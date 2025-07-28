@@ -1,0 +1,42 @@
+package database
+
+import (
+	"fmt"
+	"log"
+
+	"app/internal/models"
+
+	_ "github.com/lib/pq"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+)
+
+const (
+	host     = "localhost"
+	port     = 5432
+	user     = "calciotto"
+	password = "lee7ohnai9queeDoosh6"
+	dbname   = "calciotto"
+)
+
+func InitDB() (*gorm.DB, error) {
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		host, port, user, password, dbname)
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+
+	log.Println("Successfully connected to the database!")
+
+	// Auto-migration des modèles pour créer les tables
+	err = db.AutoMigrate(&models.Player{}, &models.Team{}, &models.Match{}, &models.TeamComposition{}, &models.Goal{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Tables created successfully!")
+
+	return db, nil
+}
