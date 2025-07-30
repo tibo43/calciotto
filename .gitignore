@@ -24,6 +24,9 @@ profile.cov
 go.work
 go.work.sum
 
+# air file
+app/tmp
+
 # env file
 .env
 
