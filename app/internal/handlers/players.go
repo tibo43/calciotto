@@ -40,3 +40,13 @@ func (h *PlayerHandler) CreatePlayer(c *gin.Context) {
 
 	c.JSON(http.StatusOK, player)
 }
+
+func (h *PlayerHandler) GetPlayerByID(c *gin.Context) {
+	id := c.Param("id")
+	player, err := h.Service.GetPlayerByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Player not found"})
+		return
+	}
+	c.JSON(http.StatusOK, player)
+}

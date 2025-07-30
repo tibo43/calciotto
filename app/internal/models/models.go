@@ -12,7 +12,7 @@ type ModelWithUUID interface {
 
 // Modèle de base pour les champs communs
 type BaseModel struct {
-	ID string `gorm:"type:uuid;primaryKey"`
+	ID string `gorm:"type:uuid;primaryKey" json:"id"`
 }
 
 // BeforeCreate est un hook GORM qui s'exécute avant la création d'un enregistrement
@@ -24,32 +24,42 @@ func (bm *BaseModel) BeforeCreate(tx *gorm.DB) error {
 // Player représente un joueur.
 type Player struct {
 	BaseModel
-	Name string
+	Name string `gorm:"type:string" json:"name"`
 }
 
 // Team représente une équipe.
 type Team struct {
 	BaseModel
-	Colour string
+	Colour string `gorm:"type:string" json:"colour"`
 }
 
 // Match représente un match.
 type Match struct {
 	BaseModel
-	Date string
+	Date string `gorm:"type:string" json:"date"`
 }
 
 // TeamComposition représente la composition d'une équipe pour un match.
 type TeamComposition struct {
 	BaseModel
-	MatchID  string `gorm:"type:uuid"`
-	TeamID   string `gorm:"type:uuid"`
-	PlayerID string `gorm:"type:uuid"`
+	MatchID  string `gorm:"type:uuid" json:"match_id"`
+	TeamID   string `gorm:"type:uuid" json:"team_id"`
+	PlayerID string `gorm:"type:uuid" json:"player_id"`
 }
 
 // Goal représente un but marqué pendant un match.
 type Goal struct {
 	BaseModel
-	MatchID  string `gorm:"type:uuid"`
-	PlayerID string `gorm:"type:uuid"`
+	MatchID  string `gorm:"type:uuid" json:"match_id"`
+	TeamID   string `gorm:"type:uuid" json:"team_id"`
+	PlayerID string `gorm:"type:uuid" json:"player_id"`
+	Number   int    `gorm:"type:int" json:"number"`
+}
+
+// TeamComposition représente la composition d'une équipe pour un match.
+type TeamScore struct {
+	BaseModel
+	Score   int    `gorm:"type:int" json:"score"`
+	MatchID string `gorm:"type:uuid" json:"match_id"`
+	TeamID  string `gorm:"type:uuid" json:"team_id"`
 }

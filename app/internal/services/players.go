@@ -25,10 +25,19 @@ func (s *PlayerService) GetPlayers() ([]models.Player, error) {
 }
 
 func (s *PlayerService) CreatePlayer(player *models.Player) error {
-	player.ID = uuid.New().String() // Génération d'un nouvel UUID
+	player.ID = uuid.New().String()
 	result := s.DB.Create(player)
 	if result.Error != nil {
 		return result.Error
 	}
 	return nil
+}
+
+func (s *PlayerService) GetPlayerByID(id string) (*models.Player, error) {
+	var player models.Player
+	result := s.DB.First(&player, "id = ?", id)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &player, nil
 }

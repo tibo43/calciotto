@@ -36,7 +36,7 @@ func InitDB() (*gorm.DB, error) {
 		log.Fatal(err)
 	}
 
-	fmt.Println("Tables created successfully!")
+	log.Println("Tables created successfully!")
 
 	return db, nil
 }
