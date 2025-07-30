@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	host     = "localhost"
+	//host     = "localhost"
+	host     = "192.168.1.10"
 	port     = 5432
 	user     = "calciotto"
 	password = "lee7ohnai9queeDoosh6"

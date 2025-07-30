@@ -32,6 +32,15 @@ func (h *GoalHandler) CreateGoal(c *gin.Context) {
 	c.JSON(http.StatusOK, goal)
 }
 
+func (h *GoalHandler) GetGoalAll(c *gin.Context) {
+	goal, err := h.Service.GetGoalAll()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, goal)
+}
+
 func (h *GoalHandler) GetGoalByMatchID(c *gin.Context) {
 	match_id := c.Param("match_id")
 	goal, err := h.Service.GetGoalByMatchID(match_id)
@@ -45,6 +54,16 @@ func (h *GoalHandler) GetGoalByMatchID(c *gin.Context) {
 func (h *GoalHandler) GetGoalByPlayerID(c *gin.Context) {
 	player_id := c.Param("player_id")
 	goal, err := h.Service.GetGoalByPlayerID(player_id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, goal)
+}
+
+func (h *GoalHandler) GetGoalByTeamID(c *gin.Context) {
+	team_id := c.Param("team_id")
+	goal, err := h.Service.GetGoalByTeamID(team_id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

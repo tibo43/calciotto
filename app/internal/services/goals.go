@@ -24,6 +24,15 @@ func (s *GoalService) CreateGoal(goal *models.Goal) error {
 	return nil
 }
 
+func (s *GoalService) GetGoalAll() ([]models.Goal, error) {
+	var goals []models.Goal
+	result := s.DB.Find(&goals)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return goals, nil
+}
+
 func (s *GoalService) GetGoalByMatchID(match_id string) ([]models.Goal, error) {
 	var goals []models.Goal
 	result := s.DB.Where("match_id = ?", match_id).Find(&goals)
@@ -36,6 +45,15 @@ func (s *GoalService) GetGoalByMatchID(match_id string) ([]models.Goal, error) {
 func (s *GoalService) GetGoalByPlayerID(player_id string) ([]models.Goal, error) {
 	var goals []models.Goal
 	result := s.DB.Where("player_id = ?", player_id).Find(&goals)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return goals, nil
+}
+
+func (s *GoalService) GetGoalByTeamID(team_id string) ([]models.Goal, error) {
+	var goals []models.Goal
+	result := s.DB.Where("team_id = ?", team_id).Find(&goals)
 	if result.Error != nil {
 		return nil, result.Error
 	}

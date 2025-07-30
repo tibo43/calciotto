@@ -24,6 +24,15 @@ func (s *TeamCompositionService) CreateTeamComposition(teamComposition *models.T
 	return nil
 }
 
+func (s *TeamCompositionService) GetTeamCompositionAll() ([]models.TeamComposition, error) {
+	var teamCompositions []models.TeamComposition
+	result := s.DB.Find(&teamCompositions)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return teamCompositions, nil
+}
+
 func (s *TeamCompositionService) GetTeamCompositionByMatchID(match_id string) ([]models.TeamComposition, error) {
 	var teamCompositions []models.TeamComposition
 	result := s.DB.Where("match_id = ?", match_id).Find(&teamCompositions)

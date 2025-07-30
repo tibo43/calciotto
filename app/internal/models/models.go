@@ -55,11 +55,3 @@ type Goal struct {
 	PlayerID string `gorm:"type:uuid" json:"player_id"`
 	Number   int    `gorm:"type:int" json:"number"`
 }
-
-// TeamComposition représente la composition d'une équipe pour un match.
-type TeamScore struct {
-	BaseModel
-	Score   int    `gorm:"type:int" json:"score"`
-	MatchID string `gorm:"type:uuid" json:"match_id"`
-	TeamID  string `gorm:"type:uuid" json:"team_id"`
-}

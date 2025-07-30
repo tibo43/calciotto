@@ -30,6 +30,15 @@ func (h *TeamCompositionHandler) CreateTeamComposition(c *gin.Context) {
 	c.JSON(http.StatusOK, teamComposition)
 }
 
+func (h *TeamCompositionHandler) GetTeamCompositionAll(c *gin.Context) {
+	teamComposition, err := h.Service.GetTeamCompositionAll()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, teamComposition)
+}
+
 func (h *TeamCompositionHandler) GetTeamCompositionByMatchID(c *gin.Context) {
 	match_id := c.Param("match_id")
 	teamComposition, err := h.Service.GetTeamCompositionByMatchID(match_id)

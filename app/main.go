@@ -26,6 +26,7 @@ func main() {
 	teamHandler := handlers.NewTeamHandler(services.NewTeamService(db))
 	matchHandler := handlers.NewMatchHandler(services.NewMatchService(db))
 	teamCompositionHandler := handlers.NewTeamCompositionHandler(services.NewTeamCompositionService(db))
+	goalHandler := handlers.NewGoalHandler(services.NewGoalService(db))
 
 	// Setup routes
 	// Players
@@ -41,9 +42,16 @@ func main() {
 	r.POST("/matches", matchHandler.CreateMatch)
 	r.GET("/matches/:id", matchHandler.GetMatchByID)
 	// Team Composition
-	r.POST("/composition", teamCompositionHandler.CreateTeamComposition)
-	r.GET("/composition/match/:match_id", teamCompositionHandler.GetTeamCompositionByMatchID)
-	r.GET("/composition/team/:team_id", teamCompositionHandler.GetTeamCompositionByTeamID)
+	r.POST("/compositions", teamCompositionHandler.CreateTeamComposition)
+	r.GET("/compositions/all", teamCompositionHandler.GetTeamCompositionAll)
+	r.GET("/compositions/match/:match_id", teamCompositionHandler.GetTeamCompositionByMatchID)
+	r.GET("/compositions/team/:team_id", teamCompositionHandler.GetTeamCompositionByTeamID)
+	// Team Composition
+	r.POST("/goals", goalHandler.CreateGoal)
+	r.GET("/goals/all", goalHandler.GetGoalAll)
+	r.GET("/goals/match/:match_id", goalHandler.GetGoalByMatchID)
+	r.GET("/goals/player/:player_id", goalHandler.GetGoalByPlayerID)
+	r.GET("/goals/team/:team_id", goalHandler.GetGoalByTeamID)
 	// Add more routes as needed
 
 	// Start server
