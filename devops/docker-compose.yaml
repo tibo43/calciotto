@@ -1,4 +1,23 @@
 services:
+  backend:
+    build:
+      context: .
+      # Correct the path to your Dockerfile
+      dockerfile: Dockerfile
+    ports:
+      - 8080:8080
+    # Important to bind/mount your codebase dir to /app dir for live reload
+    volumes:
+      - ./../app:/app
+  frontend:
+    image: node:24-alpine
+    ports:
+      - 4000:4000
+    # Important to bind/mount your codebase dir to /frontend dir for live reload
+    volumes:
+      - ./../frontend:/frontend
+    working_dir: /frontend
+    command: "npm run serve"
   db:
       image: postgres:17.5
       volumes:
