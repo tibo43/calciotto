@@ -9,6 +9,9 @@ services:
     # Important to bind/mount your codebase dir to /app dir for live reload
     volumes:
       - ./../app:/app
+    depends_on:
+      db:
+        condition: service_healthy
   frontend:
     image: node:24-alpine
     ports:
@@ -18,6 +21,9 @@ services:
       - ./../frontend:/frontend
     working_dir: /frontend
     command: "npm run serve"
+    depends_on:
+      backend:
+        condition: service_started
   db:
       image: postgres:17.5
       volumes:
