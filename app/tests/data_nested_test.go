@@ -18,46 +18,51 @@ func TestCreateDatasetNested(t *testing.T) {
 
 	// Récupération des joueurs, équipes et matchs de la base de données
 	var dbPlayers []models.Player
-	var dbTeams []models.Team
 	var dbMatches []models.Match
+	var dbTeams []models.Team
 
 	db.Find(&dbPlayers)
-	db.Find(&dbTeams)
 	db.Find(&dbMatches)
+	db.Find(&dbTeams)
 
 	// Création de quelques compositions d'équipe avec des références aléatoires
-	for i := 0; i < 5; i++ {
-		match := dbMatches[rand.Intn(len(dbMatches))]
-		team := dbTeams[rand.Intn(len(dbTeams))]
-		player := dbPlayers[rand.Intn(len(dbPlayers))]
-
-		teamComposition := models.TeamComposition{
-			MatchID:  match.ID,
-			TeamID:   team.ID,
-			PlayerID: player.ID,
-		}
-
-		result := db.Create(&teamComposition)
-		if result.Error != nil {
-			t.Fatalf("Failed to create team composition: %v", result.Error)
+	for i := 0; i < len(dbMatches); i++ {
+		match := dbMatches[i]
+		for j := 0; j < len(dbTeams); j++ {
+			team := dbTeams[j]
+			for h := 0; h < len(dbPlayers)/2+1; h++ {
+				player := dbPlayers[rand.Intn(len(dbPlayers))]
+				teamComposition := models.TeamComposition{
+					MatchID:  match.ID,
+					TeamID:   team.ID,
+					PlayerID: player.ID,
+				}
+				result := db.Create(&teamComposition)
+				if result.Error != nil {
+					t.Fatalf("Failed to create team composition: %v", result.Error)
+				}
+			}
 		}
 	}
 
-	for i := 0; i < 5; i++ {
-		match := dbMatches[rand.Intn(len(dbMatches))]
-		team := dbTeams[rand.Intn(len(dbTeams))]
-		player := dbPlayers[rand.Intn(len(dbPlayers))]
-
-		goal := models.Goal{
-			MatchID:  match.ID,
-			TeamID:   team.ID,
-			PlayerID: player.ID,
-			Number:   i,
-		}
-
-		result := db.Create(&goal)
-		if result.Error != nil {
-			t.Fatalf("Failed to create goal: %v", result.Error)
+	// Création de quelques compositions d'équipe avec des références aléatoires
+	for i := 0; i < len(dbMatches); i++ {
+		match := dbMatches[i]
+		for j := 0; j < len(dbTeams); j++ {
+			team := dbTeams[j]
+			for h := 0; h < len(dbPlayers); h++ {
+				player := dbPlayers[h]
+				goal := models.Goal{
+					MatchID:  match.ID,
+					TeamID:   team.ID,
+					PlayerID: player.ID,
+					Number:   rand.Intn(4),
+				}
+				result := db.Create(&goal)
+				if result.Error != nil {
+					t.Fatalf("Failed to create goal: %v", result.Error)
+				}
+			}
 		}
 	}
 

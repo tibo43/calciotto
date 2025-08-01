@@ -17,9 +17,22 @@ func TestCreateDataset(t *testing.T) {
 
 	// Création de quelques joueurs
 	players := []models.Player{
-		{BaseModel: models.BaseModel{}, Name: "Thibaut Fabre"},
-		{BaseModel: models.BaseModel{}, Name: "Alice Dupont"},
-		{BaseModel: models.BaseModel{}, Name: "Jean Martin"},
+		{BaseModel: models.BaseModel{}, Name: "Thibaut"},
+		{BaseModel: models.BaseModel{}, Name: "Matthias"},
+		{BaseModel: models.BaseModel{}, Name: "Manfredi"},
+		{BaseModel: models.BaseModel{}, Name: "Damien"},
+		{BaseModel: models.BaseModel{}, Name: "Vincent"},
+		{BaseModel: models.BaseModel{}, Name: "Pierre"},
+		{BaseModel: models.BaseModel{}, Name: "Anthony"},
+		{BaseModel: models.BaseModel{}, Name: "Jacopo"},
+		{BaseModel: models.BaseModel{}, Name: "Mattheo"},
+		{BaseModel: models.BaseModel{}, Name: "Ryan"},
+		{BaseModel: models.BaseModel{}, Name: "Connor"},
+		{BaseModel: models.BaseModel{}, Name: "Marco"},
+		{BaseModel: models.BaseModel{}, Name: "Niccolo"},
+		{BaseModel: models.BaseModel{}, Name: "Augustin"},
+		{BaseModel: models.BaseModel{}, Name: "Esteban"},
+		{BaseModel: models.BaseModel{}, Name: "Henry"},
 	}
 
 	for _, player := range players {
@@ -31,8 +44,8 @@ func TestCreateDataset(t *testing.T) {
 
 	// Création de quelques équipes
 	teams := []models.Team{
-		{BaseModel: models.BaseModel{}, Colour: "Rouge"},
-		{BaseModel: models.BaseModel{}, Colour: "Bleu"},
+		{BaseModel: models.BaseModel{}, Colour: "Black"},
+		{BaseModel: models.BaseModel{}, Colour: "White"},
 	}
 
 	for _, team := range teams {
@@ -44,8 +57,10 @@ func TestCreateDataset(t *testing.T) {
 
 	// Création de quelques matchs
 	matches := []models.Match{
-		{BaseModel: models.BaseModel{}, Date: "2023-10-01"},
-		{BaseModel: models.BaseModel{}, Date: "2023-10-02"},
+		{BaseModel: models.BaseModel{}, Date: "2025-10-01"},
+		{BaseModel: models.BaseModel{}, Date: "2025-10-08"},
+		{BaseModel: models.BaseModel{}, Date: "2025-10-15"},
+		{BaseModel: models.BaseModel{}, Date: "2025-10-22"},
 	}
 
 	for _, match := range matches {
