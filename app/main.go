@@ -51,6 +51,8 @@ func main() {
 	r.POST("/matches", matchHandler.CreateMatch)
 	r.GET("/matches/all", matchHandler.GetMatches)
 	r.GET("/matches/:id", matchHandler.GetMatchByID)
+	r.GET("/matches/details/all", matchHandler.GetMatchesWithDetail)
+	r.GET("/matches/details/:id", matchHandler.GetMatchWithDetailByID)
 	// Team Composition
 	r.POST("/compositions", teamCompositionHandler.CreateTeamComposition)
 	r.GET("/compositions/all", teamCompositionHandler.GetTeamCompositionAll)

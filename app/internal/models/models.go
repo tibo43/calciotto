@@ -24,19 +24,25 @@ func (bm *BaseModel) BeforeCreate(tx *gorm.DB) error {
 // Player représente un joueur.
 type Player struct {
 	BaseModel
-	Name string `gorm:"type:string" json:"name"`
+	Name             string            `gorm:"type:string" json:"name"`
+	TeamCompositions []TeamComposition `gorm:"foreignKey:PlayerID"`
+	Goals            []Goal            `gorm:"foreignKey:PlayerID"`
 }
 
 // Team représente une équipe.
 type Team struct {
 	BaseModel
-	Colour string `gorm:"type:string" json:"colour"`
+	Colour           string            `gorm:"type:string" json:"colour"`
+	TeamCompositions []TeamComposition `gorm:"foreignKey:TeamID"`
+	Goals            []Goal            `gorm:"foreignKey:TeamID"`
 }
 
 // Match représente un match.
 type Match struct {
 	BaseModel
-	Date string `gorm:"type:string" json:"date"`
+	Date             string            `gorm:"type:string" json:"date"`
+	TeamCompositions []TeamComposition `gorm:"foreignKey:MatchID"`
+	Goals            []Goal            `gorm:"foreignKey:MatchID"`
 }
 
 // TeamComposition représente la composition d'une équipe pour un match.
