@@ -1,19 +1,18 @@
-
 <template>
   <div id="app">
     <div v-if="showImage" class="initial-view">
-      <img alt="Vue logo" src="./assets/campo_image_1.jpg" @click="toggleView" style="cursor: pointer;">
+      <img alt="Calciotto Logo" src="./assets/campo_image_1.jpg" @click="toggleView" style="cursor: pointer;">
       <h1 class="title-logo">Calciotto</h1>
     </div>
     <div class="app-container" v-else>
-        <div class="sidebar">
-            <img src="@/assets/logo.png" alt="Logo" class="logo" @click="toggleView" style="cursor: pointer;"/>
-            <div class="menu">
-                <button class="menu-button">Matches</button>
-                <button class="menu-button">Teams</button>
-                <button class="menu-button">Players</button>
-            </div>
+      <div class="sidebar">
+        <img src="@/assets/logo.png" alt="Logo" class="logo" @click="toggleView" style="cursor: pointer;"/>
+        <div class="menu">
+          <button class="menu-button">Matches</button>
+          <button class="menu-button">Teams</button>
+          <button class="menu-button">Players</button>
         </div>
+      </div>
       <MatchesAll/>
     </div>
   </div>
@@ -42,12 +41,11 @@ export default {
 
 <style>
 #app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Arial', sans-serif;
   text-align: center;
-  color: #2c3e50;
-  margin-top: 60px;
+  color: #333;
+  margin: 0;
+  padding: 0;
 }
 
 .initial-view {
@@ -56,26 +54,25 @@ export default {
   align-items: center;
   justify-content: center;
   height: 100vh;
+  background-color: #f8f8f8;
 }
 
 .title-logo {
-  color: green;
-  font-size: 28px;
+  color: #4CAF50;
+  font-size: 2.5em;
   font-weight: bold;
   margin-top: 20px;
 }
 
-/* Conteneur principal pour l'application */
 .app-container {
   display: flex;
   min-height: 100vh;
-  background-color: #f5f5f5;
+  background-color: #f8f8f8;
 }
 
-/* Style de la sidebar */
 .sidebar {
   width: 250px;
-  background-color: #e0e0e0;
+  background-color: #fff;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -85,6 +82,7 @@ export default {
   position: fixed;
   left: 0;
   top: 0;
+  z-index: 1000; /* Assurez-vous que la sidebar est au-dessus des autres éléments */
 }
 
 .logo {
@@ -92,7 +90,6 @@ export default {
   margin-bottom: 30px;
 }
 
-/* Style des boutons du menu */
 .menu {
   width: 100%;
 }
@@ -106,7 +103,7 @@ export default {
   text-align: left;
   cursor: pointer;
   font-size: 16px;
-  color: green;
+  color: #4CAF50;
   font-weight: bold;
   transition: background-color 0.3s, transform 0.3s, color 0.3s;
   border-radius: 4px;
@@ -114,7 +111,7 @@ export default {
 }
 
 .menu-button:hover {
-  background-color: darkgreen;
+  background-color: #4CAF50;
   color: white;
   transform: scale(1.02);
 }
