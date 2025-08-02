@@ -21,16 +21,17 @@
         <nav class="top-navbar" :class="{ 'scrolled': isScrolled }">
           <div class="nav-container">
             <!-- Logo/Brand -->
-            <div class="nav-brand" @click="toggleView">
+            <div class="nav-brand" @click="goHome">
               <img src="@/assets/logo.png" alt="Logo" class="nav-logo">
               <span class="brand-text">Calciotto</span>
             </div>
 
             <!-- Desktop Menu -->
             <div class="nav-menu" :class="{ 'active': isMenuOpen }">
-              <button 
-                @click="setActiveTab('matches')" 
-                :class="{ 'active': activeTab === 'matches' }"
+              <router-link 
+                to="/" 
+                @click="closeMenu"
+                :class="{ 'active': $route.name === 'MatchesAll' }"
                 class="nav-button"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -40,7 +41,7 @@
                   <line x1="3" y1="10" x2="21" y2="10"/>
                 </svg>
                 Matches
-              </button>
+              </router-link>
               <button 
                 @click="setActiveTab('teams')" 
                 :class="{ 'active': activeTab === 'teams' }"
@@ -101,9 +102,12 @@
 
         <!-- Main Content -->
         <main class="main-content">
-          <transition name="tab-content" mode="out-in">
-            <MatchesAll v-if="activeTab === 'matches'" key="matches" />
-            <div v-else-if="activeTab === 'teams'" key="teams" class="tab-content">
+          <!-- Router View for Match Routes -->
+          <router-view v-if="isRouterRoute" />
+          
+          <!-- Tab Content for non-router routes -->
+          <transition v-else name="tab-content" mode="out-in">
+            <div v-if="activeTab === 'teams'" key="teams" class="tab-content">
               <div class="coming-soon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -138,13 +142,8 @@
 </template>
 
 <script>
-import MatchesAll from './components/MatchesAll.vue';
-
 export default {
   name: 'App',
-  components: {
-    MatchesAll
-  },
   data() {
     return {
       showImage: true,
@@ -153,6 +152,21 @@ export default {
       isScrolled: false,
       isDarkMode: false
     };
+  },
+  computed: {
+    isRouterRoute() {
+      // Check if current route should be handled by router
+      return this.$route.name === 'MatchesAll' || this.$route.name === 'MatchDetails';
+    }
+  },
+  watch: {
+    '$route'(to) {
+      // Update activeTab when route changes
+      if (to.name === 'MatchesAll') {
+        this.activeTab = 'matches';
+      }
+      this.closeMenu();
+    }
   },
   mounted() {
     // Check for saved theme preference
@@ -173,13 +187,23 @@ export default {
     toggleView() {
       this.showImage = !this.showImage;
       if (!this.showImage) {
-        // Reset to matches tab when entering app
+        // Navigate to matches when entering app
+        this.$router.push('/');
         this.activeTab = 'matches';
       }
+    },
+    goHome() {
+      this.$router.push('/');
+      this.activeTab = 'matches';
     },
     setActiveTab(tab) {
       this.activeTab = tab;
       this.closeMenu();
+      
+      // If selecting matches tab, navigate to home route
+      if (tab === 'matches') {
+        this.$router.push('/');
+      }
     },
     toggleMenu() {
       this.isMenuOpen = !this.isMenuOpen;
@@ -416,6 +440,7 @@ body {
   cursor: pointer;
   transition: all var(--transition-fast);
   position: relative;
+  text-decoration: none;
 }
 
 .nav-button svg {

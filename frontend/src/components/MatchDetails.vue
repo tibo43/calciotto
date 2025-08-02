@@ -23,37 +23,73 @@
     </div>
 
     <!-- Match Content -->
-    <div v-else-if="match" class="match-content">
+    <div v-else-if="match && match.Teams && match.Teams.length > 0" class="match-content">
       <div class="container">
         <!-- Match Score Overview -->
         <div class="score-overview">
+          <div class="match-title">
+            <h2>Match Score</h2>
+            <div class="match-status-badge" :class="getMatchStatus()">
+              {{ getMatchStatusText() }}
+            </div>
+          </div>
+          
           <div class="teams-score">
-            <div v-for="(team, index) in match.Teams" :key="team.ID" class="team-score">
+            <!-- Team 1 -->
+            <div class="team-score">
               <div class="team-info">
-                <div class="team-color" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-                <h3 class="team-name">{{ team.Colour }}</h3>
+                <div class="team-color" :style="{ backgroundColor: getTeamColor(match.Teams[0].Colour) }"></div>
+                <h3 class="team-name">{{ match.Teams[0].Colour }}</h3>
               </div>
-              <div class="score">{{ team.Score || 0 }}</div>
-              <div v-if="index < match.Teams.length - 1" class="vs-divider">VS</div>
+              <div class="score">{{ match.Teams[0].Score || 0 }}</div>
+            </div>
+
+            <!-- VS Divider -->
+            <div class="vs-divider">
+              <div class="vs-circle">
+                <span>VS</span>
+              </div>
+            </div>
+
+            <!-- Team 2 -->
+            <div class="team-score">
+              <div class="team-info">
+                <div class="team-color" :style="{ backgroundColor: getTeamColor(match.Teams[1].Colour) }"></div>
+                <h3 class="team-name">{{ match.Teams[1].Colour }}</h3>
+              </div>
+              <div class="score">{{ match.Teams[1].Score || 0 }}</div>
             </div>
           </div>
         </div>
 
         <!-- Team Management Tabs -->
-        <div class="team-tabs">
-          <button 
-            v-for="(team, index) in match.Teams" 
-            :key="team.ID"
-            @click="activeTeam = index"
-            :class="['tab-button', { active: activeTeam === index }]"
-          >
-            <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-            {{ team.Colour }} Team ({{ team.Players.length }})
+        <div v-if="match.Teams && match.Teams.length > 0" class="team-tabs">
+          <div class="tabs-buttons">
+            <button 
+              v-for="(team, index) in match.Teams" 
+              :key="team.ID"
+              @click="activeTeam = index"
+              :class="['tab-button', { active: activeTeam === index }]"
+            >
+              <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
+              {{ team.Colour }} Team ({{ team.Players ? team.Players.length : 0 }})
+            </button>
+          </div>
+          
+          <!-- Save Changes Button -->
+          <button @click="saveChanges" :disabled="isSaving" class="save-button">
+            <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <polyline points="17,21 17,13 7,13 7,21"/>
+              <polyline points="7,3 7,8 15,8"/>
+            </svg>
+            <div v-else class="save-spinner"></div>
+            {{ isSaving ? 'Saving...' : 'Save Changes' }}
           </button>
         </div>
 
         <!-- Active Team Management -->
-        <div class="team-management">
+        <div v-if="match.Teams && match.Teams[activeTeam]" class="team-management">
           <div class="management-header">
             <h3>{{ match.Teams[activeTeam].Colour }} Team Management</h3>
             <button @click="showAddPlayerModal = true" class="add-player-btn">
@@ -67,7 +103,7 @@
           </div>
 
           <!-- Players List -->
-          <div class="players-grid">
+          <div v-if="match.Teams[activeTeam].Players" class="players-grid">
             <div 
               v-for="(player, playerIndex) in match.Teams[activeTeam].Players" 
               :key="playerIndex"
@@ -114,18 +150,26 @@
           </div>
         </div>
 
-        <!-- Save Changes Button -->
-        <div class="save-section">
-          <button @click="saveChanges" :disabled="isSaving" class="save-button">
-            <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-              <polyline points="17,21 17,13 7,13 7,21"/>
-              <polyline points="7,3 7,8 15,8"/>
-            </svg>
-            <div v-else class="save-spinner"></div>
-            {{ isSaving ? 'Saving...' : 'Save Changes' }}
-          </button>
-        </div>
+        <!-- Save Changes Button moved to team-tabs section -->
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div v-else class="error-state">
+      <div class="error-content">
+        <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        <h3 class="error-title">Match not found</h3>
+        <p class="error-description">The match you're looking for doesn't exist or failed to load.</p>
+        <button @click="goBack" class="error-back-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15,18 9,12 15,6"/>
+          </svg>
+          Go Back
+        </button>
       </div>
     </div>
 
@@ -186,7 +230,7 @@
 import { getMatchDetailsByID, updateMatch } from '@/services/api';
 
 export default {
-  name: 'MatchDetails',
+  name: 'MatchDetail',
   data() {
     return {
       match: null,
@@ -210,7 +254,7 @@ export default {
         const matchId = this.$route.params.id;
         // You'll need to implement getMatchDetailsByID in your API service
         this.match = await getMatchDetailsByID(matchId);
-
+        
         // Ensure each player has GoalNumber property
         this.match.Teams.forEach(team => {
           team.Players.forEach(player => {
@@ -233,7 +277,17 @@ export default {
     },
     
     updateGoals(playerIndex, change) {
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        console.error('Invalid team or players data');
+        return;
+      }
+      
       const player = this.match.Teams[this.activeTeam].Players[playerIndex];
+      if (!player) {
+        console.error('Player not found at index:', playerIndex);
+        return;
+      }
+      
       const newGoals = (player.GoalNumber || 0) + change;
       
       if (newGoals >= 0) {
@@ -243,19 +297,36 @@ export default {
     },
     
     updateTeamScore() {
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        return;
+      }
+      
       const team = this.match.Teams[this.activeTeam];
       team.Score = team.Players.reduce((total, player) => total + (player.GoalNumber || 0), 0);
     },
     
     removePlayer(playerIndex) {
-      if (confirm('Are you sure you want to remove this player?')) {
-        this.match.Teams[this.activeTeam].Players.splice(playerIndex, 1);
-        this.updateTeamScore();
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        console.error('Invalid team or players data');
+        return;
       }
+      
+      // Remove player without confirmation popup
+      this.match.Teams[this.activeTeam].Players.splice(playerIndex, 1);
+      this.updateTeamScore();
     },
     
     addPlayer() {
       if (!this.newPlayerName.trim()) return;
+      
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam]) {
+        console.error('Invalid team data');
+        return;
+      }
+      
+      if (!this.match.Teams[this.activeTeam].Players) {
+        this.match.Teams[this.activeTeam].Players = [];
+      }
       
       const newPlayer = {
         Name: this.newPlayerName.trim(),
@@ -328,6 +399,43 @@ export default {
     
     getPlayerInitials(name) {
       return name.split(' ').map(word => word.charAt(0)).join('').toUpperCase().slice(0, 2);
+    },
+    
+    getTotalGoals() {
+      if (!this.match || !this.match.Teams) return 0;
+      return this.match.Teams.reduce((total, team) => total + (team.Score || 0), 0);
+    },
+    
+    getTotalPlayers() {
+      if (!this.match || !this.match.Teams) return 0;
+      return this.match.Teams.reduce((total, team) => total + (team.Players ? team.Players.length : 0), 0);
+    },
+    
+    getMatchStatus() {
+      const totalGoals = this.getTotalGoals();
+      if (totalGoals === 0) return 'upcoming';
+      return 'completed';
+    },
+    
+    getMatchStatusText() {
+      const status = this.getMatchStatus();
+      switch (status) {
+        case 'upcoming': return 'Upcoming';
+        case 'completed': return 'Completed';
+        default: return 'Unknown';
+      }
+    },
+    
+    formatDateShort(dateString) {
+      try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric'
+        });
+      } catch (error) {
+        return dateString;
+      }
     }
   }
 };
@@ -458,18 +566,52 @@ export default {
 .score-overview {
   background-color: var(--bg-primary);
   border-radius: var(--border-radius-lg);
-  padding: 2rem;
+  padding: 1.5rem;
   margin-bottom: 2rem;
   box-shadow: var(--shadow-md);
   border: 1px solid var(--border-color);
 }
 
-.teams-score {
+.match-title {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  gap: 2rem;
-  position: relative;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.match-title h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.match-status-badge {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.match-status-badge.upcoming {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.match-status-badge.completed {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.teams-score {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1.5rem;
 }
 
 .team-score {
@@ -477,46 +619,87 @@ export default {
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+  padding: 1rem;
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+}
+
+.team-score:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .team-info {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem;
+  text-align: center;
 }
 
 .team-color {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  border: 2px solid white;
-  box-shadow: var(--shadow-sm);
+  border: 3px solid white;
+  box-shadow: var(--shadow-md);
 }
 
 .team-name {
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-size: 1.25rem;
+  font-weight: 700;
   color: var(--text-primary);
   text-transform: capitalize;
+  margin: 0;
 }
 
 .score {
-  font-size: 3rem;
-  font-weight: 800;
+  font-size: 2.5rem;
+  font-weight: 900;
   color: var(--primary-color);
+  text-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+  line-height: 1;
 }
 
 .vs-divider {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vs-circle {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 800;
+  font-size: 1rem;
+  box-shadow: var(--shadow-lg);
 }
 
 /* Team Tabs */
 .team-tabs {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 1rem;
   margin-bottom: 2rem;
+  padding: 1rem;
+  background-color: var(--bg-primary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+}
+
+.tabs-buttons {
+  display: flex;
+  gap: 1rem;
 }
 
 .tab-button {
@@ -524,7 +707,7 @@ export default {
   align-items: center;
   gap: 0.5rem;
   padding: 1rem 1.5rem;
-  background-color: var(--bg-primary);
+  background-color: var(--bg-tertiary);
   border: 2px solid var(--border-color);
   border-radius: var(--border-radius);
   cursor: pointer;
@@ -601,7 +784,7 @@ export default {
 /* Players Grid */
 .players-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1.5rem;
 }
 
@@ -722,11 +905,7 @@ export default {
   text-align: center;
 }
 
-/* Save Section */
-.save-section {
-  text-align: center;
-}
-
+/* Save Section - now in team-tabs */
 .save-button {
   display: inline-flex;
   align-items: center;
@@ -739,7 +918,8 @@ export default {
   cursor: pointer;
   transition: all var(--transition-fast);
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: 1rem;
+  white-space: nowrap;
 }
 
 .save-button:hover:not(:disabled) {
@@ -915,6 +1095,64 @@ export default {
   background-color: var(--danger-color);
 }
 
+/* Error State */
+.error-state {
+  padding: 4rem 0;
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.error-content {
+  text-align: center;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.error-icon {
+  width: 4rem;
+  height: 4rem;
+  color: var(--danger-color);
+  margin-bottom: 1rem;
+}
+
+.error-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.error-description {
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+}
+
+.error-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-weight: 500;
+}
+
+.error-back-btn:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.error-back-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
 @keyframes slideIn {
   from {
     transform: translateX(100%);
@@ -946,8 +1184,15 @@ export default {
     font-size: 2rem;
   }
 
-  .teams-score {
+  .match-title {
     flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .teams-score {
+    grid-template-columns: 1fr;
     gap: 1rem;
   }
 
@@ -955,8 +1200,34 @@ export default {
     transform: rotate(90deg);
   }
 
+  .vs-circle {
+    width: 40px;
+    height: 40px;
+    font-size: 0.875rem;
+  }
+
+  .score {
+    font-size: 2rem;
+  }
+
   .team-tabs {
     flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .tabs-buttons {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .tab-button {
+    justify-content: center;
+  }
+
+  .save-button {
+    justify-content: center;
+    padding: 1rem;
   }
 
   .management-header {
@@ -971,6 +1242,45 @@ export default {
 
   .modal-content {
     width: 95%;
+  }
+}
+
+@media (max-width: 480px) {
+  .score-overview {
+    padding: 1rem;
+  }
+
+  .team-score {
+    padding: 0.75rem;
+  }
+
+  .score {
+    font-size: 1.75rem;
+  }
+
+  .team-color {
+    width: 24px;
+    height: 24px;
+  }
+
+  .team-name {
+    font-size: 1rem;
+  }
+
+  .vs-circle {
+    width: 32px;
+    height: 32px;
+    font-size: 0.75rem;
+  }
+
+  .tab-button {
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  .save-button {
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
   }
 }
 </style>

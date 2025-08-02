@@ -1,103 +1,82 @@
 import axios from 'axios';
 
-const API_URL = 'http://backend:8080'; // Replace with your Go API URL
+const API_BASE_URL = process.env.VUE_APP_API_BASE_URL || 'http://backend:8080';
 
-// Players
-export const getPlayers = () => axios.get(`${API_URL}/players/all`);
-export const getPlayer = async (id) => {
-    const response = await axios.get(`${API_URL}/players/${id}`);
-    return response.data; // Ensure this returns an array
-};
-export const addPlayer = (player) => axios.post(`${API_URL}/players`, player);
-// export const updatePlayer = (id, player) => axios.put(`${API_URL}/players/${id}`, player);
-// export const deletePlayer = (id) => axios.delete(`${API_URL}/players/${id}`);
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  }
+});
+
 // Matches
-export const getMatches = async () => {
-    const response = await axios.get(`${API_URL}/matches/all`);
-    return response.data; // Ensure this returns an array
-};
 export const getMatchesDetails = async () => {
-    const response = await axios.get(`${API_URL}/matches/details/all`);
-    return response.data; // Ensure this returns an array
+  try {
+    const response = await api.get(`/matches/details`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch matches details');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching matches details:', error);
+    throw error;
+  }
 };
+// New function for getting single match details by ID
 export const getMatchDetailsByID = async (matchId) => {
   try {
-    const response = await fetch(`${API_URL}/matches/details/${matchId}`);
-    if (!response.ok) {
+    const response = await api.get(`/matches/${matchId}/details`);
+    if (response.status !== 200) {
       throw new Error('Failed to fetch match details');
     }
-    return await response.json();
+    return response.data;
   } catch (error) {
     console.error('Error fetching match details:', error);
     throw error;
   }
 };
-// Update match
+
+// New function for updating a match
 export const updateMatch = async (matchId, matchData) => {
   try {
-    const response = await fetch(`${API_URL}/matches/${matchId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(matchData),
-    });
-    
-    if (!response.ok) {
+    const response = await api.put(`/matches/${matchId}`, matchData);
+    if (response.status !== 200) {
       throw new Error('Failed to update match');
     }
-    
-    return await response.json();
+
+    return response.data;
   } catch (error) {
     console.error('Error updating match:', error);
     throw error;
   }
 };
 
-// Alternative: If you prefer PATCH for partial updates
+// Alternative: PATCH for partial updates (if your API supports it)
 export const updateMatchPartial = async (matchId, updates) => {
   try {
-    const response = await fetch(`${API_URL}/matches/${matchId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updates),
-    });
-    
-    if (!response.ok) {
+    const response = await api.patch(`/matches/${matchId}`, updates);
+    if (response.status !== 200) {
       throw new Error('Failed to update match');
     }
-    
-    return await response.json();
+
+    return response.data;
   } catch (error) {
     console.error('Error updating match:', error);
     throw error;
   }
 };
-export const getMatch = (id) => axios.get(`${API_URL}/matches/${id}`);
-export const addMatch = (match) => axios.post(`${API_URL}/players`, match);
-// export const updatePlayer = (id, player) => axios.put(`${API_URL}/players/${id}`, player);
-// export const deletePlayer = (id) => axios.delete(`${API_URL}/players/${id}`);
-// Teams
-export const getTeams = () => axios.get(`${API_URL}/teams/all`);
-export const getTeam = async (id) => {
-    const response = await axios.get(`${API_URL}/teams/${id}`);
-    return response.data; // Ensure this returns an array
-};
-export const addTeam = (team) => axios.post(`${API_URL}/teams`, team);
-// export const updateTeam = (id, team) => axios.put(`${API_URL}/teams/${id}`, team);
-// export const deleteTeam = (id) => axios.delete(`${API_URL}/teams/${id}`);
-// Compositions
-export const getCompositions = async () => {
-    const response = await axios.get(`${API_URL}/compositions/all`);
-    return response.data; // Ensure this returns an array
-};
-export const getCompositionByMatchID = async (id) => {
-    const response = await axios.get(`${API_URL}/compositions/match/${id}`);
-    return response.data; // Ensure this returns an array
-};
-export const getCompositionByTeamID = async (id) => {
-    const response = await axios.get(`${API_URL}/compositions/team/${id}`);
-    return response.data; // Ensure this returns an array
+
+// Existing function (referenced in PlayersAll.vue)
+export const getPlayers = async () => {
+  try {
+    const response = await api.get(`/players`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch players');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching players:', error);
+    throw error;
+  }
 };
