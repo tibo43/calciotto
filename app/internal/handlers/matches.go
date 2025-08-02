@@ -17,15 +17,6 @@ func NewMatchHandler(service *services.MatchService) *MatchHandler {
 	return &MatchHandler{Service: service}
 }
 
-func (h *MatchHandler) GetMatches(c *gin.Context) {
-	matches, err := h.Service.GetMatches()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, matches)
-}
-
 func (h *MatchHandler) CreateMatch(c *gin.Context) {
 	var match models.Match
 	if err := c.ShouldBindJSON(&match); err != nil {
@@ -41,9 +32,8 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 	c.JSON(http.StatusOK, match)
 }
 
-func (h *MatchHandler) GetMatchByID(c *gin.Context) {
-	id := c.Param("id")
-	matches, err := h.Service.GetMatchByID(id)
+func (h *MatchHandler) GetMatchesDetails(c *gin.Context) {
+	matches, err := h.Service.GetMatchesDetails()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -51,18 +41,9 @@ func (h *MatchHandler) GetMatchByID(c *gin.Context) {
 	c.JSON(http.StatusOK, matches)
 }
 
-func (h *MatchHandler) GetMatchesWithDetail(c *gin.Context) {
-	matches, err := h.Service.GetMatchesWithDetail()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, matches)
-}
-
-func (h *MatchHandler) GetMatchWithDetailByID(c *gin.Context) {
+func (h *MatchHandler) GetMatchDetailsByID(c *gin.Context) {
 	id := c.Param("id")
-	matches, err := h.Service.GetMatchWithDetailByID(id)
+	matches, err := h.Service.GetMatchDetailsByID(id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
