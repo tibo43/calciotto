@@ -1,20 +1,139 @@
 <template>
-  <div id="app">
-    <div v-if="showImage" class="initial-view">
-      <img alt="Calciotto Logo" src="./assets/campo_image_1.jpg" @click="toggleView" style="cursor: pointer;">
-      <h1 class="title-logo">Calciotto</h1>
-    </div>
-    <div class="app-container" v-else>
-      <div class="sidebar">
-        <img src="@/assets/logo.png" alt="Logo" class="logo" @click="toggleView" style="cursor: pointer;"/>
-        <div class="menu">
-          <button class="menu-button">Matches</button>
-          <button class="menu-button">Teams</button>
-          <button class="menu-button">Players</button>
+  <div id="app" :class="{ 'dark-mode': isDarkMode }">
+    <!-- Initial Logo View -->
+    <transition name="initial-view">
+      <div v-if="showImage" class="initial-view" @click="toggleView">
+        <div class="logo-container">
+          <img alt="Calciotto Logo" src="./assets/campo_image_1.jpg" class="hero-image">
+          <div class="logo-overlay">
+            <h1 class="title-logo">Calciotto</h1>
+            <p class="subtitle">Click to enter</p>
+            <div class="pulse-indicator"></div>
+          </div>
         </div>
       </div>
-      <MatchesAll/>
-    </div>
+    </transition>
+
+    <!-- Main App Container -->
+    <transition name="app-container">
+      <div v-if="!showImage" class="app-container">
+        <!-- Top Navigation -->
+        <nav class="top-navbar" :class="{ 'scrolled': isScrolled }">
+          <div class="nav-container">
+            <!-- Logo/Brand -->
+            <div class="nav-brand" @click="toggleView">
+              <img src="@/assets/logo.png" alt="Logo" class="nav-logo">
+              <span class="brand-text">Calciotto</span>
+            </div>
+
+            <!-- Desktop Menu -->
+            <div class="nav-menu" :class="{ 'active': isMenuOpen }">
+              <button 
+                @click="setActiveTab('matches')" 
+                :class="{ 'active': activeTab === 'matches' }"
+                class="nav-button"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                Matches
+              </button>
+              <button 
+                @click="setActiveTab('teams')" 
+                :class="{ 'active': activeTab === 'teams' }"
+                class="nav-button"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                Teams
+              </button>
+              <button 
+                @click="setActiveTab('players')" 
+                :class="{ 'active': activeTab === 'players' }"
+                class="nav-button"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                Players
+              </button>
+            </div>
+
+            <!-- Actions -->
+            <div class="nav-actions">
+              <button 
+                class="theme-toggle" 
+                @click="toggleTheme"
+                :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+              >
+                <transition name="theme-icon" mode="out-in">
+                  <svg v-if="isDarkMode" key="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="5"/>
+                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                  </svg>
+                  <svg v-else key="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                  </svg>
+                </transition>
+              </button>
+
+              <button 
+                class="mobile-menu-toggle" 
+                :class="{ 'active': isMenuOpen }" 
+                @click="toggleMenu"
+                aria-label="Toggle navigation menu"
+              >
+                <span></span>
+                <span></span>
+                <span></span>
+              </button>
+            </div>
+          </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+          <transition name="tab-content" mode="out-in">
+            <MatchesAll v-if="activeTab === 'matches'" key="matches" />
+            <div v-else-if="activeTab === 'teams'" key="teams" class="tab-content">
+              <div class="coming-soon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <h2>Teams</h2>
+                <p>Coming soon...</p>
+              </div>
+            </div>
+            <div v-else-if="activeTab === 'players'" key="players" class="tab-content">
+              <div class="coming-soon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <h2>Players</h2>
+                <p>Coming soon...</p>
+              </div>
+            </div>
+          </transition>
+        </main>
+
+        <!-- Mobile Menu Overlay -->
+        <transition name="overlay">
+          <div v-if="isMenuOpen" class="mobile-overlay" @click="closeMenu"></div>
+        </transition>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -28,91 +147,524 @@ export default {
   },
   data() {
     return {
-      showImage: true
+      showImage: true,
+      activeTab: 'matches',
+      isMenuOpen: false,
+      isScrolled: false,
+      isDarkMode: false
     };
+  },
+  mounted() {
+    // Check for saved theme preference
+    const savedTheme = localStorage.getItem('calciotto-theme');
+    if (savedTheme) {
+      this.isDarkMode = savedTheme === 'dark';
+    } else {
+      this.isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    // Add scroll listener
+    window.addEventListener('scroll', this.handleScroll);
+  },
+  beforeUnmount() {
+    window.removeEventListener('scroll', this.handleScroll);
   },
   methods: {
     toggleView() {
       this.showImage = !this.showImage;
+      if (!this.showImage) {
+        // Reset to matches tab when entering app
+        this.activeTab = 'matches';
+      }
+    },
+    setActiveTab(tab) {
+      this.activeTab = tab;
+      this.closeMenu();
+    },
+    toggleMenu() {
+      this.isMenuOpen = !this.isMenuOpen;
+      document.body.style.overflow = this.isMenuOpen ? 'hidden' : '';
+    },
+    closeMenu() {
+      this.isMenuOpen = false;
+      document.body.style.overflow = '';
+    },
+    handleScroll() {
+      this.isScrolled = window.scrollY > 20;
+    },
+    toggleTheme() {
+      this.isDarkMode = !this.isDarkMode;
+      localStorage.setItem('calciotto-theme', this.isDarkMode ? 'dark' : 'light');
     }
   }
-};
+}
 </script>
 
 <style>
-#app {
-  font-family: 'Arial', sans-serif;
-  text-align: center;
-  color: #333;
-  margin: 0;
-  padding: 0;
+/* CSS Custom Properties */
+:root {
+  --primary-color: #10b981;
+  --primary-hover: #059669;
+  --primary-light: #6ee7b7;
+  --secondary-color: #3b82f6;
+  --accent-color: #f59e0b;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --text-light: #9ca3af;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --border-color: #e2e8f0;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+  --navbar-height: 70px;
+  --transition-fast: 0.2s ease;
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --border-radius: 12px;
+  --border-radius-lg: 16px;
 }
 
+.dark-mode {
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --text-light: #9ca3af;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --border-color: #475569;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.6);
+}
+
+/* Global Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  transition: background-color var(--transition-smooth), color var(--transition-smooth);
+}
+
+#app {
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Initial View Styles */
 .initial-view {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  cursor: pointer;
+  z-index: 9999;
+}
+
+.logo-container {
+  position: relative;
+  text-align: center;
+  transform: scale(1);
+  transition: transform var(--transition-smooth);
+}
+
+.initial-view:hover .logo-container {
+  transform: scale(1.05);
+}
+
+.hero-image {
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: var(--shadow-xl);
+  border: 4px solid rgba(255, 255, 255, 0.2);
+}
+
+.logo-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.title-logo {
+  font-size: 3rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(45deg, #ffffff, #f0f9ff);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+}
+
+.subtitle {
+  font-size: 1.1rem;
+  opacity: 0.9;
+  margin-bottom: 1rem;
+}
+
+.pulse-indicator {
+  width: 12px;
+  height: 12px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  margin: 0 auto;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+}
+
+/* Top Navigation */
+.top-navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--navbar-height);
+  background-color: rgba(248, 250, 252, 0.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-color);
+  transition: all var(--transition-smooth);
+  z-index: 1000;
+}
+
+.dark-mode .top-navbar {
+  background-color: rgba(15, 23, 42, 0.95);
+}
+
+.top-navbar.scrolled {
+  box-shadow: var(--shadow-md);
+  background-color: rgba(248, 250, 252, 0.98);
+}
+
+.dark-mode .top-navbar.scrolled {
+  background-color: rgba(15, 23, 42, 0.98);
+}
+
+.nav-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.nav-brand:hover {
+  transform: scale(1.05);
+}
+
+.nav-logo {
+  height: 40px;
+  width: auto;
+}
+
+.brand-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.nav-menu {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.nav-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  background: none;
+  border: none;
+  border-radius: var(--border-radius);
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.nav-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.nav-button:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.nav-button.active {
+  background-color: var(--primary-color);
+  color: white;
+  box-shadow: var(--shadow-md);
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.theme-toggle {
+  background: none;
+  border: none;
+  padding: 0.5rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-toggle:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.theme-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+
+.mobile-menu-toggle {
+  display: none;
+  flex-direction: column;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  gap: 0.25rem;
+}
+
+.mobile-menu-toggle span {
+  width: 1.5rem;
+  height: 2px;
+  background-color: var(--text-primary);
+  transition: all var(--transition-fast);
+  border-radius: 1px;
+}
+
+.mobile-menu-toggle.active span:nth-child(1) {
+  transform: rotate(45deg) translate(0.375rem, 0.375rem);
+}
+
+.mobile-menu-toggle.active span:nth-child(2) {
+  opacity: 0;
+}
+
+.mobile-menu-toggle.active span:nth-child(3) {
+  transform: rotate(-45deg) translate(0.375rem, -0.375rem);
+}
+
+/* Main Content */
+.app-container {
+  min-height: 100vh;
+  background-color: var(--bg-secondary);
+}
+
+.main-content {
+  margin-top: var(--navbar-height);
+  min-height: calc(100vh - var(--navbar-height));
+}
+
+/* Tab Content */
+.tab-content {
+  padding: 2rem;
+}
+
+.coming-soon {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
-  background-color: #f8f8f8;
+  min-height: 400px;
+  text-align: center;
+  color: var(--text-secondary);
 }
 
-.title-logo {
-  color: #4CAF50;
-  font-size: 2.5em;
-  font-weight: bold;
-  margin-top: 20px;
+.coming-soon svg {
+  width: 4rem;
+  height: 4rem;
+  margin-bottom: 1rem;
+  color: var(--primary-color);
 }
 
-.app-container {
-  display: flex;
-  min-height: 100vh;
-  background-color: #f8f8f8;
+.coming-soon h2 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
 }
 
-.sidebar {
-  width: 250px;
-  background-color: #fff;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
-  height: 100vh;
+/* Transitions */
+.initial-view-enter-active,
+.initial-view-leave-active {
+  transition: all var(--transition-smooth);
+}
+
+.initial-view-enter-from,
+.initial-view-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.app-container-enter-active,
+.app-container-leave-active {
+  transition: all var(--transition-smooth);
+}
+
+.app-container-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.app-container-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+.tab-content-enter-active,
+.tab-content-leave-active {
+  transition: all var(--transition-smooth);
+}
+
+.tab-content-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.tab-content-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.theme-icon-enter-active,
+.theme-icon-leave-active {
+  transition: all var(--transition-fast);
+}
+
+.theme-icon-enter-from {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.8);
+}
+
+.theme-icon-leave-to {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.8);
+}
+
+.mobile-overlay {
   position: fixed;
-  left: 0;
   top: 0;
-  z-index: 1000; /* Assurez-vous que la sidebar est au-dessus des autres éléments */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 999;
 }
 
-.logo {
-  height: 80px;
-  margin-bottom: 30px;
+.overlay-enter-active,
+.overlay-leave-active {
+  transition: opacity var(--transition-smooth);
 }
 
-.menu {
-  width: 100%;
+.overlay-enter-from,
+.overlay-leave-to {
+  opacity: 0;
 }
 
-.menu-button {
-  width: 100%;
-  background: none;
-  border: none;
-  padding: 12px;
-  margin-bottom: 10px;
-  text-align: left;
-  cursor: pointer;
-  font-size: 16px;
-  color: #4CAF50;
-  font-weight: bold;
-  transition: background-color 0.3s, transform 0.3s, color 0.3s;
-  border-radius: 4px;
-  padding-left: 15px;
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .mobile-menu-toggle {
+    display: flex;
+  }
+
+  .nav-menu {
+    position: fixed;
+    top: var(--navbar-height);
+    left: 0;
+    right: 0;
+    background-color: var(--bg-primary);
+    flex-direction: column;
+    padding: 2rem 1rem;
+    gap: 1rem;
+    transform: translateY(-100%);
+    transition: transform var(--transition-smooth);
+    box-shadow: var(--shadow-lg);
+    max-height: calc(100vh - var(--navbar-height));
+    overflow-y: auto;
+  }
+
+  .nav-menu.active {
+    transform: translateY(0);
+  }
+
+  .nav-button {
+    width: 100%;
+    justify-content: center;
+    padding: 1rem;
+    font-size: 1.1rem;
+  }
+
+  .hero-image {
+    width: 250px;
+    height: 250px;
+  }
+
+  .title-logo {
+    font-size: 2.5rem;
+  }
+
+  .nav-container {
+    padding: 0 1rem;
+  }
 }
 
-.menu-button:hover {
-  background-color: #4CAF50;
-  color: white;
-  transform: scale(1.02);
+@media (max-width: 480px) {
+  .hero-image {
+    width: 200px;
+    height: 200px;
+  }
+
+  .title-logo {
+    font-size: 2rem;
+  }
 }
 </style>
