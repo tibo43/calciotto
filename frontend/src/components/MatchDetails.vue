@@ -62,48 +62,45 @@
           </div>
         </div>
 
-        <!-- Team Management Tabs -->
-        <div v-if="match.Teams && match.Teams.length > 0" class="team-tabs">
-          <div class="tabs-buttons">
-            <button 
-              v-for="(team, index) in match.Teams" 
-              :key="team.ID"
-              @click="activeTeam = index"
-              :class="['tab-button', { active: activeTeam === index }]"
-            >
-              <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-              {{ team.Colour }} Team ({{ team.Players ? team.Players.length : 0 }})
-            </button>
-          </div>
-          
-          <!-- Save Changes Button -->
-          <button @click="saveChanges" :disabled="isSaving" class="save-button">
-            <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-              <polyline points="17,21 17,13 7,13 7,21"/>
-              <polyline points="7,3 7,8 15,8"/>
-            </svg>
-            <div v-else class="save-spinner"></div>
-            {{ isSaving ? 'Saving...' : 'Save Changes' }}
-          </button>
-        </div>
-
-        <!-- Active Team Management -->
-        <div v-if="match.Teams && match.Teams[activeTeam]" class="team-management">
+        <!-- Team Management Section -->
+        <div v-if="match.Teams && match.Teams.length > 0" class="team-management">
           <div class="management-header">
-            <h3>{{ match.Teams[activeTeam].Colour }} Team Management</h3>
-            <button @click="showAddPlayerModal = true" class="add-player-btn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="16"/>
-                <line x1="8" y1="12" x2="16" y2="12"/>
-              </svg>
-              Add Player
-            </button>
+            <div class="tabs-buttons">
+              <button 
+                v-for="(team, index) in match.Teams" 
+                :key="team.ID"
+                @click="activeTeam = index"
+                :class="['tab-button', { active: activeTeam === index }]"
+              >
+                <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
+                {{ team.Colour }} Team ({{ team.Players ? team.Players.length : 0 }})
+              </button>
+            </div>
+            
+            <div class="action-buttons">
+              <button @click="showAddPlayerModal = true" class="add-player-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="16"/>
+                  <line x1="8" y1="12" x2="16" y2="12"/>
+                </svg>
+                Add Player
+              </button>
+              
+              <button @click="saveChanges" :disabled="isSaving" class="save-button">
+                <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17,21 17,13 7,13 7,21"/>
+                  <polyline points="7,3 7,8 15,8"/>
+                </svg>
+                <div v-else class="save-spinner"></div>
+                {{ isSaving ? 'Saving...' : 'Save Changes' }}
+              </button>
+            </div>
           </div>
 
           <!-- Players List -->
-          <div v-if="match.Teams[activeTeam].Players" class="players-grid">
+          <div v-if="match.Teams[activeTeam] && match.Teams[activeTeam].Players" class="players-grid">
             <div 
               v-for="(player, playerIndex) in match.Teams[activeTeam].Players" 
               :key="playerIndex"
@@ -149,8 +146,6 @@
             </div>
           </div>
         </div>
-
-        <!-- Save Changes Button moved to team-tabs section -->
       </div>
     </div>
 
@@ -252,7 +247,6 @@ export default {
       this.isLoading = true;
       try {
         const matchId = this.$route.params.id;
-        // You'll need to implement getMatchDetailsByID in your API service
         this.match = await getMatchDetailsByID(matchId);
         
         // Ensure each player has GoalNumber property
@@ -311,7 +305,6 @@ export default {
         return;
       }
       
-      // Remove player without confirmation popup
       this.match.Teams[this.activeTeam].Players.splice(playerIndex, 1);
       this.updateTeamScore();
     },
@@ -347,7 +340,6 @@ export default {
     async saveChanges() {
       this.isSaving = true;
       try {
-        // You'll need to implement updateMatch in your API service
         await updateMatch(this.match.ID, this.match);
         this.showMessage('Match updated successfully!', 'success');
       } catch (error) {
@@ -442,7 +434,7 @@ export default {
 </script>
 
 <style scoped>
-/* CSS Variables (same as MatchesAll.vue) */
+/* CSS Variables */
 :root {
   --primary-color: #10b981;
   --primary-hover: #059669;
@@ -468,7 +460,6 @@ export default {
 }
 
 .match-detail-container {
-  min-height: 100vh;
   background-color: var(--bg-secondary);
 }
 
@@ -482,7 +473,7 @@ export default {
 .match-header {
   background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
   color: white;
-  padding: 2rem 0;
+  padding: 1rem 0;
   position: relative;
 }
 
@@ -683,17 +674,25 @@ export default {
   box-shadow: var(--shadow-lg);
 }
 
-/* Team Tabs */
-.team-tabs {
+/* Team Management */
+.team-management {
+  background-color: var(--bg-primary);
+  border-radius: var(--border-radius-lg);
+  padding: 2rem;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-color);
+  margin-bottom: 2rem;
+}
+
+.management-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
   margin-bottom: 2rem;
   padding: 1rem;
-  background-color: var(--bg-primary);
-  border-radius: var(--border-radius-lg);
-  box-shadow: var(--shadow-sm);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius);
   border: 1px solid var(--border-color);
 }
 
@@ -707,7 +706,7 @@ export default {
   align-items: center;
   gap: 0.5rem;
   padding: 1rem 1.5rem;
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-primary);
   border: 2px solid var(--border-color);
   border-radius: var(--border-radius);
   cursor: pointer;
@@ -734,34 +733,17 @@ export default {
   border: 1px solid currentColor;
 }
 
-/* Team Management */
-.team-management {
-  background-color: var(--bg-primary);
-  border-radius: var(--border-radius-lg);
-  padding: 2rem;
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-color);
-  margin-bottom: 2rem;
-}
-
-.management-header {
+.action-buttons {
   display: flex;
-  justify-content: space-between;
+  gap: 1rem;
   align-items: center;
-  margin-bottom: 2rem;
-}
-
-.management-header h3 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
 }
 
 .add-player-btn {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background-color: var(--primary-color);
+  background-color: var(--secondary-color);
   color: white;
   border: none;
   padding: 0.75rem 1.5rem;
@@ -772,13 +754,52 @@ export default {
 }
 
 .add-player-btn:hover {
-  background-color: var(--primary-hover);
+  background-color: #2563eb;
   transform: translateY(-1px);
 }
 
 .add-player-btn svg {
   width: 18px;
   height: 18px;
+}
+
+.save-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.save-button:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.save-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.save-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.save-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
 /* Players Grid */
@@ -905,47 +926,6 @@ export default {
   text-align: center;
 }
 
-/* Save Section - now in team-tabs */
-.save-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: var(--primary-color);
-  color: white;
-  border: none;
-  padding: 1rem 2rem;
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  font-weight: 600;
-  font-size: 1rem;
-  white-space: nowrap;
-}
-
-.save-button:hover:not(:disabled) {
-  background-color: var(--primary-hover);
-  transform: translateY(-1px);
-}
-
-.save-button:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.save-button svg {
-  width: 20px;
-  height: 20px;
-}
-
-.save-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
 /* Modal */
 .modal-overlay {
   position: fixed;
@@ -968,7 +948,7 @@ export default {
   width: 90%;
   max-height: 90vh;
   overflow: hidden;
-  box-shadow: var(--shadow-xl);
+  box-shadow: var(--shadow-lg);
 }
 
 .modal-header {
@@ -1210,7 +1190,7 @@ export default {
     font-size: 2rem;
   }
 
-  .team-tabs {
+  .management-header {
     flex-direction: column;
     gap: 1rem;
     align-items: stretch;
@@ -1225,15 +1205,9 @@ export default {
     justify-content: center;
   }
 
-  .save-button {
+  .action-buttons {
     justify-content: center;
-    padding: 1rem;
-  }
-
-  .management-header {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: stretch;
+    flex-wrap: wrap;
   }
 
   .players-grid {
@@ -1278,6 +1252,7 @@ export default {
     font-size: 0.875rem;
   }
 
+  .add-player-btn,
   .save-button {
     padding: 0.75rem 1rem;
     font-size: 0.875rem;

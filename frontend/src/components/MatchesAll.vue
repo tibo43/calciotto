@@ -380,7 +380,7 @@ export default {
 .matches-header {
   background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
   color: white;
-  padding: 2rem 0;
+  padding: 1rem 0;
   position: relative;
   overflow: hidden;
 }
