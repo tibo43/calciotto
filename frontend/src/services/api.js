@@ -20,9 +20,60 @@ export const getMatchesDetails = async () => {
     const response = await axios.get(`${API_URL}/matches/details/all`);
     return response.data; // Ensure this returns an array
 };
-export const getMatchDetailsByID = async (id) => {
-    const response = await axios.get(`${API_URL}/matches//details/${id}`);
-    return response.data; // Ensure this returns an array
+export const getMatchDetailsByID = async (matchId) => {
+  try {
+    const response = await fetch(`${API_URL}/matches/details/${matchId}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch match details');
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching match details:', error);
+    throw error;
+  }
+};
+// Update match
+export const updateMatch = async (matchId, matchData) => {
+  try {
+    const response = await fetch(`${API_URL}/matches/${matchId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(matchData),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to update match');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error updating match:', error);
+    throw error;
+  }
+};
+
+// Alternative: If you prefer PATCH for partial updates
+export const updateMatchPartial = async (matchId, updates) => {
+  try {
+    const response = await fetch(`${API_URL}/matches/${matchId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updates),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to update match');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error updating match:', error);
+    throw error;
+  }
 };
 export const getMatch = (id) => axios.get(`${API_URL}/matches/${id}`);
 export const addMatch = (match) => axios.post(`${API_URL}/players`, match);

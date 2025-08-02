@@ -1,17 +1,22 @@
-import Vue from 'vue';
-import VueRouter from 'vue-router';
-import PlayersAll from '@/components/PlayersAll.vue';
-import PlayerDetails from '@/components/PlayerDetails.vue';
-
-Vue.use(VueRouter);
+import { createRouter, createWebHistory } from 'vue-router';
 
 const routes = [
-  { path: '/players', component: PlayersAll },
-  { path: '/players/:id', component: PlayerDetails },
+  {
+    path: '/',
+    name: 'MatchesAll',
+    component: () => import('@/components/MatchesAll.vue'),
+    props: true
+  },
+  {
+    path: '/matches/:id/edit',
+    name: 'MatchDetails',
+    component: () => import('@/components/MatchDetails.vue'),
+    props: true
+  }
 ];
 
-const router = new VueRouter({
-  mode: 'history',
+const router = createRouter({
+  history: createWebHistory(process.env.BASE_URL),
   routes,
 });
 

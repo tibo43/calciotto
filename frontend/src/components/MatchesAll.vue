@@ -86,7 +86,19 @@
           <transition name="match-details">
             <div v-if="selectedMatch" class="match-details-container">
               <div class="details-header">
-                <h3>{{ formatDate(selectedMatch.Date) }} - Match Details</h3>
+                <div class="details-title-section">
+                  <h3>{{ formatDate(selectedMatch.Date) }} - Match Details</h3>
+                  <router-link 
+                    :to="`/matches/${selectedMatch.ID}/edit`" 
+                    class="edit-match-btn"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                    Edit Match
+                  </router-link>
+                </div>
                 <div class="details-divider"></div>
               </div>
               
@@ -662,6 +674,55 @@ export default {
   background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
   border-radius: 2px;
   width: 80px;
+}
+
+.details-title-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.edit-match-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--primary-color);
+  color: white;
+  text-decoration: none;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  border-radius: var(--border-radius);
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+.edit-match-btn:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  color: white;
+  text-decoration: none;
+}
+
+.edit-match-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .details-title-section {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+  
+  .edit-match-btn {
+    justify-content: center;
+  }
 }
 
 /* Players Table */
