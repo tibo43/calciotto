@@ -4,7 +4,7 @@
     <transition name="initial-view">
       <div v-if="showImage" class="initial-view" @click="toggleView">
         <div class="logo-container">
-          <img alt="Calciotto Logo" src="./assets/campo_image_1.jpg" class="hero-image">
+          <img alt="Calciotto Logo" src="./assets/campo.jpg" class="hero-image">
           <div class="logo-overlay">
             <h1 class="title-logo">Calciotto</h1>
             <p class="subtitle">Click to enter</p>
@@ -257,7 +257,7 @@ body {
 }
 
 #app {
-  min-height: 100vh;
+  /* min-height: 100vh; */
   position: relative;
 }
 
@@ -496,7 +496,6 @@ body {
 
 /* Main Content */
 .app-container {
-  min-height: 100vh;
   background-color: var(--bg-secondary);
 }
 
