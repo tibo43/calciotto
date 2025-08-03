@@ -78,14 +78,14 @@
             </div>
             
             <div class="action-buttons">
-              <button @click="showAddPlayerModal = true" class="add-player-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="8" x2="12" y2="16"/>
-                  <line x1="8" y1="12" x2="16" y2="12"/>
-                </svg>
-                Add Player
-              </button>
+<button @click="showModal" class="add-player-btn">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="8" x2="12" y2="16"/>
+    <line x1="8" y1="12" x2="16" y2="12"/>
+  </svg>
+  Add Player
+</button>
               
               <button @click="saveChanges" :disabled="isSaving" class="save-button">
                 <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -172,7 +172,7 @@
     <div v-if="showAddPlayerModal" class="modal-overlay" @click="closeModal">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h3>Add New Player</h3>
+          <h3>Add Player to {{ match.Teams[activeTeam].Colour }} Team</h3>
           <button @click="closeModal" class="modal-close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/>
@@ -180,19 +180,56 @@
             </svg>
           </button>
         </div>
-        
         <div class="modal-body">
           <div class="form-group">
             <label for="playerName">Player Name</label>
-            <input 
-              v-model="newPlayerName" 
-              type="text" 
-              id="playerName"
-              placeholder="Enter player name"
-              @keyup.enter="addPlayer"
-            >
+            <div class="input-wrapper">
+              <input 
+                v-model="newPlayerName" 
+                type="text" 
+                id="playerName"
+                placeholder="Start typing player name..."
+                @input="onPlayerNameInput"
+                @keyup.enter="addPlayer"
+                :class="{ 
+                  'error': playerNotFound || playerAlreadyInTeam,
+                  'success': playerSuggestions.length === 1 && !playerAlreadyInTeam && !playerNotFound
+                }"
+              >
+              
+              <!-- Loading indicator -->
+              <div v-if="isSearchingPlayer" class="search-loading">
+                <div class="spinner-small"></div>
+              </div>
+            </div>
+            
+            <!-- Validation messages -->
+            <div v-if="validationMessage" 
+                :class="['validation-message', {
+                  'error': playerNotFound || playerAlreadyInTeam,
+                  'success': playerSuggestions.length === 1 && !playerAlreadyInTeam && !playerNotFound,
+                  'info': playerSuggestions.length > 1
+                }]">
+              {{ validationMessage }}
+            </div>
+            
+            <!-- Player suggestions dropdown -->
+            <div v-if="playerSuggestions.length > 1" class="suggestions-dropdown">
+              <div class="suggestions-header">Suggested players:</div>
+              <button 
+                v-for="player in playerSuggestions" 
+                :key="player.ID || player.Name"
+                @click="selectPlayerSuggestion(player)"
+                class="suggestion-item"
+                type="button"
+              >
+                <div class="suggestion-name">{{ player.Name }}</div>
+                <div v-if="isPlayerInAnyTeam(player.Name)" class="suggestion-status">
+                  Already in match
+                </div>
+              </button>
+            </div>
           </div>
-          
           <div class="form-group">
             <label for="playerGoals">Initial Goals</label>
             <input 
@@ -204,10 +241,13 @@
             >
           </div>
         </div>
-        
         <div class="modal-footer">
           <button @click="closeModal" class="cancel-button">Cancel</button>
-          <button @click="addPlayer" :disabled="!newPlayerName.trim()" class="confirm-button">
+          <button 
+            @click="addPlayer" 
+            :disabled="!newPlayerName.trim() || playerNotFound || playerAlreadyInTeam || isSearchingPlayer" 
+            class="confirm-button"
+          >
             Add Player
           </button>
         </div>
@@ -222,7 +262,7 @@
 </template>
 
 <script>
-import { getMatchDetailsByID, updateMatch } from '@/services/api';
+import { getMatchDetailsByID, updateMatch, getPlayers } from '@/services/api';
 
 export default {
   name: 'MatchDetail',
@@ -233,10 +273,16 @@ export default {
       isSaving: false,
       activeTeam: 0,
       showAddPlayerModal: false,
-      newPlayerName: '',
+      newPlayerName: '', // This will now be the selected player ID
       newPlayerGoals: 0,
       message: '',
-      messageType: 'success' // 'success' or 'error'
+      messageType: 'success',
+      // New properties for player dropdown
+      allPlayers: [],
+      filteredPlayers: [],
+      isLoadingPlayers: false,
+      selectedPlayer: null,
+      playerSearchTerm: '',
     };
   },
   async created() {
@@ -250,13 +296,17 @@ export default {
         this.match = await getMatchDetailsByID(matchId);
         
         // Ensure each player has GoalNumber property
-        this.match.Teams.forEach(team => {
-          team.Players.forEach(player => {
-            if (!player.GoalNumber) {
-              player.GoalNumber = 0;
+        if (this.match && this.match.Teams) {
+          this.match.Teams.forEach(team => {
+            if (team.Players) {
+              team.Players.forEach(player => {
+                if (!player.GoalNumber) {
+                  player.GoalNumber = 0;
+                }
+              });
             }
           });
-        });
+        }
         
       } catch (error) {
         console.error('Error fetching match:', error);
@@ -265,7 +315,139 @@ export default {
         this.isLoading = false;
       }
     },
+
+    // Load all players when modal opens
+    async loadAllPlayers() {
+      if (this.allPlayers.length > 0) {
+        // Already loaded, just filter available players
+        this.filterAvailablePlayers();
+        return;
+      }
+
+      this.isLoadingPlayers = true;
+      try {
+        this.allPlayers = await getPlayers();
+        console.log('Loaded players:', this.allPlayers);
+        this.filterAvailablePlayers();
+      } catch (error) {
+        console.error('Error loading players:', error);
+        this.showMessage('Error loading players list', 'error');
+        this.allPlayers = [];
+        this.filteredPlayers = [];
+      } finally {
+        this.isLoadingPlayers = false;
+      }
+    },
+
+    // Filter players to show only those not in current team
+    filterAvailablePlayers() {
+      if (!this.allPlayers.length) {
+        this.filteredPlayers = [];
+        return;
+      }
+
+      // Get current team players
+      const currentTeamPlayers = this.match.Teams[this.activeTeam].Players || [];
+      const currentTeamPlayerNames = currentTeamPlayers.map(p => p.Name.toLowerCase());
+
+      // Filter out players already in current team
+      let availablePlayers = this.allPlayers.filter(player => 
+        !currentTeamPlayerNames.includes(player.Name.toLowerCase())
+      );
+
+      // Apply search filter if there's a search term
+      if (this.playerSearchTerm.trim()) {
+        availablePlayers = availablePlayers.filter(player =>
+          player.Name.toLowerCase().includes(this.playerSearchTerm.toLowerCase())
+        );
+      }
+
+      this.filteredPlayers = availablePlayers;
+    },
+
+    // Handle search input
+    onPlayerSearch() {
+      this.filterAvailablePlayers();
+    },
+
+    // Select a player from the list
+    selectPlayer(player) {
+      this.selectedPlayer = player;
+      this.newPlayerName = player.Name; // For compatibility with existing code
+    },
+
+    // Check if player is in current team
+    isPlayerInCurrentTeam(playerName) {
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        return false;
+      }
+      
+      return this.match.Teams[this.activeTeam].Players.some(player => 
+        player.Name.toLowerCase() === playerName.toLowerCase()
+      );
+    },
+
+    // Check if player is in any team in this match
+    isPlayerInAnyTeam(playerName) {
+      if (!this.match.Teams) return false;
+      
+      return this.match.Teams.some(team => 
+        team.Players && team.Players.some(player => 
+          player.Name.toLowerCase() === playerName.toLowerCase()
+        )
+      );
+    },
+
+    // Add selected player to team
+    async addPlayer() {
+      if (!this.selectedPlayer) {
+        this.showMessage('Please select a player', 'error');
+        return;
+      }
+      
+      // Double-check if player is already in current team
+      if (this.isPlayerInCurrentTeam(this.selectedPlayer.Name)) {
+        this.showMessage(`${this.selectedPlayer.Name} is already in the ${this.match.Teams[this.activeTeam].Colour} team`, 'error');
+        return;
+      }
+
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam]) {
+        console.error('Invalid team data');
+        return;
+      }
+      
+      if (!this.match.Teams[this.activeTeam].Players) {
+        this.match.Teams[this.activeTeam].Players = [];
+      }
+      
+      const newPlayer = {
+        ID: this.selectedPlayer.ID, // Include player ID if available
+        Name: this.selectedPlayer.Name,
+        GoalNumber: this.newPlayerGoals || 0
+      };
+      
+      this.match.Teams[this.activeTeam].Players.push(newPlayer);
+      this.updateTeamScore();
+      this.closeModal();
+      this.showMessage(`${newPlayer.Name} added to ${this.match.Teams[this.activeTeam].Colour} team`, 'success');
+    },
     
+    // Show modal and load players
+    async showModal() {
+      this.showAddPlayerModal = true;
+      await this.loadAllPlayers();
+    },
+    
+    closeModal() {
+      this.showAddPlayerModal = false;
+      this.selectedPlayer = null;
+      this.newPlayerName = '';
+      this.newPlayerGoals = 0;
+      this.playerSearchTerm = '';
+      this.filteredPlayers = [];
+    },
+
+    // Existing methods remain the same...
     goBack() {
       this.$router.go(-1);
     },
@@ -307,34 +489,6 @@ export default {
       
       this.match.Teams[this.activeTeam].Players.splice(playerIndex, 1);
       this.updateTeamScore();
-    },
-    
-    addPlayer() {
-      if (!this.newPlayerName.trim()) return;
-      
-      if (!this.match.Teams || !this.match.Teams[this.activeTeam]) {
-        console.error('Invalid team data');
-        return;
-      }
-      
-      if (!this.match.Teams[this.activeTeam].Players) {
-        this.match.Teams[this.activeTeam].Players = [];
-      }
-      
-      const newPlayer = {
-        Name: this.newPlayerName.trim(),
-        GoalNumber: this.newPlayerGoals || 0
-      };
-      
-      this.match.Teams[this.activeTeam].Players.push(newPlayer);
-      this.updateTeamScore();
-      this.closeModal();
-    },
-    
-    closeModal() {
-      this.showAddPlayerModal = false;
-      this.newPlayerName = '';
-      this.newPlayerGoals = 0;
     },
     
     async saveChanges() {
@@ -1052,6 +1206,147 @@ export default {
 .confirm-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.input-wrapper {
+  position: relative;
+}
+
+.input-wrapper input.error {
+  border-color: var(--danger-color);
+  background-color: #fef2f2;
+}
+
+.input-wrapper input.success {
+  border-color: var(--primary-color);
+  background-color: #f0fdf4;
+}
+
+.search-loading {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color);
+  border-top: 2px solid var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Validation messages */
+.validation-message {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.validation-message.error {
+  background-color: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.validation-message.success {
+  background-color: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.validation-message.info {
+  background-color: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+/* Suggestions dropdown */
+.suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-top: none;
+  border-radius: 0 0 var(--border-radius) var(--border-radius);
+  box-shadow: var(--shadow-lg);
+  z-index: 10;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.suggestions-header {
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.suggestion-item {
+  width: 100%;
+  padding: 0.75rem;
+  border: none;
+  background: white;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.suggestion-item:hover {
+  background-color: var(--bg-secondary);
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.suggestion-status {
+  font-size: 0.75rem;
+  color: var(--text-light);
+  background-color: var(--bg-tertiary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+}
+
+/* Form group positioning for dropdown */
+.form-group {
+  position: relative;
+}
+
+/* Enhanced confirm button states */
+.confirm-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--text-light);
+}
+
+/* Form group positioning for dropdown */
+.form-group {
+  position: relative;
+}
+
+/* Enhanced confirm button states */
+.confirm-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--text-light);
 }
 
 /* Messages */

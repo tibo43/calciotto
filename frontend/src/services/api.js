@@ -80,3 +80,16 @@ export const getPlayers = async () => {
     throw error;
   }
 };
+
+export async function searchPlayerByName(playerName) {
+  try {
+    const response = await api.get(`/players/search?name=${encodeURIComponent(playerName)}`);
+    if (response.status !== 200) {
+      throw new Error('Player search failed');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error searching for player:', error);
+    throw error;
+  }
+}

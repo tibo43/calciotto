@@ -205,6 +205,7 @@ export default {
         
         matches.forEach(match => {
           if (!match.ID || !match.Date || !Array.isArray(match.Teams)) {
+            console.error('Invalid match structure:', match);
             throw new Error('Invalid match structure');
           }
           match.Teams.forEach(team => {
