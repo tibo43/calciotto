@@ -2,6 +2,8 @@ package services
 
 import (
 	"app/internal/models"
+	"encoding/json"
+	"log"
 	"sort"
 
 	"github.com/google/uuid"
@@ -25,44 +27,13 @@ func (s *MatchService) CreateMatch(match *models.Match) error {
 	return nil
 }
 
-// Player représente un joueur.
-type Player struct {
-	ID         string `gorm:"type:uuid;primaryKey"`
-	Name       string `gorm:"type:string"`
-	GoalNumber int    `gorm:"type:int"`
-}
-
-// TeamWithPlayers représente une équipe avec ses joueurs.
-type TeamWithPlayers struct {
-	ID      string   `gorm:"type:uuid;primaryKey"`
-	Colour  string   `gorm:"type:string"`
-	Score   int      `gorm:"type:int"`
-	Players []Player `gorm:"foreignKey:TeamID"` // Indique à GORM que cette table a une relation avec Player
-}
-
-// MatchWithDetails représente un match avec ses équipes et joueurs.
-type MatchWithDetails struct {
-	ID    string            `gorm:"type:uuid;primaryKey"`
-	Date  string            `gorm:"type:string"`
-	Teams []TeamWithPlayers `gorm:"foreignKey:MatchID"` // Indique à GORM que cette table a une relation avec TeamWithPlayers
-}
-
-func (s *MatchService) GetMatchesDetails() ([]MatchWithDetails, error) {
-	var rows []struct {
-		MatchID    string
-		MatchDate  string
-		TeamID     string
-		TeamColour string
-		Score      int
-		PlayerID   string
-		PlayerName string
-		GoalNumber int
-	}
+func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
+	var rows []models.RowsMatchDetails
 
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
-        SELECT matches.id as match_id, matches.date as match_date, 
-               teams.id as team_id, teams.colour as team_colour, 
+        SELECT matches.id as match_id, matches.date as match_date,
+               teams.id as team_id, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
 			   goals.number as goal_number
         FROM matches
@@ -78,22 +49,22 @@ func (s *MatchService) GetMatchesDetails() ([]MatchWithDetails, error) {
 	}
 
 	// Map the flat results into the hierarchical structure
-	matchesMap := make(map[string]*MatchWithDetails)
+	matchesMap := make(map[string]*models.MatchWithDetails)
 
 	for _, row := range rows {
 		// Get or create the match
 		match, exists := matchesMap[row.MatchID]
 		if !exists {
-			match = &MatchWithDetails{
+			match = &models.MatchWithDetails{
 				ID:    row.MatchID,
 				Date:  row.MatchDate,
-				Teams: []TeamWithPlayers{},
+				Teams: []models.TeamWithPlayers{},
 			}
 			matchesMap[row.MatchID] = match
 		}
 
 		// Get or create the team
-		var team *TeamWithPlayers
+		var team *models.TeamWithPlayers
 		for i := range match.Teams {
 			if match.Teams[i].ID == row.TeamID {
 				team = &match.Teams[i]
@@ -101,17 +72,17 @@ func (s *MatchService) GetMatchesDetails() ([]MatchWithDetails, error) {
 			}
 		}
 		if team == nil {
-			team = &TeamWithPlayers{
+			team = &models.TeamWithPlayers{
 				ID:      row.TeamID,
 				Colour:  row.TeamColour,
 				Score:   0,
-				Players: []Player{},
+				Players: []models.PlayerCustom{},
 			}
 			match.Teams = append(match.Teams, *team)
 		}
 
 		// Add the player to the team
-		team.Players = append(team.Players, Player{
+		team.Players = append(team.Players, models.PlayerCustom{
 			ID:         row.PlayerID,
 			Name:       row.PlayerName,
 			GoalNumber: row.GoalNumber,
@@ -119,10 +90,10 @@ func (s *MatchService) GetMatchesDetails() ([]MatchWithDetails, error) {
 	}
 
 	// Convert the map to a slice
-	var matches []MatchWithDetails
+	var matches []models.MatchWithDetails
 	for _, match := range matchesMap {
 		// Filter out teams with missing ID or Colour
-		var validTeams []TeamWithPlayers
+		var validTeams []models.TeamWithPlayers
 		for _, team := range match.Teams {
 			if team.ID != "" && team.Colour != "" && len(team.Players) > 0 {
 				for _, player := range team.Players {
@@ -167,7 +138,7 @@ func (s *MatchService) GetMatchesDetails() ([]MatchWithDetails, error) {
 	return matches, nil
 }
 
-func (s *MatchService) GetMatchDetailsByID(id string) (*MatchWithDetails, error) {
+func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails, error) {
 	var rows []struct {
 		MatchID    string
 		MatchDate  string
@@ -198,15 +169,15 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*MatchWithDetails, error)
 	}
 
 	// Initialisez l'objet match
-	match := &MatchWithDetails{
+	match := &models.MatchWithDetails{
 		ID:    id,
 		Date:  rows[0].MatchDate,
-		Teams: []TeamWithPlayers{},
+		Teams: []models.TeamWithPlayers{},
 	}
 
 	for _, row := range rows {
 		// Get or create the team
-		var team *TeamWithPlayers
+		var team *models.TeamWithPlayers
 		for i := range match.Teams {
 			if match.Teams[i].ID == row.TeamID {
 				team = &match.Teams[i]
@@ -215,16 +186,16 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*MatchWithDetails, error)
 		}
 
 		if team == nil {
-			team = &TeamWithPlayers{
+			team = &models.TeamWithPlayers{
 				ID:      row.TeamID,
 				Colour:  row.TeamColour,
 				Score:   0,
-				Players: []Player{},
+				Players: []models.PlayerCustom{},
 			}
 			match.Teams = append(match.Teams, *team)
 		}
 
-		team.Players = append(team.Players, Player{
+		team.Players = append(team.Players, models.PlayerCustom{
 			ID:         row.PlayerID,
 			Name:       row.PlayerName,
 			GoalNumber: row.GoalNumber,
@@ -258,4 +229,58 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*MatchWithDetails, error)
 	}
 
 	return match, nil
+}
+
+func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
+	b, err := json.MarshalIndent(match, "", "  ")
+	if err != nil {
+		log.Println(err)
+	}
+	log.Print(string(b))
+
+	// var dbTeamCompositions []models.TeamComposition
+
+	// for i := range match.Teams {
+	// 	team := &match.Teams[i]
+	// 	result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Find(&dbTeamCompositions)
+	// 	if result.Error != nil {
+	// 		return result.Error
+	// 	}
+	// 	toDelete := []string{}
+	// 	for j := range team.Players {
+	// 		player := &team.Players[j]
+	// 		// Check if the player already exists in the team composition
+	// 		exists := false
+	// 		for _, dbTeamComposition := range dbTeamCompositions {
+	// 			if dbTeamComposition.PlayerID != player.ID {
+	// 				toDelete = append(toDelete, dbTeamComposition.PlayerID)
+	// 			}
+	// 			if dbTeamComposition.PlayerID == player.ID {
+	// 				exists = true
+	// 				toDelete = common.RemoveValueSlice(toDelete, dbTeamComposition.PlayerID)
+	// 				break
+	// 			}
+	// 		}
+	// 		if !exists {
+	// 			// Create a new team composition if it doesn't exist
+	// 			newTeamComposition := models.TeamComposition{
+	// 				MatchID:  match.ID,
+	// 				TeamID:   team.ID,
+	// 				PlayerID: player.ID,
+	// 			}
+	// 			result := s.DB.Create(&newTeamComposition)
+	// 			if result.Error != nil {
+	// 				return result.Error
+	// 			}
+	// 		}
+	// 		// drop the player if it is not in the team anymore
+	// 		if len(toDelete) > 0 {
+	// 			result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id IN ?", toDelete).Delete(&models.TeamComposition{})
+	// 			if result.Error != nil {
+	// 				return result.Error
+	// 			}
+	// 		}
+	// 	}
+	// }
+	return nil
 }

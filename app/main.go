@@ -39,11 +39,13 @@ func main() {
 	// Players
 	r.POST("/players", playerHandler.CreatePlayer)
 	r.GET("/players", playerHandler.GetPlayers)
-	r.GET("/players/:id", playerHandler.GetPlayerByID)
+	r.GET("/players/search", playerHandler.SearchPlayer)
+
 	// Matches
 	r.POST("/matches", matchHandler.CreateMatch)
 	r.GET("/matches/details", matchHandler.GetMatchesDetails)
 	r.GET("/matches/:id/details", matchHandler.GetMatchDetailsByID)
+	r.PUT("/matches/:id", matchHandler.UpdateMatch)
 	// Add more routes as needed
 
 	// Start server
