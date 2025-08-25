@@ -255,6 +255,7 @@ export default {
   --text-primary: #f9fafb;
   --text-secondary: #d1d5db;
   --text-light: #9ca3af;
+  --text-tertiary: #1f2937;
   --bg-primary: #0f172a;
   --bg-secondary: #1e293b;
   --bg-tertiary: #334155;
