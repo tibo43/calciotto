@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 
 	"app/internal/models"
@@ -24,13 +23,13 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	log.Println("Creating match:", match)
-	if err := h.Service.CreateMatch(&match.Date); err != nil {
+	id, err := h.Service.CreateMatch(match.Date)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, match)
+	c.JSON(http.StatusOK, id)
 }
 
 func (h *MatchHandler) GetMatchesDetails(c *gin.Context) {

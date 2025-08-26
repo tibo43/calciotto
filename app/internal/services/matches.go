@@ -29,7 +29,7 @@ func (s *MatchService) CreateMatch(date string) (string, error) {
 }
 
 func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
-	var rows []models.RowsMatchDetails
+	var rowsMatches []models.RowsMatchDetails
 
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
@@ -43,7 +43,7 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
         LEFT JOIN players ON players.id = team_compositions.player_id
 		LEFT JOIN goals ON goals.match_id = matches.id AND goals.team_id = teams.id AND goals.player_id = players.id
 		ORDER BY match_date DESC
-    `).Scan(&rows)
+    `).Scan(&rowsMatches)
 
 	if result.Error != nil {
 		return nil, result.Error
@@ -52,41 +52,42 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 	// Map the flat results into the hierarchical structure
 	matchesMap := make(map[string]*models.MatchWithDetails)
 
-	for _, row := range rows {
+	for _, rowMatches := range rowsMatches {
 		// Get or create the match
-		match, exists := matchesMap[row.MatchID]
+		match, exists := matchesMap[rowMatches.MatchID]
 		if !exists {
 			match = &models.MatchWithDetails{
-				ID:    row.MatchID,
-				Date:  row.MatchDate,
+				ID:    rowMatches.MatchID,
+				Date:  rowMatches.MatchDate,
 				Teams: []models.TeamWithPlayers{},
 			}
-			matchesMap[row.MatchID] = match
+			matchesMap[rowMatches.MatchID] = match
 		}
 
 		// Get or create the team
 		var team *models.TeamWithPlayers
 		for i := range match.Teams {
-			if match.Teams[i].ID == row.TeamID {
+			if match.Teams[i].ID == rowMatches.TeamID {
 				team = &match.Teams[i]
 				break
 			}
 		}
 		if team == nil {
-			team = &models.TeamWithPlayers{
-				ID:      row.TeamID,
-				Colour:  row.TeamColour,
+			newTeam := models.TeamWithPlayers{
+				ID:      rowMatches.TeamID,
+				Colour:  rowMatches.TeamColour,
 				Score:   0,
 				Players: []models.PlayerCustom{},
 			}
-			match.Teams = append(match.Teams, *team)
+			match.Teams = append(match.Teams, newTeam)
+			team = &match.Teams[len(match.Teams)-1] // Point to the newly appended team
 		}
 
 		// Add the player to the team
 		team.Players = append(team.Players, models.PlayerCustom{
-			ID:         row.PlayerID,
-			Name:       row.PlayerName,
-			GoalNumber: row.GoalNumber,
+			ID:         rowMatches.PlayerID,
+			Name:       rowMatches.PlayerName,
+			GoalNumber: rowMatches.GoalNumber,
 		})
 	}
 
@@ -102,6 +103,26 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 					team.Score += player.GoalNumber
 				}
 				validTeams = append(validTeams, team)
+			}
+		}
+
+		if len(validTeams) == 0 {
+			var rowsTeams []models.RowsTeamDetails
+			result := s.DB.Raw(`
+					SELECT teams.id as team_id, teams.colour as team_colour
+					FROM teams
+				`).Scan(&rowsTeams)
+			if result.Error != nil {
+				return nil, result.Error
+			}
+			for _, rowTeams := range rowsTeams {
+				var team = &models.TeamWithPlayers{
+					ID:      rowTeams.TeamID,
+					Colour:  rowTeams.TeamColour,
+					Score:   0,
+					Players: []models.PlayerCustom{},
+				}
+				validTeams = append(validTeams, *team)
 			}
 		}
 
@@ -135,13 +156,12 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 			})
 		}
 	}
-
 	return matches, nil
 }
 
 func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails, error) {
 
-	var rows []*models.RowsMatchDetails
+	var rowsMatch []*models.RowsMatchDetails
 
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
@@ -155,7 +175,7 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
         LEFT JOIN players ON players.id = team_compositions.player_id
 		LEFT JOIN goals ON goals.match_id = matches.id AND goals.team_id = teams.id AND goals.player_id = players.id
 		WHERE matches.id = ?
-		ORDER BY match_date DESC`, id).Scan(&rows)
+		ORDER BY match_date DESC`, id).Scan(&rowsMatch)
 
 	if result.Error != nil {
 		return nil, result.Error
@@ -164,45 +184,68 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
 	// Initialisez l'objet match
 	match := &models.MatchWithDetails{
 		ID:    id,
-		Date:  rows[0].MatchDate,
+		Date:  rowsMatch[0].MatchDate,
 		Teams: []models.TeamWithPlayers{},
 	}
 
-	for _, row := range rows {
-		// Get or create the team
-		var team *models.TeamWithPlayers
-		for i := range match.Teams {
-			if match.Teams[i].ID == row.TeamID {
-				team = &match.Teams[i]
-				break
+	if len(rowsMatch) > 1 {
+		for _, rowMatch := range rowsMatch {
+			// Get or create the team
+			var team *models.TeamWithPlayers
+			for i := range match.Teams {
+				if match.Teams[i].ID == rowMatch.TeamID {
+					log.Println("break", match)
+					team = &match.Teams[i]
+					log.Println("break", team)
+					break
+				}
 			}
+
+			if team == nil {
+				newTeam := models.TeamWithPlayers{
+					ID:      rowMatch.TeamID,
+					Colour:  rowMatch.TeamColour,
+					Score:   0,
+					Players: []models.PlayerCustom{},
+				}
+				match.Teams = append(match.Teams, newTeam)
+				team = &match.Teams[len(match.Teams)-1] // Point to the newly appended team
+			}
+
+			team.Players = append(team.Players, models.PlayerCustom{
+				ID:         rowMatch.PlayerID,
+				Name:       rowMatch.PlayerName,
+				GoalNumber: rowMatch.GoalNumber,
+			})
+
 		}
 
-		if team == nil {
-			team = &models.TeamWithPlayers{
-				ID:      row.TeamID,
-				Colour:  row.TeamColour,
+		// Calculez le score pour chaque équipe
+		for i := range match.Teams {
+			score := 0
+			for _, player := range match.Teams[i].Players {
+				score += player.GoalNumber
+			}
+			match.Teams[i].Score = score
+		}
+	} else {
+		var rowsTeams []models.RowsTeamDetails
+		result := s.DB.Raw(`
+				SELECT teams.id as team_id, teams.colour as team_colour
+				FROM teams
+			`).Scan(&rowsTeams)
+		if result.Error != nil {
+			return nil, result.Error
+		}
+		for _, rowTeams := range rowsTeams {
+			var team = &models.TeamWithPlayers{
+				ID:      rowTeams.TeamID,
+				Colour:  rowTeams.TeamColour,
 				Score:   0,
 				Players: []models.PlayerCustom{},
 			}
 			match.Teams = append(match.Teams, *team)
 		}
-
-		team.Players = append(team.Players, models.PlayerCustom{
-			ID:         row.PlayerID,
-			Name:       row.PlayerName,
-			GoalNumber: row.GoalNumber,
-		})
-
-	}
-
-	// Calculez le score pour chaque équipe
-	for i := range match.Teams {
-		score := 0
-		for _, player := range match.Teams[i].Players {
-			score += player.GoalNumber
-		}
-		match.Teams[i].Score = score
 	}
 
 	// Triez les équipes par couleur, en plaçant une couleur aléatoire en première position
@@ -274,6 +317,7 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 				}
 			}
 			if toDelete {
+				log.Println(dbTeamComposition.PlayerID)
 				result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", dbTeamComposition.PlayerID).Delete(&models.TeamComposition{})
 				if result.Error != nil {
 					return result.Error

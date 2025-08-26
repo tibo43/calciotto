@@ -32,3 +32,8 @@ type RowsMatchDetails struct {
 	PlayerName string
 	GoalNumber int
 }
+
+type RowsTeamDetails struct {
+	TeamID     string
+	TeamColour string
+}
