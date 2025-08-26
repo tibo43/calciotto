@@ -83,6 +83,21 @@ export const updateMatchPartial = async (matchId, updates) => {
   }
 };
 
+// New function for updating a match
+export const createPlayer = async (playerData) => {
+  try {
+    const response = await api.post(`/players`, playerData);
+    if (response.status !== 200) {
+      throw new Error('Failed to create player');
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error('Error creating player:', error);
+    throw error;
+  }
+};
+
 // Existing function (referenced in PlayersAll.vue)
 export const getPlayers = async () => {
   try {

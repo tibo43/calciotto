@@ -4,11 +4,116 @@
     <section class="matches-header">
       <div class="container">
         <div class="header-content">
-          <h1 class="page-title">Football Matches</h1>
-          <p class="page-subtitle">Track live scores and match details</p>
+          <div class="title-section">
+            <h1 class="page-title">Football Matches</h1>
+            <p class="page-subtitle">Track live scores and match details</p>
+          </div>
+          <!-- Create Match Button -->
+          <button 
+            class="create-match-btn"
+            @click="showCreateModal = true"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Create Match
+          </button>
         </div>
       </div>
     </section>
+
+    <!-- Create Match Modal -->
+    <transition name="modal">
+      <div v-if="showCreateModal" class="modal-overlay" @click="closeModal">
+        <div class="modal-container" @click.stop>
+          <div class="modal-header">
+            <h3>Create New Match</h3>
+            <button class="close-btn" @click="closeModal">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="modal-body">
+            <div class="form-group">
+              <label>Select Match Date</label>
+              <div class="date-picker-container">
+                <div class="date-picker-header">
+                  <button type="button" @click="previousMonth" class="nav-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="15,18 9,12 15,6"/>
+                    </svg>
+                  </button>
+                  <h4 class="month-year">{{ getCurrentMonthYear() }}</h4>
+                  <button type="button" @click="nextMonth" class="nav-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="9,18 15,12 9,6"/>
+                    </svg>
+                  </button>
+                </div>
+                
+                <div class="date-picker-grid">
+                  <div class="day-headers">
+                    <span v-for="day in dayHeaders" :key="day" class="day-header">{{ day }}</span>
+                  </div>
+                  <div class="days-grid">
+                    <button
+                      v-for="date in calendarDays"
+                      :key="`${date.day}-${date.month}`"
+                      type="button"
+                      class="day-button"
+                      :class="{
+                        'other-month': date.isOtherMonth,
+                        'selected': isSelectedDate(date),
+                        'today': isToday(date),
+                        'disabled': isPastDate(date)
+                      }"
+                      :disabled="isPastDate(date)"
+                      @click="selectDate(date)"
+                    >
+                      {{ date.day }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <p v-if="dateError" class="error-message">{{ dateError }}</p>
+              
+              <div v-if="selectedDate" class="selected-date-display">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="20,6 9,17 4,12"/>
+                </svg>
+                Selected: {{ formatSelectedDate(selectedDate) }}
+              </div>
+            </div>
+          </div>
+          
+          <div class="modal-footer">
+            <button 
+              class="cancel-btn" 
+              @click="closeModal"
+              :disabled="isCreating"
+            >
+              Cancel
+            </button>
+            <button 
+              class="confirm-btn" 
+              @click="creatingMatch"
+              :disabled="!selectedDate || isCreating"
+              :class="{ 'loading': isCreating }"
+            >
+              <div v-if="isCreating" class="loading-spinner-small"></div>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20,6 9,17 4,12"/>
+              </svg>
+              {{ isCreating ? 'Creating...' : 'Create Match' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <!-- Matches Section -->
     <section class="matches-section">
@@ -153,7 +258,17 @@
               <line x1="15" y1="9" x2="15.01" y2="9"/>
             </svg>
             <h3 class="empty-title">No matches available</h3>
-            <p class="empty-description">Check back later for upcoming matches</p>
+            <p class="empty-description">Create your first match to get started</p>
+            <button 
+              class="create-first-match-btn"
+              @click="showCreateModal = true"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Create Your First Match
+            </button>
           </div>
         </div>
       </div>
@@ -162,7 +277,7 @@
 </template>
 
 <script>
-import { getMatchesDetails } from '@/services/api';
+import { getMatchesDetails, createMatch } from '@/services/api';
 
 export default {
   name: 'MatchesAll',
@@ -172,7 +287,17 @@ export default {
       selectedMatch: null,
       isLoading: true,
       canScrollLeft: false,
-      canScrollRight: false
+      canScrollRight: false,
+      // Create Match Modal
+      showCreateModal: false,
+      selectedDate: '',
+      isCreating: false,
+      dateError: '',
+      match: {},
+      // Custom Date Picker
+      currentMonth: new Date().getMonth(),
+      currentYear: new Date().getFullYear(),
+      dayHeaders: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
     };
   },
   async created() {
@@ -189,6 +314,34 @@ export default {
   beforeUnmount() {
     if (this.$refs.matchesBar) {
       this.$refs.matchesBar.removeEventListener('scroll', this.updateScrollButtons);
+    }
+  },
+  computed: {
+    calendarDays() {
+      const days = [];
+      const firstDay = new Date(this.currentYear, this.currentMonth, 1);
+      const startDate = new Date(firstDay);
+
+      // Calculate days to go back to get Monday as first day
+      const dayOfWeek = firstDay.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      const daysToGoBack = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // If Sunday (0), go back 6 days, else go back (dayOfWeek - 1)
+    
+      startDate.setDate(startDate.getDate() - daysToGoBack);
+
+      // Generate 42 days (6 weeks)
+      for (let i = 0; i < 42; i++) {
+        const date = new Date(startDate);
+        date.setDate(startDate.getDate() + i);
+        
+        days.push({
+          day: date.getDate(),
+          month: date.getMonth(),
+          year: date.getFullYear(),
+          isOtherMonth: date.getMonth() !== this.currentMonth
+        });
+      }
+
+      return days;
     }
   },
   methods: {
@@ -226,7 +379,127 @@ export default {
         this.isLoading = false;
       }
     },
-    
+
+    // Create Match Methods
+    async creatingMatch() {
+      if (!this.selectedDate) {
+        this.dateError = 'Please select a date';
+        return;
+      }
+
+      this.isCreating = true;
+      this.dateError = '';
+      
+      this.match.Date = this.selectedDate;
+      try {
+        // Call your createMatch API function
+        const response = await createMatch(this.match);
+        
+        if (response) {
+          // Close modal
+          this.closeModal();
+          
+          // Route to edit page with the new match ID
+          this.$router.push(`/matches/${response}/edit`);
+        } else {
+          throw new Error('No match ID returned from server');
+        }
+      } catch (error) {
+        console.error('Error creating match:', error);
+        this.dateError = 'Failed to create match. Please try again.';
+      } finally {
+        this.isCreating = false;
+      }
+    },
+
+    closeModal() {
+      this.showCreateModal = false;
+      this.selectedDate = '';
+      this.dateError = '';
+      this.isCreating = false;
+      this.match = {};
+    },
+
+    formatSelectedDate(dateStr) {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    },
+
+    getCurrentMonthYear() {
+      const date = new Date(this.currentYear, this.currentMonth);
+      return date.toLocaleDateString('en-US', {
+        month: 'long',
+        year: 'numeric'
+      });
+    },
+
+    previousMonth() {
+      if (this.currentMonth === 0) {
+        this.currentMonth = 11;
+        this.currentYear--;
+      } else {
+        this.currentMonth--;
+      }
+    },
+
+    nextMonth() {
+      if (this.currentMonth === 11) {
+        this.currentMonth = 0;
+        this.currentYear++;
+      } else {
+        this.currentMonth++;
+      }
+    },
+
+    selectDate(date) {
+      if (this.isPastDate(date)) return;
+      
+      // Fix: Create date in local timezone, not UTC
+      const year = date.year;
+      const month = date.month;
+      const day = date.day;
+      
+      // Format as YYYY-MM-DD string directly
+      const monthStr = (month + 1).toString().padStart(2, '0');
+      const dayStr = day.toString().padStart(2, '0');
+      this.selectedDate = `${year}-${monthStr}-${dayStr}`;
+      
+      this.dateError = '';
+    },
+
+    isSelectedDate(date) {
+      if (!this.selectedDate) return false;
+      // Parse the YYYY-MM-DD string
+      const [year, month, day] = this.selectedDate.split('-').map(Number);
+      
+      return year === date.year &&
+            (month - 1) === date.month &&  // month in selectedDate is 1-based, date.month is 0-based
+            day === date.day;
+    },
+
+    isToday(date) {
+      const today = new Date();
+      return today.getFullYear() === date.year &&
+             today.getMonth() === date.month &&
+             today.getDate() === date.day;
+    },
+
+    isPastDate(date) {
+      const today = new Date();
+      const dateToCheck = new Date(date.year, date.month, date.day);
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      return dateToCheck < todayStart;
+    },
+
+    getTodayDate() {
+      const today = new Date();
+      return today.toISOString().split('T')[0];
+    },
     selectMatch(match) {
       this.selectedMatch = match;
     },
@@ -367,9 +640,521 @@ export default {
 }
 
 .header-content {
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   position: relative;
   z-index: 1;
+}
+
+.title-section {
+  text-align: left;
+}
+
+/* Create Match Button */
+.create-match-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background-color: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: var(--border-radius);
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all var(--transition-smooth);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.create-match-btn:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+}
+
+.create-match-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Create First Match Button (in empty state) */
+.create-first-match-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: var(--border-radius);
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all var(--transition-smooth);
+  box-shadow: var(--shadow-md);
+  margin-top: 1rem;
+}
+
+.create-first-match-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.create-first-match-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modal-container {
+  background-color: var(--bg-primary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+  max-width: 500px;
+  width: 100%;
+  overflow: visible;
+  border: 1px solid var(--border-color);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  color: white;
+}
+
+.modal-header h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: var(--border-radius);
+  transition: background-color var(--transition-fast);
+}
+
+.close-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.close-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.modal-body {
+  padding: 2rem 1.5rem;
+  overflow: visible;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+  position: relative;
+  overflow: visible;
+}
+
+/* Custom Date Picker Styles */
+.custom-date-picker {
+  position: relative;
+}
+
+.date-picker-input {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: var(--bg-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  min-height: 50px;
+}
+
+.date-picker-input:hover {
+  border-color: var(--primary-color);
+  background-color: var(--bg-primary);
+}
+
+.date-picker-input:focus-within {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.1);
+  background-color: var(--bg-primary);
+}
+
+.date-picker-container {
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius);
+  overflow: hidden;
+}
+
+.selected-date-display {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  color: white;
+  border-radius: var(--border-radius);
+  font-weight: 500;
+}
+
+.selected-date-display svg {
+  width: 16px;
+  height: 16px;
+}
+
+.calendar-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.date-display {
+  flex: 1;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.date-display:empty::before {
+  content: 'Choose a date';
+  color: var(--text-secondary);
+}
+
+.chevron-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.chevron-icon.open {
+  transform: rotate(180deg);
+}
+
+.date-picker-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background-color: var(--bg-primary);
+  border: 2px solid var(--primary-color);
+  border-radius: var(--border-radius);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  z-index: 1100;
+  margin-top: 0.5rem;
+  overflow: hidden;
+}
+
+.date-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  color: white;
+}
+
+.month-year {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.nav-btn {
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: var(--border-radius);
+  transition: background-color var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.nav-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.date-picker-grid {
+  padding: 1rem;
+}
+
+.day-headers {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.day-header {
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 0.5rem;
+}
+
+.days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.25rem;
+}
+
+.day-button {
+  aspect-ratio: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  position: relative;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.day-button:hover:not(.disabled) {
+  background-color: var(--bg-tertiary);
+  transform: scale(1.05);
+}
+
+.day-button.other-month {
+  color: var(--text-light);
+  opacity: 0.5;
+}
+
+.day-button.selected {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  color: white;
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
+}
+
+.day-button.today:not(.selected) {
+  background-color: var(--bg-tertiary);
+  color: var(--primary-color);
+  font-weight: 700;
+  position: relative;
+}
+
+.day-button.today:not(.selected)::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background-color: var(--primary-color);
+  border-radius: 50%;
+}
+
+.day-button.disabled {
+  color: var(--text-light);
+  opacity: 0.4;
+  pointer-events: none;  /* Only disabled dates should be unclickable */
+  cursor: not-allowed;
+}
+
+.day-button.disabled:hover {
+  transform: none;
+  background: transparent;
+}
+
+/* Date Picker Transitions */
+.date-picker-enter-active,
+.date-picker-leave-active {
+  transition: all var(--transition-smooth);
+}
+
+.date-picker-enter-from,
+.date-picker-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+}
+
+.form-group label {
+  display: block;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.date-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.date-input {
+  width: 100%;
+  padding: 1rem 1rem 1rem 3rem;
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 1rem;
+  transition: all var(--transition-fast);
+}
+
+.date-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.1);
+  background-color: var(--bg-primary);
+}
+
+.date-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: var(--primary-color-filter, invert(47%) sepia(91%) saturate(2108%) hue-rotate(209deg) brightness(97%) contrast(94%));
+}
+
+.error-message {
+  color: #ef4444;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 1.5rem;
+  background-color: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+}
+
+.cancel-btn,
+.confirm-btn {
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--border-radius);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 120px;
+  justify-content: center;
+}
+
+.cancel-btn {
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 2px solid var(--border-color);
+}
+
+.cancel-btn:hover:not(:disabled) {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.confirm-btn {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  color: white;
+  border: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.confirm-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.confirm-btn.loading {
+  pointer-events: none;
+}
+
+.confirm-btn svg,
+.cancel-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.loading-spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Modal Transitions */
+.modal-enter-active,
+.modal-leave-active {
+  transition: all var(--transition-smooth);
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.modal-enter-active .modal-container,
+.modal-leave-active .modal-container {
+  transition: all var(--transition-smooth);
+}
+
+.modal-enter-from .modal-container,
+.modal-leave-to .modal-container {
+  transform: translateY(20px);
 }
 
 /* Matches Section */
@@ -411,7 +1196,6 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  /* height: calc(100vh - 200px); */
 }
 
 /* Horizontal Matches Bar */
@@ -665,19 +1449,6 @@ export default {
   height: 16px;
 }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .details-title-section {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: stretch;
-  }
-  
-  .edit-match-btn {
-    justify-content: center;
-  }
-}
-
 /* Players Table */
 .players-section {
   overflow: hidden;
@@ -781,8 +1552,6 @@ export default {
   font-style: italic;
 }
 
-
-
 /* Empty State */
 .empty-state {
   padding: 4rem 0;
@@ -842,6 +1611,21 @@ export default {
     padding: 2rem 0;
   }
 
+  .header-content {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+
+  .title-section {
+    text-align: center;
+  }
+
+  .create-match-btn {
+    font-size: 0.875rem;
+    padding: 0.875rem 1.25rem;
+  }
+
   .match-card-horizontal {
     flex: 0 0 240px;
     padding: 0.75rem;
@@ -849,7 +1633,16 @@ export default {
 
   .match-details-container {
     padding: 1rem;
-    height: calc(100vh - 320px);
+  }
+
+  .details-title-section {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+  
+  .edit-match-btn {
+    justify-content: center;
   }
 
   .players-table {
@@ -870,6 +1663,25 @@ export default {
     width: 18px;
     height: 18px;
   }
+
+  .modal-container {
+    margin: 1rem;
+    max-width: none;
+  }
+
+  .modal-body {
+    padding: 1.5rem;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .cancel-btn,
+  .confirm-btn {
+    width: 100%;
+  }
 }
 
 @media (max-width: 480px) {
@@ -884,11 +1696,6 @@ export default {
 
   .match-details-container {
     padding: 0.75rem;
-    height: calc(100vh - 280px);
-  }
-
-  .stats-grid {
-    grid-template-columns: 1fr;
   }
 
   .scroll-left {
@@ -897,6 +1704,16 @@ export default {
 
   .scroll-right {
     right: 5px;
+  }
+
+  .create-match-btn {
+    font-size: 0.8rem;
+    padding: 0.75rem 1rem;
+  }
+
+  .create-match-btn svg {
+    width: 18px;
+    height: 18px;
   }
 }
 </style>
