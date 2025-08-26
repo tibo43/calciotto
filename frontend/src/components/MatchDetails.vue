@@ -168,39 +168,66 @@
     </div>
 
     <div v-if="showAddPlayerModal" class="modal-overlay" @click="closeModal">
-      <div class="modal-content multi-player-modal" @click.stop>
-        <div class="modal-header">
-          <h3>Add Players to {{ match.Teams[activeTeam].Colour }} Team</h3>
-          <button @click="closeModal" class="modal-close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-        
-        <div class="modal-body">
-          <!-- Search Section -->
-          <div class="form-group">
-            <label for="playerSearch">Search Players</label>
-            <div class="input-wrapper">
-              <input 
-                v-model="playerSearchTerm" 
-                type="text" 
-                id="playerSearch"
-                placeholder="Search for players to add..."
-                @input="onPlayerSearch"
-              >
-              <div v-if="isLoadingPlayers" class="search-loading">
-                <div class="spinner-small"></div>
-              </div>
+  <div class="modal-content enhanced-multi-player-modal" @click.stop>
+    <div class="modal-header">
+      <h3>Add Players to {{ match.Teams[activeTeam].Colour }} Team</h3>
+      <button @click="closeModal" class="modal-close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    
+    <div class="modal-body enhanced-modal-body">
+      <!-- Search Section - Fixed at top -->
+      <div class="search-section">
+        <div class="form-group">
+          <label for="playerSearch">Search Players</label>
+          <div class="input-wrapper">
+            <input 
+              v-model="playerSearchTerm" 
+              type="text" 
+              id="playerSearch"
+              placeholder="Search for players to add..."
+              @input="onPlayerSearch"
+            >
+            <div v-if="isLoadingPlayers" class="search-loading">
+              <div class="spinner-small"></div>
             </div>
           </div>
+        </div>
+      </div>
 
-          <!-- Selected Players Section -->
-          <div v-if="selectedPlayers.length > 0" class="selected-players-section">
-            <h4>Selected Players ({{ selectedPlayers.length }})</h4>
-            <div class="selected-players-list">
+      <!-- Two-column layout for selected and available players -->
+      <div class="players-columns">
+        <!-- Selected Players Column -->
+        <div class="column selected-column">
+          <div class="column-header">
+            <h4>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon">
+                <path d="M9 12l2 2 4-4"/>
+                <circle cx="12" cy="12" r="10"/>
+              </svg>
+              Selected Players 
+              <span class="count-badge">{{ selectedPlayers.length }}</span>
+            </h4>
+          </div>
+          
+          <div class="column-content">
+            <div v-if="selectedPlayers.length === 0" class="empty-state">
+              <div class="empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="16"/>
+                  <line x1="8" y1="12" x2="16" y2="12"/>
+                </svg>
+              </div>
+              <p>No players selected</p>
+              <span>Select players from the right to add them</span>
+            </div>
+            
+            <div v-else class="selected-players-list">
               <div 
                 v-for="(player, index) in selectedPlayers" 
                 :key="`selected-${player.ID || player.Name}`"
@@ -213,28 +240,46 @@
                   <span class="player-name">{{ player.Name }}</span>
                 </div>
                 
-                <div class="player-controls">
-                  <button 
-                    @click="removeSelectedPlayer(index)" 
-                    class="remove-selected-btn"
-                    title="Remove player"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/>
-                      <line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
-                </div>
+                <button 
+                  @click="removeSelectedPlayer(index)" 
+                  class="remove-selected-btn"
+                  title="Remove player"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Available Players Section -->
-          <div class="available-players-section">
-            <h4>Available Players</h4>
-            <div v-if="filteredAvailablePlayers.length === 0 && !isLoadingPlayers" class="no-players">
-              <p v-if="playerSearchTerm">No players found matching "{{ playerSearchTerm }}"</p>
+        <!-- Available Players Column -->
+        <div class="column available-column">
+          <div class="column-header">
+            <h4>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M16 12l-4-4-4 4"/>
+                <path d="M16 16l-4-4-4 4"/>
+              </svg>
+              Available Players
+              <span class="count-badge">{{ filteredAvailablePlayers.length }}</span>
+            </h4>
+          </div>
+          
+          <div class="column-content">
+            <div v-if="filteredAvailablePlayers.length === 0 && !isLoadingPlayers" class="empty-state">
+              <div class="empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                </svg>
+              </div>
+              <p v-if="playerSearchTerm">No players found</p>
               <p v-else>No available players</p>
+              <span v-if="playerSearchTerm">Try adjusting your search term</span>
             </div>
             
             <div v-else class="available-players-list">
@@ -253,8 +298,19 @@
                 </div>
                 
                 <div class="player-status">
-                  <span v-if="isPlayerSelected(player)" class="status-selected">Selected</span>
-                  <span v-else-if="isPlayerInAnyTeam(player.Name)" class="status-in-match">In Match</span>
+                  <span v-if="isPlayerSelected(player)" class="status-selected">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 12l2 2 4-4"/>
+                      <circle cx="12" cy="12" r="10"/>
+                    </svg>
+                  </span>
+                  <span v-else-if="isPlayerInAnyTeam(player.Name)" class="status-in-match">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="15" y1="9" x2="9" y2="15"/>
+                      <line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                  </span>
                   <span v-else class="status-available">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <circle cx="12" cy="12" r="10"/>
@@ -267,26 +323,48 @@
             </div>
           </div>
         </div>
-        
-        <div class="modal-footer">
-          <div class="footer-info">
-            <span v-if="selectedPlayers.length > 0" class="selection-count">
-              {{ selectedPlayers.length }} player{{ selectedPlayers.length !== 1 ? 's' : '' }} selected
-            </span>
-          </div>
-          <div class="footer-buttons">
-            <button @click="closeModal" class="cancel-button">Cancel</button>
-            <button 
-              @click="addSelectedPlayersToTeam" 
-              :disabled="selectedPlayers.length === 0" 
-              class="confirm-button"
-            >
-              Add {{ selectedPlayers.length }} Player{{ selectedPlayers.length !== 1 ? 's' : '' }}
-            </button>
-          </div>
-        </div>
       </div>
     </div>
+    
+    <div class="modal-footer enhanced-footer">
+      <div class="footer-info">
+        <div class="selection-summary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="summary-icon">
+            <path d="M9 12l2 2 4-4"/>
+            <circle cx="12" cy="12" r="10"/>
+          </svg>
+          <span v-if="selectedPlayers.length > 0" class="selection-count">
+            {{ selectedPlayers.length }} player{{ selectedPlayers.length !== 1 ? 's' : '' }} selected
+          </span>
+          <span v-else class="selection-count empty">
+            No players selected
+          </span>
+        </div>
+      </div>
+      
+      <div class="footer-buttons">
+        <button @click="closeModal" class="cancel-button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+          Cancel
+        </button>
+        <button 
+          @click="addSelectedPlayersToTeam" 
+          :disabled="selectedPlayers.length === 0" 
+          class="confirm-button enhanced-confirm"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 12l2 2 4-4"/>
+            <circle cx="12" cy="12" r="10"/>
+          </svg>
+          Add {{ selectedPlayers.length || '' }} Player{{ selectedPlayers.length !== 1 ? 's' : '' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
     <!-- Error/Success Messages -->
     <div v-if="message" :class="['message', messageType]">
@@ -1487,16 +1565,540 @@ export default {
   border-radius: 12px;
 }
 
-/* Multi-player modal specific styles */
-.multi-player-modal {
-  max-width: 600px;
-  max-height: 80vh;
+.enhanced-multi-player-modal {
+  max-width: 900px;
+  width: 95%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
 }
 
-.multi-player-modal .modal-body {
+.enhanced-multi-player-modal .modal-header {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  color: white;
+  border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+  border-bottom: none;
+}
+
+.enhanced-multi-player-modal .modal-header h3 {
+  color: white;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.enhanced-multi-player-modal .modal-close {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.enhanced-multi-player-modal .modal-close:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.enhanced-modal-body {
+  flex: 1;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* Important for proper scrolling */
+}
+
+/* Search Section - Fixed at top */
+.search-section {
+  flex-shrink: 0;
   padding: 1.5rem;
-  max-height: 60vh;
+  background-color: var(--bg-secondary);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.search-section .form-group {
+  margin-bottom: 0;
+}
+
+.search-section label {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+.search-section input {
+  font-size: 1rem;
+  padding: 0.875rem 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  transition: all var(--transition-fast);
+}
+
+.search-section input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+/* Two-column layout */
+.players-columns {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.column-header {
+  flex-shrink: 0;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+  border-bottom: 1px solid var(--border-color);
+}
+
+.column-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.header-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--primary-color);
+}
+
+.count-badge {
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.column-content {
+  flex: 1;
+  padding: 1rem 1.5rem;
   overflow-y: auto;
+  min-height: 0;
+}
+
+/* Selected Players Column */
+.selected-column {
+  background-color: var(--bg-primary);
+  border-right: 1px solid var(--border-color);
+}
+
+.selected-column .column-header {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05));
+  border-bottom-color: rgba(16, 185, 129, 0.2);
+}
+
+/* Available Players Column */
+.available-column {
+  background-color: var(--bg-primary);
+}
+
+.available-column .column-header {
+  background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+}
+
+/* Empty States */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-secondary);
+  height: 200px;
+}
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 1rem;
+  color: var(--text-light);
+}
+
+.empty-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.empty-state p {
+  margin: 0 0 0.5rem 0;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+.empty-state span {
+  font-size: 0.875rem;
+  color: var(--text-light);
+  font-style: italic;
+}
+
+/* Selected Players List */
+.selected-players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.selected-player-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05));
+  border: 2px solid rgba(16, 185, 129, 0.2);
+  border-radius: var(--border-radius-lg);
+  transition: all var(--transition-fast);
+  animation: slideInFromRight 0.3s ease-out;
+}
+
+.selected-player-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.selected-player-item .player-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.selected-player-item .player-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.selected-player-item .player-avatar-small {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+}
+
+.remove-selected-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background-color: var(--danger-color);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+}
+
+.remove-selected-btn:hover {
+  background-color: var(--danger-hover);
+  transform: scale(1.1);
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
+}
+
+.remove-selected-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Available Players List */
+.available-players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.available-player-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem;
+  background-color: var(--bg-secondary);
+  border: 2px solid transparent;
+  border-radius: var(--border-radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+  width: 100%;
+}
+
+.available-player-item:hover:not(:disabled) {
+  background-color: var(--bg-tertiary);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.1);
+}
+
+.available-player-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.available-player-item .player-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.available-player-item .player-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.available-player-item:disabled .player-name {
+  color: var(--text-secondary);
+}
+
+.player-avatar-small {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  transition: all var(--transition-fast);
+}
+
+/* Player Status Icons */
+.player-status {
+  display: flex;
+  align-items: center;
+}
+
+.status-selected,
+.status-in-match,
+.status-available {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  transition: all var(--transition-fast);
+}
+
+.status-selected {
+  color: var(--primary-color);
+  background-color: rgba(16, 185, 129, 0.1);
+}
+
+.status-selected svg {
+  width: 16px;
+  height: 16px;
+}
+
+.status-in-match {
+  color: var(--text-secondary);
+  background-color: var(--bg-tertiary);
+}
+
+.status-in-match svg {
+  width: 14px;
+  height: 14px;
+}
+
+.status-available {
+  color: var(--primary-color);
+  background-color: rgba(16, 185, 129, 0.1);
+}
+
+.status-available svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Enhanced Footer */
+.enhanced-footer {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
+  border-top: 2px solid var(--border-color);
+  padding: 1.5rem;
+}
+
+.selection-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.summary-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--primary-color);
+}
+
+.selection-count {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.selection-count.empty {
+  color: var(--text-secondary);
+}
+
+.footer-buttons {
+  gap: 1rem;
+}
+
+.enhanced-footer .cancel-button,
+.enhanced-footer .confirm-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.5rem;
+  font-weight: 600;
+  border-radius: var(--border-radius-lg);
+  transition: all var(--transition-fast);
+}
+
+.enhanced-footer .cancel-button {
+  border: 2px solid var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+}
+
+.enhanced-footer .cancel-button:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.enhanced-footer .cancel-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.enhanced-confirm {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  border: none;
+  color: white;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.enhanced-confirm:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+}
+
+.enhanced-confirm:disabled {
+  background: var(--text-light);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.enhanced-confirm svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Custom Scrollbars */
+.column-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.column-content::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+.column-content::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+  transition: background var(--transition-fast);
+}
+
+.column-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .enhanced-multi-player-modal {
+    width: 98%;
+    max-height: 90vh;
+  }
+  
+  .players-columns {
+    grid-template-columns: 1fr;
+    grid-template-rows: 300px 1fr;
+  }
+  
+  .selected-column {
+    border-right: none;
+    border-bottom: 2px solid var(--border-color);
+  }
+  
+  .column-content {
+    padding: 1rem;
+  }
+  
+  .enhanced-footer {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+  
+  .footer-buttons {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .players-columns {
+    grid-template-rows: 250px 1fr;
+  }
+  
+  .column-header {
+    padding: 0.75rem 1rem;
+  }
+  
+  .column-content {
+    padding: 0.75rem;
+  }
+  
+  .selected-player-item,
+  .available-player-item {
+    padding: 0.75rem;
+  }
+  
+  .player-avatar-small {
+    width: 32px;
+    height: 32px;
+    font-size: 0.75rem;
+  }
 }
 
 /* Selected Players Section */
