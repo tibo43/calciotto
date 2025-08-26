@@ -167,11 +167,10 @@
       </div>
     </div>
 
-    <!-- Add Player Modal -->
     <div v-if="showAddPlayerModal" class="modal-overlay" @click="closeModal">
-      <div class="modal-content" @click.stop>
+      <div class="modal-content multi-player-modal" @click.stop>
         <div class="modal-header">
-          <h3>Add Player to {{ match.Teams[activeTeam].Colour }} Team</h3>
+          <h3>Add Players to {{ match.Teams[activeTeam].Colour }} Team</h3>
           <button @click="closeModal" class="modal-close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/>
@@ -179,65 +178,112 @@
             </svg>
           </button>
         </div>
+        
         <div class="modal-body">
+          <!-- Search Section -->
           <div class="form-group">
-            <label for="playerName">Player Name</label>
+            <label for="playerSearch">Search Players</label>
             <div class="input-wrapper">
               <input 
-                v-model="newPlayerName" 
+                v-model="playerSearchTerm" 
                 type="text" 
-                id="playerName"
-                placeholder="Start typing player name..."
-                @input="onPlayerNameInput"
-                @keyup.enter="addPlayer"
-                :class="{ 
-                  'error': playerNotFound || playerAlreadyInTeam,
-                  'success': playerSuggestions.length === 1 && !playerAlreadyInTeam && !playerNotFound
-                }"
+                id="playerSearch"
+                placeholder="Search for players to add..."
+                @input="onPlayerSearch"
               >
-              
-              <!-- Loading indicator -->
-              <div v-if="isSearchingPlayer" class="search-loading">
+              <div v-if="isLoadingPlayers" class="search-loading">
                 <div class="spinner-small"></div>
               </div>
             </div>
-            
-            <!-- Validation messages -->
-            <div v-if="validationMessage" 
-                :class="['validation-message', {
-                  'error': playerNotFound || playerAlreadyInTeam,
-                  'success': playerSuggestions.length === 1 && !playerAlreadyInTeam && !playerNotFound,
-                  'info': playerSuggestions.length > 1
-                }]">
-              {{ validationMessage }}
+          </div>
+
+          <!-- Selected Players Section -->
+          <div v-if="selectedPlayers.length > 0" class="selected-players-section">
+            <h4>Selected Players ({{ selectedPlayers.length }})</h4>
+            <div class="selected-players-list">
+              <div 
+                v-for="(player, index) in selectedPlayers" 
+                :key="`selected-${player.ID || player.Name}`"
+                class="selected-player-item"
+              >
+                <div class="player-info">
+                  <div class="player-avatar-small">
+                    {{ getPlayerInitials(player.Name) }}
+                  </div>
+                  <span class="player-name">{{ player.Name }}</span>
+                </div>
+                
+                <div class="player-controls">
+                  <button 
+                    @click="removeSelectedPlayer(index)" 
+                    class="remove-selected-btn"
+                    title="Remove player"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Available Players Section -->
+          <div class="available-players-section">
+            <h4>Available Players</h4>
+            <div v-if="filteredAvailablePlayers.length === 0 && !isLoadingPlayers" class="no-players">
+              <p v-if="playerSearchTerm">No players found matching "{{ playerSearchTerm }}"</p>
+              <p v-else>No available players</p>
             </div>
             
-            <!-- Player suggestions dropdown -->
-            <div v-if="playerSuggestions.length > 1" class="suggestions-dropdown">
-              <button 
-                v-for="player in playerSuggestions" 
-                :key="player.ID || player.Name"
-                @click="selectPlayerSuggestion(player)"
-                class="suggestion-item"
-                type="button"
+            <div v-else class="available-players-list">
+              <button
+                v-for="player in filteredAvailablePlayers"
+                :key="`available-${player.ID || player.Name}`"
+                @click="addPlayerToSelection(player)"
+                class="available-player-item"
+                :disabled="isPlayerSelected(player) || isPlayerInAnyTeam(player.Name)"
               >
-                <div class="suggestion-name">{{ player.Name }}</div>
-                <div v-if="isPlayerInAnyTeam(player.Name)" class="suggestion-status">
-                  Already in match
+                <div class="player-info">
+                  <div class="player-avatar-small">
+                    {{ getPlayerInitials(player.Name) }}
+                  </div>
+                  <span class="player-name">{{ player.Name }}</span>
+                </div>
+                
+                <div class="player-status">
+                  <span v-if="isPlayerSelected(player)" class="status-selected">Selected</span>
+                  <span v-else-if="isPlayerInAnyTeam(player.Name)" class="status-in-match">In Match</span>
+                  <span v-else class="status-available">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="16"/>
+                      <line x1="8" y1="12" x2="16" y2="12"/>
+                    </svg>
+                  </span>
                 </div>
               </button>
             </div>
           </div>
         </div>
+        
         <div class="modal-footer">
-          <button @click="closeModal" class="cancel-button">Cancel</button>
-          <button 
-            @click="addPlayer" 
-            :disabled="!newPlayerName.trim() || playerNotFound || playerAlreadyInTeam || isSearchingPlayer" 
-            class="confirm-button"
-          >
-            Add Player
-          </button>
+          <div class="footer-info">
+            <span v-if="selectedPlayers.length > 0" class="selection-count">
+              {{ selectedPlayers.length }} player{{ selectedPlayers.length !== 1 ? 's' : '' }} selected
+            </span>
+          </div>
+          <div class="footer-buttons">
+            <button @click="closeModal" class="cancel-button">Cancel</button>
+            <button 
+              @click="addSelectedPlayersToTeam" 
+              :disabled="selectedPlayers.length === 0" 
+              class="confirm-button"
+            >
+              Add {{ selectedPlayers.length }} Player{{ selectedPlayers.length !== 1 ? 's' : '' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -261,22 +307,16 @@ export default {
       isSaving: false,
       activeTeam: 0,
       showAddPlayerModal: false,
-      newPlayerName: '', // This will now be the selected player ID
-      newPlayerGoals: 0,
       message: '',
       messageType: 'success',
       // New properties for player dropdown
       allPlayers: [],
       filteredPlayers: [],
+      selectedPlayers: [],
+      filteredAvailablePlayers: [],
       isLoadingPlayers: false,
-      selectedPlayer: null,
       playerSearchTerm: '',
-      // Add these missing properties that are referenced in template
-      playerSuggestions: [],
       isSearchingPlayer: false,
-      playerNotFound: false,
-      playerAlreadyInTeam: false,
-      validationMessage: ''
     };
   },
   async created() {
@@ -313,7 +353,6 @@ export default {
     // Load all players when modal opens
     async loadAllPlayers() {
       if (this.allPlayers && this.allPlayers.length > 0) {
-        // Already loaded, just filter available players
         this.filterAvailablePlayers();
         return;
       }
@@ -322,13 +361,12 @@ export default {
       try {
         const players = await getPlayers();
         this.allPlayers = Array.isArray(players) ? players : [];
-        console.log('Loaded players:', this.allPlayers);
         this.filterAvailablePlayers();
       } catch (error) {
         console.error('Error loading players:', error);
         this.showMessage('Error loading players list', 'error');
         this.allPlayers = [];
-        this.filteredPlayers = [];
+        this.filteredAvailablePlayers = [];
       } finally {
         this.isLoadingPlayers = false;
       }
@@ -337,13 +375,13 @@ export default {
     // Filter players to show only those not in current team
     filterAvailablePlayers() {
       if (!this.allPlayers || !Array.isArray(this.allPlayers) || this.allPlayers.length === 0) {
-        this.filteredPlayers = [];
+        this.filteredAvailablePlayers = [];
         return;
       }
 
       // Fix: Add safety checks for match and teams
       if (!this.match || !this.match.Teams || !this.match.Teams[this.activeTeam]) {
-        this.filteredPlayers = [];
+        this.filteredAvailablePlayers = [];
         return;
       }
 
@@ -359,11 +397,11 @@ export default {
       // Apply search filter if there's a search term
       if (this.playerSearchTerm && this.playerSearchTerm.trim()) {
         availablePlayers = availablePlayers.filter(player =>
-          player.Name.toLowerCase().includes(this.playerSearchTerm.toLowerCase())
+          player.Name.toLowerCase().includes(this.playerSearchTerm.toLowerCase().trim())
         );
       }
 
-      this.filteredPlayers = availablePlayers;
+      this.filteredAvailablePlayers = availablePlayers;
     },
 
     onPlayerNameInput() {
@@ -451,7 +489,78 @@ export default {
 
     // Handle search input
     onPlayerSearch() {
-      this.filterAvailablePlayers();
+      // Clear any existing timeout
+      if (this.searchTimeout) {
+        clearTimeout(this.searchTimeout);
+      }
+
+      // Debounce the search
+      this.searchTimeout = setTimeout(() => {
+        this.filterAvailablePlayers();
+      }, 300);
+    },
+
+    addPlayerToSelection(player) {
+      if (this.isPlayerSelected(player) || this.isPlayerInAnyTeam(player.Name)) {
+        return;
+      }
+
+      const playerToAdd = {
+        ID: player.ID,
+        Name: player.Name,
+        initialGoals: 0  // Default to 0 goals
+      };
+
+      this.selectedPlayers.push(playerToAdd);
+    },
+
+    // Remove a player from selection
+    removeSelectedPlayer(index) {
+      this.selectedPlayers.splice(index, 1);
+    },
+
+    // Check if player is already selected
+    isPlayerSelected(player) {
+      return this.selectedPlayers.some(selectedPlayer => 
+        selectedPlayer.Name.toLowerCase() === player.Name.toLowerCase()
+      );
+    },
+
+    // Add all selected players to the team
+    async addSelectedPlayersToTeam() {
+      if (this.selectedPlayers.length === 0) {
+        this.showMessage('Please select at least one player', 'error');
+        return;
+      }
+
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam]) {
+        console.error('Invalid team data');
+        return;
+      }
+
+      if (!this.match.Teams[this.activeTeam].Players) {
+        this.match.Teams[this.activeTeam].Players = [];
+      }
+
+      // Add each selected player to the team
+      this.selectedPlayers.forEach(selectedPlayer => {
+        // Double-check if player is not already in the team
+        if (!this.isPlayerInCurrentTeam(selectedPlayer.Name)) {
+          const newPlayer = {
+            ID: selectedPlayer.ID,
+            Name: selectedPlayer.Name,
+            GoalNumber: selectedPlayer.initialGoals || 0
+          };
+          
+          this.match.Teams[this.activeTeam].Players.push(newPlayer);
+        }
+      });
+
+      // Update team score
+      this.updateTeamScore();
+      
+      // Close modal and show success message
+      this.closeModal();
     },
 
     // Select a player from the list
@@ -503,17 +612,6 @@ export default {
         );
       }
 
-      if (!playerToAdd) {
-        this.showMessage('Please select a valid player from the list', 'error');
-        return;
-      }
-      
-      // Double-check if player is already in current team
-      if (this.isPlayerInCurrentTeam(playerToAdd.Name)) {
-        this.showMessage(`${playerToAdd.Name} is already in the ${this.match.Teams[this.activeTeam].Colour} team`, 'error');
-        return;
-      }
-
       if (!this.match.Teams || !this.match.Teams[this.activeTeam]) {
         console.error('Invalid team data');
         return;
@@ -532,7 +630,6 @@ export default {
       this.match.Teams[this.activeTeam].Players.push(newPlayer);
       this.updateTeamScore();
       this.closeModal();
-      this.showMessage(`${newPlayer.Name} added to ${this.match.Teams[this.activeTeam].Colour} team`, 'success');
     },
     
     // Show modal and load players
@@ -543,16 +640,10 @@ export default {
     
     closeModal() {
       this.showAddPlayerModal = false;
-      this.selectedPlayer = null;
-      this.newPlayerName = '';
-      this.newPlayerGoals = 0;
+      this.selectedPlayers = [];
       this.playerSearchTerm = '';
-      this.filteredPlayers = [];
-      this.playerSuggestions = [];
+      this.filteredAvailablePlayers = [];
       this.isSearchingPlayer = false;
-      this.playerNotFound = false;
-      this.playerAlreadyInTeam = false;
-      this.validationMessage = '';
       if (this.searchTimeout) {
         clearTimeout(this.searchTimeout);
       }
@@ -747,17 +838,6 @@ export default {
 .back-button svg {
   width: 18px;
   height: 18px;
-}
-
-.page-title {
-  font-size: 2.5rem;
-  font-weight: 800;
-  margin-bottom: 0.5rem;
-}
-
-.page-subtitle {
-  font-size: 1.1rem;
-  opacity: 0.9;
 }
 
 /* Loading State */
@@ -1405,6 +1485,315 @@ export default {
   background-color: var(--bg-tertiary);
   padding: 0.25rem 0.5rem;
   border-radius: 12px;
+}
+
+/* Multi-player modal specific styles */
+.multi-player-modal {
+  max-width: 600px;
+  max-height: 80vh;
+}
+
+.multi-player-modal .modal-body {
+  padding: 1.5rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* Selected Players Section */
+.selected-players-section {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius);
+  border: 2px dashed var(--primary-color);
+}
+
+.selected-players-section h4 {
+  margin: 0 0 1rem 0;
+  color: var(--primary-color);
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.selected-players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.selected-player-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background-color: var(--bg-primary);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+}
+
+.selected-player-item .player-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.player-avatar-small {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.selected-player-item .player-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.remove-selected-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background-color: var(--danger-color);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.remove-selected-btn:hover {
+  background-color: var(--danger-hover);
+  transform: scale(1.1);
+}
+
+.remove-selected-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Available Players Section */
+.available-players-section {
+  margin-bottom: 1rem;
+}
+
+.available-players-section h4 {
+  margin: 0 0 1rem 0;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.no-players {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+}
+
+.no-players p {
+  margin: 0;
+  font-style: italic;
+}
+
+.available-players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+}
+
+.available-player-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background-color: var(--bg-primary);
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+  width: 100%;
+}
+
+.available-player-item:hover:not(:disabled) {
+  background-color: var(--bg-secondary);
+}
+
+.available-player-item:last-child {
+  border-bottom: none;
+}
+
+.available-player-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--bg-tertiary);
+}
+
+.available-player-item .player-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.available-player-item .player-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.available-player-item:disabled .player-name {
+  color: var(--text-secondary);
+}
+
+.player-status {
+  display: flex;
+  align-items: center;
+}
+
+.status-selected {
+  font-size: 0.75rem;
+  color: var(--primary-color);
+  font-weight: 600;
+  background-color: rgba(16, 185, 129, 0.1);
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+}
+
+.status-in-match {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background-color: var(--bg-tertiary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+}
+
+.status-available {
+  color: var(--primary-color);
+}
+
+.status-available svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Updated Modal Footer */
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+}
+
+.footer-info {
+  flex: 1;
+}
+
+.selection-count {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.footer-buttons {
+  display: flex;
+  gap: 1rem;
+}
+
+/* Enhanced confirm button for multi-selection */
+.confirm-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--text-light);
+}
+
+/* Responsive adjustments for multi-player modal */
+@media (max-width: 768px) {
+  .multi-player-modal {
+    width: 95%;
+    max-width: none;
+    max-height: 90vh;
+  }
+
+  .selected-player-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .player-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .available-players-list {
+    max-height: 250px;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .footer-buttons {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .multi-player-modal .modal-body {
+    padding: 1rem;
+  }
+
+  .selected-players-section {
+    padding: 0.75rem;
+  }
+
+  .available-player-item {
+    padding: 0.5rem;
+  }
+}
+
+/* Scrollbar styling for lists */
+.available-players-list::-webkit-scrollbar,
+.multi-player-modal .modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.available-players-list::-webkit-scrollbar-track,
+.multi-player-modal .modal-body::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+}
+
+.available-players-list::-webkit-scrollbar-thumb,
+.multi-player-modal .modal-body::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.available-players-list::-webkit-scrollbar-thumb:hover,
+.multi-player-modal .modal-body::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
 /* Form group positioning for dropdown */

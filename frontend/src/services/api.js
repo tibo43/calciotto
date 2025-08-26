@@ -23,6 +23,7 @@ export const getMatchesDetails = async () => {
     throw error;
   }
 };
+
 // New function for getting single match details by ID
 export const getMatchDetailsByID = async (matchId) => {
   try {
@@ -33,6 +34,21 @@ export const getMatchDetailsByID = async (matchId) => {
     return response.data;
   } catch (error) {
     console.error('Error fetching match details:', error);
+    throw error;
+  }
+};
+
+// New function for updating a match
+export const createMatch = async (matchData) => {
+  try {
+    const response = await api.post(`/matches`, matchData);
+    if (response.status !== 200) {
+      throw new Error('Failed to create match');
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error('Error creating match:', error);
     throw error;
   }
 };

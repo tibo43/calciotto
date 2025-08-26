@@ -196,7 +196,6 @@ export default {
       this.isLoading = true;
       try {
         const matches = await getMatchesDetails();
-        console.log("matches", matches);
         
         // Validate matches data
         if (!Array.isArray(matches)) {
@@ -331,43 +330,8 @@ export default {
 </script>
 
 <style scoped>
-/* CSS Variables */
-:root {
-  --primary-color: #10b981;
-  --primary-hover: #059669;
-  --primary-light: #6ee7b7;
-  --secondary-color: #3b82f6;
-  --accent-color: #f59e0b;
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --text-light: #9ca3af;
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8fafc;
-  --bg-tertiary: #f1f5f9;
-  --border-color: #e2e8f0;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
-  --transition-fast: 0.2s ease;
-  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  --border-radius: 12px;
-  --border-radius-lg: 16px;
-}
-
-.dark-mode {
-  --text-primary: #f9fafb;
-  --text-secondary: #d1d5db;
-  --text-light: #9ca3af;
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --border-color: #475569;
-}
-
 /* Container */
 .matches-container {
-  /* min-height: 100vh; */
   background-color: var(--bg-secondary);
 }
 
@@ -406,18 +370,6 @@ export default {
   text-align: center;
   position: relative;
   z-index: 1;
-}
-
-.page-title {
-  font-size: 2.5rem;
-  font-weight: 800;
-  margin-bottom: 0.5rem;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.page-subtitle {
-  font-size: 1.1rem;
-  opacity: 0.9;
 }
 
 /* Matches Section */
