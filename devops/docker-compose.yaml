@@ -21,6 +21,8 @@ services:
       - ./../frontend:/frontend
     working_dir: /frontend
     command: "npm run serve"
+    environment:
+      - VUE_APP_API_BASE_URL
     depends_on:
       backend:
         condition: service_started
