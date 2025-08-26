@@ -25,7 +25,7 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 		return
 	}
 	log.Println("Creating match:", match)
-	if err := h.Service.CreateMatch(&match); err != nil {
+	if err := h.Service.CreateMatch(&match.Date); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

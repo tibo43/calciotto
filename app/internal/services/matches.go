@@ -2,11 +2,9 @@ package services
 
 import (
 	"app/internal/models"
-	"encoding/json"
 	"log"
 	"sort"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -18,13 +16,16 @@ func NewMatchService(db *gorm.DB) *MatchService {
 	return &MatchService{DB: db}
 }
 
-func (s *MatchService) CreateMatch(match *models.Match) error {
-	match.ID = uuid.New().String()
+func (s *MatchService) CreateMatch(date string) (string, error) {
+	match := &models.Match{
+		BaseModel: models.BaseModel{},
+		Date:      date,
+	}
 	result := s.DB.Create(match)
 	if result.Error != nil {
-		return result.Error
+		return "", result.Error
 	}
-	return nil
+	return match.ID, nil
 }
 
 func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
@@ -139,16 +140,8 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 }
 
 func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails, error) {
-	var rows []struct {
-		MatchID    string
-		MatchDate  string
-		TeamID     string
-		TeamColour string
-		Score      int
-		PlayerID   string
-		PlayerName string
-		GoalNumber int
-	}
+
+	var rows []*models.RowsMatchDetails
 
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
@@ -232,55 +225,61 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
 }
 
 func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
-	b, err := json.MarshalIndent(match, "", "  ")
-	if err != nil {
-		log.Println(err)
+
+	var dbTeamCompositions []models.TeamComposition
+
+	for i := range match.Teams {
+		team := &match.Teams[i]
+		log.Println(team.Colour)
+		result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Find(&dbTeamCompositions)
+		if result.Error != nil {
+			return result.Error
+		}
+		for j := range team.Players {
+			player := &team.Players[j]
+			// Check if the player already exists in the team composition
+			exists := false
+			for _, dbTeamComposition := range dbTeamCompositions {
+				log.Println(player.ID, dbTeamComposition.PlayerID)
+				if dbTeamComposition.PlayerID == player.ID {
+					exists = true
+					break
+				}
+			}
+			log.Println(player.Name, exists)
+			if !exists {
+				// Create a new team composition if it doesn't exist
+				newTeamComposition := models.TeamComposition{
+					MatchID:  match.ID,
+					TeamID:   team.ID,
+					PlayerID: player.ID,
+				}
+				result := s.DB.Create(&newTeamComposition)
+				if result.Error != nil {
+					return result.Error
+				}
+			}
+		}
+
+		for _, dbTeamComposition := range dbTeamCompositions {
+			toDelete := false
+			for j := range team.Players {
+				player := &team.Players[j]
+				if dbTeamComposition.PlayerID != player.ID {
+					toDelete = true
+				}
+				if dbTeamComposition.PlayerID == player.ID {
+					toDelete = false
+					break
+				}
+			}
+			if toDelete {
+				result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", dbTeamComposition.PlayerID).Delete(&models.TeamComposition{})
+				if result.Error != nil {
+					return result.Error
+				}
+			}
+		}
 	}
-	log.Print(string(b))
-
-	// var dbTeamCompositions []models.TeamComposition
-
-	// for i := range match.Teams {
-	// 	team := &match.Teams[i]
-	// 	result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Find(&dbTeamCompositions)
-	// 	if result.Error != nil {
-	// 		return result.Error
-	// 	}
-	// 	toDelete := []string{}
-	// 	for j := range team.Players {
-	// 		player := &team.Players[j]
-	// 		// Check if the player already exists in the team composition
-	// 		exists := false
-	// 		for _, dbTeamComposition := range dbTeamCompositions {
-	// 			if dbTeamComposition.PlayerID != player.ID {
-	// 				toDelete = append(toDelete, dbTeamComposition.PlayerID)
-	// 			}
-	// 			if dbTeamComposition.PlayerID == player.ID {
-	// 				exists = true
-	// 				toDelete = common.RemoveValueSlice(toDelete, dbTeamComposition.PlayerID)
-	// 				break
-	// 			}
-	// 		}
-	// 		if !exists {
-	// 			// Create a new team composition if it doesn't exist
-	// 			newTeamComposition := models.TeamComposition{
-	// 				MatchID:  match.ID,
-	// 				TeamID:   team.ID,
-	// 				PlayerID: player.ID,
-	// 			}
-	// 			result := s.DB.Create(&newTeamComposition)
-	// 			if result.Error != nil {
-	// 				return result.Error
-	// 			}
-	// 		}
-	// 		// drop the player if it is not in the team anymore
-	// 		if len(toDelete) > 0 {
-	// 			result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id IN ?", toDelete).Delete(&models.TeamComposition{})
-	// 			if result.Error != nil {
-	// 				return result.Error
-	// 			}
-	// 		}
-	// 	}
-	// }
 	return nil
 }
