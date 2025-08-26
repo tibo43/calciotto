@@ -731,7 +731,7 @@ export default {
   box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
   max-width: 500px;
   width: 100%;
-  overflow: visible;
+  overflow: hidden;
   border: 1px solid var(--border-color);
 }
 
@@ -772,6 +772,8 @@ export default {
 .modal-body {
   padding: 2rem 1.5rem;
   overflow: visible;
+  max-height: 70vh;  /* Limit height */
+  overflow-y: auto;  /* Add scroll if needed */
 }
 
 .form-group {
@@ -814,6 +816,7 @@ export default {
   border: 2px solid var(--border-color);
   border-radius: var(--border-radius);
   overflow: hidden;
+  margin-bottom: 0;  /* Remove any bottom margin */
 }
 
 .selected-date-display {
@@ -916,6 +919,7 @@ export default {
 
 .date-picker-grid {
   padding: 1rem;
+  padding-bottom: 0.5rem;
 }
 
 .day-headers {
