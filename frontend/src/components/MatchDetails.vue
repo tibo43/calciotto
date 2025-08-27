@@ -181,6 +181,26 @@
                   <div class="spinner-small"></div>
                 </div>
               </div>
+              <div v-if="showCreatePlayerOption" class="create-player-section">
+                <div class="create-player-prompt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="info-icon">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  <span>Player "{{ playerSearchTerm }}" not found.</span>
+                </div>
+                <button @click="createNewPlayer" :disabled="isCreatingPlayer" class="create-player-btn">
+                  <svg v-if="!isCreatingPlayer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="8.5" cy="7" r="4" />
+                    <line x1="20" y1="8" x2="20" y2="14" />
+                    <line x1="23" y1="11" x2="17" y2="11" />
+                  </svg>
+                  <div v-else class="spinner-small"></div>
+                  {{ isCreatingPlayer ? 'Creating...' : `Create "${playerSearchTerm}"` }}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -346,7 +366,7 @@
 </template>
 
 <script>
-import { getMatchDetailsByID, updateMatch, getPlayers } from '@/services/api';
+import { getMatchDetailsByID, updateMatch, getPlayers, createPlayer } from '@/services/api';
 
 export default {
   name: 'MatchDetail',
@@ -368,6 +388,8 @@ export default {
       playerSearchTerm: '',
       isSearchingPlayer: false,
       messageKey: 0,
+      showCreatePlayerOption: false,
+      isCreatingPlayer: false,
     };
   },
   async created() {
@@ -410,14 +432,7 @@ export default {
 
       this.isLoadingPlayers = true;
       try {
-        const players = await getPlayers();
-        this.allPlayers = Array.isArray(players) ? players : [];
-        this.filterAvailablePlayers();
-      } catch (error) {
-        console.error('Error loading players:', error);
-        this.showMessage('Error loading players list', 'error');
-        this.allPlayers = [];
-        this.filteredAvailablePlayers = [];
+        await this.reloadAllPlayers();
       } finally {
         this.isLoadingPlayers = false;
       }
@@ -427,25 +442,23 @@ export default {
     filterAvailablePlayers() {
       if (!this.allPlayers || !Array.isArray(this.allPlayers) || this.allPlayers.length === 0) {
         this.filteredAvailablePlayers = [];
+        this.checkCreatePlayerOption();
         return;
       }
 
-      // Fix: Add safety checks for match and teams
       if (!this.match || !this.match.Teams || !this.match.Teams[this.activeTeam]) {
         this.filteredAvailablePlayers = [];
+        this.checkCreatePlayerOption();
         return;
       }
 
-      // Get current team players with safety check
       const currentTeamPlayers = this.match.Teams[this.activeTeam].Players || [];
       const currentTeamPlayerNames = currentTeamPlayers.map(p => p.Name.toLowerCase());
 
-      // Filter out players already in current team
       let availablePlayers = this.allPlayers.filter(player =>
         player && player.Name && !currentTeamPlayerNames.includes(player.Name.toLowerCase())
       );
 
-      // Apply search filter if there's a search term
       if (this.playerSearchTerm && this.playerSearchTerm.trim()) {
         availablePlayers = availablePlayers.filter(player =>
           player.Name.toLowerCase().includes(this.playerSearchTerm.toLowerCase().trim())
@@ -453,6 +466,7 @@ export default {
       }
 
       this.filteredAvailablePlayers = availablePlayers;
+      this.checkCreatePlayerOption();
     },
 
     onPlayerNameInput() {
@@ -464,6 +478,89 @@ export default {
       this.searchTimeout = setTimeout(() => {
         this.searchPlayers();
       }, 300);
+    },
+
+    // Check if we should show the create player option
+    checkCreatePlayerOption() {
+      if (!this.playerSearchTerm || this.playerSearchTerm.trim().length < 2) {
+        this.showCreatePlayerOption = false;
+        return;
+      }
+
+      const searchTerm = this.playerSearchTerm.trim().toLowerCase();
+      const exactMatch = this.allPlayers.some(player =>
+        player.Name.toLowerCase() === searchTerm
+      );
+
+      // Show create option if no exact match found and search term is not empty
+      this.showCreatePlayerOption = !exactMatch && this.filteredAvailablePlayers.length === 0;
+    },
+
+    // Create a new player
+    async createNewPlayer() {
+      if (!this.playerSearchTerm || this.playerSearchTerm.trim().length < 2) {
+        this.showMessage('Please enter a valid player name', 'error');
+        return;
+      }
+
+      const playerName = this.playerSearchTerm.trim();
+
+      // Check if player already exists (case-insensitive)
+      const existingPlayer = this.allPlayers.find(player =>
+        player.Name.toLowerCase() === playerName.toLowerCase()
+      );
+
+      if (existingPlayer) {
+        this.showMessage('Player already exists', 'error');
+        return;
+      }
+
+      this.isCreatingPlayer = true;
+      try {
+        const newPlayerData = {
+          Name: playerName
+        };
+
+        const createdPlayer = await createPlayer(newPlayerData);
+
+        // RELOAD ALL PLAYERS FROM DATABASE to ensure we have fresh data
+        await this.reloadAllPlayers();
+
+        // Find the newly created player in the fresh data
+        const freshPlayer = this.allPlayers.find(player =>
+          player.Name.toLowerCase() === playerName.toLowerCase()
+        );
+
+        if (freshPlayer) {
+          // Add the new player to selection immediately
+          this.addPlayerToSelection(freshPlayer);
+        }
+
+        // Clear search and hide create option
+        this.playerSearchTerm = '';
+        this.showCreatePlayerOption = false;
+        this.filterAvailablePlayers();
+
+        this.showMessage(`Player "${playerName}" created and added to selection!`, 'success');
+
+      } catch (error) {
+        console.error('Error creating player:', error);
+        this.showMessage('Error creating player. Please try again.', 'error');
+      } finally {
+        this.isCreatingPlayer = false;
+      }
+    },
+
+    async reloadAllPlayers() {
+      try {
+        const players = await getPlayers();
+        this.allPlayers = Array.isArray(players) ? players : [];
+        this.filterAvailablePlayers();
+      } catch (error) {
+        console.error('Error reloading players:', error);
+        this.showMessage('Error reloading players list', 'error');
+        // Don't reset allPlayers on error, keep the current data
+      }
     },
 
     async searchPlayers() {
@@ -695,6 +792,8 @@ export default {
       this.playerSearchTerm = '';
       this.filteredAvailablePlayers = [];
       this.isSearchingPlayer = false;
+      this.showCreatePlayerOption = false;
+      this.isCreatingPlayer = false;
       if (this.searchTimeout) {
         clearTimeout(this.searchTimeout);
       }
@@ -2053,6 +2152,64 @@ export default {
   background: var(--text-secondary);
 }
 
+/* Create Player Section */
+.create-player-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(37, 99, 235, 0.05));
+  border: 2px dashed rgba(59, 130, 246, 0.3);
+  border-radius: var(--border-radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.create-player-prompt {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.info-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--secondary-color);
+}
+
+.create-player-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, var(--secondary-color), #1d4ed8);
+  color: white;
+  border: none;
+  padding: 0.75rem 1rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-weight: 500;
+  align-self: flex-start;
+}
+
+.create-player-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.create-player-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.create-player-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .enhanced-multi-player-modal {
@@ -2081,6 +2238,15 @@ export default {
   }
 
   .footer-buttons {
+    justify-content: center;
+  }
+
+  .create-player-section {
+    padding: 0.75rem;
+  }
+
+  .create-player-btn {
+    align-self: stretch;
     justify-content: center;
   }
 }
