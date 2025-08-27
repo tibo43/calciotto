@@ -33,12 +33,13 @@ func (h *PlayerHandler) CreatePlayer(c *gin.Context) {
 		return
 	}
 
-	if err := h.Service.CreatePlayer(&player); err != nil {
+	id, err := h.Service.CreatePlayer(player.Name)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, player)
+	c.JSON(http.StatusOK, id)
 }
 
 func (h *PlayerHandler) SearchPlayer(c *gin.Context) {

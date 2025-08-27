@@ -4,7 +4,6 @@ import (
 	"app/internal/models"
 	"log"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -14,6 +13,18 @@ type PlayerService struct {
 
 func NewPlayerService(db *gorm.DB) *PlayerService {
 	return &PlayerService{DB: db}
+}
+
+func (s *PlayerService) CreatePlayer(name string) (string, error) {
+	player := &models.Player{
+		BaseModel: models.BaseModel{},
+		Name:      name,
+	}
+	result := s.DB.Create(player)
+	if result.Error != nil {
+		return "", result.Error
+	}
+	return player.ID, nil
 }
 
 func (s *PlayerService) GetPlayers() ([]models.PlayerCustom, error) {
@@ -33,15 +44,6 @@ func (s *PlayerService) GetPlayers() ([]models.PlayerCustom, error) {
 		return nil, result.Error
 	}
 	return playersCustom, nil
-}
-
-func (s *PlayerService) CreatePlayer(player *models.Player) error {
-	player.ID = uuid.New().String()
-	result := s.DB.Create(player)
-	if result.Error != nil {
-		return result.Error
-	}
-	return nil
 }
 
 func (s *PlayerService) SearchPlayer(name string) (*models.Player, error) {
