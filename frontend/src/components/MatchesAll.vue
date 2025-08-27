@@ -9,13 +9,10 @@
             <p class="page-subtitle">Track live scores and match details</p>
           </div>
           <!-- Create Match Button -->
-          <button 
-            class="create-match-btn"
-            @click="showCreateModal = true"
-          >
+          <button class="create-match-btn" @click="showCreateModal = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
             Create Match
           </button>
@@ -31,12 +28,12 @@
             <h3>Create New Match</h3>
             <button class="close-btn" @click="closeModal">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
           </div>
-          
+
           <div class="modal-body">
             <div class="form-group">
               <label>Select Match Date</label>
@@ -44,69 +41,54 @@
                 <div class="date-picker-header">
                   <button type="button" @click="previousMonth" class="nav-btn">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polyline points="15,18 9,12 15,6"/>
+                      <polyline points="15,18 9,12 15,6" />
                     </svg>
                   </button>
                   <h4 class="month-year">{{ getCurrentMonthYear() }}</h4>
                   <button type="button" @click="nextMonth" class="nav-btn">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polyline points="9,18 15,12 9,6"/>
+                      <polyline points="9,18 15,12 9,6" />
                     </svg>
                   </button>
                 </div>
-                
+
                 <div class="date-picker-grid">
                   <div class="day-headers">
                     <span v-for="day in dayHeaders" :key="day" class="day-header">{{ day }}</span>
                   </div>
                   <div class="days-grid">
-                    <button
-                      v-for="date in calendarDays"
-                      :key="`${date.day}-${date.month}`"
-                      type="button"
-                      class="day-button"
-                      :class="{
+                    <button v-for="date in calendarDays" :key="`${date.day}-${date.month}`" type="button"
+                      class="day-button" :class="{
                         'other-month': date.isOtherMonth,
                         'selected': isSelectedDate(date),
                         'today': isToday(date),
                         'disabled': isPastDate(date)
-                      }"
-                      :disabled="isPastDate(date)"
-                      @click="selectDate(date)"
-                    >
+                      }" :disabled="isPastDate(date)" @click="selectDate(date)">
                       {{ date.day }}
                     </button>
                   </div>
                 </div>
               </div>
               <p v-if="dateError" class="error-message">{{ dateError }}</p>
-              
+
               <div v-if="selectedDate" class="selected-date-display">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="20,6 9,17 4,12"/>
+                  <polyline points="20,6 9,17 4,12" />
                 </svg>
                 Selected: {{ formatSelectedDate(selectedDate) }}
               </div>
             </div>
           </div>
-          
+
           <div class="modal-footer">
-            <button 
-              class="cancel-btn" 
-              @click="closeModal"
-              :disabled="isCreating"
-            >
+            <button class="cancel-btn" @click="closeModal" :disabled="isCreating">
               Cancel
             </button>
-            <button 
-              class="confirm-btn" 
-              @click="creatingMatch"
-              :disabled="!selectedDate || isCreating"
-              :class="{ 'loading': isCreating }"
-            >
+            <button class="confirm-btn" @click="creatingMatch" :disabled="!selectedDate || isCreating"
+              :class="{ 'loading': isCreating }">
               <div v-if="isCreating" class="loading-spinner-small"></div>
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="20,6 9,17 4,12"/>
+                <polyline points="20,6 9,17 4,12" />
               </svg>
               {{ isCreating ? 'Creating...' : 'Create Match' }}
             </button>
@@ -129,20 +111,15 @@
           <!-- Horizontal Matches Bar -->
           <div class="matches-bar-container">
             <div class="matches-bar" ref="matchesBar">
-              <div 
-                v-for="match in matches" 
-                :key="match.ID" 
-                class="match-card-horizontal"
-                :class="{ 'active': selectedMatch?.ID === match.ID }"
-                @click="selectMatch(match)"
-              >
+              <div v-for="match in matches" :key="match.ID" class="match-card-horizontal"
+                :class="{ 'active': selectedMatch?.ID === match.ID }" @click="selectMatch(match)">
                 <!-- Match Date -->
                 <div class="match-date-horizontal">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                    <line x1="16" y1="2" x2="16" y2="6"/>
-                    <line x1="8" y1="2" x2="8" y2="6"/>
-                    <line x1="3" y1="10" x2="21" y2="10"/>
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
                   </svg>
                   <span>{{ formatDateShort(match.Date) }}</span>
                 </div>
@@ -165,24 +142,16 @@
                 </div>
               </div>
             </div>
-            
+
             <!-- Scroll indicators -->
-            <button 
-              class="scroll-btn scroll-left" 
-              @click="scrollLeft"
-              :disabled="!canScrollLeft"
-            >
+            <button class="scroll-btn scroll-left" @click="scrollLeft" :disabled="!canScrollLeft">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="15,18 9,12 15,6"/>
+                <polyline points="15,18 9,12 15,6" />
               </svg>
             </button>
-            <button 
-              class="scroll-btn scroll-right" 
-              @click="scrollRight"
-              :disabled="!canScrollRight"
-            >
+            <button class="scroll-btn scroll-right" @click="scrollRight" :disabled="!canScrollRight">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="9,18 15,12 9,6"/>
+                <polyline points="9,18 15,12 9,6" />
               </svg>
             </button>
           </div>
@@ -193,20 +162,17 @@
               <div class="details-header">
                 <div class="details-title-section">
                   <h3>{{ formatDate(selectedMatch.Date) }} - Match Details</h3>
-                  <router-link 
-                    :to="`/matches/${selectedMatch.ID}/edit`" 
-                    class="edit-match-btn"
-                  >
+                  <router-link :to="`/matches/${selectedMatch.ID}/edit`" class="edit-match-btn">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                     </svg>
                     Edit Match
                   </router-link>
                 </div>
                 <div class="details-divider"></div>
               </div>
-              
+
               <div class="players-section">
                 <div class="players-table-container">
                   <table class="players-table">
@@ -232,7 +198,7 @@
                             <div class="player-avatar">
                               {{ getPlayerInitials(team.Players[rowIndex - 1].Name) }}
                             </div>
-                            <span class="player-name">{{ team.Players[rowIndex - 1].Name }}</span>
+                            <span class="player-name">{{ formatPlayerNameForDisplay(team.Players[rowIndex - 1].Name) }}</span>
                           </div>
                           <span v-else class="empty-slot">-</span>
                         </td>
@@ -252,20 +218,17 @@
         <div v-else class="empty-state">
           <div class="empty-content">
             <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M16 16s-1.5-2-4-2-4 2-4 2"/>
-              <line x1="9" y1="9" x2="9.01" y2="9"/>
-              <line x1="15" y1="9" x2="15.01" y2="9"/>
+              <circle cx="12" cy="12" r="10" />
+              <path d="M16 16s-1.5-2-4-2-4 2-4 2" />
+              <line x1="9" y1="9" x2="9.01" y2="9" />
+              <line x1="15" y1="9" x2="15.01" y2="9" />
             </svg>
             <h3 class="empty-title">No matches available</h3>
             <p class="empty-description">Create your first match to get started</p>
-            <button 
-              class="create-first-match-btn"
-              @click="showCreateModal = true"
-            >
+            <button class="create-first-match-btn" @click="showCreateModal = true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
               Create Your First Match
             </button>
@@ -325,14 +288,14 @@ export default {
       // Calculate days to go back to get Monday as first day
       const dayOfWeek = firstDay.getDay(); // 0 = Sunday, 1 = Monday, etc.
       const daysToGoBack = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // If Sunday (0), go back 6 days, else go back (dayOfWeek - 1)
-    
+
       startDate.setDate(startDate.getDate() - daysToGoBack);
 
       // Generate 42 days (6 weeks)
       for (let i = 0; i < 42; i++) {
         const date = new Date(startDate);
         date.setDate(startDate.getDate() + i);
-        
+
         days.push({
           day: date.getDate(),
           month: date.getMonth(),
@@ -349,12 +312,12 @@ export default {
       this.isLoading = true;
       try {
         const matches = await getMatchesDetails();
-        
+
         // Validate matches data
         if (!Array.isArray(matches)) {
           throw new Error('Invalid matches data');
         }
-        
+
         matches.forEach(match => {
           if (!match.ID || !match.Date || !Array.isArray(match.Teams)) {
             console.error('Invalid match structure:', match);
@@ -368,7 +331,7 @@ export default {
         });
 
         this.matches = matches;
-        
+
         // Auto-select the newest match
         if (this.matches.length > 0) {
           this.selectedMatch = this.matches[0];
@@ -389,16 +352,16 @@ export default {
 
       this.isCreating = true;
       this.dateError = '';
-      
+
       this.match.Date = this.selectedDate;
       try {
         // Call your createMatch API function
         const response = await createMatch(this.match);
-        
+
         if (response) {
           // Close modal
           this.closeModal();
-          
+
           // Route to edit page with the new match ID
           this.$router.push(`/matches/${response}/edit`);
         } else {
@@ -458,17 +421,17 @@ export default {
 
     selectDate(date) {
       if (this.isPastDate(date)) return;
-      
+
       // Fix: Create date in local timezone, not UTC
       const year = date.year;
       const month = date.month;
       const day = date.day;
-      
+
       // Format as YYYY-MM-DD string directly
       const monthStr = (month + 1).toString().padStart(2, '0');
       const dayStr = day.toString().padStart(2, '0');
       this.selectedDate = `${year}-${monthStr}-${dayStr}`;
-      
+
       this.dateError = '';
     },
 
@@ -476,17 +439,17 @@ export default {
       if (!this.selectedDate) return false;
       // Parse the YYYY-MM-DD string
       const [year, month, day] = this.selectedDate.split('-').map(Number);
-      
+
       return year === date.year &&
-            (month - 1) === date.month &&  // month in selectedDate is 1-based, date.month is 0-based
-            day === date.day;
+        (month - 1) === date.month &&  // month in selectedDate is 1-based, date.month is 0-based
+        day === date.day;
     },
 
     isToday(date) {
       const today = new Date();
       return today.getFullYear() === date.year &&
-             today.getMonth() === date.month &&
-             today.getDate() === date.day;
+        today.getMonth() === date.month &&
+        today.getDate() === date.day;
     },
 
     isPastDate(date) {
@@ -503,19 +466,19 @@ export default {
     selectMatch(match) {
       this.selectedMatch = match;
     },
-    
+
     scrollLeft() {
       if (this.$refs.matchesBar) {
         this.$refs.matchesBar.scrollBy({ left: -300, behavior: 'smooth' });
       }
     },
-    
+
     scrollRight() {
       if (this.$refs.matchesBar) {
         this.$refs.matchesBar.scrollBy({ left: 300, behavior: 'smooth' });
       }
     },
-    
+
     updateScrollButtons() {
       if (this.$refs.matchesBar) {
         const element = this.$refs.matchesBar;
@@ -523,7 +486,7 @@ export default {
         this.canScrollRight = element.scrollLeft < (element.scrollWidth - element.clientWidth);
       }
     },
-    
+
     formatDate(dateString) {
       try {
         const date = new Date(dateString);
@@ -537,7 +500,7 @@ export default {
         return dateString;
       }
     },
-    
+
     formatDateShort(dateString) {
       try {
         const date = new Date(dateString);
@@ -550,7 +513,7 @@ export default {
         return dateString;
       }
     },
-    
+
     getTeamColor(colour) {
       const colorMap = {
         'red': '#ef4444',
@@ -564,32 +527,42 @@ export default {
         'white': '#f8fafc',
         'black': '#1f2937'
       };
-      
+
       return colorMap[colour.toLowerCase()] || '#6b7280';
     },
-    
+
     getMaxPlayers(teams) {
       return Math.max(...teams.map(team => team.Players.length));
     },
-    
+
     getPlayerInitials(name) {
-      return name.split(' ').map(word => word.charAt(0)).join('').toUpperCase().slice(0, 2);
+      return name.split(' ')
+        .map(word => word.charAt(0).toUpperCase())
+        .join('')
+        .slice(0, 2);
     },
-    
+
+    formatPlayerNameForDisplay(name) {
+      // Convert to title case for display (capitalize first letter of each word)
+      return name.split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    },
+
     getTotalGoals(match) {
       return match.Teams.reduce((total, team) => total + (team.Score || 0), 0);
     },
-    
+
     getTotalPlayers(match) {
       return match.Teams.reduce((total, team) => total + team.Players.length, 0);
     },
-    
+
     getMatchStatus(match) {
       const totalGoals = this.getTotalGoals(match);
       if (totalGoals === 0) return 'upcoming';
       return 'completed';
     },
-    
+
     getMatchStatusText(match) {
       const status = this.getMatchStatus(match);
       switch (status) {
@@ -635,8 +608,15 @@ export default {
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
 .header-content {
@@ -772,8 +752,10 @@ export default {
 .modal-body {
   padding: 2rem 1.5rem;
   overflow: visible;
-  max-height: 70vh;  /* Limit height */
-  overflow-y: auto;  /* Add scroll if needed */
+  max-height: 70vh;
+  /* Limit height */
+  overflow-y: auto;
+  /* Add scroll if needed */
 }
 
 .form-group {
@@ -788,7 +770,8 @@ export default {
   border: 2px solid var(--border-color);
   border-radius: var(--border-radius);
   overflow: hidden;
-  margin-bottom: 0;  /* Remove any bottom margin */
+  margin-bottom: 0;
+  /* Remove any bottom margin */
 }
 
 .selected-date-display {
@@ -929,7 +912,8 @@ export default {
 .day-button.disabled {
   color: var(--text-light);
   opacity: 0.4;
-  pointer-events: none;  /* Only disabled dates should be unclickable */
+  pointer-events: none;
+  /* Only disabled dates should be unclickable */
   cursor: not-allowed;
 }
 
@@ -1073,8 +1057,13 @@ export default {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-text {
@@ -1227,8 +1216,15 @@ export default {
 }
 
 @keyframes pulse-status {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
 
 /* Scroll Buttons */
@@ -1531,7 +1527,7 @@ export default {
     gap: 1rem;
     align-items: stretch;
   }
-  
+
   .edit-match-btn {
     justify-content: center;
   }

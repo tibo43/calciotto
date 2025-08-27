@@ -103,7 +103,7 @@
                   {{ getPlayerInitials(player.Name) }}
                 </div>
                 <div class="player-info">
-                  <h4 class="player-name">{{ player.Name }}</h4>
+                  <h4 class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</h4>
                   <span class="player-goals">Goals: {{ player.GoalNumber || 0 }}</span>
                 </div>
                 <button @click="removePlayer(playerIndex)" class="remove-player">
@@ -188,7 +188,7 @@
                     <line x1="12" y1="16" x2="12" y2="12" />
                     <line x1="12" y1="8" x2="12.01" y2="8" />
                   </svg>
-                  <span>Player "{{ playerSearchTerm }}" not found.</span>
+                  <span>Player "{{ formatPlayerNameForDisplay(playerSearchTerm) }}" not found.</span>
                 </div>
                 <button @click="createNewPlayer" :disabled="isCreatingPlayer" class="create-player-btn">
                   <svg v-if="!isCreatingPlayer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -198,7 +198,7 @@
                     <line x1="23" y1="11" x2="17" y2="11" />
                   </svg>
                   <div v-else class="spinner-small"></div>
-                  {{ isCreatingPlayer ? 'Creating...' : `Create "${playerSearchTerm}"` }}
+                  {{ isCreatingPlayer ? 'Creating...' : `Create "${formatPlayerNameForDisplay(playerSearchTerm)}"` }}
                 </button>
               </div>
             </div>
@@ -239,7 +239,7 @@
                       <div class="player-avatar-small">
                         {{ getPlayerInitials(player.Name) }}
                       </div>
-                      <span class="player-name">{{ player.Name }}</span>
+                      <span class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</span>
                     </div>
 
                     <button @click="removeSelectedPlayer(index)" class="remove-selected-btn" title="Remove player">
@@ -288,7 +288,7 @@
                       <div class="player-avatar-small">
                         {{ getPlayerInitials(player.Name) }}
                       </div>
-                      <span class="player-name">{{ player.Name }}</span>
+                      <span class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</span>
                     </div>
 
                     <div class="player-status">
@@ -504,10 +504,11 @@ export default {
       }
 
       const playerName = this.playerSearchTerm.trim();
+      const playerNameLowerCase = playerName.toLowerCase(); // Backend gets lowercase
 
       // Check if player already exists (case-insensitive)
       const existingPlayer = this.allPlayers.find(player =>
-        player.Name.toLowerCase() === playerName.toLowerCase()
+        player.Name.toLowerCase() === playerNameLowerCase
       );
 
       if (existingPlayer) {
@@ -518,7 +519,7 @@ export default {
       this.isCreatingPlayer = true;
       try {
         const newPlayerData = {
-          Name: playerName
+          Name: playerNameLowerCase // Send lowercase to backend
         };
 
         const createdPlayer = await createPlayer(newPlayerData);
@@ -528,7 +529,7 @@ export default {
 
         // Find the newly created player in the fresh data
         const freshPlayer = this.allPlayers.find(player =>
-          player.Name.toLowerCase() === playerName.toLowerCase()
+          player.Name.toLowerCase() === playerNameLowerCase
         );
 
         if (freshPlayer) {
@@ -541,7 +542,7 @@ export default {
         this.showCreatePlayerOption = false;
         this.filterAvailablePlayers();
 
-        this.showMessage(`Player "${playerName}" created and added to selection!`, 'success');
+        this.showMessage(`Player "${this.formatPlayerNameForDisplay(playerNameLowerCase)}" created and added to selection!`, 'success');
 
       } catch (error) {
         console.error('Error creating player:', error);
@@ -928,7 +929,17 @@ export default {
     },
 
     getPlayerInitials(name) {
-      return name.split(' ').map(word => word.charAt(0)).join('').toUpperCase().slice(0, 2);
+      return name.split(' ')
+        .map(word => word.charAt(0).toUpperCase())
+        .join('')
+        .slice(0, 2);
+    },
+
+    formatPlayerNameForDisplay(name) {
+      // Convert to title case for display (capitalize first letter of each word)
+      return name.split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
     },
 
     getTotalGoals() {
