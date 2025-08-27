@@ -22,7 +22,7 @@ services:
     working_dir: /frontend
     command: "npm run serve"
     environment:
-      - VUE_APP_API_BASE_URL
+      - VUE_API_BASE_URL="http://127.0.0.1:8080"
     depends_on:
       backend:
         condition: service_started
