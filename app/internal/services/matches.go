@@ -2,6 +2,7 @@ package services
 
 import (
 	"app/internal/models"
+	"log"
 	"sort"
 
 	"gorm.io/gorm"
@@ -35,12 +36,11 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
         SELECT matches.id as match_id, matches.date as match_date,
                teams.id as team_id, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
-			   goals.number as goal_number
+			   team_compositions.number as goal_number
         FROM matches
         LEFT JOIN team_compositions ON team_compositions.match_id = matches.id
         LEFT JOIN teams ON teams.id = team_compositions.team_id
         LEFT JOIN players ON players.id = team_compositions.player_id
-		LEFT JOIN goals ON goals.match_id = matches.id AND goals.team_id = teams.id AND goals.player_id = players.id
 		ORDER BY match_date DESC
     `).Scan(&rowsMatches)
 
@@ -167,12 +167,11 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
         SELECT matches.id as match_id, matches.date as match_date, 
                teams.id as team_id, teams.colour as team_colour, 
                players.id as player_id, players.name as player_name,
-			   goals.number as goal_number
+			   team_compositions.number as goal_number
         FROM matches
         LEFT JOIN team_compositions ON team_compositions.match_id = matches.id
         LEFT JOIN teams ON teams.id = team_compositions.team_id
         LEFT JOIN players ON players.id = team_compositions.player_id
-		LEFT JOIN goals ON goals.match_id = matches.id AND goals.team_id = teams.id AND goals.player_id = players.id
 		WHERE matches.id = ?
 		ORDER BY match_date DESC`, id).Scan(&rowsMatch)
 
@@ -265,7 +264,6 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
 }
 
 func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
-
 	var dbTeamCompositions []models.TeamComposition
 
 	for i := range match.Teams {
@@ -280,6 +278,7 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 			exists := false
 			for _, dbTeamComposition := range dbTeamCompositions {
 				if dbTeamComposition.PlayerID == player.ID {
+					log.Println("prima", player.Name)
 					exists = true
 					break
 				}
@@ -290,6 +289,7 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 					MatchID:  match.ID,
 					TeamID:   team.ID,
 					PlayerID: player.ID,
+					Number:   player.GoalNumber,
 				}
 				result := s.DB.Create(&newTeamComposition)
 				if result.Error != nil {
@@ -304,11 +304,15 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 				player := &team.Players[j]
 				if dbTeamComposition.PlayerID != player.ID {
 					toDelete = true
+					log.Println("delete", player.Name)
+				} else {
+					log.Println("delete equal", player.Name)
+					result := s.DB.Model(&models.TeamComposition{}).Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", player.ID).Update("Number", player.GoalNumber)
+					if result.Error != nil {
+						return result.Error
+					}
 				}
-				if dbTeamComposition.PlayerID == player.ID {
-					toDelete = false
-					break
-				}
+
 			}
 			if toDelete {
 				result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", dbTeamComposition.PlayerID).Delete(&models.TeamComposition{})
