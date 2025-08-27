@@ -522,7 +522,7 @@ export default {
           Name: playerNameLowerCase // Send lowercase to backend
         };
 
-        const createdPlayer = await createPlayer(newPlayerData);
+        await createPlayer(newPlayerData);
 
         // RELOAD ALL PLAYERS FROM DATABASE to ensure we have fresh data
         await this.reloadAllPlayers();
