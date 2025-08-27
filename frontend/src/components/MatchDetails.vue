@@ -1394,6 +1394,7 @@ export default {
 
 .form-group {
   margin-bottom: 1.5rem;
+  position: relative;
 }
 
 .form-group label {
@@ -1456,6 +1457,7 @@ export default {
 .confirm-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  background-color: var(--text-light);
 }
 
 .input-wrapper {
@@ -2109,21 +2111,6 @@ export default {
 }
 
 /* Selected Players Section */
-.selected-players-section {
-  margin-bottom: 2rem;
-  padding: 1rem;
-  background-color: var(--bg-tertiary);
-  border-radius: var(--border-radius);
-  border: 2px dashed var(--primary-color);
-}
-
-.selected-players-section h4 {
-  margin: 0 0 1rem 0;
-  color: var(--primary-color);
-  font-weight: 600;
-  font-size: 1rem;
-}
-
 .selected-players-list {
   display: flex;
   flex-direction: column;
@@ -2196,28 +2183,6 @@ export default {
 }
 
 /* Available Players Section */
-.available-players-section {
-  margin-bottom: 1rem;
-}
-
-.available-players-section h4 {
-  margin: 0 0 1rem 0;
-  color: var(--text-primary);
-  font-weight: 600;
-  font-size: 1rem;
-}
-
-.no-players {
-  text-align: center;
-  padding: 2rem;
-  color: var(--text-secondary);
-}
-
-.no-players p {
-  margin: 0;
-  font-style: italic;
-}
-
 .available-players-list {
   display: flex;
   flex-direction: column;
@@ -2327,21 +2292,8 @@ export default {
   gap: 1rem;
 }
 
-/* Enhanced confirm button for multi-selection */
-.confirm-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background-color: var(--text-light);
-}
-
 /* Responsive adjustments for multi-player modal */
 @media (max-width: 768px) {
-  .multi-player-modal {
-    width: 95%;
-    max-width: none;
-    max-height: 90vh;
-  }
-
   .selected-player-item {
     flex-direction: column;
     align-items: flex-start;
@@ -2369,64 +2321,28 @@ export default {
 }
 
 @media (max-width: 480px) {
-  .multi-player-modal .modal-body {
-    padding: 1rem;
-  }
-
-  .selected-players-section {
-    padding: 0.75rem;
-  }
-
   .available-player-item {
     padding: 0.5rem;
   }
 }
 
 /* Scrollbar styling for lists */
-.available-players-list::-webkit-scrollbar,
-.multi-player-modal .modal-body::-webkit-scrollbar {
+.available-players-list::-webkit-scrollbar {
   width: 6px;
 }
 
-.available-players-list::-webkit-scrollbar-track,
-.multi-player-modal .modal-body::-webkit-scrollbar-track {
+.available-players-list::-webkit-scrollbar-track {
   background: var(--bg-tertiary);
   border-radius: 3px;
 }
 
-.available-players-list::-webkit-scrollbar-thumb,
-.multi-player-modal .modal-body::-webkit-scrollbar-thumb {
+.available-players-list::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 3px;
 }
 
-.available-players-list::-webkit-scrollbar-thumb:hover,
-.multi-player-modal .modal-body::-webkit-scrollbar-thumb:hover {
+.available-players-list::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
-}
-
-/* Form group positioning for dropdown */
-.form-group {
-  position: relative;
-}
-
-/* Enhanced confirm button states */
-.confirm-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background-color: var(--text-light);
-}
-
-/* Form group positioning for dropdown */
-.form-group {
-  position: relative;
-}
-
-/* Enhanced confirm button states */
-.confirm-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background-color: var(--text-light);
 }
 
 /* Toast Container */

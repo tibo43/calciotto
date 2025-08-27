@@ -783,34 +783,6 @@ export default {
 }
 
 /* Custom Date Picker Styles */
-.custom-date-picker {
-  position: relative;
-}
-
-.date-picker-input {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1rem;
-  border: 2px solid var(--border-color);
-  border-radius: var(--border-radius);
-  background-color: var(--bg-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  min-height: 50px;
-}
-
-.date-picker-input:hover {
-  border-color: var(--primary-color);
-  background-color: var(--bg-primary);
-}
-
-.date-picker-input:focus-within {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.1);
-  background-color: var(--bg-primary);
-}
-
 .date-picker-container {
   background-color: var(--bg-primary);
   border: 2px solid var(--border-color);
@@ -834,50 +806,6 @@ export default {
 .selected-date-display svg {
   width: 16px;
   height: 16px;
-}
-
-.calendar-icon {
-  width: 20px;
-  height: 20px;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.date-display {
-  flex: 1;
-  color: var(--text-primary);
-  font-size: 1rem;
-}
-
-.date-display:empty::before {
-  content: 'Choose a date';
-  color: var(--text-secondary);
-}
-
-.chevron-icon {
-  width: 20px;
-  height: 20px;
-  color: var(--text-secondary);
-  transition: transform var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.chevron-icon.open {
-  transform: rotate(180deg);
-}
-
-.date-picker-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background-color: var(--bg-primary);
-  border: 2px solid var(--primary-color);
-  border-radius: var(--border-radius);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-  z-index: 1100;
-  margin-top: 0.5rem;
-  overflow: hidden;
 }
 
 .date-picker-header {
@@ -1010,53 +938,12 @@ export default {
   background: transparent;
 }
 
-/* Date Picker Transitions */
-.date-picker-enter-active,
-.date-picker-leave-active {
-  transition: all var(--transition-smooth);
-}
-
-.date-picker-enter-from,
-.date-picker-leave-to {
-  opacity: 0;
-  transform: translateY(-10px) scale(0.95);
-}
-
 .form-group label {
   display: block;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 0.75rem;
   font-size: 0.95rem;
-}
-
-.date-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.date-input {
-  width: 100%;
-  padding: 1rem 1rem 1rem 3rem;
-  border: 2px solid var(--border-color);
-  border-radius: var(--border-radius);
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 1rem;
-  transition: all var(--transition-fast);
-}
-
-.date-input:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.1);
-  background-color: var(--bg-primary);
-}
-
-.date-input::-webkit-calendar-picker-indicator {
-  cursor: pointer;
-  filter: var(--primary-color-filter, invert(47%) sepia(91%) saturate(2108%) hue-rotate(209deg) brightness(97%) contrast(94%));
 }
 
 .error-message {
