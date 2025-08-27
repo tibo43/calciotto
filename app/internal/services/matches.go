@@ -2,7 +2,6 @@ package services
 
 import (
 	"app/internal/models"
-	"log"
 	"sort"
 
 	"gorm.io/gorm"
@@ -194,9 +193,7 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
 			var team *models.TeamWithPlayers
 			for i := range match.Teams {
 				if match.Teams[i].ID == rowMatch.TeamID {
-					log.Println("break", match)
 					team = &match.Teams[i]
-					log.Println("break", team)
 					break
 				}
 			}
@@ -273,7 +270,6 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 
 	for i := range match.Teams {
 		team := &match.Teams[i]
-		log.Println(team.Colour)
 		result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Find(&dbTeamCompositions)
 		if result.Error != nil {
 			return result.Error
@@ -283,13 +279,11 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 			// Check if the player already exists in the team composition
 			exists := false
 			for _, dbTeamComposition := range dbTeamCompositions {
-				log.Println(player.ID, dbTeamComposition.PlayerID)
 				if dbTeamComposition.PlayerID == player.ID {
 					exists = true
 					break
 				}
 			}
-			log.Println(player.Name, exists)
 			if !exists {
 				// Create a new team composition if it doesn't exist
 				newTeamComposition := models.TeamComposition{
@@ -317,7 +311,6 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 				}
 			}
 			if toDelete {
-				log.Println(dbTeamComposition.PlayerID)
 				result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", dbTeamComposition.PlayerID).Delete(&models.TeamComposition{})
 				if result.Error != nil {
 					return result.Error
