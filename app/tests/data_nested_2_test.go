@@ -39,28 +39,11 @@ func TestCreateDatasetNested2(t *testing.T) {
 				MatchID:  match.ID,
 				TeamID:   team.ID,
 				PlayerID: player.ID,
+				Number:   0,
 			}
 			result := db.Create(&teamComposition)
 			if result.Error != nil {
 				t.Fatalf("Failed to create team composition: %v", result.Error)
-			}
-		}
-	}
-
-	// Création de quelques compositions d'équipe avec des références aléatoires
-	for j := 0; j < len(dbTeams); j++ {
-		team := dbTeams[j]
-		for h := 0; h < len(dbPlayers); h++ {
-			player := dbPlayers[h]
-			goal := models.Goal{
-				MatchID:  match.ID,
-				TeamID:   team.ID,
-				PlayerID: player.ID,
-				Number:   0,
-			}
-			result := db.Create(&goal)
-			if result.Error != nil {
-				t.Fatalf("Failed to create goal: %v", result.Error)
 			}
 		}
 	}
