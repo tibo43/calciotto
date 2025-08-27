@@ -6,7 +6,7 @@
         <div class="header-content">
           <button @click="goBack" class="back-button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="15,18 9,12 15,6"/>
+              <polyline points="15,18 9,12 15,6" />
             </svg>
             Back to Matches
           </button>
@@ -33,7 +33,7 @@
               {{ getMatchStatusText() }}
             </div>
           </div>
-          
+
           <div class="teams-score">
             <!-- Team 1 -->
             <div class="team-score">
@@ -66,31 +66,27 @@
         <div v-if="match.Teams && match.Teams.length > 0" class="team-management">
           <div class="management-header">
             <div class="tabs-buttons">
-              <button 
-                v-for="(team, index) in match.Teams" 
-                :key="team.ID"
-                @click="activeTeam = index"
-                :class="['tab-button', { active: activeTeam === index }]"
-              >
+              <button v-for="(team, index) in match.Teams" :key="team.ID" @click="activeTeam = index"
+                :class="['tab-button', { active: activeTeam === index }]">
                 <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
                 {{ team.Colour }} Team ({{ team.Players ? team.Players.length : 0 }})
               </button>
             </div>
-            
+
             <div class="action-buttons">
               <button @click="showModal" class="add-player-btn">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="8" x2="12" y2="16"/>
-                  <line x1="8" y1="12" x2="16" y2="12"/>
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="16" />
+                  <line x1="8" y1="12" x2="16" y2="12" />
                 </svg>
                 Add Player
               </button>
-              <button @click="saveChanges" :disabled="isSaving" class="save-button">
+              <button @click="saveChanges" class="save-button">
                 <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                  <polyline points="17,21 17,13 7,13 7,21"/>
-                  <polyline points="7,3 7,8 15,8"/>
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17,21 17,13 7,13 7,21" />
+                  <polyline points="7,3 7,8 15,8" />
                 </svg>
                 <div v-else class="save-spinner"></div>
                 {{ isSaving ? 'Saving...' : 'Save Changes' }}
@@ -100,11 +96,8 @@
 
           <!-- Players List -->
           <div v-if="match.Teams[activeTeam] && match.Teams[activeTeam].Players" class="players-grid">
-            <div 
-              v-for="(player, playerIndex) in match.Teams[activeTeam].Players" 
-              :key="playerIndex"
-              class="player-card"
-            >
+            <div v-for="(player, playerIndex) in match.Teams[activeTeam].Players" :key="playerIndex"
+              class="player-card">
               <div class="player-header">
                 <div class="player-avatar">
                   {{ getPlayerInitials(player.Name) }}
@@ -115,30 +108,27 @@
                 </div>
                 <button @click="removePlayer(playerIndex)" class="remove-player">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 </button>
               </div>
-              
+
               <!-- Goal Management -->
               <div class="goal-management">
-                <button 
-                  @click="updateGoals(playerIndex, -1)" 
-                  :disabled="!player.GoalNumber || player.GoalNumber <= 0"
-                  class="goal-btn decrease"
-                >
+                <button @click="updateGoals(playerIndex, -1)" :disabled="!player.GoalNumber || player.GoalNumber <= 0"
+                  class="goal-btn decrease">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
                 </button>
-                
+
                 <span class="goal-count">{{ player.GoalNumber || 0 }}</span>
-                
+
                 <button @click="updateGoals(playerIndex, 1)" class="goal-btn increase">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="12" y1="5" x2="12" y2="19"/>
-                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
                 </button>
               </div>
@@ -152,15 +142,15 @@
     <div v-else class="error-state">
       <div class="error-content">
         <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="15" y1="9" x2="9" y2="15"/>
-          <line x1="9" y1="9" x2="15" y2="15"/>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="15" y1="9" x2="9" y2="15" />
+          <line x1="9" y1="9" x2="15" y2="15" />
         </svg>
         <h3 class="error-title">Match not found</h3>
         <p class="error-description">The match you're looking for doesn't exist or failed to load.</p>
         <button @click="goBack" class="error-back-btn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15,18 9,12 15,6"/>
+            <polyline points="15,18 9,12 15,6" />
           </svg>
           Go Back
         </button>
@@ -168,207 +158,189 @@
     </div>
 
     <div v-if="showAddPlayerModal" class="modal-overlay" @click="closeModal">
-  <div class="modal-content enhanced-multi-player-modal" @click.stop>
-    <div class="modal-header">
-      <h3>Add Players to {{ match.Teams[activeTeam].Colour }} Team</h3>
-      <button @click="closeModal" class="modal-close">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/>
-          <line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    
-    <div class="modal-body enhanced-modal-body">
-      <!-- Search Section - Fixed at top -->
-      <div class="search-section">
-        <div class="form-group">
-          <label for="playerSearch">Search Players</label>
-          <div class="input-wrapper">
-            <input 
-              v-model="playerSearchTerm" 
-              type="text" 
-              id="playerSearch"
-              placeholder="Search for players to add..."
-              @input="onPlayerSearch"
-            >
-            <div v-if="isLoadingPlayers" class="search-loading">
-              <div class="spinner-small"></div>
-            </div>
-          </div>
+      <div class="modal-content enhanced-multi-player-modal" @click.stop>
+        <div class="modal-header">
+          <h3>Add Players to {{ match.Teams[activeTeam].Colour }} Team</h3>
+          <button @click="closeModal" class="modal-close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
-      </div>
 
-      <!-- Two-column layout for selected and available players -->
-      <div class="players-columns">
-        <!-- Selected Players Column -->
-        <div class="column selected-column">
-          <div class="column-header">
-            <h4>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon">
-                <path d="M9 12l2 2 4-4"/>
-                <circle cx="12" cy="12" r="10"/>
-              </svg>
-              Selected Players 
-              <span class="count-badge">{{ selectedPlayers.length }}</span>
-            </h4>
-          </div>
-          
-          <div class="column-content">
-            <div v-if="selectedPlayers.length === 0" class="empty-state">
-              <div class="empty-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="8" x2="12" y2="16"/>
-                  <line x1="8" y1="12" x2="16" y2="12"/>
-                </svg>
-              </div>
-              <p>No players selected</p>
-              <span>Select players from the right to add them</span>
-            </div>
-            
-            <div v-else class="selected-players-list">
-              <div 
-                v-for="(player, index) in selectedPlayers" 
-                :key="`selected-${player.ID || player.Name}`"
-                class="selected-player-item"
-              >
-                <div class="player-info">
-                  <div class="player-avatar-small">
-                    {{ getPlayerInitials(player.Name) }}
-                  </div>
-                  <span class="player-name">{{ player.Name }}</span>
+        <div class="modal-body enhanced-modal-body">
+          <!-- Search Section - Fixed at top -->
+          <div class="search-section">
+            <div class="form-group">
+              <label for="playerSearch">Search Players</label>
+              <div class="input-wrapper">
+                <input v-model="playerSearchTerm" type="text" id="playerSearch"
+                  placeholder="Search for players to add..." @input="onPlayerSearch">
+                <div v-if="isLoadingPlayers" class="search-loading">
+                  <div class="spinner-small"></div>
                 </div>
-                
-                <button 
-                  @click="removeSelectedPlayer(index)" 
-                  class="remove-selected-btn"
-                  title="Remove player"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- Two-column layout for selected and available players -->
+          <div class="players-columns">
+            <!-- Selected Players Column -->
+            <div class="column selected-column">
+              <div class="column-header">
+                <h4>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon">
+                    <path d="M9 12l2 2 4-4" />
+                    <circle cx="12" cy="12" r="10" />
                   </svg>
-                </button>
+                  Selected Players
+                  <span class="count-badge">{{ selectedPlayers.length }}</span>
+                </h4>
               </div>
-            </div>
-          </div>
-        </div>
 
-        <!-- Available Players Column -->
-        <div class="column available-column">
-          <div class="column-header">
-            <h4>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M16 12l-4-4-4 4"/>
-                <path d="M16 16l-4-4-4 4"/>
-              </svg>
-              Available Players
-              <span class="count-badge">{{ filteredAvailablePlayers.length }}</span>
-            </h4>
-          </div>
-          
-          <div class="column-content">
-            <div v-if="filteredAvailablePlayers.length === 0 && !isLoadingPlayers" class="empty-state">
-              <div class="empty-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-                </svg>
-              </div>
-              <p v-if="playerSearchTerm">No players found</p>
-              <p v-else>No available players</p>
-              <span v-if="playerSearchTerm">Try adjusting your search term</span>
-            </div>
-            
-            <div v-else class="available-players-list">
-              <button
-                v-for="player in filteredAvailablePlayers"
-                :key="`available-${player.ID || player.Name}`"
-                @click="addPlayerToSelection(player)"
-                class="available-player-item"
-                :disabled="isPlayerSelected(player) || isPlayerInAnyTeam(player.Name)"
-              >
-                <div class="player-info">
-                  <div class="player-avatar-small">
-                    {{ getPlayerInitials(player.Name) }}
+              <div class="column-content">
+                <div v-if="selectedPlayers.length === 0" class="empty-state">
+                  <div class="empty-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="16" />
+                      <line x1="8" y1="12" x2="16" y2="12" />
+                    </svg>
                   </div>
-                  <span class="player-name">{{ player.Name }}</span>
+                  <p>No players selected</p>
+                  <span>Select players from the right to add them</span>
                 </div>
-                
-                <div class="player-status">
-                  <span v-if="isPlayerSelected(player)" class="status-selected">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M9 12l2 2 4-4"/>
-                      <circle cx="12" cy="12" r="10"/>
-                    </svg>
-                  </span>
-                  <span v-else-if="isPlayerInAnyTeam(player.Name)" class="status-in-match">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="15" y1="9" x2="9" y2="15"/>
-                      <line x1="9" y1="9" x2="15" y2="15"/>
-                    </svg>
-                  </span>
-                  <span v-else class="status-available">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="12" y1="8" x2="12" y2="16"/>
-                      <line x1="8" y1="12" x2="16" y2="12"/>
-                    </svg>
-                  </span>
+
+                <div v-else class="selected-players-list">
+                  <div v-for="(player, index) in selectedPlayers" :key="`selected-${player.ID || player.Name}`"
+                    class="selected-player-item">
+                    <div class="player-info">
+                      <div class="player-avatar-small">
+                        {{ getPlayerInitials(player.Name) }}
+                      </div>
+                      <span class="player-name">{{ player.Name }}</span>
+                    </div>
+
+                    <button @click="removeSelectedPlayer(index)" class="remove-selected-btn" title="Remove player">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-              </button>
+              </div>
             </div>
+
+            <!-- Available Players Column -->
+            <div class="column available-column">
+              <div class="column-header">
+                <h4>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M16 12l-4-4-4 4" />
+                    <path d="M16 16l-4-4-4 4" />
+                  </svg>
+                  Available Players
+                  <span class="count-badge">{{ filteredAvailablePlayers.length }}</span>
+                </h4>
+              </div>
+
+              <div class="column-content">
+                <div v-if="filteredAvailablePlayers.length === 0 && !isLoadingPlayers" class="empty-state">
+                  <div class="empty-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                    </svg>
+                  </div>
+                  <p v-if="playerSearchTerm">No players found</p>
+                  <p v-else>No available players</p>
+                  <span v-if="playerSearchTerm">Try adjusting your search term</span>
+                </div>
+
+                <div v-else class="available-players-list">
+                  <button v-for="player in filteredAvailablePlayers" :key="`available-${player.ID || player.Name}`"
+                    @click="addPlayerToSelection(player)" class="available-player-item"
+                    :disabled="isPlayerSelected(player) || isPlayerInAnyTeam(player.Name)">
+                    <div class="player-info">
+                      <div class="player-avatar-small">
+                        {{ getPlayerInitials(player.Name) }}
+                      </div>
+                      <span class="player-name">{{ player.Name }}</span>
+                    </div>
+
+                    <div class="player-status">
+                      <span v-if="isPlayerSelected(player)" class="status-selected">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M9 12l2 2 4-4" />
+                          <circle cx="12" cy="12" r="10" />
+                        </svg>
+                      </span>
+                      <span v-else-if="isPlayerInAnyTeam(player.Name)" class="status-in-match">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="15" y1="9" x2="9" y2="15" />
+                          <line x1="9" y1="9" x2="15" y2="15" />
+                        </svg>
+                      </span>
+                      <span v-else class="status-available">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="8" x2="12" y2="16" />
+                          <line x1="8" y1="12" x2="16" y2="12" />
+                        </svg>
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer enhanced-footer">
+          <div class="footer-info">
+            <div class="selection-summary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="summary-icon">
+                <path d="M9 12l2 2 4-4" />
+                <circle cx="12" cy="12" r="10" />
+              </svg>
+              <span v-if="selectedPlayers.length > 0" class="selection-count">
+                {{ selectedPlayers.length }} player{{ selectedPlayers.length !== 1 ? 's' : '' }} selected
+              </span>
+              <span v-else class="selection-count empty">
+                No players selected
+              </span>
+            </div>
+          </div>
+
+          <div class="footer-buttons">
+            <button @click="closeModal" class="cancel-button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Cancel
+            </button>
+            <button @click="addSelectedPlayersToTeam" :disabled="selectedPlayers.length === 0"
+              class="confirm-button enhanced-confirm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 12l2 2 4-4" />
+                <circle cx="12" cy="12" r="10" />
+              </svg>
+              Add {{ selectedPlayers.length || '' }} Player{{ selectedPlayers.length !== 1 ? 's' : '' }}
+            </button>
           </div>
         </div>
       </div>
     </div>
-    
-    <div class="modal-footer enhanced-footer">
-      <div class="footer-info">
-        <div class="selection-summary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="summary-icon">
-            <path d="M9 12l2 2 4-4"/>
-            <circle cx="12" cy="12" r="10"/>
-          </svg>
-          <span v-if="selectedPlayers.length > 0" class="selection-count">
-            {{ selectedPlayers.length }} player{{ selectedPlayers.length !== 1 ? 's' : '' }} selected
-          </span>
-          <span v-else class="selection-count empty">
-            No players selected
-          </span>
-        </div>
+    <!-- Toast Container -->
+    <div v-if="message" class="toast-container">
+      <div :class="['message', messageType]" @click="dismissMessage" :key="messageKey">
+        {{ message }}
       </div>
-      
-      <div class="footer-buttons">
-        <button @click="closeModal" class="cancel-button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-          Cancel
-        </button>
-        <button 
-          @click="addSelectedPlayersToTeam" 
-          :disabled="selectedPlayers.length === 0" 
-          class="confirm-button enhanced-confirm"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 12l2 2 4-4"/>
-            <circle cx="12" cy="12" r="10"/>
-          </svg>
-          Add {{ selectedPlayers.length || '' }} Player{{ selectedPlayers.length !== 1 ? 's' : '' }}
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-    <!-- Error/Success Messages -->
-    <div v-if="message" :class="['message', messageType]">
-      {{ message }}
     </div>
   </div>
 </template>
@@ -395,6 +367,7 @@ export default {
       isLoadingPlayers: false,
       playerSearchTerm: '',
       isSearchingPlayer: false,
+      messageKey: 0,
     };
   },
   async created() {
@@ -406,7 +379,7 @@ export default {
       try {
         const matchId = this.$route.params.id;
         this.match = await getMatchDetailsByID(matchId);
-        
+
         // Ensure each player has GoalNumber property
         if (this.match && this.match.Teams) {
           this.match.Teams.forEach(team => {
@@ -419,7 +392,7 @@ export default {
             }
           });
         }
-        
+
       } catch (error) {
         console.error('Error fetching match:', error);
         this.showMessage('Error loading match details', 'error');
@@ -468,7 +441,7 @@ export default {
       const currentTeamPlayerNames = currentTeamPlayers.map(p => p.Name.toLowerCase());
 
       // Filter out players already in current team
-      let availablePlayers = this.allPlayers.filter(player => 
+      let availablePlayers = this.allPlayers.filter(player =>
         player && player.Name && !currentTeamPlayerNames.includes(player.Name.toLowerCase())
       );
 
@@ -485,7 +458,7 @@ export default {
     onPlayerNameInput() {
       this.playerSearchTerm = this.newPlayerName;
       this.isSearchingPlayer = true;
-      
+
       // Debounce the search
       clearTimeout(this.searchTimeout);
       this.searchTimeout = setTimeout(() => {
@@ -511,7 +484,7 @@ export default {
 
         // Filter players based on search term
         const searchTerm = this.newPlayerName.toLowerCase().trim();
-        const matchingPlayers = this.allPlayers.filter(player => 
+        const matchingPlayers = this.allPlayers.filter(player =>
           player && player.Name && player.Name.toLowerCase().includes(searchTerm)
         );
 
@@ -526,7 +499,7 @@ export default {
           const player = matchingPlayers[0];
           this.playerNotFound = false;
           this.playerAlreadyInTeam = this.isPlayerInCurrentTeam(player.Name);
-          
+
           if (this.playerAlreadyInTeam) {
             this.validationMessage = `${player.Name} is already in the ${this.match.Teams[this.activeTeam].Colour} team`;
           } else if (this.isPlayerInAnyTeam(player.Name)) {
@@ -555,7 +528,7 @@ export default {
       this.playerSuggestions = [player]; // Show only selected player
       this.playerNotFound = false;
       this.playerAlreadyInTeam = this.isPlayerInCurrentTeam(player.Name);
-      
+
       if (this.playerAlreadyInTeam) {
         this.validationMessage = `${player.Name} is already in the ${this.match.Teams[this.activeTeam].Colour} team`;
       } else if (this.isPlayerInAnyTeam(player.Name)) {
@@ -563,7 +536,7 @@ export default {
       } else {
         this.validationMessage = `${player.Name} - Ready to add`;
       }
-    },    
+    },
 
     // Handle search input
     onPlayerSearch() {
@@ -599,7 +572,7 @@ export default {
 
     // Check if player is already selected
     isPlayerSelected(player) {
-      return this.selectedPlayers.some(selectedPlayer => 
+      return this.selectedPlayers.some(selectedPlayer =>
         selectedPlayer.Name.toLowerCase() === player.Name.toLowerCase()
       );
     },
@@ -629,14 +602,14 @@ export default {
             Name: selectedPlayer.Name,
             GoalNumber: selectedPlayer.initialGoals || 0
           };
-          
+
           this.match.Teams[this.activeTeam].Players.push(newPlayer);
         }
       });
 
       // Update team score
       this.updateTeamScore();
-      
+
       // Close modal and show success message
       this.closeModal();
     },
@@ -652,8 +625,8 @@ export default {
       if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
         return false;
       }
-      
-      return this.match.Teams[this.activeTeam].Players.some(player => 
+
+      return this.match.Teams[this.activeTeam].Players.some(player =>
         player.Name.toLowerCase() === playerName.toLowerCase()
       );
     },
@@ -661,9 +634,9 @@ export default {
     // Check if player is in any team in this match
     isPlayerInAnyTeam(playerName) {
       if (!this.match.Teams) return false;
-      
-      return this.match.Teams.some(team => 
-        team.Players && team.Players.some(player => 
+
+      return this.match.Teams.some(team =>
+        team.Players && team.Players.some(player =>
           player.Name.toLowerCase() === playerName.toLowerCase()
         )
       );
@@ -678,14 +651,14 @@ export default {
 
       // If we have suggestions, use the first one or the selected one
       let playerToAdd = this.selectedPlayer;
-      
+
       if (!playerToAdd && this.playerSuggestions.length === 1) {
         playerToAdd = this.playerSuggestions[0];
       }
-      
+
       if (!playerToAdd) {
         // Try to find player by name
-        playerToAdd = this.allPlayers.find(p => 
+        playerToAdd = this.allPlayers.find(p =>
           p.Name.toLowerCase() === this.newPlayerName.toLowerCase().trim()
         );
       }
@@ -694,28 +667,28 @@ export default {
         console.error('Invalid team data');
         return;
       }
-      
+
       if (!this.match.Teams[this.activeTeam].Players) {
         this.match.Teams[this.activeTeam].Players = [];
       }
-      
+
       const newPlayer = {
         ID: playerToAdd.ID,
         Name: playerToAdd.Name,
         GoalNumber: this.newPlayerGoals || 0
       };
-      
+
       this.match.Teams[this.activeTeam].Players.push(newPlayer);
       this.updateTeamScore();
       this.closeModal();
     },
-    
+
     // Show modal and load players
     async showModal() {
       this.showAddPlayerModal = true;
       await this.loadAllPlayers();
     },
-    
+
     closeModal() {
       this.showAddPlayerModal = false;
       this.selectedPlayers = [];
@@ -731,47 +704,59 @@ export default {
     goBack() {
       this.$router.go(-1);
     },
-    
+
     updateGoals(playerIndex, change) {
       if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
         console.error('Invalid team or players data');
         return;
       }
-      
+
       const player = this.match.Teams[this.activeTeam].Players[playerIndex];
       if (!player) {
         console.error('Player not found at index:', playerIndex);
         return;
       }
-      
+
       const newGoals = (player.GoalNumber || 0) + change;
-      
+
       if (newGoals >= 0) {
         player.GoalNumber = newGoals;
         this.updateTeamScore();
       }
     },
-    
+
     updateTeamScore() {
       if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
         return;
       }
-      
+
       const team = this.match.Teams[this.activeTeam];
       team.Score = team.Players.reduce((total, player) => total + (player.GoalNumber || 0), 0);
     },
-    
+
     removePlayer(playerIndex) {
       if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
         console.error('Invalid team or players data');
         return;
       }
-      
+
       this.match.Teams[this.activeTeam].Players.splice(playerIndex, 1);
       this.updateTeamScore();
     },
-    
+
+    hasEmptyTeam() {
+      if (!this.match || !this.match.Teams) return true;
+
+      return this.match.Teams.some(team =>
+        !team.Players || team.Players.length === 0
+      );
+    },
+
     async saveChanges() {
+      if (this.hasEmptyTeam()) {
+        this.showMessage('Each team requires at least 1 player', 'error');
+        return;
+      }
       this.isSaving = true;
       try {
         await updateMatch(this.match.ID, this.match);
@@ -783,15 +768,35 @@ export default {
         this.isSaving = false;
       }
     },
-    
-    showMessage(text, type) {
+
+    showMessage(text, type = 'success') {
       this.message = text;
       this.messageType = type;
-      setTimeout(() => {
-        this.message = '';
+      this.messageKey++; // Trigger re-render for animations
+
+      // Auto-dismiss after 4 seconds
+      if (this.messageTimeout) {
+        clearTimeout(this.messageTimeout);
+      }
+
+      this.messageTimeout = setTimeout(() => {
+        this.dismissMessage();
       }, 3000);
     },
-    
+
+    dismissMessage() {
+      const messageEl = document.querySelector('.message');
+      if (messageEl) {
+        messageEl.classList.add('toast-exit');
+        setTimeout(() => {
+          this.message = '';
+          if (this.messageTimeout) {
+            clearTimeout(this.messageTimeout);
+          }
+        }, 300);
+      }
+    },
+
     formatDate(dateString) {
       try {
         const date = new Date(dateString);
@@ -805,7 +810,7 @@ export default {
         return dateString;
       }
     },
-    
+
     getTeamColor(colour) {
       const colorMap = {
         'red': '#ef4444',
@@ -819,30 +824,30 @@ export default {
         'white': '#f8fafc',
         'black': '#1f2937'
       };
-      
+
       return colorMap[colour.toLowerCase()] || '#6b7280';
     },
-    
+
     getPlayerInitials(name) {
       return name.split(' ').map(word => word.charAt(0)).join('').toUpperCase().slice(0, 2);
     },
-    
+
     getTotalGoals() {
       if (!this.match || !this.match.Teams) return 0;
       return this.match.Teams.reduce((total, team) => total + (team.Score || 0), 0);
     },
-    
+
     getTotalPlayers() {
       if (!this.match || !this.match.Teams) return 0;
       return this.match.Teams.reduce((total, team) => total + (team.Players ? team.Players.length : 0), 0);
     },
-    
+
     getMatchStatus() {
       const totalGoals = this.getTotalGoals();
       if (totalGoals === 0) return 'upcoming';
       return 'completed';
     },
-    
+
     getMatchStatusText() {
       const status = this.getMatchStatus();
       switch (status) {
@@ -851,7 +856,7 @@ export default {
         default: return 'Unknown';
       }
     },
-    
+
     formatDateShort(dateString) {
       try {
         const date = new Date(dateString);
@@ -938,8 +943,13 @@ export default {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-text {
@@ -1180,11 +1190,6 @@ export default {
 .save-button:hover:not(:disabled) {
   background-color: var(--primary-hover);
   transform: translateY(-1px);
-}
-
-.save-button:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
 }
 
 .save-button svg {
@@ -1601,7 +1606,8 @@ export default {
   padding: 0;
   display: flex;
   flex-direction: column;
-  min-height: 0; /* Important for proper scrolling */
+  min-height: 0;
+  /* Important for proper scrolling */
 }
 
 /* Search Section - Fixed at top */
@@ -1777,6 +1783,7 @@ export default {
     opacity: 0;
     transform: translateX(20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -2050,27 +2057,27 @@ export default {
     width: 98%;
     max-height: 90vh;
   }
-  
+
   .players-columns {
     grid-template-columns: 1fr;
     grid-template-rows: 300px 1fr;
   }
-  
+
   .selected-column {
     border-right: none;
     border-bottom: 2px solid var(--border-color);
   }
-  
+
   .column-content {
     padding: 1rem;
   }
-  
+
   .enhanced-footer {
     flex-direction: column;
     gap: 1rem;
     align-items: stretch;
   }
-  
+
   .footer-buttons {
     justify-content: center;
   }
@@ -2080,20 +2087,20 @@ export default {
   .players-columns {
     grid-template-rows: 250px 1fr;
   }
-  
+
   .column-header {
     padding: 0.75rem 1rem;
   }
-  
+
   .column-content {
     padding: 0.75rem;
   }
-  
+
   .selected-player-item,
   .available-player-item {
     padding: 0.75rem;
   }
-  
+
   .player-avatar-small {
     width: 32px;
     height: 32px;
@@ -2422,25 +2429,153 @@ export default {
   background-color: var(--text-light);
 }
 
-/* Messages */
-.message {
+/* Toast Container */
+.toast-container {
   position: fixed;
   top: 20px;
   right: 20px;
-  padding: 1rem 1.5rem;
-  border-radius: var(--border-radius);
-  color: white;
-  font-weight: 500;
   z-index: 1001;
-  animation: slideIn 0.3s ease-out;
+  pointer-events: none;
 }
 
+/* Modern Toast Message */
+.message {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 300px;
+  max-width: 420px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  font-weight: 500;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  pointer-events: auto;
+
+  /* Animation */
+  animation: toastSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top right;
+}
+
+/* Success Toast */
 .message.success {
-  background-color: var(--primary-color);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.95), rgba(5, 150, 105, 0.95));
+  color: white;
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
+/* Error Toast */
 .message.error {
-  background-color: var(--danger-color);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.95));
+  color: white;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Info Toast */
+.message.info {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95));
+  color: white;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Warning Toast */
+.message.warning {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(217, 119, 6, 0.95));
+  color: white;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Close Button */
+.message::after {
+  content: '×';
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 20px;
+  height: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.message::after:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+/* Animations */
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%) scale(0.8);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes toastSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(100%) scale(0.8);
+  }
+}
+
+@keyframes toastProgress {
+  from {
+    width: 100%;
+  }
+
+  to {
+    width: 0%;
+  }
+}
+
+/* Exit Animation */
+.message.toast-exit {
+  animation: toastSlideOut 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .toast-container {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+  }
+
+  .message {
+    min-width: unset;
+    max-width: unset;
+    width: 100%;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .message {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
 }
 
 /* Error State */
@@ -2506,6 +2641,7 @@ export default {
     transform: translateX(100%);
     opacity: 0;
   }
+
   to {
     transform: translateX(0);
     opacity: 1;
