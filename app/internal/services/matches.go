@@ -2,7 +2,6 @@ package services
 
 import (
 	"app/internal/models"
-	"log"
 	"sort"
 
 	"gorm.io/gorm"
@@ -278,7 +277,6 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 			exists := false
 			for _, dbTeamComposition := range dbTeamCompositions {
 				if dbTeamComposition.PlayerID == player.ID {
-					log.Println("prima", player.Name)
 					exists = true
 					break
 				}
@@ -299,20 +297,17 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 		}
 
 		for _, dbTeamComposition := range dbTeamCompositions {
-			toDelete := false
+			toDelete := true
 			for j := range team.Players {
 				player := &team.Players[j]
-				if dbTeamComposition.PlayerID != player.ID {
-					toDelete = true
-					log.Println("delete", player.Name)
-				} else {
-					log.Println("delete equal", player.Name)
+				if dbTeamComposition.PlayerID == player.ID {
+					toDelete = false
 					result := s.DB.Model(&models.TeamComposition{}).Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", player.ID).Update("Number", player.GoalNumber)
 					if result.Error != nil {
 						return result.Error
 					}
+					break
 				}
-
 			}
 			if toDelete {
 				result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", dbTeamComposition.PlayerID).Delete(&models.TeamComposition{})
