@@ -7,15 +7,15 @@ import (
 	"gorm.io/gorm"
 )
 
-type TeamCompositionService struct {
+type MatchPlayerService struct {
 	DB *gorm.DB
 }
 
-func NewTeamCompositionService(db *gorm.DB) *TeamCompositionService {
-	return &TeamCompositionService{DB: db}
+func NewMatchPlayerService(db *gorm.DB) *MatchPlayerService {
+	return &MatchPlayerService{DB: db}
 }
 
-func (s *TeamCompositionService) CreateTeamComposition(teamComposition *models.TeamComposition) error {
+func (s *MatchPlayerService) CreateMatchPlayer(teamComposition *models.MatchPlayer) error {
 	teamComposition.ID = uuid.New().String()
 	result := s.DB.Create(teamComposition)
 	if result.Error != nil {
@@ -24,8 +24,8 @@ func (s *TeamCompositionService) CreateTeamComposition(teamComposition *models.T
 	return nil
 }
 
-func (s *TeamCompositionService) GetTeamCompositionAll() ([]models.TeamComposition, error) {
-	var teamCompositions []models.TeamComposition
+func (s *MatchPlayerService) GetMatchPlayerAll() ([]models.MatchPlayer, error) {
+	var teamCompositions []models.MatchPlayer
 	result := s.DB.Find(&teamCompositions)
 	if result.Error != nil {
 		return nil, result.Error
@@ -33,8 +33,8 @@ func (s *TeamCompositionService) GetTeamCompositionAll() ([]models.TeamCompositi
 	return teamCompositions, nil
 }
 
-func (s *TeamCompositionService) GetTeamCompositionByMatchID(match_id string) ([]models.TeamComposition, error) {
-	var teamCompositions []models.TeamComposition
+func (s *MatchPlayerService) GetMatchPlayerByMatchID(match_id string) ([]models.MatchPlayer, error) {
+	var teamCompositions []models.MatchPlayer
 	result := s.DB.Where("match_id = ?", match_id).Find(&teamCompositions)
 	if result.Error != nil {
 		return nil, result.Error
@@ -42,8 +42,8 @@ func (s *TeamCompositionService) GetTeamCompositionByMatchID(match_id string) ([
 	return teamCompositions, nil
 }
 
-func (s *TeamCompositionService) GetTeamCompositionByTeamID(team_id string) ([]models.TeamComposition, error) {
-	var teamCompositions []models.TeamComposition
+func (s *MatchPlayerService) GetMatchPlayerByTeamID(team_id string) ([]models.MatchPlayer, error) {
+	var teamCompositions []models.MatchPlayer
 	result := s.DB.Where("team_id = ?", team_id).Find(&teamCompositions)
 	if result.Error != nil {
 		return nil, result.Error

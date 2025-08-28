@@ -34,9 +34,9 @@ func (s *PlayerService) GetPlayers() ([]models.PlayerCustom, error) {
 
 	for i := range players {
 		playersCustom = append(playersCustom, models.PlayerCustom{
-			ID:         players[i].ID,
-			Name:       players[i].Name,
-			GoalNumber: 0,
+			ID:          players[i].ID,
+			Name:        players[i].Name,
+			GoalsScored: 0,
 		})
 	}
 

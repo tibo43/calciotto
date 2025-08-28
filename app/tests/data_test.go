@@ -17,22 +17,18 @@ func TestCreateDataset(t *testing.T) {
 
 	// Création de quelques joueurs
 	players := []models.Player{
-		{BaseModel: models.BaseModel{}, Name: "Thibaut"},
-		{BaseModel: models.BaseModel{}, Name: "Matthias"},
-		{BaseModel: models.BaseModel{}, Name: "Manfredi"},
-		{BaseModel: models.BaseModel{}, Name: "Damien"},
-		{BaseModel: models.BaseModel{}, Name: "Vincent"},
-		{BaseModel: models.BaseModel{}, Name: "Pierre"},
-		{BaseModel: models.BaseModel{}, Name: "Anthony"},
-		{BaseModel: models.BaseModel{}, Name: "Jacopo"},
-		{BaseModel: models.BaseModel{}, Name: "Mattheo"},
-		{BaseModel: models.BaseModel{}, Name: "Ryan"},
-		{BaseModel: models.BaseModel{}, Name: "Connor"},
-		{BaseModel: models.BaseModel{}, Name: "Marco"},
-		{BaseModel: models.BaseModel{}, Name: "Niccolo"},
-		{BaseModel: models.BaseModel{}, Name: "Augustin"},
-		{BaseModel: models.BaseModel{}, Name: "Esteban"},
-		{BaseModel: models.BaseModel{}, Name: "Henry"},
+		{BaseModel: models.BaseModel{}, Name: "thibaut"},
+		{BaseModel: models.BaseModel{}, Name: "matthias"},
+		{BaseModel: models.BaseModel{}, Name: "manfredi"},
+		{BaseModel: models.BaseModel{}, Name: "damien"},
+		{BaseModel: models.BaseModel{}, Name: "vincent"},
+		{BaseModel: models.BaseModel{}, Name: "pierre"},
+		{BaseModel: models.BaseModel{}, Name: "anthony"},
+		{BaseModel: models.BaseModel{}, Name: "jacopo"},
+		{BaseModel: models.BaseModel{}, Name: "mattheo"},
+		{BaseModel: models.BaseModel{}, Name: "ryan"},
+		{BaseModel: models.BaseModel{}, Name: "connor"},
+		{BaseModel: models.BaseModel{}, Name: "marcos"},
 	}
 
 	for _, player := range players {
@@ -52,21 +48,6 @@ func TestCreateDataset(t *testing.T) {
 		result := db.Create(&team)
 		if result.Error != nil {
 			t.Fatalf("Failed to create team: %v", result.Error)
-		}
-	}
-
-	// Création de quelques matchs
-	matches := []models.Match{
-		{BaseModel: models.BaseModel{}, Date: "2025-10-01"},
-		{BaseModel: models.BaseModel{}, Date: "2025-10-08"},
-		{BaseModel: models.BaseModel{}, Date: "2025-10-15"},
-		{BaseModel: models.BaseModel{}, Date: "2025-10-22"},
-	}
-
-	for _, match := range matches {
-		result := db.Create(&match)
-		if result.Error != nil {
-			t.Fatalf("Failed to create match: %v", result.Error)
 		}
 	}
 

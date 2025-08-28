@@ -18,7 +18,6 @@ func TestCreateDatasetNested2(t *testing.T) {
 
 	// Création de quelques matchs
 	match := models.Match{BaseModel: models.BaseModel{}, Date: "2025-10-29"}
-	log.Println("Creating match:", match)
 	result := db.Create(&match)
 	if result.Error != nil {
 		t.Fatalf("Failed to create match: %v", result.Error)
@@ -35,11 +34,11 @@ func TestCreateDatasetNested2(t *testing.T) {
 		team := dbTeams[j]
 		for h := 0; h < len(dbPlayers)/2+1; h++ {
 			player := dbPlayers[rand.Intn(len(dbPlayers))]
-			teamComposition := models.TeamComposition{
-				MatchID:  match.ID,
-				TeamID:   team.ID,
-				PlayerID: player.ID,
-				Number:   0,
+			teamComposition := models.MatchPlayer{
+				MatchID:     match.ID,
+				TeamID:      team.ID,
+				PlayerID:    player.ID,
+				GoalsScored: 0,
 			}
 			result := db.Create(&teamComposition)
 			if result.Error != nil {

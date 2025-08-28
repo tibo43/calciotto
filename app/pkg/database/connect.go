@@ -33,7 +33,7 @@ func InitDB() (*gorm.DB, error) {
 	log.Println("Successfully connected to the database!")
 
 	// Auto-migration des modèles pour créer les tables
-	err = db.AutoMigrate(&models.Player{}, &models.Team{}, &models.Match{}, &models.TeamComposition{})
+	err = db.AutoMigrate(&models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{})
 	if err != nil {
 		log.Fatal(err)
 	}

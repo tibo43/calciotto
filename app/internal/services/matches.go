@@ -35,11 +35,11 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
         SELECT matches.id as match_id, matches.date as match_date,
                teams.id as team_id, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
-			   team_compositions.number as goal_number
+			   match_players.goals_scored as goals_scored
         FROM matches
-        LEFT JOIN team_compositions ON team_compositions.match_id = matches.id
-        LEFT JOIN teams ON teams.id = team_compositions.team_id
-        LEFT JOIN players ON players.id = team_compositions.player_id
+        LEFT JOIN match_players ON match_players.match_id = matches.id
+        LEFT JOIN teams ON teams.id = match_players.team_id
+        LEFT JOIN players ON players.id = match_players.player_id
 		ORDER BY match_date DESC
     `).Scan(&rowsMatches)
 
@@ -83,9 +83,9 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 
 		// Add the player to the team
 		team.Players = append(team.Players, models.PlayerCustom{
-			ID:         rowMatches.PlayerID,
-			Name:       rowMatches.PlayerName,
-			GoalNumber: rowMatches.GoalNumber,
+			ID:          rowMatches.PlayerID,
+			Name:        rowMatches.PlayerName,
+			GoalsScored: rowMatches.GoalsScored,
 		})
 	}
 
@@ -98,7 +98,7 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 			if team.ID != "" && team.Colour != "" && len(team.Players) > 0 {
 				for _, player := range team.Players {
 					// Update the team's score based on the number of goals scored by players
-					team.Score += player.GoalNumber
+					team.Score += player.GoalsScored
 				}
 				validTeams = append(validTeams, team)
 			}
@@ -150,7 +150,7 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 	for _, match := range matches {
 		for _, team := range match.Teams {
 			sort.Slice(team.Players, func(i, j int) bool {
-				return team.Players[i].GoalNumber > team.Players[j].GoalNumber
+				return team.Players[i].GoalsScored > team.Players[j].GoalsScored
 			})
 		}
 	}
@@ -166,11 +166,11 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
         SELECT matches.id as match_id, matches.date as match_date, 
                teams.id as team_id, teams.colour as team_colour, 
                players.id as player_id, players.name as player_name,
-			   team_compositions.number as goal_number
+			   match_players.goals_scored as goals_scored
         FROM matches
-        LEFT JOIN team_compositions ON team_compositions.match_id = matches.id
-        LEFT JOIN teams ON teams.id = team_compositions.team_id
-        LEFT JOIN players ON players.id = team_compositions.player_id
+        LEFT JOIN match_players ON match_players.match_id = matches.id
+        LEFT JOIN teams ON teams.id = match_players.team_id
+        LEFT JOIN players ON players.id = match_players.player_id
 		WHERE matches.id = ?
 		ORDER BY match_date DESC`, id).Scan(&rowsMatch)
 
@@ -208,9 +208,9 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
 			}
 
 			team.Players = append(team.Players, models.PlayerCustom{
-				ID:         rowMatch.PlayerID,
-				Name:       rowMatch.PlayerName,
-				GoalNumber: rowMatch.GoalNumber,
+				ID:          rowMatch.PlayerID,
+				Name:        rowMatch.PlayerName,
+				GoalsScored: rowMatch.GoalsScored,
 			})
 
 		}
@@ -219,7 +219,7 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
 		for i := range match.Teams {
 			score := 0
 			for _, player := range match.Teams[i].Players {
-				score += player.GoalNumber
+				score += player.GoalsScored
 			}
 			match.Teams[i].Score = score
 		}
@@ -255,7 +255,7 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
 	for i := range match.Teams {
 		team := &match.Teams[i]
 		sort.Slice(team.Players, func(k, l int) bool {
-			return team.Players[k].GoalNumber > team.Players[l].GoalNumber
+			return team.Players[k].GoalsScored > team.Players[l].GoalsScored
 		})
 	}
 
@@ -263,11 +263,11 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
 }
 
 func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
-	var dbTeamCompositions []models.TeamComposition
+	var dbMatchPlayers []models.MatchPlayer
 
 	for i := range match.Teams {
 		team := &match.Teams[i]
-		result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Find(&dbTeamCompositions)
+		result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Find(&dbMatchPlayers)
 		if result.Error != nil {
 			return result.Error
 		}
@@ -275,34 +275,34 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 			player := &team.Players[j]
 			// Check if the player already exists in the team composition
 			exists := false
-			for _, dbTeamComposition := range dbTeamCompositions {
-				if dbTeamComposition.PlayerID == player.ID {
+			for _, dbMatchPlayer := range dbMatchPlayers {
+				if dbMatchPlayer.PlayerID == player.ID {
 					exists = true
 					break
 				}
 			}
 			if !exists {
 				// Create a new team composition if it doesn't exist
-				newTeamComposition := models.TeamComposition{
-					MatchID:  match.ID,
-					TeamID:   team.ID,
-					PlayerID: player.ID,
-					Number:   player.GoalNumber,
+				newMatchPlayer := models.MatchPlayer{
+					MatchID:     match.ID,
+					TeamID:      team.ID,
+					PlayerID:    player.ID,
+					GoalsScored: player.GoalsScored,
 				}
-				result := s.DB.Create(&newTeamComposition)
+				result := s.DB.Create(&newMatchPlayer)
 				if result.Error != nil {
 					return result.Error
 				}
 			}
 		}
 
-		for _, dbTeamComposition := range dbTeamCompositions {
+		for _, dbMatchPlayer := range dbMatchPlayers {
 			toDelete := true
 			for j := range team.Players {
 				player := &team.Players[j]
-				if dbTeamComposition.PlayerID == player.ID {
+				if dbMatchPlayer.PlayerID == player.ID {
 					toDelete = false
-					result := s.DB.Model(&models.TeamComposition{}).Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", player.ID).Update("Number", player.GoalNumber)
+					result := s.DB.Model(&models.MatchPlayer{}).Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", player.ID).Update("goals_scored", player.GoalsScored)
 					if result.Error != nil {
 						return result.Error
 					}
@@ -310,7 +310,7 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 				}
 			}
 			if toDelete {
-				result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", dbTeamComposition.PlayerID).Delete(&models.TeamComposition{})
+				result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", dbMatchPlayer.PlayerID).Delete(&models.MatchPlayer{})
 				if result.Error != nil {
 					return result.Error
 				}

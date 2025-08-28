@@ -2,9 +2,9 @@ package models
 
 // Player représente un joueur.
 type PlayerCustom struct {
-	ID         string `json:"ID"`
-	Name       string `json:"Name"`
-	GoalNumber int    `json:"GoalNumber"`
+	ID          string `json:"ID"`
+	Name        string `json:"Name"`
+	GoalsScored int    `json:"GoalNumber"`
 }
 
 // TeamWithPlayers représente une équipe avec ses joueurs.
@@ -23,14 +23,14 @@ type MatchWithDetails struct {
 }
 
 type RowsMatchDetails struct {
-	MatchID    string
-	MatchDate  string
-	TeamID     string
-	TeamColour string
-	Score      int
-	PlayerID   string
-	PlayerName string
-	GoalNumber int
+	MatchID     string
+	MatchDate   string
+	TeamID      string
+	TeamColour  string
+	Score       int
+	PlayerID    string
+	PlayerName  string
+	GoalsScored int
 }
 
 type RowsTeamDetails struct {
