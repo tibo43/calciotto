@@ -97,8 +97,8 @@
           <!-- Tab Content for non-router routes -->
           <transition v-else name="tab-content" mode="out-in">
             <div v-if="activeTab === 'teams'" key="teams" class="tab-content">
-              <div class="coming-soon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="empty-icon">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                   <circle cx="9" cy="7" r="4"/>
                   <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
@@ -109,8 +109,8 @@
               </div>
             </div>
             <div v-else-if="activeTab === 'players'" key="players" class="tab-content">
-              <div class="coming-soon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="empty-icon">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
                   <circle cx="12" cy="7" r="4"/>
                 </svg>
@@ -131,68 +131,15 @@
 </template>
 
 <style>
-/* CSS Custom Properties */
-:root {
-  --primary-color: #10b981;
-  --primary-hover: #059669;
-  --primary-light: #6ee7b7;
-  --secondary-color: #3b82f6;
-  --accent-color: #f59e0b;
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --text-light: #9ca3af;
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8fafc;
-  --bg-tertiary: #f1f5f9;
-  --border-color: #e2e8f0;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
-  --navbar-height: 70px;
-  --transition-fast: 0.2s ease;
-  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-bounce: 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  --border-radius: 12px;
-  --border-radius-lg: 16px;
-}
+/* Import global styles - Add this import in your main.js or main.ts instead */
+/* @import './assets/global-styles.css'; */
 
-.dark-mode {
-  --text-primary: #f9fafb;
-  --text-secondary: #d1d5db;
-  --text-light: #9ca3af;
-  --text-tertiary: #1f2937;
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --border-color: #475569;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.6);
-}
-
-/* Global Reset */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  line-height: 1.6;
-  transition: background-color var(--transition-smooth), color var(--transition-smooth);
-}
-
+/* App-specific styles that can't be moved to global */
 #app {
-  /* min-height: 100vh; */
   position: relative;
 }
 
-/* Initial View Styles */
+/* Initial View Styles - Component-specific */
 .initial-view {
   position: fixed;
   top: 0;
@@ -262,12 +209,7 @@ body {
   animation: pulse 2s infinite;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.2); }
-}
-
-/* Top Navigation */
+/* Navigation Styles - Component-specific */
 .top-navbar {
   position: fixed;
   top: 0;
@@ -441,27 +383,25 @@ body {
   padding: 2rem;
 }
 
-.coming-soon {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  text-align: center;
-  color: var(--text-secondary);
-}
-
-.coming-soon svg {
-  width: 4rem;
-  height: 4rem;
-  margin-bottom: 1rem;
-  color: var(--primary-color);
-}
-
-.coming-soon h2 {
+.tab-content .empty-state h2 {
   font-size: 2rem;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
+}
+
+.tab-content .empty-state svg {
+  color: var(--primary-color);
+}
+
+/* Mobile Overlay */
+.mobile-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 999;
 }
 
 /* Transitions */
@@ -519,16 +459,6 @@ body {
 .theme-icon-leave-to {
   opacity: 0;
   transform: rotate(90deg) scale(0.8);
-}
-
-.mobile-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 999;
 }
 
 .overlay-enter-active,
@@ -597,17 +527,5 @@ body {
   .title-logo {
     font-size: 2rem;
   }
-}
-
-.page-title {
-  font-size: 2.5rem;
-  font-weight: 800;
-  margin-bottom: 0.5rem;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.page-subtitle {
-  font-size: 1.1rem;
-  opacity: 0.9;
 }
 </style>
