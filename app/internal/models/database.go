@@ -39,6 +39,7 @@ type Team struct {
 type Match struct {
 	BaseModel
 	Date             string        `gorm:"type:string" json:"date"`
+	WinnerTeamId     string        `gorm:"type:uuid" json:"team_id"`
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:MatchID"`
 }
 
