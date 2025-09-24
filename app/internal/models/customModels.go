@@ -37,3 +37,9 @@ type RowsTeamDetails struct {
 	TeamID     string
 	TeamColour string
 }
+
+type UserLogin struct {
+	UserName string
+	Password string
+	IsAdmin  bool
+}

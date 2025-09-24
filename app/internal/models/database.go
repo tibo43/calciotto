@@ -50,3 +50,11 @@ type MatchPlayer struct {
 	PlayerID    string `gorm:"type:uuid" json:"player_id"`
 	GoalsScored int    `gorm:"type:int" json:"goals_scored"`
 }
+
+// MatchPlayer représente la composition d'une équipe pour un match.
+type User struct {
+	BaseModel
+	UserName string `gorm:"type:string" json:"username"`
+	Password string `gorm:"type:text" json:"password"`
+	IsAdmin  bool   `gorm:"type:boolean" json:"is_admin"`
+}

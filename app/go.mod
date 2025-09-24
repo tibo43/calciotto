@@ -8,6 +8,7 @@ require gorm.io/gorm v1.30.1
 
 require (
 	github.com/gin-contrib/cors v1.7.6 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.6.0 // indirect

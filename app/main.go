@@ -35,6 +35,7 @@ func main() {
 	// Initialize handlers
 	playerHandler := handlers.NewPlayerHandler(services.NewPlayerService(db))
 	matchHandler := handlers.NewMatchHandler(services.NewMatchService(db))
+	loginHandler := handlers.NewLoginHandler(services.NewLoginService(db))
 
 	// Setup routes
 	// Players
@@ -47,7 +48,9 @@ func main() {
 	r.GET("/matches/details", matchHandler.GetMatchesDetails)
 	r.GET("/matches/:id/details", matchHandler.GetMatchDetailsByID)
 	r.PUT("/matches/:id", matchHandler.UpdateMatch)
-	// Add more routes as needed
+
+	// Login
+	r.POST("/autentication", loginHandler.TokenHandler)
 
 	// Start server
 	r.Run(":8080")

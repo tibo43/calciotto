@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"app/internal/models"
+	"app/pkg/common"
 	"app/pkg/database"
 )
 
@@ -15,7 +16,7 @@ func TestCreateDataset(t *testing.T) {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Création de quelques joueurs
+	// // Création de quelques joueurs
 	players := []models.Player{
 		{BaseModel: models.BaseModel{}, Name: "thibaut"},
 		{BaseModel: models.BaseModel{}, Name: "matthias"},
@@ -48,6 +49,18 @@ func TestCreateDataset(t *testing.T) {
 		result := db.Create(&team)
 		if result.Error != nil {
 			t.Fatalf("Failed to create team: %v", result.Error)
+		}
+	}
+
+	users := []models.User{
+		{BaseModel: models.BaseModel{}, UserName: "captain", Password: common.HashPassword("azerty"), IsAdmin: true},
+		{BaseModel: models.BaseModel{}, UserName: "player", Password: common.HashPassword("azerty"), IsAdmin: false},
+	}
+
+	for _, user := range users {
+		result := db.Create(&user)
+		if result.Error != nil {
+			t.Fatalf("Failed to create users: %v", result.Error)
 		}
 	}
 
