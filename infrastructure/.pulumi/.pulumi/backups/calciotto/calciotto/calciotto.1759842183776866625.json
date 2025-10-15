@@ -1,0 +1,20 @@
+{
+    "version": 3,
+    "checkpoint": {
+        "stack": "organization/calciotto/calciotto",
+        "latest": {
+            "manifest": {
+                "time": "2025-10-07T13:03:03.759480421Z",
+                "magic": "a2260982023ff8963543af175c4449f1d0a852350fee13e43f2f30328959523e",
+                "version": "v3.201.0"
+            },
+            "secrets_providers": {
+                "type": "passphrase",
+                "state": {
+                    "salt": "v1:boGEHjiay68=:v1:eqjTO6V+Hlgy0ojK:ARbKnkdeSAi2QSm6TwG0YyBTEVKPHw=="
+                }
+            },
+            "metadata": {}
+        }
+    }
+}

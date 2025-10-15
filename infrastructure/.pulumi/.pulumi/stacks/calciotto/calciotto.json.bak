@@ -1,0 +1,61 @@
+{
+    "version": 3,
+    "checkpoint": {
+        "stack": "organization/calciotto/calciotto",
+        "latest": {
+            "manifest": {
+                "time": "2025-10-07T13:10:32.930433681Z",
+                "magic": "a2260982023ff8963543af175c4449f1d0a852350fee13e43f2f30328959523e",
+                "version": "v3.201.0"
+            },
+            "secrets_providers": {
+                "type": "passphrase",
+                "state": {
+                    "salt": "v1:boGEHjiay68=:v1:eqjTO6V+Hlgy0ojK:ARbKnkdeSAi2QSm6TwG0YyBTEVKPHw=="
+                }
+            },
+            "resources": [
+                {
+                    "urn": "urn:pulumi:calciotto::calciotto::pulumi:providers:scaleway::default_1_34_2_github_/api.github.com/pulumiverse",
+                    "custom": true,
+                    "id": "ca2ec80e-b49a-45ff-a0bd-85fbb4983d66",
+                    "type": "pulumi:providers:scaleway",
+                    "inputs": {
+                        "__internal": {
+                            "pluginDownloadURL": "github://api.github.com/pulumiverse"
+                        },
+                        "version": "1.34.2"
+                    },
+                    "outputs": {
+                        "version": "1.34.2"
+                    },
+                    "created": "2025-10-07T13:03:58.494323962Z",
+                    "modified": "2025-10-07T13:03:58.494323962Z"
+                }
+            ],
+            "pending_operations": [
+                {
+                    "resource": {
+                        "urn": "urn:pulumi:calciotto::calciotto::pulumi:providers:scaleway::default_1_34_2_github_/api.github.com/pulumiverse",
+                        "custom": true,
+                        "id": "ca2ec80e-b49a-45ff-a0bd-85fbb4983d66",
+                        "type": "pulumi:providers:scaleway",
+                        "inputs": {
+                            "__internal": {
+                                "pluginDownloadURL": "github://api.github.com/pulumiverse"
+                            },
+                            "version": "1.34.2"
+                        },
+                        "outputs": {
+                            "version": "1.34.2"
+                        },
+                        "created": "2025-10-07T13:03:58.494323962Z",
+                        "modified": "2025-10-07T13:03:58.494323962Z"
+                    },
+                    "type": "deleting"
+                }
+            ],
+            "metadata": {}
+        }
+    }
+}
