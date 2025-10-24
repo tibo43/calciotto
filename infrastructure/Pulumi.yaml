@@ -1,6 +1,0 @@
-name: calciotto
-runtime: nodejs
-description: A minimal TypeScript Pulumi program
-
-backend:
-  url: file://.pulumi
