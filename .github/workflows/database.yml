@@ -1,0 +1,24 @@
+name: database
+
+on:
+  push:
+    branches:
+      - feat/koyeb
+
+jobs:
+  koyeb:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install and configure the Koyeb CLI
+        uses: koyeb-community/koyeb-actions@v2
+        with:
+          api_token: "${{ secrets.KOYEB_API_TOKEN }}"
+
+      - run: |
+          koyeb database create calciotto-db --app calciotto --instance-type free --pg-version 18 --region fra
+          while [ `koyeb database get calciotto/calciotto-db -o yaml | yq .service.status` != "HEALTHY" ]
+          do
+            sleep 2
+          done
+
+      
