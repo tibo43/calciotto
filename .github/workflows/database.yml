@@ -16,7 +16,7 @@ jobs:
 
       - run: koyeb database create database --app calciotto --instance-type free --pg-version 18 --region fra --db-name calciotto --db-owner calciotto
       - run: |
-          while [ `koyeb database get calciotto/calciotto-db -o yaml | yq .service.status` != "HEALTHY" ]
+          while [ `koyeb database get calciotto/database -o yaml | yq .service.status` != "HEALTHY" ]
           do
             echo "waiting..."
             sleep 2
