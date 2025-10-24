@@ -22,6 +22,6 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: devops/Dockerfile.prod.frontend
+          file: ./devops/Dockerfile.prod.frontend
           push: true
           tags: calciotto/frontend:latest
