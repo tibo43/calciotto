@@ -39,7 +39,7 @@ jobs:
         uses: koyeb/action-git-deploy@v1
         with:
           app-name: calciotto
-          service-name: calciotto-frontend
+          service-name: frontend
           service-type: web
           service-instance-type: free
           service-regions: fra
