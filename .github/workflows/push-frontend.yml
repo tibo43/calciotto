@@ -23,4 +23,4 @@ jobs:
         with:
           file: ./devops/Dockerfile.prod.frontend
           push: true
-          tags: calciotto/frontend:latest
+          tags: tibo43/calciotto-frontend:latest
