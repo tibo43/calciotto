@@ -1,4 +1,4 @@
-name: push-frontend
+name: frontend
 
 on:
   push:
@@ -38,7 +38,7 @@ jobs:
       - name: Build and deploy the application to Koyeb
         uses: koyeb/action-git-deploy@v1
         with:
-          app-name: calciotto-frontend
+          app-name: calciotto
           service-name: calciotto-frontend
           service-type: web
           service-instance-type: free
@@ -46,6 +46,3 @@ jobs:
           service-ports: "3000:http"
           service-routes: "/:3000"
           docker: tibo43/calciotto-frontend:latest
-
-      - name: Cleanup Koyeb application
-        uses: koyeb/action-git-deploy/cleanup@v1
