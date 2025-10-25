@@ -30,5 +30,6 @@ jobs:
           service-ports: "4000:http"
           service-routes: "/:4000"
           service-env: POSTGRES_URL=@POSTGRES_URL
+          git-builder: docker
           git-docker-dockerfile: ./devops/Dockerfile.koyeb
           
