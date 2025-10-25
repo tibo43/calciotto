@@ -22,14 +22,14 @@ func main() {
 
 	// Initialize Gin router
 	r := gin.Default()
-
 	// Configuration CORS
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:4000", "http://127.0.0.1:4000"},
+		AllowOrigins:     []string{"http://localhost:4000", "http://127.0.0.1:4000", "https://*.koyeb.app"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
 		AllowHeaders:     []string{"Origin", "Content-Type"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
+		AllowWildcard:    true,
 	}))
 
 	// Initialize handlers

@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"app/internal/models"
 
@@ -12,8 +13,6 @@ import (
 )
 
 const (
-	//host     = "localhost"
-	//host     = "192.168.1.10"
 	host     = "db"
 	port     = 5432
 	user     = "calciotto"
@@ -22,8 +21,14 @@ const (
 )
 
 func InitDB() (*gorm.DB, error) {
-	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		host, port, user, password, dbname)
+	POSTGRES_URL := os.Getenv("POSTGRES_URL")
+	dsn := ""
+	if POSTGRES_URL == "" {
+		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+			host, port, user, password, dbname)
+	} else {
+		dsn = POSTGRES_URL
+	}
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
