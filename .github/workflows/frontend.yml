@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/koyeb
+  workflow_dispatch:
 
 jobs:
   docker:
@@ -25,24 +26,24 @@ jobs:
           file: ./devops/Dockerfile.prod.frontend
           push: true
           tags: tibo43/calciotto-frontend:latest
-  koyeb:
-    runs-on: ubuntu-latest
-    needs:
-      - docker
-    steps:
-      - name: Install and configure the Koyeb CLI
-        uses: koyeb-community/koyeb-actions@v2
-        with:
-          api_token: "${{ secrets.KOYEB_API_TOKEN }}"
+  # koyeb:
+  #   runs-on: ubuntu-latest
+  #   needs:
+  #     - docker
+  #   steps:
+  #     - name: Install and configure the Koyeb CLI
+  #       uses: koyeb-community/koyeb-actions@v2
+  #       with:
+  #         api_token: "${{ secrets.KOYEB_API_TOKEN }}"
 
-      - name: Build and deploy the application to Koyeb
-        uses: koyeb/action-git-deploy@v1
-        with:
-          app-name: calciotto
-          service-name: frontend
-          service-type: web
-          service-instance-type: free
-          service-regions: fra
-          service-ports: "3000:http"
-          service-routes: "/:3000"
-          docker: tibo43/calciotto-frontend:latest
+  #     - name: Build and deploy the application to Koyeb
+  #       uses: koyeb/action-git-deploy@v1
+  #       with:
+  #         app-name: calciotto
+  #         service-name: frontend
+  #         service-type: web
+  #         service-instance-type: free
+  #         service-regions: fra
+  #         service-ports: "3000:http"
+  #         service-routes: "/:3000"
+  #         docker: tibo43/calciotto-frontend:latest

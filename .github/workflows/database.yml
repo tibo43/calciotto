@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/koyeb
+  workflow_dispatch:
 
 jobs:
   koyeb:
@@ -14,14 +15,17 @@ jobs:
         with:
           api_token: "${{ secrets.KOYEB_API_TOKEN }}"
 
-      - run: koyeb database create database --app calciotto --instance-type free --pg-version 18 --region fra --db-name calciotto --db-owner calciotto
-      - run: |
+      - name: Create Koyeb database
+        run: koyeb database create database --app calciotto --instance-type free --pg-version 18 --region fra --db-name calciotto --db-owner calciotto
+      - name: Waiting of the creation of the database
+        run: |
           while [ `koyeb database get calciotto/database -o yaml | yq .service.status` != "HEALTHY" ]
           do
             echo "waiting..."
             sleep 2
           done
-      - run: koyeb secrets create POSTGRES_URL -v `koyeb database get calciotto/database -o yaml | yq .ConnectionStrings | awk '{print $2}'`
+      - name: Create Koyeb secret
+        run: koyeb secrets create POSTGRES_URL -v `koyeb database get calciotto/database -o yaml | yq .ConnectionStrings | awk '{print $2}'`
 
 
 
