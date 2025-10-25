@@ -32,4 +32,6 @@ jobs:
           service-env: POSTGRES_URL=@POSTGRES_URL
           git-builder: docker
           git-docker-dockerfile: ./devops/Dockerfile.koyeb
+          privileged: true
+          skip-cache: true
           
