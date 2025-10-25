@@ -1,58 +1,14 @@
 services:
   backend:
-    build:
-      context: .
-      # Correct the path to your Dockerfile
-      dockerfile: Dockerfile
+    image: tibo43/calciotto-backend:latest
     ports:
       - 8080:8080
-    # Important to bind/mount your codebase dir to /app dir for live reload
-    volumes:
-      - ./../app:/app
-    depends_on:
-      db:
-        condition: service_healthy
   frontend:
-    image: node:24-alpine
+    image: tibo43/calciotto-frontend:latest
     ports:
       - 4000:4000
-    # Important to bind/mount your codebase dir to /frontend dir for live reload
-    volumes:
-      - ./../frontend:/frontend
-    working_dir: /frontend
-    command: "npm run serve"
     environment:
       - VUE_API_BASE_URL="http://127.0.0.1:8080"
     depends_on:
       backend:
-        condition: service_started
-  db:
-      image: postgres:17.5
-      volumes:
-        - ./scripts/init.sh:/docker-entrypoint-initdb.d/init.sh
-        - postgres:/var/lib/postgresql/data/pgdata
-        - ./configs/postgresql.conf:/etc/postgresql/postgresql.conf
-        - ./configs/pg_hba.conf:/etc/postgresql/pg_hba.conf
-      ports:
-        - "${POSTGRES_PORT}:5432"
-      environment:
-        - POSTGRES_USER=postgres
-        - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-        - PGDATA=/var/lib/postgresql/data/pgdata
-        - DB_NAME
-        - DB_USER
-        - DB_PASSWORD
-      command: ["--config_file=/etc/postgresql/postgresql.conf", "--hba_file=/etc/postgresql/pg_hba.conf"]
-      healthcheck:
-        test:
-          [
-            "CMD-SHELL",
-            "pg_isready --username=${DB_USER} --port=${POSTGRES_PORT} --dbname=${DB_NAME}",
-          ]
-        start_period: 2s
-        interval: 5s
-        timeout: 5s
-        retries: 5
-      restart: unless-stopped
-volumes:
-  postgres:
+        condition: service_starter

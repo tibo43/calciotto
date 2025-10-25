@@ -30,26 +30,26 @@ jobs:
           file: ./devops/Dockerfile.prod.backend
           push: true
           tags: tibo43/calciotto-backend:latest
-  koyeb:
-    runs-on: ubuntu-latest
-    needs:
-      - docker
-    steps:
-      - name: Install and configure the Koyeb CLI
-        uses: koyeb-community/koyeb-actions@v2
-        with:
-          api_token: "${{ secrets.KOYEB_API_TOKEN }}"
+  # koyeb:
+  #   runs-on: ubuntu-latest
+  #   needs:
+  #     - docker
+  #   steps:
+  #     - name: Install and configure the Koyeb CLI
+  #       uses: koyeb-community/koyeb-actions@v2
+  #       with:
+  #         api_token: "${{ secrets.KOYEB_API_TOKEN }}"
 
-      - name: Build and deploy the application to Koyeb
-        uses: koyeb/action-git-deploy@v1
-        with:
-          app-name: calciotto
-          service-name: backend
-          service-type: web
-          service-instance-type: free
-          service-regions: fra
-          service-ports: "8080:http"
-          service-routes: "/:8080"
-          service-env: POSTGRES_URL=@POSTGRES_URL
-          docker: tibo43/calciotto-backend:latest
+  #     - name: Build and deploy the application to Koyeb
+  #       uses: koyeb/action-git-deploy@v1
+  #       with:
+  #         app-name: calciotto
+  #         service-name: backend
+  #         service-type: web
+  #         service-instance-type: free
+  #         service-regions: fra
+  #         service-ports: "8080:http"
+  #         service-routes: "/:8080"
+  #         service-env: POSTGRES_URL=@POSTGRES_URL
+  #         docker: tibo43/calciotto-backend:latest
           
