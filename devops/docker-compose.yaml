@@ -11,4 +11,4 @@ services:
       - VUE_API_BASE_URL="http://127.0.0.1:8080"
     depends_on:
       backend:
-        condition: service_starter
+        condition: service_started
