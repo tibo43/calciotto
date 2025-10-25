@@ -3,10 +3,12 @@ services:
     image: tibo43/calciotto-backend:latest
     ports:
       - 8080:8080
+    environment:
+      - POSTGRES_URL=$POSTGRES_URL
   frontend:
     image: tibo43/calciotto-frontend:latest
     ports:
-      - 4000:4000
+      - 3000:3000
     environment:
       - VUE_API_BASE_URL="http://127.0.0.1:8080"
     depends_on:

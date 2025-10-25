@@ -27,8 +27,8 @@ jobs:
           service-type: web
           service-instance-type: free
           service-regions: fra
-          service-ports: "4000:http"
-          service-routes: "/:4000"
+          service-ports: "3000:http"
+          service-routes: "/:3000"
           service-env: POSTGRES_URL=@POSTGRES_URL
           git-builder: docker
           git-docker-dockerfile: ./devops/Dockerfile.koyeb
