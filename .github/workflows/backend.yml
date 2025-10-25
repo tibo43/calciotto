@@ -27,7 +27,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           platforms: linux/amd64,linux/arm64
-          file: ./devops/Dockerfile.prod.frontend
+          file: ./devops/Dockerfile.prod.backend
           push: true
           tags: tibo43/calciotto-backend:latest
   koyeb:
