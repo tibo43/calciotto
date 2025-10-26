@@ -365,364 +365,623 @@
 </template>
 
 <script>
-import { ref, onMounted, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { getMatchDetailsByID, updateMatch, getPlayers, createPlayer } from '@/services/api';
 
 export default {
-  name: 'MatchDetails',
-  setup() {
-    const route = useRoute()
-    const router = useRouter()
-    
-    // Reactive data
-    const match = ref(null)
-    const isLoading = ref(true)
-    const isSaving = ref(false)
-    const activeTeam = ref(0)
-    const showAddPlayerModal = ref(false)
-    const selectedPlayers = ref([])
-    const availablePlayers = ref([])
-    const playerSearchTerm = ref('')
-    const isLoadingPlayers = ref(false)
-    const isCreatingPlayer = ref(false)
-    const message = ref('')
-    const messageType = ref('success')
-    const messageKey = ref(0)
-
-    // Computed properties
-    const showCreatePlayerOption = computed(() => {
-      return playerSearchTerm.value.trim() && 
-             !isLoadingPlayers.value && 
-             !filteredAvailablePlayers.value.some(p => 
-               p.Name.toLowerCase() === playerSearchTerm.value.toLowerCase()
-             )
-    })
-
-    const filteredAvailablePlayers = computed(() => {
-      if (!playerSearchTerm.value.trim()) {
-        return availablePlayers.value
-      }
-      
-      const searchTerm = playerSearchTerm.value.toLowerCase()
-      return availablePlayers.value.filter(player =>
-        player.Name.toLowerCase().includes(searchTerm)
-      )
-    })
-
-    // Methods
-    const fetchMatchDetails = async () => {
+  name: 'MatchDetail',
+  mounted() {
+    document.title = 'Calciotto';
+  },
+  data() {
+    return {
+      match: null,
+      isLoading: true,
+      isSaving: false,
+      activeTeam: 0,
+      showAddPlayerModal: false,
+      message: '',
+      messageType: 'success',
+      // New properties for player dropdown
+      allPlayers: [],
+      filteredPlayers: [],
+      selectedPlayers: [],
+      filteredAvailablePlayers: [],
+      isLoadingPlayers: false,
+      playerSearchTerm: '',
+      isSearchingPlayer: false,
+      messageKey: 0,
+      showCreatePlayerOption: false,
+      isCreatingPlayer: false,
+    };
+  },
+  async created() {
+    await this.loadMatch();
+  },
+  methods: {
+    async loadMatch() {
+      this.isLoading = true;
       try {
-        isLoading.value = true
-        const matchId = route.params.id
-        
-        // Simulate API call - replace with actual API
-        const response = await fetch(`/api/matches/${matchId}`)
-        if (!response.ok) throw new Error('Match not found')
-        
-        match.value = await response.json()
+        const matchId = this.$route.params.id;
+        this.match = await getMatchDetailsByID(matchId);
+
+        // Ensure each player has GoalNumber property
+        if (this.match && this.match.Teams) {
+          this.match.Teams.forEach(team => {
+            if (team.Players) {
+              team.Players.forEach(player => {
+                if (!player.GoalNumber) {
+                  player.GoalNumber = 0;
+                }
+              });
+            }
+          });
+        }
+
       } catch (error) {
-        console.error('Error fetching match details:', error)
-        showMessage('Failed to load match details', 'error')
+        console.error('Error fetching match:', error);
+        this.showMessage('Error loading match details', 'error');
       } finally {
-        isLoading.value = false
+        this.isLoading = false;
       }
-    }
+    },
 
-    const fetchAvailablePlayers = async () => {
+    // Load all players when modal opens
+    async loadAllPlayers() {
+      if (this.allPlayers && this.allPlayers.length > 0) {
+        this.filterAvailablePlayers();
+        return;
+      }
+
+      this.isLoadingPlayers = true;
       try {
-        isLoadingPlayers.value = true
-        
-        // Simulate API call - replace with actual API
-        const response = await fetch('/api/players')
-        if (!response.ok) throw new Error('Failed to fetch players')
-        
-        const allPlayers = await response.json()
-        
-        // Filter out players already in this match
-        const playersInMatch = match.value?.Teams?.flatMap(team => 
-          team.Players?.map(p => p.Name) || []
-        ) || []
-        
-        availablePlayers.value = allPlayers.filter(player => 
-          !playersInMatch.includes(player.Name)
+        await this.reloadAllPlayers();
+      } finally {
+        this.isLoadingPlayers = false;
+      }
+    },
+
+    // Filter players to show only those not in current team
+    filterAvailablePlayers() {
+      if (!this.allPlayers || !Array.isArray(this.allPlayers) || this.allPlayers.length === 0) {
+        this.filteredAvailablePlayers = [];
+        this.checkCreatePlayerOption();
+        return;
+      }
+
+      if (!this.match || !this.match.Teams || !this.match.Teams[this.activeTeam]) {
+        this.filteredAvailablePlayers = [];
+        this.checkCreatePlayerOption();
+        return;
+      }
+
+      const currentTeamPlayers = this.match.Teams[this.activeTeam].Players || [];
+      const currentTeamPlayerNames = currentTeamPlayers.map(p => p.Name.toLowerCase());
+
+      let availablePlayers = this.allPlayers.filter(player =>
+        player && player.Name && !currentTeamPlayerNames.includes(player.Name.toLowerCase())
+      );
+
+      if (this.playerSearchTerm && this.playerSearchTerm.trim()) {
+        availablePlayers = availablePlayers.filter(player =>
+          player.Name.toLowerCase().includes(this.playerSearchTerm.toLowerCase().trim())
+        );
+      }
+
+      this.filteredAvailablePlayers = availablePlayers;
+      this.checkCreatePlayerOption();
+    },
+
+    onPlayerNameInput() {
+      this.playerSearchTerm = this.newPlayerName;
+      this.isSearchingPlayer = true;
+
+      // Debounce the search
+      clearTimeout(this.searchTimeout);
+      this.searchTimeout = setTimeout(() => {
+        this.searchPlayers();
+      }, 300);
+    },
+
+    // Check if we should show the create player option
+    checkCreatePlayerOption() {
+      if (!this.playerSearchTerm || this.playerSearchTerm.trim().length < 2) {
+        this.showCreatePlayerOption = false;
+        return;
+      }
+
+      const searchTerm = this.playerSearchTerm.trim().toLowerCase();
+      const exactMatch = this.allPlayers.some(player =>
+        player.Name.toLowerCase() === searchTerm
+      );
+
+      // Show create option if no exact match found and search term is not empty
+      this.showCreatePlayerOption = !exactMatch && this.filteredAvailablePlayers.length === 0;
+    },
+
+    // Create a new player
+    async createNewPlayer() {
+      if (!this.playerSearchTerm || this.playerSearchTerm.trim().length < 2) {
+        this.showMessage('Please enter a valid player name', 'error');
+        return;
+      }
+
+      const playerName = this.playerSearchTerm.trim();
+      const playerNameLowerCase = playerName.toLowerCase(); // Backend gets lowercase
+
+      // Check if player already exists (case-insensitive)
+      const existingPlayer = this.allPlayers.find(player =>
+        player.Name.toLowerCase() === playerNameLowerCase
+      );
+
+      if (existingPlayer) {
+        this.showMessage('Player already exists', 'error');
+        return;
+      }
+
+      this.isCreatingPlayer = true;
+      try {
+        const newPlayerData = {
+          Name: playerNameLowerCase // Send lowercase to backend
+        };
+
+        await createPlayer(newPlayerData);
+
+        // RELOAD ALL PLAYERS FROM DATABASE to ensure we have fresh data
+        await this.reloadAllPlayers();
+
+        // Find the newly created player in the fresh data
+        const freshPlayer = this.allPlayers.find(player =>
+          player.Name.toLowerCase() === playerNameLowerCase
+        );
+
+        if (freshPlayer) {
+          // Add the new player to selection immediately
+          this.addPlayerToSelection(freshPlayer);
+        }
+
+        // Clear search and hide create option
+        this.playerSearchTerm = '';
+        this.showCreatePlayerOption = false;
+        this.filterAvailablePlayers();
+
+        this.showMessage(`Player "${this.formatPlayerNameForDisplay(playerNameLowerCase)}" created and added to selection!`, 'success');
+
+      } catch (error) {
+        console.error('Error creating player:', error);
+        this.showMessage('Error creating player. Please try again.', 'error');
+      } finally {
+        this.isCreatingPlayer = false;
+      }
+    },
+
+    async reloadAllPlayers() {
+      try {
+        const players = await getPlayers();
+        this.allPlayers = Array.isArray(players) ? players : [];
+        this.filterAvailablePlayers();
+      } catch (error) {
+        console.error('Error reloading players:', error);
+        this.showMessage('Error reloading players list', 'error');
+        // Don't reset allPlayers on error, keep the current data
+      }
+    },
+
+    async searchPlayers() {
+      if (!this.newPlayerName.trim()) {
+        this.playerSuggestions = [];
+        this.validationMessage = '';
+        this.playerNotFound = false;
+        this.playerAlreadyInTeam = false;
+        this.isSearchingPlayer = false;
+        return;
+      }
+
+      try {
+        // Load all players if not loaded
+        if (!this.allPlayers || this.allPlayers.length === 0) {
+          await this.loadAllPlayers();
+        }
+
+        // Filter players based on search term
+        const searchTerm = this.newPlayerName.toLowerCase().trim();
+        const matchingPlayers = this.allPlayers.filter(player =>
+          player && player.Name && player.Name.toLowerCase().includes(searchTerm)
+        );
+
+        this.playerSuggestions = matchingPlayers;
+
+        // Set validation states
+        if (matchingPlayers.length === 0) {
+          this.playerNotFound = true;
+          this.playerAlreadyInTeam = false;
+          this.validationMessage = 'No players found with that name';
+        } else if (matchingPlayers.length === 1) {
+          const player = matchingPlayers[0];
+          this.playerNotFound = false;
+          this.playerAlreadyInTeam = this.isPlayerInCurrentTeam(player.Name);
+
+          if (this.playerAlreadyInTeam) {
+            this.validationMessage = `${player.Name} is already in the ${this.match.Teams[this.activeTeam].Colour} team`;
+          } else if (this.isPlayerInAnyTeam(player.Name)) {
+            this.validationMessage = `${player.Name} is already in another team`;
+          } else {
+            this.validationMessage = `${player.Name} - Ready to add`;
+          }
+        } else {
+          this.playerNotFound = false;
+          this.playerAlreadyInTeam = false;
+          this.validationMessage = `Found ${matchingPlayers.length} matching players`;
+        }
+      } catch (error) {
+        console.error('Error searching players:', error);
+        this.playerSuggestions = [];
+        this.validationMessage = 'Error searching players';
+        this.playerNotFound = true;
+      } finally {
+        this.isSearchingPlayer = false;
+      }
+    },
+
+    selectPlayerSuggestion(player) {
+      this.selectedPlayer = player;
+      this.newPlayerName = player.Name;
+      this.playerSuggestions = [player]; // Show only selected player
+      this.playerNotFound = false;
+      this.playerAlreadyInTeam = this.isPlayerInCurrentTeam(player.Name);
+
+      if (this.playerAlreadyInTeam) {
+        this.validationMessage = `${player.Name} is already in the ${this.match.Teams[this.activeTeam].Colour} team`;
+      } else if (this.isPlayerInAnyTeam(player.Name)) {
+        this.validationMessage = `${player.Name} is already in another team`;
+      } else {
+        this.validationMessage = `${player.Name} - Ready to add`;
+      }
+    },
+
+    // Handle search input
+    onPlayerSearch() {
+      // Clear any existing timeout
+      if (this.searchTimeout) {
+        clearTimeout(this.searchTimeout);
+      }
+
+      // Debounce the search
+      this.searchTimeout = setTimeout(() => {
+        this.filterAvailablePlayers();
+      }, 300);
+    },
+
+    addPlayerToSelection(player) {
+      if (this.isPlayerSelected(player) || this.isPlayerInAnyTeam(player.Name)) {
+        return;
+      }
+
+      const playerToAdd = {
+        ID: player.ID,
+        Name: player.Name,
+        initialGoals: 0  // Default to 0 goals
+      };
+
+      this.selectedPlayers.push(playerToAdd);
+    },
+
+    // Remove a player from selection
+    removeSelectedPlayer(index) {
+      this.selectedPlayers.splice(index, 1);
+    },
+
+    // Check if player is already selected
+    isPlayerSelected(player) {
+      return this.selectedPlayers.some(selectedPlayer =>
+        selectedPlayer.Name.toLowerCase() === player.Name.toLowerCase()
+      );
+    },
+
+    // Add all selected players to the team
+    async addSelectedPlayersToTeam() {
+      if (this.selectedPlayers.length === 0) {
+        this.showMessage('Please select at least one player', 'error');
+        return;
+      }
+
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam]) {
+        console.error('Invalid team data');
+        return;
+      }
+
+      if (!this.match.Teams[this.activeTeam].Players) {
+        this.match.Teams[this.activeTeam].Players = [];
+      }
+
+      // Add each selected player to the team
+      this.selectedPlayers.forEach(selectedPlayer => {
+        // Double-check if player is not already in the team
+        if (!this.isPlayerInCurrentTeam(selectedPlayer.Name)) {
+          const newPlayer = {
+            ID: selectedPlayer.ID,
+            Name: selectedPlayer.Name,
+            GoalNumber: selectedPlayer.initialGoals || 0
+          };
+
+          this.match.Teams[this.activeTeam].Players.push(newPlayer);
+        }
+      });
+
+      // Update team score
+      this.updateTeamScore();
+
+      // Close modal and show success message
+      this.closeModal();
+    },
+
+    // Select a player from the list
+    selectPlayer(player) {
+      this.selectedPlayer = player;
+      this.newPlayerName = player.Name; // For compatibility with existing code
+    },
+
+    // Check if player is in current team
+    isPlayerInCurrentTeam(playerName) {
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        return false;
+      }
+
+      return this.match.Teams[this.activeTeam].Players.some(player =>
+        player.Name.toLowerCase() === playerName.toLowerCase()
+      );
+    },
+
+    // Check if player is in any team in this match
+    isPlayerInAnyTeam(playerName) {
+      if (!this.match.Teams) return false;
+
+      return this.match.Teams.some(team =>
+        team.Players && team.Players.some(player =>
+          player.Name.toLowerCase() === playerName.toLowerCase()
         )
-      } catch (error) {
-        console.error('Error fetching players:', error)
-        showMessage('Failed to load players', 'error')
-      } finally {
-        isLoadingPlayers.value = false
+      );
+    },
+
+    // Add selected player to team
+    async addPlayer() {
+      if (!this.newPlayerName.trim()) {
+        this.showMessage('Please enter a player name', 'error');
+        return;
       }
-    }
 
-    const goBack = () => {
-      router.push('/matches')
-    }
+      // If we have suggestions, use the first one or the selected one
+      let playerToAdd = this.selectedPlayer;
 
-    const formatDate = (dateStr) => {
-      if (!dateStr) return 'Date not available'
-      
+      if (!playerToAdd && this.playerSuggestions.length === 1) {
+        playerToAdd = this.playerSuggestions[0];
+      }
+
+      if (!playerToAdd) {
+        // Try to find player by name
+        playerToAdd = this.allPlayers.find(p =>
+          p.Name.toLowerCase() === this.newPlayerName.toLowerCase().trim()
+        );
+      }
+
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam]) {
+        console.error('Invalid team data');
+        return;
+      }
+
+      if (!this.match.Teams[this.activeTeam].Players) {
+        this.match.Teams[this.activeTeam].Players = [];
+      }
+
+      const newPlayer = {
+        ID: playerToAdd.ID,
+        Name: playerToAdd.Name,
+        GoalNumber: this.newPlayerGoals || 0
+      };
+
+      this.match.Teams[this.activeTeam].Players.push(newPlayer);
+      this.updateTeamScore();
+      this.closeModal();
+    },
+
+    // Show modal and load players
+    async showModal() {
+      this.showAddPlayerModal = true;
+      await this.loadAllPlayers();
+    },
+
+    closeModal() {
+      this.showAddPlayerModal = false;
+      this.selectedPlayers = [];
+      this.playerSearchTerm = '';
+      this.filteredAvailablePlayers = [];
+      this.isSearchingPlayer = false;
+      this.showCreatePlayerOption = false;
+      this.isCreatingPlayer = false;
+      if (this.searchTimeout) {
+        clearTimeout(this.searchTimeout);
+      }
+    },
+
+    // Existing methods remain the same...
+    goBack() {
+      this.$router.go(-1);
+    },
+
+    updateGoals(playerIndex, change) {
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        console.error('Invalid team or players data');
+        return;
+      }
+
+      const player = this.match.Teams[this.activeTeam].Players[playerIndex];
+      if (!player) {
+        console.error('Player not found at index:', playerIndex);
+        return;
+      }
+
+      const newGoals = (player.GoalNumber || 0) + change;
+
+      if (newGoals >= 0) {
+        player.GoalNumber = newGoals;
+        this.updateTeamScore();
+      }
+    },
+
+    updateTeamScore() {
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        return;
+      }
+
+      const team = this.match.Teams[this.activeTeam];
+      team.Score = team.Players.reduce((total, player) => total + (player.GoalNumber || 0), 0);
+    },
+
+    removePlayer(playerIndex) {
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        console.error('Invalid team or players data');
+        return;
+      }
+
+      this.match.Teams[this.activeTeam].Players.splice(playerIndex, 1);
+      this.updateTeamScore();
+    },
+
+    hasEmptyTeam() {
+      if (!this.match || !this.match.Teams) return true;
+
+      return this.match.Teams.some(team =>
+        !team.Players || team.Players.length === 0
+      );
+    },
+
+    async saveChanges() {
+      if (this.hasEmptyTeam()) {
+        this.showMessage('Each team requires at least 1 player', 'error');
+        return;
+      }
+      this.isSaving = true;
       try {
-        const date = new Date(dateStr)
+        await updateMatch(this.match.ID, this.match);
+        this.showMessage('Match updated successfully!', 'success');
+      } catch (error) {
+        console.error('Error saving match:', error);
+        this.showMessage('Error saving changes', 'error');
+      } finally {
+        this.isSaving = false;
+      }
+    },
+
+    showMessage(text, type = 'success') {
+      this.message = text;
+      this.messageType = type;
+      this.messageKey++; // Trigger re-render for animations
+
+      // Auto-dismiss after 4 seconds
+      if (this.messageTimeout) {
+        clearTimeout(this.messageTimeout);
+      }
+
+      this.messageTimeout = setTimeout(() => {
+        this.dismissMessage();
+      }, 3000);
+    },
+
+    dismissMessage() {
+      const messageEl = document.querySelector('.message');
+      if (messageEl) {
+        messageEl.classList.add('toast-exit');
+        setTimeout(() => {
+          this.message = '';
+          if (this.messageTimeout) {
+            clearTimeout(this.messageTimeout);
+          }
+        }, 300);
+      }
+    },
+
+    formatDate(dateString) {
+      try {
+        const date = new Date(dateString);
         return date.toLocaleDateString('en-US', {
           weekday: 'long',
           year: 'numeric',
           month: 'long',
           day: 'numeric'
-        })
+        });
       } catch (error) {
-        return dateStr
+        return dateString;
       }
-    }
+    },
 
-    const getMatchStatus = () => {
-      if (!match.value?.Date) return 'upcoming'
-      const matchDate = new Date(match.value.Date)
-      const now = new Date()
-      return matchDate < now ? 'completed' : 'upcoming'
-    }
+    getTeamColor(colour) {
+      const colorMap = {
+        'red': '#ef4444',
+        'blue': '#3b82f6',
+        'green': '#10b981',
+        'yellow': '#f59e0b',
+        'purple': '#8b5cf6',
+        'orange': '#f97316',
+        'pink': '#ec4899',
+        'cyan': '#06b6d4',
+        'white': '#f8fafc',
+        'black': '#1f2937'
+      };
 
-    const getMatchStatusText = () => {
-      return getMatchStatus() === 'completed' ? 'Completed' : 'Upcoming'
-    }
+      return colorMap[colour.toLowerCase()] || '#6b7280';
+    },
 
-    const getTeamColor = (colorName) => {
-      const colors = {
-        red: '#ef4444',
-        blue: '#3b82f6',
-        green: '#10b981',
-        yellow: '#f59e0b',
-        purple: '#8b5cf6',
-        pink: '#ec4899',
-        orange: '#f97316',
-        cyan: '#06b6d4',
-        gray: '#6b7280',
-        indigo: '#6366f1'
+    getPlayerInitials(name) {
+      return name.split(' ')
+        .map(word => word.charAt(0).toUpperCase())
+        .join('')
+        .slice(0, 2);
+    },
+
+    formatPlayerNameForDisplay(name) {
+      // Convert to title case for display (capitalize first letter of each word)
+      return name.split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    },
+
+    getTotalGoals() {
+      if (!this.match || !this.match.Teams) return 0;
+      return this.match.Teams.reduce((total, team) => total + (team.Score || 0), 0);
+    },
+
+    getTotalPlayers() {
+      if (!this.match || !this.match.Teams) return 0;
+      return this.match.Teams.reduce((total, team) => total + (team.Players ? team.Players.length : 0), 0);
+    },
+
+    getMatchStatus() {
+      const totalGoals = this.getTotalGoals();
+      if (totalGoals === 0) return 'upcoming';
+      return 'completed';
+    },
+
+    getMatchStatusText() {
+      const status = this.getMatchStatus();
+      switch (status) {
+        case 'upcoming': return 'Upcoming';
+        case 'completed': return 'Completed';
+        default: return 'Unknown';
       }
-      return colors[colorName?.toLowerCase()] || '#6b7280'
-    }
+    },
 
-    const getPlayerInitials = (name) => {
-      if (!name) return '?'
-      const parts = name.trim().split(' ')
-      if (parts.length >= 2) {
-        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-      }
-      return name.substring(0, 2).toUpperCase()
-    }
-
-    const formatPlayerNameForDisplay = (name) => {
-      if (!name) return 'Unknown Player'
-      return name.split(' ').map(part => 
-        part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
-      ).join(' ')
-    }
-
-    const updateGoals = (playerIndex, change) => {
-      if (!match.value?.Teams?.[activeTeam.value]?.Players?.[playerIndex]) return
-      
-      const player = match.value.Teams[activeTeam.value].Players[playerIndex]
-      const currentGoals = player.GoalNumber || 0
-      const newGoals = Math.max(0, currentGoals + change)
-      
-      player.GoalNumber = newGoals
-      
-      // Update team score
-      updateTeamScore()
-    }
-
-    const updateTeamScore = () => {
-      if (!match.value?.Teams?.[activeTeam.value]?.Players) return
-      
-      const totalGoals = match.value.Teams[activeTeam.value].Players.reduce(
-        (sum, player) => sum + (player.GoalNumber || 0), 0
-      )
-      
-      match.value.Teams[activeTeam.value].Score = totalGoals
-    }
-
-    const removePlayer = (playerIndex) => {
-      if (!match.value?.Teams?.[activeTeam.value]?.Players) return
-      
-      match.value.Teams[activeTeam.value].Players.splice(playerIndex, 1)
-      updateTeamScore()
-      showMessage('Player removed from team', 'success')
-    }
-
-    const showModal = async () => {
-      showAddPlayerModal.value = true
-      selectedPlayers.value = []
-      await fetchAvailablePlayers()
-    }
-
-    const closeModal = () => {
-      showAddPlayerModal.value = false
-      selectedPlayers.value = []
-      playerSearchTerm.value = ''
-    }
-
-    const onPlayerSearch = () => {
-      // Debounce logic could be added here if needed
-    }
-
-    const isPlayerSelected = (player) => {
-      return selectedPlayers.value.some(p => 
-        (p.ID && player.ID && p.ID === player.ID) || 
-        p.Name === player.Name
-      )
-    }
-
-    const isPlayerInAnyTeam = (playerName) => {
-      if (!match.value?.Teams) return false
-      
-      return match.value.Teams.some(team => 
-        team.Players?.some(p => p.Name === playerName)
-      )
-    }
-
-    const addPlayerToSelection = (player) => {
-      if (isPlayerSelected(player) || isPlayerInAnyTeam(player.Name)) return
-      
-      selectedPlayers.value.push({ ...player })
-    }
-
-    const removeSelectedPlayer = (index) => {
-      selectedPlayers.value.splice(index, 1)
-    }
-
-    const createNewPlayer = async () => {
-      if (!playerSearchTerm.value.trim()) return
-      
+    formatDateShort(dateString) {
       try {
-        isCreatingPlayer.value = true
-        
-        // Simulate API call to create player
-        const newPlayer = {
-          ID: Date.now(), // Temporary ID
-          Name: playerSearchTerm.value.trim(),
-          GoalNumber: 0
-        }
-        
-        // Add to available players and select it
-        availablePlayers.value.unshift(newPlayer)
-        addPlayerToSelection(newPlayer)
-        
-        playerSearchTerm.value = ''
-        showMessage('New player created and selected', 'success')
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric'
+        });
       } catch (error) {
-        console.error('Error creating player:', error)
-        showMessage('Failed to create player', 'error')
-      } finally {
-        isCreatingPlayer.value = false
+        return dateString;
       }
-    }
-
-    const addSelectedPlayersToTeam = () => {
-      if (selectedPlayers.value.length === 0) return
-      
-      if (!match.value.Teams[activeTeam.value].Players) {
-        match.value.Teams[activeTeam.value].Players = []
-      }
-      
-      selectedPlayers.value.forEach(player => {
-        match.value.Teams[activeTeam.value].Players.push({
-          ...player,
-          GoalNumber: 0
-        })
-      })
-      
-      updateTeamScore()
-      showMessage(`Added ${selectedPlayers.value.length} player(s) to team`, 'success')
-      closeModal()
-    }
-
-    const saveChanges = async () => {
-      try {
-        isSaving.value = true
-        
-        // Simulate API call to save changes
-        const response = await fetch(`/api/matches/${match.value.ID}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(match.value)
-        })
-        
-        if (!response.ok) throw new Error('Failed to save changes')
-        
-        showMessage('Changes saved successfully', 'success')
-      } catch (error) {
-        console.error('Error saving changes:', error)
-        showMessage('Failed to save changes', 'error')
-      } finally {
-        isSaving.value = false
-      }
-    }
-
-    const showMessage = (text, type = 'success') => {
-      message.value = text
-      messageType.value = type
-      messageKey.value += 1
-      
-      setTimeout(() => {
-        dismissMessage()
-      }, 4000)
-    }
-
-    const dismissMessage = () => {
-      message.value = ''
-    }
-
-    // Lifecycle
-    onMounted(() => {
-      fetchMatchDetails()
-    })
-
-    return {
-      // Reactive data
-      match,
-      isLoading,
-      isSaving,
-      activeTeam,
-      showAddPlayerModal,
-      selectedPlayers,
-      availablePlayers,
-      playerSearchTerm,
-      isLoadingPlayers,
-      isCreatingPlayer,
-      message,
-      messageType,
-      messageKey,
-      
-      // Computed
-      showCreatePlayerOption,
-      filteredAvailablePlayers,
-      
-      // Methods
-      goBack,
-      formatDate,
-      getMatchStatus,
-      getMatchStatusText,
-      getTeamColor,
-      getPlayerInitials,
-      formatPlayerNameForDisplay,
-      updateGoals,
-      removePlayer,
-      showModal,
-      closeModal,
-      onPlayerSearch,
-      isPlayerSelected,
-      isPlayerInAnyTeam,
-      addPlayerToSelection,
-      removeSelectedPlayer,
-      createNewPlayer,
-      addSelectedPlayersToTeam,
-      saveChanges,
-      showMessage,
-      dismissMessage
     }
   }
-}
+};
 </script>
 
 <style scoped>
