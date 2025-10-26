@@ -1,3 +1,0 @@
-FROM koyeb/docker-compose
-
-COPY ./devops/docker-compose.yaml /app
