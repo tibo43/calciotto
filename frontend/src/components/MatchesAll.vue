@@ -9,7 +9,7 @@
             <p class="page-subtitle">Track live scores and match details</p>
           </div>
           <!-- Create Match Button -->
-          <button class="create-match-btn" @click="showCreateModal = true">
+          <button class="btn-base btn-primary btn-large create-match-btn" @click="showCreateModal = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
@@ -24,9 +24,9 @@
     <transition name="modal">
       <div v-if="showCreateModal" class="modal-overlay" @click="closeModal">
         <div class="modal-container" @click.stop>
-          <div class="modal-header">
+          <div class="modal-header modal-header-gradient">
             <h3>Create New Match</h3>
-            <button class="close-btn" @click="closeModal">
+            <button class="modal-close" @click="closeModal">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -34,7 +34,7 @@
             </button>
           </div>
 
-          <div class="modal-body">
+          <div class="modal-body modal-body-large">
             <div class="form-group">
               <label>Select Match Date</label>
               <div class="date-picker-container">
@@ -81,10 +81,10 @@
           </div>
 
           <div class="modal-footer">
-            <button class="cancel-btn" @click="closeModal" :disabled="isCreating">
+            <button class="btn-base btn-cancel" @click="closeModal" :disabled="isCreating">
               Cancel
             </button>
-            <button class="confirm-btn" @click="creatingMatch" :disabled="!selectedDate || isCreating"
+            <button class="btn-base btn-primary" @click="creatingMatch" :disabled="!selectedDate || isCreating"
               :class="{ 'loading': isCreating }">
               <div v-if="isCreating" class="loading-spinner-small"></div>
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -109,8 +109,8 @@
         <!-- Matches Layout -->
         <div v-else-if="matches.length > 0" class="matches-layout">
           <!-- Horizontal Matches Bar -->
-          <div class="matches-bar-container">
-            <div class="matches-bar" ref="matchesBar">
+          <div class="matches-bar-container card-base">
+            <div class="matches-bar hide-scrollbar" ref="matchesBar">
               <div v-for="match in matches" :key="match.ID" class="match-card-horizontal"
                 :class="{ 'active': selectedMatch?.ID === match.ID }" @click="selectMatch(match)">
                 <!-- Match Date -->
@@ -158,11 +158,11 @@
 
           <!-- Selected Match Details -->
           <transition name="match-details">
-            <div v-if="selectedMatch" class="match-details-container">
+            <div v-if="selectedMatch" class="match-details-container card-base">
               <div class="details-header">
                 <div class="details-title-section">
                   <h3>{{ formatDate(selectedMatch.Date) }} - Match Details</h3>
-                  <router-link :to="`/matches/${selectedMatch.ID}/edit`" class="edit-match-btn">
+                  <router-link :to="`/matches/${selectedMatch.ID}/edit`" class="btn-base btn-primary btn-small edit-match-btn">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -195,7 +195,7 @@
                         </td>
                         <td v-for="team in selectedMatch.Teams" :key="team.ID" class="player-cell">
                           <div v-if="team.Players[rowIndex - 1]" class="player-info">
-                            <div class="player-avatar">
+                            <div class="player-avatar-small">
                               {{ getPlayerInitials(team.Players[rowIndex - 1].Name) }}
                             </div>
                             <span class="player-name">{{ formatPlayerNameForDisplay(team.Players[rowIndex - 1].Name) }}</span>
@@ -225,7 +225,7 @@
             </svg>
             <h3 class="empty-title">No matches available</h3>
             <p class="empty-description">Create your first match to get started</p>
-            <button class="create-first-match-btn" @click="showCreateModal = true">
+            <button class="btn-base btn-primary btn-large" @click="showCreateModal = true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
@@ -576,15 +576,11 @@ export default {
 </script>
 
 <style scoped>
+/* Component-specific styles that couldn't be moved to global */
+
 /* Container */
 .matches-container {
   background-color: var(--bg-secondary);
-}
-
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 1.5rem;
 }
 
 /* Header Section */
@@ -607,18 +603,6 @@ export default {
   animation: float 20s ease-in-out infinite;
 }
 
-@keyframes float {
-
-  0%,
-  100% {
-    transform: translateY(0px);
-  }
-
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
 .header-content {
   display: flex;
   justify-content: space-between;
@@ -631,147 +615,54 @@ export default {
   text-align: left;
 }
 
-/* Create Match Button */
+/* Create Match Button Styling */
 .create-match-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.15) !important;
   backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  color: white;
-  padding: 1rem 1.5rem;
-  border-radius: var(--border-radius);
-  font-weight: 600;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all var(--transition-smooth);
+  border: 2px solid rgba(255, 255, 255, 0.3) !important;
+  color: white !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
 .create-match-btn:hover {
-  background-color: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: translateY(-2px);
+  background-color: rgba(255, 255, 255, 0.25) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
 }
 
-.create-match-btn svg {
-  width: 20px;
-  height: 20px;
+/* Modal Header Gradient */
+.modal-header-gradient {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%) !important;
+  color: white !important;
+  border-bottom: none !important;
 }
 
-/* Create First Match Button (in empty state) */
-.create-first-match-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-  color: white;
-  border: none;
-  padding: 1rem 2rem;
-  border-radius: var(--border-radius);
-  font-weight: 600;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all var(--transition-smooth);
-  box-shadow: var(--shadow-md);
-  margin-top: 1rem;
+.modal-header-gradient h3 {
+  color: white !important;
 }
 
-.create-first-match-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
+.modal-header-gradient .modal-close {
+  color: rgba(255, 255, 255, 0.8) !important;
 }
 
-.create-first-match-btn svg {
-  width: 20px;
-  height: 20px;
+.modal-header-gradient .modal-close:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
 }
 
-/* Modal Styles */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 1rem;
-}
-
-.modal-container {
-  background-color: var(--bg-primary);
-  border-radius: var(--border-radius-lg);
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
-  max-width: 500px;
-  width: 100%;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem;
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-  color: white;
-}
-
-.modal-header h3 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.close-btn {
-  background: transparent;
-  border: none;
-  color: white;
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: var(--border-radius);
-  transition: background-color var(--transition-fast);
-}
-
-.close-btn:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-.close-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
-.modal-body {
-  padding: 2rem 1.5rem;
-  overflow: visible;
+/* Modal Body Large */
+.modal-body-large {
   max-height: 70vh;
-  /* Limit height */
   overflow-y: auto;
-  /* Add scroll if needed */
 }
 
-.form-group {
-  margin-bottom: 1.5rem;
-  position: relative;
-  overflow: visible;
-}
-
-/* Custom Date Picker Styles */
+/* Date Picker Styles */
 .date-picker-container {
   background-color: var(--bg-primary);
   border: 2px solid var(--border-color);
   border-radius: var(--border-radius);
   overflow: hidden;
   margin-bottom: 0;
-  /* Remove any bottom margin */
 }
 
 .selected-date-display {
@@ -869,8 +760,6 @@ export default {
   justify-content: center;
   min-height: 40px;
   position: relative;
-  pointer-events: auto;
-  cursor: pointer;
 }
 
 .day-button:hover:not(.disabled) {
@@ -913,7 +802,6 @@ export default {
   color: var(--text-light);
   opacity: 0.4;
   pointer-events: none;
-  /* Only disabled dates should be unclickable */
   cursor: not-allowed;
 }
 
@@ -922,153 +810,9 @@ export default {
   background: transparent;
 }
 
-.form-group label {
-  display: block;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.75rem;
-  font-size: 0.95rem;
-}
-
-.error-message {
-  color: #ef4444;
-  font-size: 0.875rem;
-  margin-top: 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  padding: 1.5rem;
-  background-color: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-}
-
-.cancel-btn,
-.confirm-btn {
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--border-radius);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 120px;
-  justify-content: center;
-}
-
-.cancel-btn {
-  background-color: transparent;
-  color: var(--text-secondary);
-  border: 2px solid var(--border-color);
-}
-
-.cancel-btn:hover:not(:disabled) {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.confirm-btn {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-  color: white;
-  border: none;
-  box-shadow: var(--shadow-sm);
-}
-
-.confirm-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
-
-.confirm-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.confirm-btn.loading {
-  pointer-events: none;
-}
-
-.confirm-btn svg,
-.cancel-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.loading-spinner-small {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-/* Modal Transitions */
-.modal-enter-active,
-.modal-leave-active {
-  transition: all var(--transition-smooth);
-}
-
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-  transform: scale(0.95);
-}
-
-.modal-enter-active .modal-container,
-.modal-leave-active .modal-container {
-  transition: all var(--transition-smooth);
-}
-
-.modal-enter-from .modal-container,
-.modal-leave-to .modal-container {
-  transform: translateY(20px);
-}
-
 /* Matches Section */
 .matches-section {
   padding: 2rem 0;
-}
-
-/* Loading State */
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 4rem 0;
-}
-
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid var(--border-color);
-  border-top: 3px solid var(--primary-color);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 1rem;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.loading-text {
-  color: var(--text-secondary);
-  font-size: 1.1rem;
 }
 
 /* Matches Layout */
@@ -1081,11 +825,7 @@ export default {
 /* Horizontal Matches Bar */
 .matches-bar-container {
   position: relative;
-  background-color: var(--bg-primary);
-  border-radius: var(--border-radius-lg);
-  box-shadow: var(--shadow-md);
   overflow: hidden;
-  border: 1px solid var(--border-color);
 }
 
 .matches-bar {
@@ -1094,12 +834,6 @@ export default {
   padding: 1rem;
   overflow-x: auto;
   scroll-behavior: smooth;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.matches-bar::-webkit-scrollbar {
-  display: none;
 }
 
 .match-card-horizontal {
@@ -1216,12 +950,9 @@ export default {
 }
 
 @keyframes pulse-status {
-
-  0%,
-  100% {
+  0%, 100% {
     opacity: 1;
   }
-
   50% {
     opacity: 0.5;
   }
@@ -1273,11 +1004,6 @@ export default {
 
 /* Match Details Container */
 .match-details-container {
-  background-color: var(--bg-primary);
-  border-radius: var(--border-radius-lg);
-  padding: 1.5rem;
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-color);
   overflow: hidden;
 }
 
@@ -1308,32 +1034,13 @@ export default {
 }
 
 .edit-match-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: var(--primary-color);
-  color: white;
-  text-decoration: none;
-  padding: 0.75rem 1.5rem;
-  cursor: pointer;
-  border-radius: var(--border-radius);
-  font-weight: 500;
-  font-size: 0.875rem;
-  transition: all var(--transition-fast);
-  box-shadow: var(--shadow-sm);
+  text-decoration: none !important;
+  color: white !important;
 }
 
 .edit-match-btn:hover {
-  background-color: var(--primary-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-  color: white;
-  text-decoration: none;
-}
-
-.edit-match-btn svg {
-  width: 16px;
-  height: 16px;
+  text-decoration: none !important;
+  color: white !important;
 }
 
 /* Players Table */
@@ -1376,13 +1083,6 @@ export default {
   gap: 0.5rem;
 }
 
-.team-color-small {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 1px solid white;
-}
-
 .goal-number-col {
   width: 80px;
   background-color: var(--primary-color);
@@ -1403,29 +1103,8 @@ export default {
   background-color: var(--bg-secondary);
 }
 
-.player-info {
-  display: flex;
-  align-items: center;
+.player-cell .player-info {
   justify-content: center;
-  gap: 0.75rem;
-}
-
-.player-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background-color: var(--primary-color);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.player-name {
-  font-weight: 500;
-  color: var(--text-primary);
 }
 
 .goal-cell {
@@ -1439,36 +1118,28 @@ export default {
   font-style: italic;
 }
 
-/* Empty State */
-.empty-state {
-  padding: 4rem 0;
-}
-
-.empty-content {
-  text-align: center;
-  max-width: 400px;
-  margin: 0 auto;
-}
-
-.empty-icon {
-  width: 4rem;
-  height: 4rem;
-  color: var(--text-light);
-  margin-bottom: 1rem;
-}
-
-.empty-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.5rem;
-}
-
-.empty-description {
-  color: var(--text-secondary);
-}
-
 /* Transitions */
+.modal-enter-active,
+.modal-leave-active {
+  transition: all var(--transition-smooth);
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.modal-enter-active .modal-container,
+.modal-leave-active .modal-container {
+  transition: all var(--transition-smooth);
+}
+
+.modal-enter-from .modal-container,
+.modal-leave-to .modal-container {
+  transform: translateY(20px);
+}
+
 .match-details-enter-active,
 .match-details-leave-active {
   transition: all var(--transition-smooth);
@@ -1482,14 +1153,6 @@ export default {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .page-title {
-    font-size: 2rem;
-  }
-
-  .container {
-    padding: 0 1rem;
-  }
-
   .matches-section {
     padding: 2rem 0;
   }
@@ -1506,11 +1169,6 @@ export default {
 
   .title-section {
     text-align: center;
-  }
-
-  .create-match-btn {
-    font-size: 0.875rem;
-    padding: 0.875rem 1.25rem;
   }
 
   .match-card-horizontal {
@@ -1556,26 +1214,12 @@ export default {
     max-width: none;
   }
 
-  .modal-body {
+  .modal-body-large {
     padding: 1.5rem;
-  }
-
-  .modal-footer {
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .cancel-btn,
-  .confirm-btn {
-    width: 100%;
   }
 }
 
 @media (max-width: 480px) {
-  .page-title {
-    font-size: 1.75rem;
-  }
-
   .match-card-horizontal {
     flex: 0 0 200px;
     padding: 0.5rem;
@@ -1591,16 +1235,6 @@ export default {
 
   .scroll-right {
     right: 5px;
-  }
-
-  .create-match-btn {
-    font-size: 0.8rem;
-    padding: 0.75rem 1rem;
-  }
-
-  .create-match-btn svg {
-    width: 18px;
-    height: 18px;
   }
 }
 </style>
