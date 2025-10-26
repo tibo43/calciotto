@@ -1,7 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.VUE_API_BASE_URL || 'http://127.0.0.1:8080';
-
+const API_BASE_URL = process.env.VUE_APP_API_BASE_URL
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,6 +9,8 @@ const api = axios.create({
     'Content-Type': 'application/json',
   }
 });
+
+export default api;
 
 // Matches
 export const getMatchesDetails = async () => {

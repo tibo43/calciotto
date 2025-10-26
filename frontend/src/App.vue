@@ -158,6 +158,7 @@ export default {
     }
   },
   mounted() {
+    document.title = 'Calciotto';
     // Check for saved theme preference
     const savedTheme = localStorage.getItem('calciotto-theme');
     if (savedTheme) {

@@ -267,6 +267,7 @@ export default {
     await this.loadMatches();
   },
   mounted() {
+    document.title = 'Calciotto';
     this.$nextTick(() => {
       this.updateScrollButtons();
       if (this.$refs.matchesBar) {

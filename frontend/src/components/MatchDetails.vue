@@ -370,6 +370,9 @@ import { getMatchDetailsByID, updateMatch, getPlayers, createPlayer } from '@/se
 
 export default {
   name: 'MatchDetail',
+  mounted() {
+    document.title = 'Calciotto';
+  },
   data() {
     return {
       match: null,
