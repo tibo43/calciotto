@@ -42,8 +42,9 @@ jobs:
   #         app-name: calciotto
   #         service-name: frontend
   #         service-type: web
-  #         service-instance-type: free
-  #         service-regions: fra
+  #         service-instance-type: eco-nano
+  #         service-regions: par
   #         service-ports: "3000:http"
   #         service-routes: "/:3000"
+  #         service-env: POSTGRES_URL=@POSTGRES_URL
   #         docker: tibo43/calciotto-frontend:latest

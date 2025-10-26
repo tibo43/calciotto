@@ -16,7 +16,7 @@ jobs:
           api_token: "${{ secrets.KOYEB_API_TOKEN }}"
 
       - name: Create Koyeb database
-        run: koyeb database create database --app calciotto --instance-type free --pg-version 18 --region fra --db-name calciotto --db-owner calciotto
+        run: koyeb database create database --app calciotto --instance-type free --pg-version 18 --region par --db-name calciotto --db-owner calciotto
       - name: Waiting of the creation of the database
         run: |
           while [ `koyeb database get calciotto/database -o yaml | yq .service.status` != "HEALTHY" ]
