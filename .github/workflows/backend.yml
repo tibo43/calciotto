@@ -49,7 +49,7 @@ jobs:
           service-instance-type: free
           service-regions: fra
           service-ports: "8080:http"
-          service-routes: "/:8080"
+          service-routes: "/api:8080"
           service-env: POSTGRES_URL=@POSTGRES_URL
           docker: tibo43/calciotto-backend:latest
           
