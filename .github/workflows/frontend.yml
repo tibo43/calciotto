@@ -43,7 +43,7 @@ jobs:
   #         service-name: frontend
   #         service-type: web
   #         service-instance-type: eco-nano
-  #         service-regions: par
+  #         service-regions: fra
   #         service-ports: "3000:http"
   #         service-routes: "/:3000"
   #         service-env: POSTGRES_URL=@POSTGRES_URL
