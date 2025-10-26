@@ -15,7 +15,7 @@ export default api;
 // Matches
 export const getMatchesDetails = async () => {
   try {
-    const response = await api.get(`/matches/details`);
+    const response = await api.get(`/api/matches/details`);
     if (response.status !== 200) {
       throw new Error('Failed to fetch matches details');
     }
@@ -29,7 +29,7 @@ export const getMatchesDetails = async () => {
 // New function for getting single match details by ID
 export const getMatchDetailsByID = async (matchId) => {
   try {
-    const response = await api.get(`/matches/${matchId}/details`);
+    const response = await api.get(`/api/matches/${matchId}/details`);
     if (response.status !== 200) {
       throw new Error('Failed to fetch match details');
     }
@@ -43,7 +43,7 @@ export const getMatchDetailsByID = async (matchId) => {
 // New function for updating a match
 export const createMatch = async (matchData) => {
   try {
-    const response = await api.post(`/matches`, matchData);
+    const response = await api.post(`/api/matches`, matchData);
     if (response.status !== 200) {
       throw new Error('Failed to create match');
     }
@@ -58,7 +58,7 @@ export const createMatch = async (matchData) => {
 // New function for updating a match
 export const updateMatch = async (matchId, matchData) => {
   try {
-    const response = await api.put(`/matches/${matchId}`, matchData);
+    const response = await api.put(`/api/matches/${matchId}`, matchData);
     if (response.status !== 200) {
       throw new Error('Failed to update match');
     }
@@ -73,7 +73,7 @@ export const updateMatch = async (matchId, matchData) => {
 // Alternative: PATCH for partial updates (if your API supports it)
 export const updateMatchPartial = async (matchId, updates) => {
   try {
-    const response = await api.patch(`/matches/${matchId}`, updates);
+    const response = await api.patch(`/api/matches/${matchId}`, updates);
     if (response.status !== 200) {
       throw new Error('Failed to update match');
     }
@@ -88,7 +88,7 @@ export const updateMatchPartial = async (matchId, updates) => {
 // New function for updating a match
 export const createPlayer = async (playerData) => {
   try {
-    const response = await api.post(`/players`, playerData);
+    const response = await api.post(`/api/players`, playerData);
     if (response.status !== 200) {
       throw new Error('Failed to create player');
     }
@@ -103,7 +103,7 @@ export const createPlayer = async (playerData) => {
 // Existing function (referenced in PlayersAll.vue)
 export const getPlayers = async () => {
   try {
-    const response = await api.get(`/players`);
+    const response = await api.get(`/api/players`);
     if (response.status !== 200) {
       throw new Error('Failed to fetch players');
     }
@@ -116,7 +116,7 @@ export const getPlayers = async () => {
 
 export async function searchPlayerByName(playerName) {
   try {
-    const response = await api.get(`/players/search?name=${encodeURIComponent(playerName)}`);
+    const response = await api.get(`/api/players/search?name=${encodeURIComponent(playerName)}`);
     if (response.status !== 200) {
       throw new Error('Player search failed');
     }
