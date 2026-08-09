@@ -32,8 +32,3 @@ type RowsMatchDetails struct {
 	PlayerName  string
 	GoalsScored int
 }
-
-type RowsTeamDetails struct {
-	TeamID     string
-	TeamColour string
-}
