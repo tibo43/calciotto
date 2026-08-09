@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"app/internal/models"
 
@@ -11,18 +12,21 @@ import (
 	"gorm.io/gorm"
 )
 
-const (
-	//host     = "localhost"
-	//host     = "192.168.1.10"
-	host     = "db"
-	port     = 5432
-	user     = "calciotto"
-	password = "lee7ohnai9queeDoosh6"
-	dbname   = "calciotto"
-)
+func getEnv(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
 
 func InitDB() (*gorm.DB, error) {
-	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+	host := getEnv("DB_HOST", "db")
+	port := getEnv("DB_PORT", "5432")
+	user := getEnv("DB_USER", "calciotto")
+	password := os.Getenv("DB_PASSWORD")
+	dbname := getEnv("DB_NAME", "calciotto")
+
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		host, port, user, password, dbname)
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})

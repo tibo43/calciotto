@@ -2,10 +2,11 @@ services:
   backend:
     build:
       context: .
-      # Correct the path to your Dockerfile
-      dockerfile: Dockerfile
+      dockerfile: dockerfile.dev
     ports:
       - 8080:8080
+    env_file:
+      - env/develop.env
     # Important to bind/mount your codebase dir to /app dir for live reload
     volumes:
       - ./../app:/app
@@ -19,8 +20,9 @@ services:
     # Important to bind/mount your codebase dir to /frontend dir for live reload
     volumes:
       - ./../frontend:/frontend
+      - frontend_node_modules:/frontend/node_modules
     working_dir: /frontend
-    command: "npm run serve"
+    command: sh -c "npm install && npm run serve"
     environment:
       - VUE_API_BASE_URL="http://127.0.0.1:8080"
     depends_on:
@@ -56,3 +58,4 @@ services:
       restart: unless-stopped
 volumes:
   postgres:
+  frontend_node_modules:
