@@ -38,10 +38,13 @@ npm run lint    # eslint (plugin:vue/vue3-essential + eslint:recommended)
 Strict `handlers/` → `services/` → `models/` layering:
 - `internal/handlers/*.go` — Gin controllers only: bind JSON, call the service, map errors to HTTP status/JSON. No business logic here.
 - `internal/services/*.go` — one service struct per entity (`PlayerService`, `TeamService`, `MatchService`, `MatchPlayerService`), each wrapping a `*gorm.DB`.
-- `internal/models/database.go` — GORM models (`Player`, `Team`, `Match`, `MatchPlayer`), all embedding `BaseModel` which generates a UUID string ID in a `BeforeCreate` hook.
-- `internal/models/customModels.go` — DTOs used only for the "match with nested teams/players" API shape (`MatchWithDetails`, `TeamWithPlayers`, `PlayerCustom`) plus flat row structs (`RowsMatchDetails`, `RowsTeamDetails`) used to scan raw SQL joins.
+- `internal/models/database.go` — GORM models (`Player`, `Team`, `Match`, `MatchPlayer`), all embedding `BaseModel` which generates a `uuid.UUID` ID (`github.com/google/uuid`) in a `BeforeCreate` hook. All FK-style fields (`MatchPlayer.MatchID/TeamID/PlayerID`) are `uuid.UUID`, not `string` — comparisons against "no value" use `uuid.Nil`, not `""`.
+- `internal/models/date.go` — `Date` is a `time.Time`-backed type used everywhere a calendar day is stored (`Match.Date`, DTO date fields). It marshals/unmarshals as `"YYYY-MM-DD"` over JSON (matching the original string-based API contract exactly) and scans/values as a SQL `date` column — this is why `Match.Date` could switch from `string` to a typed date without changing the wire format or requiring frontend changes.
+- `internal/models/customModels.go` — DTOs used only for the "match with nested teams/players" API shape (`MatchWithDetails`, `TeamWithPlayers`, `PlayerCustom`) plus a flat row struct (`RowsMatchDetails`) used to scan the raw SQL join in `matches.go`. IDs are `uuid.UUID`, dates are `Date`.
 
 Only `Player` and `Match` routes are actually wired in `main.go`. `TeamHandler` and `MatchPlayerHandler` exist and are fully implemented in `internal/handlers/` and `internal/services/` but are **not registered as routes** — there is currently no HTTP path to create a `Team` or a standalone `MatchPlayer` row directly.
+
+Every handler that reads an ID from the URL (`c.Param("id")`, etc.) parses it with `uuid.Parse` and returns 400 on failure before calling the service — service methods take `uuid.UUID`, never a raw path string.
 
 ### Data model
 `MatchPlayer` is the join table that carries both roster membership *and* the score: `(match_id, team_id, player_id, goals_scored)`. There's no separate "goals" or "events" table — a team's score is always derived by summing `goals_scored` over its players.
@@ -49,7 +52,10 @@ Only `Player` and `Match` routes are actually wired in `main.go`. `TeamHandler` 
 ### The flatten/reconstruct pattern (matches.go)
 `MatchService.GetMatchesDetails` / `GetMatchDetailsByID` do not use GORM associations or `Preload`. They run a raw SQL query with `LEFT JOIN`s across `matches → match_players → teams/players`, scan into flat `RowsMatchDetails` rows, then manually rebuild the nested `MatchWithDetails{ Teams: []TeamWithPlayers{ Players: []PlayerCustom } }` structure in Go (matching by ID in loops, appending as new IDs are encountered). When a match has no rows in `match_players` for a given team (or at all), there's a fallback path that queries all `teams` directly to still return empty team shells. Any change to the JSON shape returned to the frontend needs to touch both the SQL query and this reconstruction loop, not just the model struct.
 
-`MatchService.UpdateMatch` performs a diff: for each team in the incoming payload it loads existing `MatchPlayer` rows for that `(match_id, team_id)`, creates rows for players not yet present, updates `goals_scored` for players still present, and deletes rows for players removed from the payload. There is no transaction wrapping this — it's a sequence of independent queries per team/player.
+`MatchService.UpdateMatch` performs a diff: for each team in the incoming payload it loads existing `MatchPlayer` rows for that `(match_id, team_id)`, creates rows for players not yet present, updates `goals_scored` for players still present, and deletes rows for players removed from the payload. The whole diff runs inside `s.DB.Transaction(...)`.
+
+### Input validation
+`PlayerService.CreatePlayer` trims the name, rejects empty input (`ErrEmptyPlayerName`) and rejects case-insensitive duplicates (`ErrPlayerAlreadyExists`) — both are sentinel errors in `internal/services/players.go`, mapped to HTTP 400 in `PlayerHandler.CreatePlayer` via `errors.Is`. `Player.Name` also has a DB-level `uniqueIndex` as a second line of defense. Match date validation happens for free via the `Date` type's `UnmarshalJSON`: a malformed date fails JSON binding in the handler and surfaces as a 400 through the existing `ShouldBindJSON` error path, with no extra service-side check needed.
 
 ### Frontend
 - `src/router/index.js` defines two routes: `/` (`MatchesAll`) and `/matches/:id/edit` (`MatchDetails`). `App.vue` also has non-router tabs ("Standings"/teams/players) that render static "Coming soon" placeholders and are unrelated to the router views.

@@ -111,13 +111,13 @@ func resetData(db *gorm.DB) error {
 	return nil
 }
 
-// lastSundays returns the date (YYYY-MM-DD) of the last n Sundays, oldest first.
-func lastSundays(n int) []string {
-	dates := make([]string, 0, n)
+// lastSundays returns the last n Sundays, oldest first.
+func lastSundays(n int) []models.Date {
+	dates := make([]models.Date, 0, n)
 	now := time.Now()
 	lastSunday := now.AddDate(0, 0, -int(now.Weekday()))
 	for i := n - 1; i >= 0; i-- {
-		dates = append(dates, lastSunday.AddDate(0, 0, -7*i).Format("2006-01-02"))
+		dates = append(dates, models.Date(lastSunday.AddDate(0, 0, -7*i)))
 	}
 	return dates
 }

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"app/internal/models"
@@ -35,6 +36,10 @@ func (h *PlayerHandler) CreatePlayer(c *gin.Context) {
 
 	id, err := h.Service.CreatePlayer(player.Name)
 	if err != nil {
+		if errors.Is(err, services.ErrEmptyPlayerName) || errors.Is(err, services.ErrPlayerAlreadyExists) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

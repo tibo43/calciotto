@@ -16,7 +16,7 @@ func NewMatchPlayerService(db *gorm.DB) *MatchPlayerService {
 }
 
 func (s *MatchPlayerService) CreateMatchPlayer(teamComposition *models.MatchPlayer) error {
-	teamComposition.ID = uuid.New().String()
+	teamComposition.ID = uuid.New()
 	result := s.DB.Create(teamComposition)
 	if result.Error != nil {
 		return result.Error
@@ -33,7 +33,7 @@ func (s *MatchPlayerService) GetMatchPlayerAll() ([]models.MatchPlayer, error) {
 	return teamCompositions, nil
 }
 
-func (s *MatchPlayerService) GetMatchPlayerByMatchID(match_id string) ([]models.MatchPlayer, error) {
+func (s *MatchPlayerService) GetMatchPlayerByMatchID(match_id uuid.UUID) ([]models.MatchPlayer, error) {
 	var teamCompositions []models.MatchPlayer
 	result := s.DB.Where("match_id = ?", match_id).Find(&teamCompositions)
 	if result.Error != nil {
@@ -42,7 +42,7 @@ func (s *MatchPlayerService) GetMatchPlayerByMatchID(match_id string) ([]models.
 	return teamCompositions, nil
 }
 
-func (s *MatchPlayerService) GetMatchPlayerByTeamID(team_id string) ([]models.MatchPlayer, error) {
+func (s *MatchPlayerService) GetMatchPlayerByTeamID(team_id uuid.UUID) ([]models.MatchPlayer, error) {
 	var teamCompositions []models.MatchPlayer
 	result := s.DB.Where("team_id = ?", team_id).Find(&teamCompositions)
 	if result.Error != nil {

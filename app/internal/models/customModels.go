@@ -1,15 +1,17 @@
 package models
 
+import "github.com/google/uuid"
+
 // Player représente un joueur.
 type PlayerCustom struct {
-	ID          string `json:"ID"`
-	Name        string `json:"Name"`
-	GoalsScored int    `json:"GoalNumber"`
+	ID          uuid.UUID `json:"ID"`
+	Name        string    `json:"Name"`
+	GoalsScored int       `json:"GoalNumber"`
 }
 
 // TeamWithPlayers représente une équipe avec ses joueurs.
 type TeamWithPlayers struct {
-	ID      string         `json:"ID"`
+	ID      uuid.UUID      `json:"ID"`
 	Colour  string         `json:"Colour"`
 	Score   int            `json:"Score"`
 	Players []PlayerCustom `json:"Players"`
@@ -17,18 +19,18 @@ type TeamWithPlayers struct {
 
 // MatchWithDetails représente un match avec ses équipes et joueurs.
 type MatchWithDetails struct {
-	ID    string            `json:"ID"`
-	Date  string            `json:"Date"`
+	ID    uuid.UUID         `json:"ID"`
+	Date  Date              `json:"Date"`
 	Teams []TeamWithPlayers `json:"Teams"`
 }
 
 type RowsMatchDetails struct {
-	MatchID     string
-	MatchDate   string
-	TeamID      string
+	MatchID     uuid.UUID
+	MatchDate   Date
+	TeamID      uuid.UUID
 	TeamColour  string
 	Score       int
-	PlayerID    string
+	PlayerID    uuid.UUID
 	PlayerName  string
 	GoalsScored int
 }

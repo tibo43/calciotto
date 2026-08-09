@@ -7,6 +7,7 @@ import (
 	"app/internal/services"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type MatchPlayerHandler struct {
@@ -40,7 +41,11 @@ func (h *MatchPlayerHandler) GetMatchPlayerAll(c *gin.Context) {
 }
 
 func (h *MatchPlayerHandler) GetMatchPlayerByMatchID(c *gin.Context) {
-	match_id := c.Param("match_id")
+	match_id, err := uuid.Parse(c.Param("match_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		return
+	}
 	teamComposition, err := h.Service.GetMatchPlayerByMatchID(match_id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -50,7 +55,11 @@ func (h *MatchPlayerHandler) GetMatchPlayerByMatchID(c *gin.Context) {
 }
 
 func (h *MatchPlayerHandler) GetMatchPlayerByTeamID(c *gin.Context) {
-	team_id := c.Param("team_id")
+	team_id, err := uuid.Parse(c.Param("team_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid team id"})
+		return
+	}
 	teamComposition, err := h.Service.GetMatchPlayerByTeamID(team_id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

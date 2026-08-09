@@ -2,9 +2,17 @@ package services
 
 import (
 	"app/internal/models"
+	"errors"
 	"log"
+	"strings"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+)
+
+var (
+	ErrEmptyPlayerName     = errors.New("player name must not be empty")
+	ErrPlayerAlreadyExists = errors.New("player already exists")
 )
 
 type PlayerService struct {
@@ -15,33 +23,41 @@ func NewPlayerService(db *gorm.DB) *PlayerService {
 	return &PlayerService{DB: db}
 }
 
-func (s *PlayerService) CreatePlayer(name string) (string, error) {
-	player := &models.Player{
-		BaseModel: models.BaseModel{},
-		Name:      name,
+func (s *PlayerService) CreatePlayer(name string) (uuid.UUID, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return uuid.Nil, ErrEmptyPlayerName
 	}
-	result := s.DB.Create(player)
-	if result.Error != nil {
-		return "", result.Error
+
+	var existing models.Player
+	result := s.DB.Where("LOWER(name) = LOWER(?)", name).First(&existing)
+	if result.Error == nil {
+		return uuid.Nil, ErrPlayerAlreadyExists
+	}
+	if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return uuid.Nil, result.Error
+	}
+
+	player := &models.Player{Name: name}
+	if result := s.DB.Create(player); result.Error != nil {
+		return uuid.Nil, result.Error
 	}
 	return player.ID, nil
 }
 
 func (s *PlayerService) GetPlayers() ([]models.PlayerCustom, error) {
-	var playersCustom []models.PlayerCustom
 	var players []models.Player
-	result := s.DB.Find(&players)
+	if result := s.DB.Find(&players); result.Error != nil {
+		return nil, result.Error
+	}
 
+	var playersCustom []models.PlayerCustom
 	for i := range players {
 		playersCustom = append(playersCustom, models.PlayerCustom{
 			ID:          players[i].ID,
 			Name:        players[i].Name,
 			GoalsScored: 0,
 		})
-	}
-
-	if result.Error != nil {
-		return nil, result.Error
 	}
 	return playersCustom, nil
 }

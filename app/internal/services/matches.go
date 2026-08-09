@@ -4,6 +4,7 @@ import (
 	"app/internal/models"
 	"sort"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -15,14 +16,13 @@ func NewMatchService(db *gorm.DB) *MatchService {
 	return &MatchService{DB: db}
 }
 
-func (s *MatchService) CreateMatch(date string) (string, error) {
+func (s *MatchService) CreateMatch(date models.Date) (uuid.UUID, error) {
 	match := &models.Match{
-		BaseModel: models.BaseModel{},
-		Date:      date,
+		Date: date,
 	}
 	result := s.DB.Create(match)
 	if result.Error != nil {
-		return "", result.Error
+		return uuid.Nil, result.Error
 	}
 	return match.ID, nil
 }
@@ -48,7 +48,7 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 	}
 
 	// Map the flat results into the hierarchical structure
-	matchesMap := make(map[string]*models.MatchWithDetails)
+	matchesMap := make(map[uuid.UUID]*models.MatchWithDetails)
 
 	for _, rowMatches := range rowsMatches {
 		// Get or create the match
@@ -101,7 +101,7 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 		// Filter out teams with missing ID or Colour
 		var validTeams []models.TeamWithPlayers
 		for _, team := range match.Teams {
-			if team.ID != "" && team.Colour != "" && len(team.Players) > 0 {
+			if team.ID != uuid.Nil && team.Colour != "" && len(team.Players) > 0 {
 				for _, player := range team.Players {
 					// Update the team's score based on the number of goals scored by players
 					team.Score += player.GoalsScored
@@ -138,13 +138,9 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 	}
 
 	// Sort matches by date in descending order
-	for i := 0; i < len(matches)-1; i++ {
-		for j := i + 1; j < len(matches); j++ {
-			if matches[i].Date < matches[j].Date {
-				matches[i], matches[j] = matches[j], matches[i]
-			}
-		}
-	}
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[j].Date.Before(matches[i].Date)
+	})
 	// Sort matched teams same colour in first position
 	for _, match := range matches {
 		sort.Slice(match.Teams, func(i, j int) bool {
@@ -163,7 +159,7 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 	return matches, nil
 }
 
-func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails, error) {
+func (s *MatchService) GetMatchDetailsByID(id uuid.UUID) (*models.MatchWithDetails, error) {
 
 	var rowsMatch []*models.RowsMatchDetails
 
@@ -196,7 +192,7 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
 	}
 
 	for _, rowMatch := range rowsMatch {
-		if rowMatch.TeamID == "" {
+		if rowMatch.TeamID == uuid.Nil {
 			// No match_players row at all for this match yet.
 			continue
 		}
@@ -261,9 +257,8 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
 		}
 	}
 
-	// Triez les équipes par couleur, en plaçant une couleur aléatoire en première position
+	// Triez les équipes par couleur (ordre alphabétique)
 	if len(match.Teams) > 0 {
-		// Triez les équipes par couleur
 		sort.Slice(match.Teams, func(i, j int) bool {
 			return match.Teams[i].Colour < match.Teams[j].Colour
 		})

@@ -18,7 +18,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println(db)
 
 	// Initialize Gin router
 	r := gin.Default()

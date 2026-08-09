@@ -7,6 +7,7 @@ import (
 	"app/internal/services"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type TeamHandler struct {
@@ -42,7 +43,11 @@ func (h *TeamHandler) CreateTeam(c *gin.Context) {
 }
 
 func (h *TeamHandler) GetTeamByID(c *gin.Context) {
-	id := c.Param("id")
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid team id"})
+		return
+	}
 	teams, err := h.Service.GetTeamByID(id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

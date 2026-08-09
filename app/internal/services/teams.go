@@ -25,7 +25,7 @@ func (s *TeamService) GetTeams() ([]models.Team, error) {
 }
 
 func (s *TeamService) CreateTeam(team *models.Team) error {
-	team.ID = uuid.New().String()
+	team.ID = uuid.New()
 	result := s.DB.Create(team)
 	if result.Error != nil {
 		return result.Error
@@ -33,7 +33,7 @@ func (s *TeamService) CreateTeam(team *models.Team) error {
 	return nil
 }
 
-func (s *TeamService) GetTeamByID(id string) (*models.Team, error) {
+func (s *TeamService) GetTeamByID(id uuid.UUID) (*models.Team, error) {
 	var team models.Team
 	result := s.DB.First(&team, "id = ?", id)
 	if result.Error != nil {

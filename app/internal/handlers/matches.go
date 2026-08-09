@@ -7,6 +7,7 @@ import (
 	"app/internal/services"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type MatchHandler struct {
@@ -42,7 +43,11 @@ func (h *MatchHandler) GetMatchesDetails(c *gin.Context) {
 }
 
 func (h *MatchHandler) GetMatchDetailsByID(c *gin.Context) {
-	id := c.Param("id")
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		return
+	}
 	matches, err := h.Service.GetMatchDetailsByID(id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
