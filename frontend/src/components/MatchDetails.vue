@@ -375,6 +375,7 @@ export default {
   data() {
     return {
       match: null,
+      matchSnapshot: null,
       isLoading: true,
       isSaving: false,
       activeTeam: 0,
@@ -383,7 +384,6 @@ export default {
       messageType: 'success',
       // New properties for player dropdown
       allPlayers: [],
-      filteredPlayers: [],
       selectedPlayers: [],
       filteredAvailablePlayers: [],
       isLoadingPlayers: false,
@@ -397,7 +397,20 @@ export default {
   async created() {
     await this.loadMatch();
   },
+  beforeRouteLeave(to, from, next) {
+    if (this.hasUnsavedChanges()) {
+      const leave = window.confirm('You have unsaved changes. Leave without saving?');
+      next(leave);
+      return;
+    }
+    next();
+  },
   methods: {
+    hasUnsavedChanges() {
+      if (this.isSaving || !this.match) return false;
+      return JSON.stringify(this.match) !== this.matchSnapshot;
+    },
+
     async loadMatch() {
       this.isLoading = true;
       try {
@@ -417,6 +430,7 @@ export default {
           });
         }
 
+        this.matchSnapshot = JSON.stringify(this.match);
       } catch (error) {
         console.error('Error fetching match:', error);
         this.showMessage('Error loading match details', 'error');
@@ -469,17 +483,6 @@ export default {
 
       this.filteredAvailablePlayers = availablePlayers;
       this.checkCreatePlayerOption();
-    },
-
-    onPlayerNameInput() {
-      this.playerSearchTerm = this.newPlayerName;
-      this.isSearchingPlayer = true;
-
-      // Debounce the search
-      clearTimeout(this.searchTimeout);
-      this.searchTimeout = setTimeout(() => {
-        this.searchPlayers();
-      }, 300);
     },
 
     // Check if we should show the create player option
@@ -566,78 +569,6 @@ export default {
       }
     },
 
-    async searchPlayers() {
-      if (!this.newPlayerName.trim()) {
-        this.playerSuggestions = [];
-        this.validationMessage = '';
-        this.playerNotFound = false;
-        this.playerAlreadyInTeam = false;
-        this.isSearchingPlayer = false;
-        return;
-      }
-
-      try {
-        // Load all players if not loaded
-        if (!this.allPlayers || this.allPlayers.length === 0) {
-          await this.loadAllPlayers();
-        }
-
-        // Filter players based on search term
-        const searchTerm = this.newPlayerName.toLowerCase().trim();
-        const matchingPlayers = this.allPlayers.filter(player =>
-          player && player.Name && player.Name.toLowerCase().includes(searchTerm)
-        );
-
-        this.playerSuggestions = matchingPlayers;
-
-        // Set validation states
-        if (matchingPlayers.length === 0) {
-          this.playerNotFound = true;
-          this.playerAlreadyInTeam = false;
-          this.validationMessage = 'No players found with that name';
-        } else if (matchingPlayers.length === 1) {
-          const player = matchingPlayers[0];
-          this.playerNotFound = false;
-          this.playerAlreadyInTeam = this.isPlayerInCurrentTeam(player.Name);
-
-          if (this.playerAlreadyInTeam) {
-            this.validationMessage = `${player.Name} is already in the ${this.match.Teams[this.activeTeam].Colour} team`;
-          } else if (this.isPlayerInAnyTeam(player.Name)) {
-            this.validationMessage = `${player.Name} is already in another team`;
-          } else {
-            this.validationMessage = `${player.Name} - Ready to add`;
-          }
-        } else {
-          this.playerNotFound = false;
-          this.playerAlreadyInTeam = false;
-          this.validationMessage = `Found ${matchingPlayers.length} matching players`;
-        }
-      } catch (error) {
-        console.error('Error searching players:', error);
-        this.playerSuggestions = [];
-        this.validationMessage = 'Error searching players';
-        this.playerNotFound = true;
-      } finally {
-        this.isSearchingPlayer = false;
-      }
-    },
-
-    selectPlayerSuggestion(player) {
-      this.selectedPlayer = player;
-      this.newPlayerName = player.Name;
-      this.playerSuggestions = [player]; // Show only selected player
-      this.playerNotFound = false;
-      this.playerAlreadyInTeam = this.isPlayerInCurrentTeam(player.Name);
-
-      if (this.playerAlreadyInTeam) {
-        this.validationMessage = `${player.Name} is already in the ${this.match.Teams[this.activeTeam].Colour} team`;
-      } else if (this.isPlayerInAnyTeam(player.Name)) {
-        this.validationMessage = `${player.Name} is already in another team`;
-      } else {
-        this.validationMessage = `${player.Name} - Ready to add`;
-      }
-    },
-
     // Handle search input
     onPlayerSearch() {
       // Clear any existing timeout
@@ -714,12 +645,6 @@ export default {
       this.closeModal();
     },
 
-    // Select a player from the list
-    selectPlayer(player) {
-      this.selectedPlayer = player;
-      this.newPlayerName = player.Name; // For compatibility with existing code
-    },
-
     // Check if player is in current team
     isPlayerInCurrentTeam(playerName) {
       if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
@@ -740,47 +665,6 @@ export default {
           player.Name.toLowerCase() === playerName.toLowerCase()
         )
       );
-    },
-
-    // Add selected player to team
-    async addPlayer() {
-      if (!this.newPlayerName.trim()) {
-        this.showMessage('Please enter a player name', 'error');
-        return;
-      }
-
-      // If we have suggestions, use the first one or the selected one
-      let playerToAdd = this.selectedPlayer;
-
-      if (!playerToAdd && this.playerSuggestions.length === 1) {
-        playerToAdd = this.playerSuggestions[0];
-      }
-
-      if (!playerToAdd) {
-        // Try to find player by name
-        playerToAdd = this.allPlayers.find(p =>
-          p.Name.toLowerCase() === this.newPlayerName.toLowerCase().trim()
-        );
-      }
-
-      if (!this.match.Teams || !this.match.Teams[this.activeTeam]) {
-        console.error('Invalid team data');
-        return;
-      }
-
-      if (!this.match.Teams[this.activeTeam].Players) {
-        this.match.Teams[this.activeTeam].Players = [];
-      }
-
-      const newPlayer = {
-        ID: playerToAdd.ID,
-        Name: playerToAdd.Name,
-        GoalNumber: this.newPlayerGoals || 0
-      };
-
-      this.match.Teams[this.activeTeam].Players.push(newPlayer);
-      this.updateTeamScore();
-      this.closeModal();
     },
 
     // Show modal and load players
@@ -862,6 +746,7 @@ export default {
       this.isSaving = true;
       try {
         await updateMatch(this.match.ID, this.match);
+        this.matchSnapshot = JSON.stringify(this.match);
         this.showMessage('Match updated successfully!', 'success');
       } catch (error) {
         console.error('Error saving match:', error);
@@ -1227,9 +1112,31 @@ export default {
   flex: 1;
 }
 
+/* In the roster card header, stack name above goals instead of the
+   global .player-info row layout — and give it a real flex-basis so
+   overflow doesn't get shoved entirely onto the avatar/delete circles. */
+.player-header .player-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.125rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.player-header .player-name {
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
 .player-goals {
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.8rem;
+}
+
+.player-avatar {
+  flex-shrink: 0;
 }
 
 .btn-danger-icon {
@@ -1239,6 +1146,7 @@ export default {
   border-radius: 50%;
   width: 32px;
   height: 32px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
