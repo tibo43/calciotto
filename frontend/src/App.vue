@@ -42,9 +42,10 @@
                 </svg>
                 Matches
               </router-link>
-              <button 
-                @click="setActiveTab('Standings')" 
-                :class="{ 'active': activeTab === 'Standings' }"
+              <router-link
+                to="/standings"
+                @click="closeMenu"
+                :class="{ 'active': $route.name === 'Standings' }"
                 class="nav-button"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -54,7 +55,7 @@
                   <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                 </svg>
                 Standings
-              </button>
+              </router-link>
             </div>
 
             <!-- Actions -->
@@ -145,7 +146,7 @@ export default {
   computed: {
     isRouterRoute() {
       // Check if current route should be handled by router
-      return this.$route.name === 'MatchesAll' || this.$route.name === 'MatchDetails';
+      return this.$route.name === 'MatchesAll' || this.$route.name === 'MatchDetails' || this.$route.name === 'Standings';
     }
   },
   watch: {
@@ -184,15 +185,6 @@ export default {
     goHome() {
       this.$router.push('/');
       this.activeTab = 'matches';
-    },
-    setActiveTab(tab) {
-      this.activeTab = tab;
-      this.closeMenu();
-      
-      // If selecting matches tab, navigate to home route
-      if (tab === 'matches') {
-        this.$router.push('/');
-      }
     },
     toggleMenu() {
       this.isMenuOpen = !this.isMenuOpen;

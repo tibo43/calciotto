@@ -12,6 +12,11 @@ const routes = [
     name: 'MatchDetails',
     component: () => import('@/components/MatchDetails.vue'),
     props: true
+  },
+  {
+    path: '/standings',
+    name: 'Standings',
+    component: () => import('@/components/Standings.vue')
   }
 ];
 

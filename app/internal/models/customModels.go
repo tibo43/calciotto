@@ -34,3 +34,23 @@ type RowsMatchDetails struct {
 	PlayerName  string
 	GoalsScored int
 }
+
+// PointsStandingRow is one player's row in the win/draw/loss points standings.
+type PointsStandingRow struct {
+	PlayerID uuid.UUID `json:"PlayerID"`
+	Name     string    `json:"Name"`
+	Played   int       `json:"Played"`
+	Won      int       `json:"Won"`
+	Drawn    int       `json:"Drawn"`
+	Lost     int       `json:"Lost"`
+	GoalsFor int       `json:"GoalsFor"`
+	Points   int       `json:"Points"`
+}
+
+// ScorerRow is one player's row in the top-scorers ranking.
+type ScorerRow struct {
+	PlayerID uuid.UUID `json:"PlayerID"`
+	Name     string    `json:"Name"`
+	Played   int       `json:"Played"`
+	Goals    int       `json:"Goals"`
+}

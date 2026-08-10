@@ -125,3 +125,30 @@ export async function searchPlayerByName(playerName) {
     throw error;
   }
 }
+
+// Standings
+export const getPointsStandings = async () => {
+  try {
+    const response = await api.get(`/standings/points`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch points standings');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching points standings:', error);
+    throw error;
+  }
+};
+
+export const getScorers = async () => {
+  try {
+    const response = await api.get(`/standings/scorers`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch scorers');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching scorers:', error);
+    throw error;
+  }
+};
