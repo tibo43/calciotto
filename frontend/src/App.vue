@@ -86,6 +86,22 @@
 
             <!-- Actions -->
             <div class="nav-actions">
+              <!-- The group Matches/Standings are scoped to. Rendered even
+                   with a single group (one option) so it behaves the same the
+                   moment a second one is joined; only a player with no group
+                   at all gets nothing. -->
+              <select
+                v-if="groups.length"
+                class="group-select"
+                :value="activeGroupId"
+                @change="changeActiveGroup($event.target.value)"
+                aria-label="Active group"
+              >
+                <option v-for="group in groups" :key="group.id" :value="group.id">
+                  {{ group.name }}
+                </option>
+              </select>
+
               <button
                 class="btn-base btn-cancel btn-small logout-btn"
                 @click="logout"
@@ -165,7 +181,8 @@
 </template>
 
 <script>
-import { clearToken } from '@/services/api';
+import { clearToken, getToken } from '@/services/api';
+import { clearActiveGroupId, resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
 
 export default {
   name: 'App',
@@ -175,7 +192,9 @@ export default {
       activeTab: 'matches',
       isMenuOpen: false,
       isScrolled: false,
-      isDarkMode: false
+      isDarkMode: false,
+      groups: [],
+      activeGroupId: ''
     };
   },
   computed: {
@@ -185,12 +204,13 @@ export default {
     }
   },
   watch: {
-    '$route'(to) {
+    '$route'(to, from) {
       // Update activeTab when route changes
       if (to.name === 'MatchesAll') {
         this.activeTab = 'matches';
       }
       this.closeMenu();
+      this.refreshGroups(from);
     }
   },
   mounted() {
@@ -204,6 +224,8 @@ export default {
 
     // Add scroll listener
     window.addEventListener('scroll', this.handleScroll);
+
+    this.refreshGroups();
   },
   beforeUnmount() {
     window.removeEventListener('scroll', this.handleScroll);
@@ -235,8 +257,46 @@ export default {
       this.isDarkMode = !this.isDarkMode;
       localStorage.setItem('calciotto-theme', this.isDarkMode ? 'dark' : 'light');
     },
+    // App.vue outlives every route, so the selector has to be (re)filled on
+    // navigation and not only on mount: logging in doesn't remount it, it just
+    // pushes a route, and at mount time there was no token to call
+    // /groups/me with.
+    async refreshGroups(from) {
+      if (!getToken() || ['Login', 'Signup'].includes(this.$route.name)) {
+        this.groups = [];
+        this.activeGroupId = '';
+        return;
+      }
+      try {
+        // Groups.vue creates and joins without reloading the page, so the
+        // cached list is stale the moment we navigate away from it.
+        const force = Boolean(from) && from.name === 'Groups';
+        const { groups, activeGroupId } = await resolveActiveGroup({ force });
+        this.groups = groups;
+        this.activeGroupId = activeGroupId;
+      } catch (error) {
+        // The selector is a convenience; every view still falls back to the
+        // backend's own group resolution without it.
+        console.error('Error loading the group selector:', error);
+      }
+    },
+    changeActiveGroup(groupId) {
+      if (!groupId || groupId === this.activeGroupId) {
+        return;
+      }
+      setActiveGroupId(groupId);
+      // No store to notify: the scoped views read the active group once, in
+      // created(), so a full reload is what actually re-scopes the app.
+      window.location.reload();
+    },
     logout() {
       clearToken();
+      // The next account to log in on this browser must not inherit this
+      // one's group — the stale-id fallback would catch it, but only after a
+      // request scoped to a group they may not belong to.
+      clearActiveGroupId();
+      this.groups = [];
+      this.activeGroupId = '';
       this.$router.push('/login');
     }
   }
@@ -426,6 +486,29 @@ export default {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+.group-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  max-width: 12rem;
+  transition: all var(--transition-fast);
+}
+
+.group-select:hover {
+  border-color: var(--primary-color);
+}
+
+.group-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
 }
 
 .theme-toggle {
@@ -628,6 +711,11 @@ export default {
 
   .nav-container {
     padding: 0 1rem;
+  }
+
+  .group-select {
+    max-width: 7rem;
+    padding: 0.5rem;
   }
 }
 

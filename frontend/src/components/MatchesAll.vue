@@ -241,12 +241,16 @@
 
 <script>
 import { getMatchesDetails, createMatch } from '@/services/api';
+import { resolveActiveGroupId } from '@/services/activeGroup';
 
 export default {
   name: 'MatchesAll',
   data() {
     return {
       matches: [],
+      // Resolved once on load and reused for both listing and creating, so a
+      // match always gets created in the same group the list is showing.
+      activeGroupId: '',
       selectedMatch: null,
       isLoading: true,
       canScrollLeft: false,
@@ -264,6 +268,7 @@ export default {
     };
   },
   async created() {
+    this.activeGroupId = await resolveActiveGroupId();
     await this.loadMatches();
   },
   mounted() {
@@ -311,7 +316,7 @@ export default {
     async loadMatches() {
       this.isLoading = true;
       try {
-        const matches = await getMatchesDetails();
+        const matches = await getMatchesDetails(this.activeGroupId);
 
         // Validate matches data
         if (!Array.isArray(matches)) {
@@ -356,7 +361,7 @@ export default {
       this.match.Date = this.selectedDate;
       try {
         // Call your createMatch API function
-        const response = await createMatch(this.match);
+        const response = await createMatch(this.match, this.activeGroupId);
 
         if (response) {
           // Close modal

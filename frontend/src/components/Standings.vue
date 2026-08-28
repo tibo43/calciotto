@@ -118,6 +118,7 @@
 
 <script>
 import { getPointsStandings, getScorers, getSeasons } from '@/services/api';
+import { resolveActiveGroupId } from '@/services/activeGroup';
 
 export default {
   name: 'PlayerStandings',
@@ -127,6 +128,9 @@ export default {
       topScorers: [],
       seasons: [],
       selectedSeason: '',
+      // Seasons are derived from the group's own matches, so this has to be
+      // resolved before loadSeasons, not just before loadStandings.
+      activeGroupId: '',
       isLoading: true,
       activeSubTab: 'points',
       subTabs: [
@@ -136,13 +140,14 @@ export default {
     };
   },
   async created() {
+    this.activeGroupId = await resolveActiveGroupId();
     await this.loadSeasons();
     await this.loadStandings();
   },
   methods: {
     async loadSeasons() {
       try {
-        const seasons = await getSeasons();
+        const seasons = await getSeasons(this.activeGroupId);
         this.seasons = Array.isArray(seasons) ? seasons : [];
       } catch (error) {
         console.error('Error fetching seasons:', error);
@@ -158,8 +163,8 @@ export default {
       this.isLoading = true;
       try {
         const [points, scorers] = await Promise.all([
-          getPointsStandings(this.selectedSeason),
-          getScorers(this.selectedSeason)
+          getPointsStandings(this.selectedSeason, this.activeGroupId),
+          getScorers(this.selectedSeason, this.activeGroupId)
         ]);
         this.pointsStandings = Array.isArray(points) ? points : [];
         this.topScorers = Array.isArray(scorers) ? scorers : [];

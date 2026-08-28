@@ -366,6 +366,7 @@
 
 <script>
 import { getMatchDetailsByID, updateMatch, getPlayers, createPlayer } from '@/services/api';
+import { resolveActiveGroupId } from '@/services/activeGroup';
 
 export default {
   name: 'MatchDetail',
@@ -414,7 +415,12 @@ export default {
       this.isLoading = true;
       try {
         const matchId = this.$route.params.id;
-        this.match = await getMatchDetailsByID(matchId);
+        // GetMatchDetailsByID filters on (match id, group id), so a match from
+        // another group reads as "not found" — which is what we want: the URL
+        // alone must not pull a match out of a group we aren't scoped to.
+        // updateMatch needs no group of its own; it posts back this.match,
+        // whose GroupID already comes from this response.
+        this.match = await getMatchDetailsByID(matchId, await resolveActiveGroupId());
 
         // Ensure each player has GoalNumber property
         if (this.match && this.match.Teams) {

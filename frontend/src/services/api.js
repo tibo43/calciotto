@@ -48,10 +48,28 @@ export const signup = async (playerId, email, password) => {
   return response.data;
 };
 
+// Builds a `?a=b&c=d` suffix out of the params that actually have a value.
+//
+// Both params it carries are optional in the same way — leaving one out asks
+// the backend for its own default rather than for nothing. No season means
+// every season mixed together (the behaviour before seasons existed); no
+// group_id means the caller's first group (resolveGroupID's fallback), which
+// is only ever the right answer for a player who belongs to a single group.
+const query = (params) => {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) {
+      search.append(key, value);
+    }
+  });
+  const queryString = search.toString();
+  return queryString ? `?${queryString}` : '';
+};
+
 // Matches
-export const getMatchesDetails = async () => {
+export const getMatchesDetails = async (groupId) => {
   try {
-    const response = await api.get(`/matches/details`);
+    const response = await api.get(`/matches/details${query({ group_id: groupId })}`);
     if (response.status !== 200) {
       throw new Error('Failed to fetch matches details');
     }
@@ -63,9 +81,9 @@ export const getMatchesDetails = async () => {
 };
 
 // New function for getting single match details by ID
-export const getMatchDetailsByID = async (matchId) => {
+export const getMatchDetailsByID = async (matchId, groupId) => {
   try {
-    const response = await api.get(`/matches/${matchId}/details`);
+    const response = await api.get(`/matches/${matchId}/details${query({ group_id: groupId })}`);
     if (response.status !== 200) {
       throw new Error('Failed to fetch match details');
     }
@@ -76,10 +94,15 @@ export const getMatchDetailsByID = async (matchId) => {
   }
 };
 
-// New function for updating a match
-export const createMatch = async (matchData) => {
+// The match is created in groupId when one is given. The key has to be the
+// snake_case `group_id`: CreateMatch binds the body into models.Match, whose
+// tag is `json:"group_id"`, and Go's case-insensitive fallback does not see
+// past the underscore — a `GroupID` key would silently bind to nothing and
+// the match would land in the player's first group instead.
+export const createMatch = async (matchData, groupId) => {
   try {
-    const response = await api.post(`/matches`, matchData);
+    const payload = groupId ? { ...matchData, group_id: groupId } : matchData;
+    const response = await api.post(`/matches`, payload);
     if (response.status !== 200) {
       throw new Error('Failed to create match');
     }
@@ -164,13 +187,9 @@ export async function searchPlayerByName(playerName) {
 }
 
 // Standings
-// season is optional: leaving it out asks the backend for every match, all
-// seasons mixed together (the behaviour before seasons existed).
-const seasonQuery = (season) => (season ? `?season=${encodeURIComponent(season)}` : '');
-
-export const getPointsStandings = async (season) => {
+export const getPointsStandings = async (season, groupId) => {
   try {
-    const response = await api.get(`/standings/points${seasonQuery(season)}`);
+    const response = await api.get(`/standings/points${query({ season, group_id: groupId })}`);
     if (response.status !== 200) {
       throw new Error('Failed to fetch points standings');
     }
@@ -181,9 +200,9 @@ export const getPointsStandings = async (season) => {
   }
 };
 
-export const getScorers = async (season) => {
+export const getScorers = async (season, groupId) => {
   try {
-    const response = await api.get(`/standings/scorers${seasonQuery(season)}`);
+    const response = await api.get(`/standings/scorers${query({ season, group_id: groupId })}`);
     if (response.status !== 200) {
       throw new Error('Failed to fetch scorers');
     }
@@ -194,9 +213,9 @@ export const getScorers = async (season) => {
   }
 };
 
-export const getSeasons = async () => {
+export const getSeasons = async (groupId) => {
   try {
-    const response = await api.get(`/standings/seasons`);
+    const response = await api.get(`/standings/seasons${query({ group_id: groupId })}`);
     if (response.status !== 200) {
       throw new Error('Failed to fetch seasons');
     }
@@ -213,7 +232,7 @@ export const getSeasons = async () => {
 // optional and applies to both the overall totals and the per-group rows.
 export const getPlayerProfile = async (season) => {
   try {
-    const response = await api.get(`/players/me/stats${seasonQuery(season)}`);
+    const response = await api.get(`/players/me/stats${query({ season })}`);
     if (response.status !== 200) {
       throw new Error('Failed to fetch player profile');
     }
