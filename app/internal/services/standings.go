@@ -10,11 +10,17 @@ import (
 )
 
 type StandingsService struct {
-	MatchService *MatchService
+	MatchService      *MatchService
+	MembershipService *GroupMembershipService
+	PlayerService     *PlayerService
 }
 
-func NewStandingsService(db *gorm.DB) *StandingsService {
-	return &StandingsService{MatchService: NewMatchService(db)}
+func NewStandingsService(db *gorm.DB, membershipService *GroupMembershipService) *StandingsService {
+	return &StandingsService{
+		MatchService:      NewMatchService(db),
+		MembershipService: membershipService,
+		PlayerService:     NewPlayerService(db),
+	}
 }
 
 func (s *StandingsService) GetPointsStandings(groupID uuid.UUID, season string) ([]models.PointsStandingRow, error) {
@@ -42,6 +48,73 @@ func (s *StandingsService) GetSeasons(groupID uuid.UUID) ([]string, error) {
 		return nil, err
 	}
 	return ComputeSeasons(matches), nil
+}
+
+// GetPlayerProfile returns one player's record across every group they belong
+// to. Overall and PerGroup are computed from the same matches, so they always
+// agree: each group's matches are loaded and season-filtered exactly like the
+// group-scoped standings endpoints do, then ComputePointsStandings runs once
+// per group for PerGroup and once over the concatenation for Overall.
+//
+// A group the player is a member of but has never played a match in still
+// gets a PerGroup entry, zeroed — being in the group is what puts the row
+// there, not having played. Same for Overall: a player with no matches at all
+// gets a zero row, not an error.
+func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (*models.PlayerProfileStats, error) {
+	groups, err := s.MembershipService.GetGroupsByPlayerID(playerID)
+	if err != nil {
+		return nil, err
+	}
+	// GetGroupsByPlayerID has no ORDER BY, so sort here — otherwise the
+	// profile's per-group table can reshuffle between two identical requests.
+	sort.Slice(groups, func(i, j int) bool { return groups[i].Name < groups[j].Name })
+
+	// The zero row still carries the player's identity, so a profile with no
+	// matches anywhere is a complete row of zeroes rather than a blank.
+	zeroRow := models.PointsStandingRow{PlayerID: playerID}
+	if player, err := s.PlayerService.GetPlayerByID(playerID); err == nil {
+		zeroRow.Name = player.Name
+	}
+
+	profile := &models.PlayerProfileStats{
+		Overall:  zeroRow,
+		PerGroup: make([]models.PlayerGroupStanding, 0, len(groups)),
+	}
+
+	var allMatches []models.MatchWithDetails
+	for _, group := range groups {
+		matches, err := s.MatchService.GetMatchesDetails(group.ID)
+		if err != nil {
+			return nil, err
+		}
+		matches = FilterMatchesBySeason(matches, season)
+		allMatches = append(allMatches, matches...)
+
+		row := zeroRow
+		if found := findPointsRow(ComputePointsStandings(matches), playerID); found != nil {
+			row = *found
+		}
+		profile.PerGroup = append(profile.PerGroup, models.PlayerGroupStanding{
+			PointsStandingRow: row,
+			GroupID:           group.ID,
+			GroupName:         group.Name,
+		})
+	}
+
+	if found := findPointsRow(ComputePointsStandings(allMatches), playerID); found != nil {
+		profile.Overall = *found
+	}
+	return profile, nil
+}
+
+// findPointsRow picks one player out of a computed standings table.
+func findPointsRow(rows []models.PointsStandingRow, playerID uuid.UUID) *models.PointsStandingRow {
+	for i := range rows {
+		if rows[i].PlayerID == playerID {
+			return &rows[i]
+		}
+	}
+	return nil
 }
 
 // FilterMatchesBySeason keeps only the matches belonging to season (a label as

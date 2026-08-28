@@ -129,7 +129,7 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 	teamService := services.NewTeamService(tx)
 	playerService := services.NewPlayerService(tx)
 	matchService := services.NewMatchService(tx)
-	standingsService := services.NewStandingsService(tx)
+	standingsService := services.NewStandingsService(tx, services.NewGroupMembershipService(tx))
 
 	groupA, err := groupService.CreateGroup("Zzz Integration Scoped Group A")
 	if err != nil {

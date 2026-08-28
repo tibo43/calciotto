@@ -72,3 +72,15 @@ func (s *PlayerService) SearchPlayer(name string) (*models.PlayerCustom, error) 
 	}
 	return &models.PlayerCustom{ID: player.ID, Name: player.Name, GoalsScored: 0}, nil
 }
+
+// GetPlayerByID returns a player as a DTO, without Email — same reasoning as
+// SearchPlayer: Player.Email is account data and must not leak through
+// endpoints that only need a name.
+func (s *PlayerService) GetPlayerByID(id uuid.UUID) (*models.PlayerCustom, error) {
+	var player models.Player
+	result := s.DB.First(&player, "id = ?", id)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &models.PlayerCustom{ID: player.ID, Name: player.Name, GoalsScored: 0}, nil
+}

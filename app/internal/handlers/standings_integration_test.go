@@ -23,7 +23,7 @@ func newStandingsTestRouter(tx *gorm.DB, authService *services.AuthService, memb
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(tx), membershipService)
+	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(tx, membershipService), membershipService)
 	authRequired := handlers.AuthMiddleware(authService)
 	requireGroupMember := handlers.RequireGroupMembership(membershipService)
 

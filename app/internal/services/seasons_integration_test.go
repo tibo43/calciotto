@@ -21,7 +21,7 @@ func TestStandings_Integration_ScopedPerSeason(t *testing.T) {
 	teamService := services.NewTeamService(tx)
 	playerService := services.NewPlayerService(tx)
 	matchService := services.NewMatchService(tx)
-	standingsService := services.NewStandingsService(tx)
+	standingsService := services.NewStandingsService(tx, services.NewGroupMembershipService(tx))
 
 	group, err := groupService.CreateGroup("Zzz Integration Season Group")
 	if err != nil {

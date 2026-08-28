@@ -206,3 +206,20 @@ export const getSeasons = async () => {
     throw error;
   }
 };
+
+// Player profile
+// Cross-group stats of the authenticated player themselves — the backend
+// takes the player from the JWT, so there is no id to pass here. season is
+// optional and applies to both the overall totals and the per-group rows.
+export const getPlayerProfile = async (season) => {
+  try {
+    const response = await api.get(`/players/me/stats${seasonQuery(season)}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch player profile');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching player profile:', error);
+    throw error;
+  }
+};

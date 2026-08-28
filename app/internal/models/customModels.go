@@ -56,3 +56,21 @@ type ScorerRow struct {
 	Played   int       `json:"Played"`
 	Goals    int       `json:"Goals"`
 }
+
+// PlayerGroupStanding is one player's standings row inside a single group,
+// tagged with the group it belongs to. The cross-group player profile needs
+// the same shape as PointsStandingRow repeated once per group, so it embeds
+// the row rather than restating its eight fields (the JSON stays flat).
+type PlayerGroupStanding struct {
+	PointsStandingRow
+	GroupID   uuid.UUID `json:"GroupID"`
+	GroupName string    `json:"GroupName"`
+}
+
+// PlayerProfileStats is one player's record across every group they belong
+// to: Overall counts all of those groups' matches together, PerGroup breaks
+// the same period down group by group.
+type PlayerProfileStats struct {
+	Overall  PointsStandingRow     `json:"Overall"`
+	PerGroup []PlayerGroupStanding `json:"PerGroup"`
+}

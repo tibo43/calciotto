@@ -46,7 +46,7 @@ func main() {
 	groupHandler := handlers.NewGroupHandler(groupService, groupMembershipService)
 	teamHandler := handlers.NewTeamHandler(services.NewTeamService(db))
 	matchHandler := handlers.NewMatchHandler(services.NewMatchService(db), groupMembershipService)
-	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(db), groupMembershipService)
+	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(db, groupMembershipService), groupMembershipService)
 	authService := services.NewAuthService(db, jwtSecret)
 	authHandler := handlers.NewAuthHandler(authService)
 
@@ -60,6 +60,11 @@ func main() {
 	r.POST("/players", playerHandler.CreatePlayer)
 	r.GET("/players", playerHandler.GetPlayers)
 	r.GET("/players/search", playerHandler.SearchPlayer)
+	// Cross-group profile of the caller themselves: authRequired only, with no
+	// requireGroupMember — there is no single group_id to authorize against
+	// here, and the handler only ever reports on the groups the JWT's own
+	// player belongs to (see StandingsHandler.GetPlayerProfile).
+	r.GET("/players/me/stats", authRequired, standingsHandler.GetPlayerProfile)
 
 	// Groups
 	r.POST("/groups", groupHandler.CreateGroup)

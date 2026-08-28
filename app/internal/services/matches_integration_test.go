@@ -21,7 +21,7 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 	teamService := services.NewTeamService(tx)
 	playerService := services.NewPlayerService(tx)
 	matchService := services.NewMatchService(tx)
-	standingsService := services.NewStandingsService(tx)
+	standingsService := services.NewStandingsService(tx, services.NewGroupMembershipService(tx))
 
 	group, err := groupService.CreateGroup("Zzz Integration Group")
 	if err != nil {
