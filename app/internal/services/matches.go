@@ -2,11 +2,20 @@ package services
 
 import (
 	"app/internal/models"
+	"errors"
 	"sort"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+// ErrMatchNotFound is returned when the requested match either does not
+// exist at all, or exists but does not belong to the group it was requested
+// under — the latter is the mechanism that stops a match ID from one group
+// from being used to read another group's data, so it deliberately shares
+// the same sentinel/404 as a plain missing match rather than leaking a
+// distinct "forbidden" signal.
+var ErrMatchNotFound = errors.New("match not found")
 
 type MatchService struct {
 	DB *gorm.DB
@@ -187,7 +196,7 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 	}
 
 	if len(rowsMatch) == 0 {
-		return nil, gorm.ErrRecordNotFound
+		return nil, ErrMatchNotFound
 	}
 
 	// Initialisez l'objet match

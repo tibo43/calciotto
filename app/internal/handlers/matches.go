@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"app/internal/models"
@@ -81,7 +82,12 @@ func (h *MatchHandler) GetMatchDetailsByID(c *gin.Context) {
 	}
 	matches, err := h.Service.GetMatchDetailsByID(id, groupID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		switch {
+		case errors.Is(err, services.ErrMatchNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 	c.JSON(http.StatusOK, matches)

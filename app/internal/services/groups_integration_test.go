@@ -213,9 +213,11 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 		t.Fatalf("GetMatchesDetails(groupB) = %+v, want only matchB", matchesB)
 	}
 
-	// Fetching group A's match while scoped to group B must behave as not found.
-	if _, err := matchService.GetMatchDetailsByID(matchAID, groupB.ID); err == nil {
-		t.Error("expected GetMatchDetailsByID(matchA, groupB) to fail, got nil error")
+	// Fetching group A's match while scoped to group B must behave as not
+	// found — specifically services.ErrMatchNotFound, so the handler can map
+	// it to a 404 rather than a generic 500.
+	if _, err := matchService.GetMatchDetailsByID(matchAID, groupB.ID); !errors.Is(err, services.ErrMatchNotFound) {
+		t.Errorf("expected GetMatchDetailsByID(matchA, groupB) to fail with ErrMatchNotFound, got: %v", err)
 	}
 
 	// Standings must be computed per group: bob lost in group A (0 points) but

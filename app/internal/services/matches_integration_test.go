@@ -10,7 +10,6 @@ import (
 	"app/internal/testutil"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 func TestMatchLifecycle_Integration(t *testing.T) {
@@ -169,8 +168,8 @@ func TestGetMatchDetailsByID_Integration_NotFound(t *testing.T) {
 	matchService := services.NewMatchService(tx)
 
 	_, err := matchService.GetMatchDetailsByID(uuid.New(), uuid.New())
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		t.Errorf("GetMatchDetailsByID(random id) error = %v, want gorm.ErrRecordNotFound", err)
+	if !errors.Is(err, services.ErrMatchNotFound) {
+		t.Errorf("GetMatchDetailsByID(random id) error = %v, want services.ErrMatchNotFound", err)
 	}
 }
 
@@ -198,8 +197,8 @@ func TestGetMatchDetailsByID_Integration_WrongGroupNotFound(t *testing.T) {
 	}
 
 	_, err = matchService.GetMatchDetailsByID(matchID, groupB.ID)
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		t.Errorf("GetMatchDetailsByID(match from group A, group B) error = %v, want gorm.ErrRecordNotFound", err)
+	if !errors.Is(err, services.ErrMatchNotFound) {
+		t.Errorf("GetMatchDetailsByID(match from group A, group B) error = %v, want services.ErrMatchNotFound", err)
 	}
 }
 
