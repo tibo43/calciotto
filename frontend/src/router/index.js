@@ -38,6 +38,16 @@ const routes = [
     path: '/signup',
     name: 'Signup',
     component: () => import('@/components/Signup.vue')
+  },
+  {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: () => import('@/components/ForgotPassword.vue')
+  },
+  {
+    path: '/reset-password',
+    name: 'ResetPassword',
+    component: () => import('@/components/ResetPassword.vue')
   }
 ];
 
@@ -47,7 +57,10 @@ const router = createRouter({
 });
 
 router.beforeEach((to) => {
-  const isPublic = to.name === 'Login' || to.name === 'Signup';
+  // The password-reset pages are public for the same reason Login/Signup are:
+  // someone who lost their password has no token to be let through with.
+  const publicRoutes = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
+  const isPublic = publicRoutes.includes(to.name);
   if (!isPublic && !getToken()) {
     return { name: 'Login' };
   }

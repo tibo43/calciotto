@@ -200,7 +200,7 @@ export default {
   computed: {
     isRouterRoute() {
       // Check if current route should be handled by router
-      return ['MatchesAll', 'MatchDetails', 'Standings', 'Groups', 'Profile', 'Login', 'Signup'].includes(this.$route.name);
+      return ['MatchesAll', 'MatchDetails', 'Standings', 'Groups', 'Profile', 'Login', 'Signup', 'ForgotPassword', 'ResetPassword'].includes(this.$route.name);
     }
   },
   watch: {
@@ -262,7 +262,7 @@ export default {
     // pushes a route, and at mount time there was no token to call
     // /groups/me with.
     async refreshGroups(from) {
-      if (!getToken() || ['Login', 'Signup'].includes(this.$route.name)) {
+      if (!getToken() || ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'].includes(this.$route.name)) {
         this.groups = [];
         this.activeGroupId = '';
         return;

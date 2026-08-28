@@ -48,6 +48,21 @@ export const signup = async (playerId, email, password) => {
   return response.data;
 };
 
+// Always resolves with the same generic message whether or not the email is
+// registered — the backend deliberately doesn't say, so callers must not try to
+// infer it either.
+export const forgotPassword = async (email) => {
+  const response = await api.post('/auth/forgot-password', { email });
+  return response.data;
+};
+
+// 400 covers every token failure alike (unknown, expired, already used) — the
+// backend gives one generic message on purpose.
+export const resetPassword = async (token, newPassword) => {
+  const response = await api.post('/auth/reset-password', { token, new_password: newPassword });
+  return response.data;
+};
+
 // Builds a `?a=b&c=d` suffix out of the params that actually have a value.
 //
 // Both params it carries are optional in the same way — leaving one out asks

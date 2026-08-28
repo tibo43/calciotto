@@ -29,6 +29,29 @@ type Player struct {
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:PlayerID"`
 }
 
+// PasswordResetToken matérialise un lien "mot de passe oublié" à usage unique,
+// émis par AuthService.ForgotPassword et consommé par ResetPassword.
+//
+// TokenHash contient le SHA-256 (hex) du token brut, jamais le token lui-même :
+// une fuite de cette table ne permet donc pas de forger un lien valide. Le hash
+// est volontairement rapide, contrairement à Player.PasswordHash qui utilise
+// bcrypt — un token de reset est généré aléatoirement (32 octets d'entropie),
+// donc hors de portée d'une attaque par dictionnaire ou par force brute, là où
+// un mot de passe choisi par un humain a besoin du coût délibéré de bcrypt.
+// bcrypt n'apporterait rien ici et rendrait chaque vérification inutilement
+// lente.
+//
+// UsedAt reste nil tant que le lien n'a pas servi : un token est valide s'il
+// existe, qu'il n'est pas expiré (ExpiresAt) et qu'il n'a pas déjà été
+// consommé.
+type PasswordResetToken struct {
+	BaseModel
+	PlayerID  uuid.UUID  `gorm:"type:uuid;index" json:"player_id"`
+	TokenHash string     `gorm:"type:string;uniqueIndex" json:"-"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	UsedAt    *time.Time `json:"used_at,omitempty"`
+}
+
 // Group représente un groupe de joueurs (ex: un club, une salle). Team et
 // Match sont scopés par groupe ; un Player peut appartenir à plusieurs
 // groupes via GroupMembership.

@@ -112,6 +112,10 @@ func main() {
 	// Auth
 	r.POST("/auth/signup", authHandler.Signup)
 	r.POST("/auth/login", authHandler.Login)
+	// Public like signup/login above: someone who forgot their password has by
+	// definition no token to authenticate the request with.
+	r.POST("/auth/forgot-password", authHandler.ForgotPassword)
+	r.POST("/auth/reset-password", authHandler.ResetPassword)
 	// Add more routes as needed
 
 	// Start server
