@@ -13,6 +13,17 @@ import (
 	"gorm.io/gorm"
 )
 
+// seedAuthSecret signs tokens AuthService.Signup never issues here — the seed
+// script only claims each player's account, it never logs in — so this value
+// has no security relevance and doesn't need to match the backend's real
+// JWT_SECRET.
+const seedAuthSecret = "seed-only-unused-jwt-secret"
+
+// seedPassword is the shared password for every seeded player account, so
+// anyone can log in as any of them locally without juggling per-player
+// credentials.
+const seedPassword = "user1234"
+
 var playerNames = []string{
 	"thibaut", "matthias", "manfredi", "damien", "vincent", "pierre",
 	"anthony", "jacopo", "mattheo", "ryan", "connor", "marcos",
@@ -48,6 +59,7 @@ func main() {
 	teamService := services.NewTeamService(db)
 	matchService := services.NewMatchService(db)
 	matchPlayerService := services.NewMatchPlayerService(db)
+	authService := services.NewAuthService(db, seedAuthSecret)
 
 	group, err := groupService.CreateGroup("Default")
 	if err != nil {
@@ -64,9 +76,13 @@ func main() {
 		if err := groupMembershipService.AddPlayerToGroup(group.ID, id); err != nil {
 			log.Fatalf("failed to add player %q to group: %v", name, err)
 		}
+		email := name + "@mail.com"
+		if err := authService.Signup(id, email, seedPassword); err != nil {
+			log.Fatalf("failed to sign up player %q: %v", name, err)
+		}
 		players = append(players, models.Player{BaseModel: models.BaseModel{ID: id}, Name: name})
 	}
-	log.Printf("created %d players", len(players))
+	log.Printf("created %d players, each with an account (name@mail.com / %s)", len(players), seedPassword)
 
 	teams, err := teamService.GetTeamsByGroupID(group.ID)
 	if err != nil {
