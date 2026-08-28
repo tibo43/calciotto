@@ -75,9 +75,27 @@ type MatchPlayer struct {
 // par GORM à la création) permet de déterminer quel groupe un joueur a
 // rejoint en premier — l'ID d'un groupe est un UUID aléatoire (v4), donc trié
 // par ID ne dit rien sur l'ordre d'appartenance ou de création.
+//
+// Role distingue le créateur d'un groupe (RoleOwner) du reste des membres
+// (RoleMember) — c'est une simple string plutôt qu'un type enum Go dédié,
+// comme Team.Colour ci-dessus : le repo n'a pas de convention pour les enums
+// et deux valeurs constantes suffisent ici. Le rôle n'a aujourd'hui aucun
+// consommateur câblé sur une route (voir RequireGroupOwner dans
+// internal/handlers/groupowner.go) ; il prépare seulement les futures
+// features "quitter un groupe" / "retirer un membre".
 type GroupMembership struct {
 	BaseModel
 	GroupID   uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_group_membership_group_player" json:"group_id"`
 	PlayerID  uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_group_membership_group_player" json:"player_id"`
+	Role      string    `gorm:"type:string;not null;default:member" json:"role"`
 	CreatedAt time.Time `json:"-"`
 }
+
+// RoleOwner et RoleMember sont les deux seules valeurs valides de
+// GroupMembership.Role. Le créateur d'un groupe (POST /groups) devient
+// RoleOwner ; tout autre joueur ajouté (POST /groups/join, POST
+// /groups/:id/players) devient RoleMember.
+const (
+	RoleOwner  = "owner"
+	RoleMember = "member"
+)

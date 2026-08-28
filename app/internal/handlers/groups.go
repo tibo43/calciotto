@@ -48,7 +48,7 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 		return
 	}
 
-	if err := h.MembershipService.AddPlayerToGroup(created.ID, playerID); err != nil {
+	if err := h.MembershipService.AddPlayerToGroupWithRole(created.ID, playerID, models.RoleOwner); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

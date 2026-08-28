@@ -15,10 +15,23 @@ func NewGroupMembershipService(db *gorm.DB) *GroupMembershipService {
 	return &GroupMembershipService{DB: db}
 }
 
-// AddPlayerToGroup adds a player to a group. Duplicate memberships are
-// rejected by the DB-level unique index on (group_id, player_id).
+// AddPlayerToGroup adds a player to a group as a plain member. Duplicate
+// memberships are rejected by the DB-level unique index on
+// (group_id, player_id). It's a thin wrapper over AddPlayerToGroupWithRole
+// kept at this signature because too many call sites depend on it
+// (PlayerHandler.CreatePlayer, GroupHandler.JoinGroup/AddPlayerToGroup,
+// cmd/seed/main.go, several tests) — GroupHandler.CreateGroup is the only
+// caller that needs a different role, and calls AddPlayerToGroupWithRole
+// directly instead.
 func (s *GroupMembershipService) AddPlayerToGroup(groupID, playerID uuid.UUID) error {
-	membership := &models.GroupMembership{GroupID: groupID, PlayerID: playerID}
+	return s.AddPlayerToGroupWithRole(groupID, playerID, models.RoleMember)
+}
+
+// AddPlayerToGroupWithRole adds a player to a group with the given role.
+// Duplicate memberships are rejected by the DB-level unique index on
+// (group_id, player_id).
+func (s *GroupMembershipService) AddPlayerToGroupWithRole(groupID, playerID uuid.UUID, role string) error {
+	membership := &models.GroupMembership{GroupID: groupID, PlayerID: playerID, Role: role}
 	result := s.DB.Create(membership)
 	if result.Error != nil {
 		return result.Error
@@ -48,6 +61,21 @@ func (s *GroupMembershipService) IsMember(groupID, playerID uuid.UUID) (bool, er
 		return false, result.Error
 	}
 	return count > 0, nil
+}
+
+// GetRole returns playerID's role within groupID. It returns an empty string
+// and gorm.ErrRecordNotFound if the player doesn't belong to the group at
+// all — mirrors the query IsMember runs, but selects the role instead of
+// just counting rows.
+func (s *GroupMembershipService) GetRole(groupID, playerID uuid.UUID) (string, error) {
+	var membership models.GroupMembership
+	result := s.DB.
+		Where("group_id = ? AND player_id = ?", groupID, playerID).
+		First(&membership)
+	if result.Error != nil {
+		return "", result.Error
+	}
+	return membership.Role, nil
 }
 
 // GetFirstGroupForPlayer returns the group playerID joined first (by
