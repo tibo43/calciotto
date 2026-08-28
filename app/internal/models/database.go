@@ -16,10 +16,14 @@ func (bm *BaseModel) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// Player représente un joueur.
+// Player représente un joueur. Email/PasswordHash restent nuls tant que le
+// joueur n'a pas "réclamé" son compte via AuthService.Signup — un Player
+// peut donc exister sans jamais être associé à des identifiants de connexion.
 type Player struct {
 	BaseModel
 	Name             string        `gorm:"type:string;uniqueIndex" json:"name"`
+	Email            *string       `gorm:"type:string;uniqueIndex" json:"email,omitempty"`
+	PasswordHash     string        `gorm:"type:string" json:"-"`
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:PlayerID"`
 }
 

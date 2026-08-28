@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"app/internal/handlers"
 	"app/internal/services"
@@ -31,6 +32,13 @@ func main() {
 		AllowCredentials: true,
 	}))
 
+	// JWT_SECRET has no hardcoded fallback: an empty signing key would let
+	// anyone forge tokens, so fail fast at startup instead of running insecure.
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET environment variable is required")
+	}
+
 	// Initialize handlers
 	groupService := services.NewGroupService(db)
 	groupMembershipService := services.NewGroupMembershipService(db)
@@ -39,6 +47,7 @@ func main() {
 	teamHandler := handlers.NewTeamHandler(services.NewTeamService(db))
 	matchHandler := handlers.NewMatchHandler(services.NewMatchService(db), groupService)
 	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(db), groupService)
+	authHandler := handlers.NewAuthHandler(services.NewAuthService(db, jwtSecret))
 
 	// Setup routes
 	// Players
@@ -63,6 +72,10 @@ func main() {
 	// Standings
 	r.GET("/standings/points", standingsHandler.GetPointsStandings)
 	r.GET("/standings/scorers", standingsHandler.GetScorers)
+
+	// Auth
+	r.POST("/auth/signup", authHandler.Signup)
+	r.POST("/auth/login", authHandler.Login)
 	// Add more routes as needed
 
 	// Start server
