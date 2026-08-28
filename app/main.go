@@ -32,15 +32,27 @@ func main() {
 	}))
 
 	// Initialize handlers
-	playerHandler := handlers.NewPlayerHandler(services.NewPlayerService(db))
-	matchHandler := handlers.NewMatchHandler(services.NewMatchService(db))
-	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(db))
+	groupService := services.NewGroupService(db)
+	groupMembershipService := services.NewGroupMembershipService(db)
+	playerHandler := handlers.NewPlayerHandler(services.NewPlayerService(db), groupService, groupMembershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, groupMembershipService)
+	teamHandler := handlers.NewTeamHandler(services.NewTeamService(db))
+	matchHandler := handlers.NewMatchHandler(services.NewMatchService(db), groupService)
+	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(db), groupService)
 
 	// Setup routes
 	// Players
 	r.POST("/players", playerHandler.CreatePlayer)
 	r.GET("/players", playerHandler.GetPlayers)
 	r.GET("/players/search", playerHandler.SearchPlayer)
+
+	// Groups
+	r.POST("/groups", groupHandler.CreateGroup)
+	r.GET("/groups", groupHandler.GetGroups)
+	r.GET("/groups/:id", groupHandler.GetGroupByID)
+	r.GET("/groups/:id/teams", teamHandler.GetTeamsByGroup)
+	r.POST("/groups/:id/players", groupHandler.AddPlayerToGroup)
+	r.GET("/groups/:id/players", groupHandler.GetGroupMembers)
 
 	// Matches
 	r.POST("/matches", matchHandler.CreateMatch)

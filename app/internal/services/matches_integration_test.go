@@ -17,22 +17,26 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
+	groupService := services.NewGroupService(tx)
 	teamService := services.NewTeamService(tx)
 	playerService := services.NewPlayerService(tx)
 	matchService := services.NewMatchService(tx)
 	standingsService := services.NewStandingsService(tx)
 
-	// GetMatchesDetails/GetMatchDetailsByID backfill every match with *every*
-	// team in the system (see matches.go), so this app only behaves correctly
-	// today with exactly the 2 real teams seeded — reuse those rather than
-	// creating extra ones, which would make every match show 4 teams instead
-	// of 2 (a known limitation, not something this test should paper over).
-	teams, err := teamService.GetTeams()
+	group, err := groupService.CreateGroup("Zzz Integration Group")
 	if err != nil {
-		t.Fatalf("failed to load existing teams: %v", err)
+		t.Fatalf("failed to create group: %v", err)
+	}
+
+	// GetMatchesDetails/GetMatchDetailsByID backfill every match with every
+	// team *in that match's group* (see matches.go), and CreateGroup always
+	// creates exactly the 2 default teams (black/white) for a fresh group.
+	teams, err := teamService.GetTeamsByGroupID(group.ID)
+	if err != nil {
+		t.Fatalf("failed to load group's teams: %v", err)
 	}
 	if len(teams) != 2 {
-		t.Skipf("skipping: this test expects exactly 2 teams to exist (run `go run ./cmd/seed`), found %d", len(teams))
+		t.Fatalf("expected CreateGroup to create exactly 2 teams, got %d", len(teams))
 	}
 	black, white := &teams[0], &teams[1]
 
@@ -45,7 +49,7 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 		t.Fatalf("failed to create player bob: %v", err)
 	}
 
-	matchID, err := matchService.CreateMatch(models.Date(time.Now()))
+	matchID, err := matchService.CreateMatch(models.Date(time.Now()), group.ID)
 	if err != nil {
 		t.Fatalf("failed to create match: %v", err)
 	}
@@ -62,7 +66,7 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 		t.Fatalf("UpdateMatch (step 1) returned error: %v", err)
 	}
 
-	details, err := matchService.GetMatchDetailsByID(matchID)
+	details, err := matchService.GetMatchDetailsByID(matchID, group.ID)
 	if err != nil {
 		t.Fatalf("GetMatchDetailsByID (step 1) returned error: %v", err)
 	}
@@ -78,7 +82,7 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 	}
 
 	// The list endpoint must show the same shape, not just the by-ID one.
-	all, err := matchService.GetMatchesDetails()
+	all, err := matchService.GetMatchesDetails(group.ID)
 	if err != nil {
 		t.Fatalf("GetMatchesDetails returned error: %v", err)
 	}
@@ -102,7 +106,7 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 		t.Fatalf("UpdateMatch (step 2) returned error: %v", err)
 	}
 
-	details, err = matchService.GetMatchDetailsByID(matchID)
+	details, err = matchService.GetMatchDetailsByID(matchID, group.ID)
 	if err != nil {
 		t.Fatalf("GetMatchDetailsByID (step 2) returned error: %v", err)
 	}
@@ -116,7 +120,7 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 
 	// The points standings and scorers should now reflect this match: black
 	// (3-1) won, so alice gets 3 points, bob gets 0; both have their goals.
-	points, err := standingsService.GetPointsStandings()
+	points, err := standingsService.GetPointsStandings(group.ID)
 	if err != nil {
 		t.Fatalf("GetPointsStandings returned error: %v", err)
 	}
@@ -128,7 +132,7 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 		t.Errorf("bob points row = %+v, want 0 points / 1 goal", bobPoints)
 	}
 
-	scorers, err := standingsService.GetScorers()
+	scorers, err := standingsService.GetScorers(group.ID)
 	if err != nil {
 		t.Fatalf("GetScorers returned error: %v", err)
 	}
@@ -164,9 +168,38 @@ func TestGetMatchDetailsByID_Integration_NotFound(t *testing.T) {
 	tx := testutil.BeginTx(t, db)
 	matchService := services.NewMatchService(tx)
 
-	_, err := matchService.GetMatchDetailsByID(uuid.New())
+	_, err := matchService.GetMatchDetailsByID(uuid.New(), uuid.New())
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Errorf("GetMatchDetailsByID(random id) error = %v, want gorm.ErrRecordNotFound", err)
+	}
+}
+
+// A match ID that exists, but in a different group than the one requested,
+// must be treated as not found — it must not leak across group boundaries.
+func TestGetMatchDetailsByID_Integration_WrongGroupNotFound(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+	matchService := services.NewMatchService(tx)
+
+	groupA, err := groupService.CreateGroup("Zzz Integration Group A")
+	if err != nil {
+		t.Fatalf("failed to create group A: %v", err)
+	}
+	groupB, err := groupService.CreateGroup("Zzz Integration Group B")
+	if err != nil {
+		t.Fatalf("failed to create group B: %v", err)
+	}
+
+	matchID, err := matchService.CreateMatch(models.Date(time.Now()), groupA.ID)
+	if err != nil {
+		t.Fatalf("failed to create match: %v", err)
+	}
+
+	_, err = matchService.GetMatchDetailsByID(matchID, groupB.ID)
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("GetMatchDetailsByID(match from group A, group B) error = %v, want gorm.ErrRecordNotFound", err)
 	}
 }
 

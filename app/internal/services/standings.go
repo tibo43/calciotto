@@ -17,16 +17,16 @@ func NewStandingsService(db *gorm.DB) *StandingsService {
 	return &StandingsService{MatchService: NewMatchService(db)}
 }
 
-func (s *StandingsService) GetPointsStandings() ([]models.PointsStandingRow, error) {
-	matches, err := s.MatchService.GetMatchesDetails()
+func (s *StandingsService) GetPointsStandings(groupID uuid.UUID) ([]models.PointsStandingRow, error) {
+	matches, err := s.MatchService.GetMatchesDetails(groupID)
 	if err != nil {
 		return nil, err
 	}
 	return ComputePointsStandings(matches), nil
 }
 
-func (s *StandingsService) GetScorers() ([]models.ScorerRow, error) {
-	matches, err := s.MatchService.GetMatchesDetails()
+func (s *StandingsService) GetScorers(groupID uuid.UUID) ([]models.ScorerRow, error) {
+	matches, err := s.MatchService.GetMatchesDetails(groupID)
 	if err != nil {
 		return nil, err
 	}

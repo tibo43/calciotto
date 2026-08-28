@@ -41,3 +41,14 @@ func (s *TeamService) GetTeamByID(id uuid.UUID) (*models.Team, error) {
 	}
 	return &team, nil
 }
+
+// GetTeamsByGroupID returns the teams belonging to a given group (normally
+// exactly the 2 default teams created alongside the group).
+func (s *TeamService) GetTeamsByGroupID(groupID uuid.UUID) ([]models.Team, error) {
+	var teams []models.Team
+	result := s.DB.Where("group_id = ?", groupID).Find(&teams)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return teams, nil
+}

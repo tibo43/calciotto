@@ -18,8 +18,6 @@ var playerNames = []string{
 	"anthony", "jacopo", "mattheo", "ryan", "connor", "marcos",
 }
 
-var teamColours = []string{"black", "white"}
-
 func main() {
 	reset := flag.Bool("reset", false, "wipe existing players/teams/matches before seeding")
 	matchCount := flag.Int("matches", 6, "number of past matches to generate")
@@ -45,9 +43,17 @@ func main() {
 	}
 
 	playerService := services.NewPlayerService(db)
+	groupService := services.NewGroupService(db)
+	groupMembershipService := services.NewGroupMembershipService(db)
 	teamService := services.NewTeamService(db)
 	matchService := services.NewMatchService(db)
 	matchPlayerService := services.NewMatchPlayerService(db)
+
+	group, err := groupService.CreateGroup("Default")
+	if err != nil {
+		log.Fatalf("failed to create default group: %v", err)
+	}
+	log.Printf("created group %q (%s)", group.Name, group.ID)
 
 	players := make([]models.Player, 0, len(playerNames))
 	for _, name := range playerNames {
@@ -55,22 +61,21 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to create player %q: %v", name, err)
 		}
+		if err := groupMembershipService.AddPlayerToGroup(group.ID, id); err != nil {
+			log.Fatalf("failed to add player %q to group: %v", name, err)
+		}
 		players = append(players, models.Player{BaseModel: models.BaseModel{ID: id}, Name: name})
 	}
 	log.Printf("created %d players", len(players))
 
-	teams := make([]models.Team, 0, len(teamColours))
-	for _, colour := range teamColours {
-		team := &models.Team{Colour: colour}
-		if err := teamService.CreateTeam(team); err != nil {
-			log.Fatalf("failed to create team %q: %v", colour, err)
-		}
-		teams = append(teams, *team)
+	teams, err := teamService.GetTeamsByGroupID(group.ID)
+	if err != nil {
+		log.Fatalf("failed to load group's teams: %v", err)
 	}
-	log.Printf("created %d teams", len(teams))
+	log.Printf("group has %d teams", len(teams))
 
 	for _, date := range lastSundays(*matchCount) {
-		matchID, err := matchService.CreateMatch(date)
+		matchID, err := matchService.CreateMatch(date, group.ID)
 		if err != nil {
 			log.Fatalf("failed to create match: %v", err)
 		}
@@ -103,7 +108,7 @@ func main() {
 
 // resetData wipes seeded tables in FK-safe order (children before parents).
 func resetData(db *gorm.DB) error {
-	for _, model := range []interface{}{&models.MatchPlayer{}, &models.Match{}, &models.Team{}, &models.Player{}} {
+	for _, model := range []interface{}{&models.MatchPlayer{}, &models.GroupMembership{}, &models.Match{}, &models.Team{}, &models.Player{}, &models.Group{}} {
 		if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(model).Error; err != nil {
 			return err
 		}

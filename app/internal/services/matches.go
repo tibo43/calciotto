@@ -16,9 +16,10 @@ func NewMatchService(db *gorm.DB) *MatchService {
 	return &MatchService{DB: db}
 }
 
-func (s *MatchService) CreateMatch(date models.Date) (uuid.UUID, error) {
+func (s *MatchService) CreateMatch(date models.Date, groupID uuid.UUID) (uuid.UUID, error) {
 	match := &models.Match{
-		Date: date,
+		GroupID: groupID,
+		Date:    date,
 	}
 	result := s.DB.Create(match)
 	if result.Error != nil {
@@ -27,12 +28,12 @@ func (s *MatchService) CreateMatch(date models.Date) (uuid.UUID, error) {
 	return match.ID, nil
 }
 
-func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
+func (s *MatchService) GetMatchesDetails(groupID uuid.UUID) ([]models.MatchWithDetails, error) {
 	var rowsMatches []models.RowsMatchDetails
 
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
-        SELECT matches.id as match_id, matches.date as match_date,
+        SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
                teams.id as team_id, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored
@@ -40,8 +41,9 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
         LEFT JOIN match_players ON match_players.match_id = matches.id
         LEFT JOIN teams ON teams.id = match_players.team_id
         LEFT JOIN players ON players.id = match_players.player_id
+		WHERE matches.group_id = ?
 		ORDER BY match_date DESC
-    `).Scan(&rowsMatches)
+    `, groupID).Scan(&rowsMatches)
 
 	if result.Error != nil {
 		return nil, result.Error
@@ -55,9 +57,10 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 		match, exists := matchesMap[rowMatches.MatchID]
 		if !exists {
 			match = &models.MatchWithDetails{
-				ID:    rowMatches.MatchID,
-				Date:  rowMatches.MatchDate,
-				Teams: []models.TeamWithPlayers{},
+				ID:      rowMatches.MatchID,
+				GroupID: rowMatches.MatchGroupID,
+				Date:    rowMatches.MatchDate,
+				Teams:   []models.TeamWithPlayers{},
 			}
 			matchesMap[rowMatches.MatchID] = match
 		}
@@ -89,9 +92,9 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 		})
 	}
 
-	// Fetch all teams once, used below to backfill any team that has no roster yet in a given match.
+	// Fetch this group's teams once, used below to backfill any team that has no roster yet in a given match.
 	var allTeams []models.Team
-	if result := s.DB.Find(&allTeams); result.Error != nil {
+	if result := s.DB.Where("group_id = ?", groupID).Find(&allTeams); result.Error != nil {
 		return nil, result.Error
 	}
 
@@ -159,22 +162,25 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 	return matches, nil
 }
 
-func (s *MatchService) GetMatchDetailsByID(id uuid.UUID) (*models.MatchWithDetails, error) {
+// GetMatchDetailsByID returns the match with the given id, scoped to
+// groupID — a match belonging to a different group is treated as not found,
+// so a match ID from one group can't be used to read another group's data.
+func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*models.MatchWithDetails, error) {
 
 	var rowsMatch []*models.RowsMatchDetails
 
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
-        SELECT matches.id as match_id, matches.date as match_date, 
-               teams.id as team_id, teams.colour as team_colour, 
+        SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
+               teams.id as team_id, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored
         FROM matches
         LEFT JOIN match_players ON match_players.match_id = matches.id
         LEFT JOIN teams ON teams.id = match_players.team_id
         LEFT JOIN players ON players.id = match_players.player_id
-		WHERE matches.id = ?
-		ORDER BY match_date DESC`, id).Scan(&rowsMatch)
+		WHERE matches.id = ? AND matches.group_id = ?
+		ORDER BY match_date DESC`, id, groupID).Scan(&rowsMatch)
 
 	if result.Error != nil {
 		return nil, result.Error
@@ -186,9 +192,10 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID) (*models.MatchWithDetai
 
 	// Initialisez l'objet match
 	match := &models.MatchWithDetails{
-		ID:    id,
-		Date:  rowsMatch[0].MatchDate,
-		Teams: []models.TeamWithPlayers{},
+		ID:      id,
+		GroupID: rowsMatch[0].MatchGroupID,
+		Date:    rowsMatch[0].MatchDate,
+		Teams:   []models.TeamWithPlayers{},
 	}
 
 	for _, rowMatch := range rowsMatch {
@@ -236,7 +243,7 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID) (*models.MatchWithDetai
 	// Backfill any team that has no players assigned yet in this match, so the match
 	// always shows every team instead of only the ones with a roster so far.
 	var allTeams []models.Team
-	if result := s.DB.Find(&allTeams); result.Error != nil {
+	if result := s.DB.Where("group_id = ?", groupID).Find(&allTeams); result.Error != nil {
 		return nil, result.Error
 	}
 	for _, allTeam := range allTeams {

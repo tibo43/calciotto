@@ -11,11 +11,12 @@ import (
 )
 
 type MatchHandler struct {
-	Service *services.MatchService
+	Service      *services.MatchService
+	GroupService *services.GroupService
 }
 
-func NewMatchHandler(service *services.MatchService) *MatchHandler {
-	return &MatchHandler{Service: service}
+func NewMatchHandler(service *services.MatchService, groupService *services.GroupService) *MatchHandler {
+	return &MatchHandler{Service: service, GroupService: groupService}
 }
 
 func (h *MatchHandler) CreateMatch(c *gin.Context) {
@@ -24,7 +25,18 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	id, err := h.Service.CreateMatch(match.Date)
+
+	groupID := match.GroupID
+	if groupID == uuid.Nil {
+		group, err := h.GroupService.GetDefaultGroup()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "no default group available: " + err.Error()})
+			return
+		}
+		groupID = group.ID
+	}
+
+	id, err := h.Service.CreateMatch(match.Date, groupID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -34,7 +46,11 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 }
 
 func (h *MatchHandler) GetMatchesDetails(c *gin.Context) {
-	matches, err := h.Service.GetMatchesDetails()
+	groupID, ok := resolveGroupID(c, h.GroupService)
+	if !ok {
+		return
+	}
+	matches, err := h.Service.GetMatchesDetails(groupID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -48,7 +64,11 @@ func (h *MatchHandler) GetMatchDetailsByID(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
 		return
 	}
-	matches, err := h.Service.GetMatchDetailsByID(id)
+	groupID, ok := resolveGroupID(c, h.GroupService)
+	if !ok {
+		return
+	}
+	matches, err := h.Service.GetMatchDetailsByID(id, groupID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

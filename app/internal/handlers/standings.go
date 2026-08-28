@@ -9,15 +9,20 @@ import (
 )
 
 type StandingsHandler struct {
-	Service *services.StandingsService
+	Service      *services.StandingsService
+	GroupService *services.GroupService
 }
 
-func NewStandingsHandler(service *services.StandingsService) *StandingsHandler {
-	return &StandingsHandler{Service: service}
+func NewStandingsHandler(service *services.StandingsService, groupService *services.GroupService) *StandingsHandler {
+	return &StandingsHandler{Service: service, GroupService: groupService}
 }
 
 func (h *StandingsHandler) GetPointsStandings(c *gin.Context) {
-	rows, err := h.Service.GetPointsStandings()
+	groupID, ok := resolveGroupID(c, h.GroupService)
+	if !ok {
+		return
+	}
+	rows, err := h.Service.GetPointsStandings(groupID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -26,7 +31,11 @@ func (h *StandingsHandler) GetPointsStandings(c *gin.Context) {
 }
 
 func (h *StandingsHandler) GetScorers(c *gin.Context) {
-	rows, err := h.Service.GetScorers()
+	groupID, ok := resolveGroupID(c, h.GroupService)
+	if !ok {
+		return
+	}
+	rows, err := h.Service.GetScorers(groupID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
