@@ -56,7 +56,9 @@ func main() {
 	requireGroupMemberByPathID := handlers.RequireGroupMembershipByPathParam(groupMembershipService, "id")
 
 	// Setup routes
-	// Players — public: no invite/bootstrapping flow yet, see CLAUDE.md.
+	// Players — public: creating a player still needs no token (the group
+	// invite flow below covers group membership, not player creation), see
+	// CLAUDE.md.
 	r.POST("/players", playerHandler.CreatePlayer)
 	r.GET("/players", playerHandler.GetPlayers)
 	r.GET("/players/search", playerHandler.SearchPlayer)
@@ -67,9 +69,18 @@ func main() {
 	r.GET("/players/me/stats", authRequired, standingsHandler.GetPlayerProfile)
 
 	// Groups
-	r.POST("/groups", groupHandler.CreateGroup)
+	// POST /groups and POST /groups/join take authRequired but no
+	// requireGroupMember: creating a group means there is no group to be a
+	// member of yet, and joining one by invite code is precisely the way in
+	// for a non-member. Together they are the group bootstrapping flow — the
+	// creator becomes the first member, then shares the invite code.
+	r.POST("/groups", authRequired, groupHandler.CreateGroup)
+	r.POST("/groups/join", authRequired, groupHandler.JoinGroup)
 	r.GET("/groups", groupHandler.GetGroups)
 	r.GET("/groups/:id", groupHandler.GetGroupByID)
+	// The invite code is a shared secret, so it gets its own member-only
+	// route rather than riding along in the (public) group JSON.
+	r.GET("/groups/:id/invite-code", authRequired, requireGroupMemberByPathID, groupHandler.GetInviteCode)
 	r.GET("/groups/:id/teams", authRequired, requireGroupMemberByPathID, teamHandler.GetTeamsByGroup)
 	r.POST("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.AddPlayerToGroup)
 	r.GET("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupMembers)

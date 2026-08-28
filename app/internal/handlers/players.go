@@ -31,10 +31,12 @@ func (h *PlayerHandler) GetPlayers(c *gin.Context) {
 
 // CreatePlayer creates a player, then attaches it to a group — group_id in
 // the body if provided, else GroupService.GetDefaultGroup(). This route is
-// intentionally public (no invite/bootstrapping flow yet, see CLAUDE.md), so
-// unlike the authenticated handlers there's no player_id to resolve a real
-// group from instead — GetDefaultGroup's "whichever group sorts first" quirk
-// is a known, accepted limitation here until this route requires auth too.
+// intentionally public: the invite-code flow (POST /groups/join) lets an
+// existing player join a group, but creating the player itself still requires
+// no token, so unlike the authenticated handlers there's no player_id to
+// resolve a real group from instead — GetDefaultGroup's "whichever group sorts
+// first" quirk is a known, accepted limitation here until this route requires
+// auth too.
 // PlayerService itself stays group-agnostic; the membership is created here
 // in the handler.
 func (h *PlayerHandler) CreatePlayer(c *gin.Context) {

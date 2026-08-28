@@ -32,9 +32,15 @@ type Player struct {
 // Group représente un groupe de joueurs (ex: un club, une salle). Team et
 // Match sont scopés par groupe ; un Player peut appartenir à plusieurs
 // groupes via GroupMembership.
+//
+// InviteCode est le secret partagé qui permet à un joueur de rejoindre le
+// groupe (POST /groups/join) : il porte donc `json:"-"` pour ne jamais
+// s'échapper via les routes publiques GET /groups et GET /groups/:id — seul
+// GET /groups/:id/invite-code, réservé aux membres, le renvoie explicitement.
 type Group struct {
 	BaseModel
-	Name string `gorm:"type:string" json:"name"`
+	Name       string `gorm:"type:string" json:"name"`
+	InviteCode string `gorm:"type:string;uniqueIndex" json:"-"`
 }
 
 // Team représente une équipe. Chaque groupe a exactement deux équipes

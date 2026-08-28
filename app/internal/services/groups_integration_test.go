@@ -1,6 +1,8 @@
 package services_test
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -242,5 +244,82 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 	}
 	if aliceInB := pointsRowByID(pointsB, aliceID); aliceInB != nil {
 		t.Errorf("alice never played in group B, but got a standings row: %+v", aliceInB)
+	}
+}
+
+// TestCreateGroup_Integration_GeneratesInviteCode pins the invite code's
+// shape: every group gets its own, drawn from the unambiguous alphabet, so it
+// can be read out loud or typed by hand without confusion.
+func TestCreateGroup_Integration_GeneratesInviteCode(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+
+	first, err := groupService.CreateGroup("Zzz Integration Invite Group A")
+	if err != nil {
+		t.Fatalf("CreateGroup returned error: %v", err)
+	}
+	second, err := groupService.CreateGroup("Zzz Integration Invite Group B")
+	if err != nil {
+		t.Fatalf("CreateGroup returned error: %v", err)
+	}
+
+	if first.InviteCode == second.InviteCode {
+		t.Errorf("two groups share the invite code %q", first.InviteCode)
+	}
+	for _, group := range []*models.Group{first, second} {
+		if len(group.InviteCode) != 8 {
+			t.Errorf("invite code %q has length %d, want 8", group.InviteCode, len(group.InviteCode))
+		}
+		if strings.ContainsAny(group.InviteCode, "01OIL") {
+			t.Errorf("invite code %q contains an ambiguous character", group.InviteCode)
+		}
+		if group.InviteCode != strings.ToUpper(group.InviteCode) {
+			t.Errorf("invite code %q is not upper-case, so case normalization on join would not match it", group.InviteCode)
+		}
+	}
+}
+
+// TestJoinByInviteCode_Integration covers the service's own contract: a valid
+// code enrolls the player, an unknown one and a second join report distinct
+// sentinel errors the handler maps to 404 and 400.
+func TestJoinByInviteCode_Integration(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+	playerService := services.NewPlayerService(tx)
+	membershipService := services.NewGroupMembershipService(tx)
+
+	group, err := groupService.CreateGroup("Zzz Integration Join Group")
+	if err != nil {
+		t.Fatalf("CreateGroup returned error: %v", err)
+	}
+	playerID, err := playerService.CreatePlayer("Zzz Integration Join Player")
+	if err != nil {
+		t.Fatalf("CreatePlayer returned error: %v", err)
+	}
+
+	joined, err := groupService.JoinByInviteCode(playerID, group.InviteCode)
+	if err != nil {
+		t.Fatalf("JoinByInviteCode returned error: %v", err)
+	}
+	if joined.ID != group.ID {
+		t.Errorf("JoinByInviteCode returned group %s, want %s", joined.ID, group.ID)
+	}
+	isMember, err := membershipService.IsMember(group.ID, playerID)
+	if err != nil {
+		t.Fatalf("IsMember returned error: %v", err)
+	}
+	if !isMember {
+		t.Error("player is not a member after JoinByInviteCode")
+	}
+
+	if _, err := groupService.JoinByInviteCode(playerID, group.InviteCode); !errors.Is(err, services.ErrAlreadyMember) {
+		t.Errorf("re-joining error = %v, want ErrAlreadyMember", err)
+	}
+	if _, err := groupService.JoinByInviteCode(playerID, "ZZZZZZZZ"); !errors.Is(err, services.ErrInviteCodeNotFound) {
+		t.Errorf("unknown code error = %v, want ErrInviteCodeNotFound", err)
 	}
 }
