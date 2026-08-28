@@ -3,7 +3,6 @@ package services
 import (
 	"app/internal/models"
 	"errors"
-	"log"
 	"strings"
 
 	"github.com/google/uuid"
@@ -68,6 +67,5 @@ func (s *PlayerService) SearchPlayer(name string) (*models.Player, error) {
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	log.Println("Found player:", player)
 	return &player, nil
 }

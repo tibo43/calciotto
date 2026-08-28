@@ -388,7 +388,6 @@ export default {
       filteredAvailablePlayers: [],
       isLoadingPlayers: false,
       playerSearchTerm: '',
-      isSearchingPlayer: false,
       messageKey: 0,
       showCreatePlayerOption: false,
       isCreatingPlayer: false,
@@ -678,7 +677,6 @@ export default {
       this.selectedPlayers = [];
       this.playerSearchTerm = '';
       this.filteredAvailablePlayers = [];
-      this.isSearchingPlayer = false;
       this.showCreatePlayerOption = false;
       this.isCreatingPlayer = false;
       if (this.searchTimeout) {
