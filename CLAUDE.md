@@ -13,7 +13,9 @@ Calciotto is a small full-stack app for organizing amateur football ("calciotto"
 cd devops
 docker compose --env-file env/develop.env up
 ```
-This starts Postgres (with healthcheck), the Go backend (via `air` for live reload, port 8080), and the Vue frontend (`npm install && npm run serve`, port 4000). The `--env-file` flag is required — without it, `${POSTGRES_PORT}`/`${POSTGRES_PASSWORD}` and the bare `DB_NAME`/`DB_USER`/`DB_PASSWORD` refs in `docker-compose.yaml` resolve to empty strings (Compose only auto-loads a file literally named `.env` next to the compose file, which this repo intentionally doesn't ship since `.env` is gitignored). The backend and frontend containers bind-mount `../app` and `../frontend`, so local edits are picked up without rebuilding the image.
+This starts Postgres (with healthcheck), the Go backend (via `air` for live reload, port 8080), the Vue frontend (`npm install && npm run serve`, port 4000), and a one-shot `seed` service that runs `go run ./cmd/seed` as soon as `db` is healthy. The `--env-file` flag is required — without it, `${POSTGRES_PORT}`/`${POSTGRES_PASSWORD}` and the bare `DB_NAME`/`DB_USER`/`DB_PASSWORD` refs in `docker-compose.yaml` resolve to empty strings (Compose only auto-loads a file literally named `.env` next to the compose file, which this repo intentionally doesn't ship since `.env` is gitignored). The backend and frontend containers bind-mount `../app` and `../frontend`, so local edits are picked up without rebuilding the image.
+
+`seed` is idempotent (`cmd/seed` skips itself once players already exist), so it's safe to run on every `up` — after the first successful run it just logs "skipping" and exits. Force a fresh reseed with `docker compose exec backend go run ./cmd/seed -reset`.
 
 ### Backend (`app/`)
 ```bash
