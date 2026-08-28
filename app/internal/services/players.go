@@ -61,11 +61,14 @@ func (s *PlayerService) GetPlayers() ([]models.PlayerCustom, error) {
 	return playersCustom, nil
 }
 
-func (s *PlayerService) SearchPlayer(name string) (*models.Player, error) {
+// SearchPlayer returns a DTO without Email — this backs a public endpoint
+// (GET /players/search), and Player.Email now holds account data that must
+// not leak to anyone who merely knows a player's name.
+func (s *PlayerService) SearchPlayer(name string) (*models.PlayerCustom, error) {
 	var player models.Player
 	result := s.DB.First(&player, "name = ?", name)
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	return &player, nil
+	return &models.PlayerCustom{ID: player.ID, Name: player.Name, GoalsScored: 0}, nil
 }

@@ -91,3 +91,26 @@ func TestDate_Before(t *testing.T) {
 		t.Error("expected later.Before(earlier) to be false")
 	}
 }
+
+func TestSeasonOf(t *testing.T) {
+	tests := []struct {
+		name string
+		date time.Time
+		want string
+	}{
+		{"september starts a new season", time.Date(2025, time.September, 14, 0, 0, 0, 0, time.UTC), "2025-2026"},
+		{"august belongs to the previous season", time.Date(2026, time.August, 9, 0, 0, 0, 0, time.UTC), "2025-2026"},
+		{"august 31st is the last day of a season", time.Date(2026, time.August, 31, 0, 0, 0, 0, time.UTC), "2025-2026"},
+		{"september 1st is the first day of a season", time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC), "2026-2027"},
+		{"december stays in the season started that year", time.Date(2025, time.December, 25, 0, 0, 0, 0, time.UTC), "2025-2026"},
+		{"january belongs to the season started the previous year", time.Date(2026, time.January, 4, 0, 0, 0, 0, time.UTC), "2025-2026"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SeasonOf(Date(tt.date)); got != tt.want {
+				t.Errorf("SeasonOf(%s) = %q, want %q", tt.date.Format(dateLayout), got, tt.want)
+			}
+		})
+	}
+}

@@ -218,7 +218,7 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 
 	// Standings must be computed per group: bob lost in group A (0 points) but
 	// won in group B (3 points) — the two must not be mixed together.
-	pointsA, err := standingsService.GetPointsStandings(groupA.ID)
+	pointsA, err := standingsService.GetPointsStandings(groupA.ID, "")
 	if err != nil {
 		t.Fatalf("GetPointsStandings(groupA) returned error: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 		t.Errorf("bob's group A standing = %+v, want 0 points from 1 match", bobA)
 	}
 
-	pointsB, err := standingsService.GetPointsStandings(groupB.ID)
+	pointsB, err := standingsService.GetPointsStandings(groupB.ID, "")
 	if err != nil {
 		t.Fatalf("GetPointsStandings(groupB) returned error: %v", err)
 	}

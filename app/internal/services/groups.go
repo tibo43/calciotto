@@ -59,10 +59,16 @@ func (s *GroupService) GetGroupByID(id uuid.UUID) (*models.Group, error) {
 	return &group, nil
 }
 
-// GetDefaultGroup returns the first group in the system. It is used as an
-// implicit fallback for callers (e.g. the current frontend) that don't pass a
-// group_id explicitly — this app is expected to operate with a single group
-// until multi-group UI support lands.
+// GetDefaultGroup returns whichever group's (random) UUID sorts first — it
+// has no relation to any particular caller or player. That makes it unsafe
+// as a fallback for anything authenticated: creating a second group can
+// silently flip which group is "default" and, combined with a group
+// membership check, lock out every existing user who never passes a
+// group_id explicitly (see the incident this was pulled from PlayerHandler
+// and MatchHandler's read/list paths for). Only use it where there is no
+// authenticated player to resolve a real group for instead — currently just
+// PlayerHandler.CreatePlayer, whose route is intentionally public. Anywhere
+// behind AuthMiddleware, use GroupMembershipService.GetFirstGroupForPlayer.
 func (s *GroupService) GetDefaultGroup() (*models.Group, error) {
 	var group models.Group
 	result := s.DB.Order("id").First(&group)

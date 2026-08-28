@@ -11,14 +11,20 @@ import (
 )
 
 type MatchHandler struct {
-	Service      *services.MatchService
-	GroupService *services.GroupService
+	Service           *services.MatchService
+	MembershipService *services.GroupMembershipService
 }
 
-func NewMatchHandler(service *services.MatchService, groupService *services.GroupService) *MatchHandler {
-	return &MatchHandler{Service: service, GroupService: groupService}
+func NewMatchHandler(service *services.MatchService, membershipService *services.GroupMembershipService) *MatchHandler {
+	return &MatchHandler{Service: service, MembershipService: membershipService}
 }
 
+// CreateMatch requires authentication (see main.go), so when the payload
+// carries no group_id it falls back to a group the caller actually belongs
+// to — the same resolution RequireGroupMembership already authorized against
+// — rather than GroupService.GetDefaultGroup(), which has no relation to the
+// caller and would let the match get created in a group the caller was never
+// even checked against.
 func (h *MatchHandler) CreateMatch(c *gin.Context) {
 	var match models.Match
 	if err := c.ShouldBindJSON(&match); err != nil {
@@ -28,9 +34,14 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 
 	groupID := match.GroupID
 	if groupID == uuid.Nil {
-		group, err := h.GroupService.GetDefaultGroup()
+		playerID, ok := playerIDFromContext(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+			return
+		}
+		group, err := h.MembershipService.GetFirstGroupForPlayer(playerID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "no default group available: " + err.Error()})
+			c.JSON(http.StatusNotFound, gin.H{"error": "authenticated player does not belong to any group"})
 			return
 		}
 		groupID = group.ID
@@ -46,7 +57,7 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 }
 
 func (h *MatchHandler) GetMatchesDetails(c *gin.Context) {
-	groupID, ok := resolveGroupID(c, h.GroupService)
+	groupID, ok := resolveGroupID(c, h.MembershipService)
 	if !ok {
 		return
 	}
@@ -64,7 +75,7 @@ func (h *MatchHandler) GetMatchDetailsByID(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
 		return
 	}
-	groupID, ok := resolveGroupID(c, h.GroupService)
+	groupID, ok := resolveGroupID(c, h.MembershipService)
 	if !ok {
 		return
 	}

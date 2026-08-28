@@ -52,3 +52,17 @@ func (d Date) String() string {
 func (d Date) Before(other Date) bool {
 	return time.Time(d).Before(time.Time(other))
 }
+
+// SeasonOf returns the label of the season d belongs to, e.g. "2025-2026".
+// A season starts on September 1st: a date from September onwards belongs to
+// the season starting that same year, an earlier one to the season that
+// started the previous year. There is no Season table — a season is purely
+// derived from a match date, so this stays a pure function of d.
+func SeasonOf(d Date) string {
+	t := time.Time(d)
+	start := t.Year()
+	if t.Month() < time.September {
+		start--
+	}
+	return fmt.Sprintf("%d-%d", start, start+1)
+}

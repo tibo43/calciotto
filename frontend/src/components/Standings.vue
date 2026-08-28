@@ -21,6 +21,14 @@
         </div>
 
         <div v-else class="standings-layout">
+          <!-- Season selector -->
+          <div class="season-bar card-base">
+            <label class="season-label" for="season-select">Season</label>
+            <select id="season-select" class="season-select" v-model="selectedSeason" @change="loadStandings">
+              <option v-for="season in seasons" :key="season" :value="season">{{ season }}</option>
+            </select>
+          </div>
+
           <!-- Sub tabs -->
           <div class="sub-tabs-bar card-base">
             <button v-for="tab in subTabs" :key="tab.key" @click="activeSubTab = tab.key"
@@ -109,7 +117,7 @@
 </template>
 
 <script>
-import { getPointsStandings, getScorers } from '@/services/api';
+import { getPointsStandings, getScorers, getSeasons } from '@/services/api';
 
 export default {
   name: 'PlayerStandings',
@@ -117,6 +125,8 @@ export default {
     return {
       pointsStandings: [],
       topScorers: [],
+      seasons: [],
+      selectedSeason: '',
       isLoading: true,
       activeSubTab: 'points',
       subTabs: [
@@ -126,13 +136,31 @@ export default {
     };
   },
   async created() {
+    await this.loadSeasons();
     await this.loadStandings();
   },
   methods: {
+    async loadSeasons() {
+      try {
+        const seasons = await getSeasons();
+        this.seasons = Array.isArray(seasons) ? seasons : [];
+      } catch (error) {
+        console.error('Error fetching seasons:', error);
+        this.seasons = [];
+      }
+      // The backend returns the group's seasons in ascending order, so the
+      // last one is the most recent — that's what we open on. With no seasons
+      // at all (a group without matches), an empty selection means "no
+      // filtering", which is exactly what the backend already does.
+      this.selectedSeason = this.seasons.length ? this.seasons[this.seasons.length - 1] : '';
+    },
     async loadStandings() {
       this.isLoading = true;
       try {
-        const [points, scorers] = await Promise.all([getPointsStandings(), getScorers()]);
+        const [points, scorers] = await Promise.all([
+          getPointsStandings(this.selectedSeason),
+          getScorers(this.selectedSeason)
+        ]);
         this.pointsStandings = Array.isArray(points) ? points : [];
         this.topScorers = Array.isArray(scorers) ? scorers : [];
       } catch (error) {
@@ -178,6 +206,42 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+/* Season selector */
+.season-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+.season-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.season-select {
+  flex: 1;
+  max-width: 220px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.season-select:hover,
+.season-select:focus {
+  border-color: var(--primary-color);
+  outline: none;
 }
 
 /* Sub tabs */
@@ -269,6 +333,15 @@ export default {
 @media (max-width: 768px) {
   .standings-header {
     padding: 2rem 0;
+  }
+
+  .season-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .season-select {
+    max-width: none;
   }
 
   .sub-tabs-bar {

@@ -17,20 +17,65 @@ func NewStandingsService(db *gorm.DB) *StandingsService {
 	return &StandingsService{MatchService: NewMatchService(db)}
 }
 
-func (s *StandingsService) GetPointsStandings(groupID uuid.UUID) ([]models.PointsStandingRow, error) {
+func (s *StandingsService) GetPointsStandings(groupID uuid.UUID, season string) ([]models.PointsStandingRow, error) {
 	matches, err := s.MatchService.GetMatchesDetails(groupID)
 	if err != nil {
 		return nil, err
 	}
-	return ComputePointsStandings(matches), nil
+	return ComputePointsStandings(FilterMatchesBySeason(matches, season)), nil
 }
 
-func (s *StandingsService) GetScorers(groupID uuid.UUID) ([]models.ScorerRow, error) {
+func (s *StandingsService) GetScorers(groupID uuid.UUID, season string) ([]models.ScorerRow, error) {
 	matches, err := s.MatchService.GetMatchesDetails(groupID)
 	if err != nil {
 		return nil, err
 	}
-	return ComputeScorers(matches), nil
+	return ComputeScorers(FilterMatchesBySeason(matches, season)), nil
+}
+
+// GetSeasons lists the seasons a group actually has matches in. Seasons have
+// no table of their own — they're derived from the match dates already loaded
+// for the group, so no extra query is needed.
+func (s *StandingsService) GetSeasons(groupID uuid.UUID) ([]string, error) {
+	matches, err := s.MatchService.GetMatchesDetails(groupID)
+	if err != nil {
+		return nil, err
+	}
+	return ComputeSeasons(matches), nil
+}
+
+// FilterMatchesBySeason keeps only the matches belonging to season (a label as
+// produced by models.SeasonOf). An empty season means "no filtering", so
+// callers that don't scope by season keep the previous behaviour.
+func FilterMatchesBySeason(matches []models.MatchWithDetails, season string) []models.MatchWithDetails {
+	if season == "" {
+		return matches
+	}
+	filtered := make([]models.MatchWithDetails, 0, len(matches))
+	for _, match := range matches {
+		if models.SeasonOf(match.Date) == season {
+			filtered = append(filtered, match)
+		}
+	}
+	return filtered
+}
+
+// ComputeSeasons returns the sorted, deduplicated season labels covered by an
+// already-loaded set of matches. Like the Compute* functions below, it is a
+// pure function of its input: which matches to consider is the caller's call.
+func ComputeSeasons(matches []models.MatchWithDetails) []string {
+	seen := make(map[string]bool, len(matches))
+	seasons := make([]string, 0, len(matches))
+	for _, match := range matches {
+		season := models.SeasonOf(match.Date)
+		if seen[season] {
+			continue
+		}
+		seen[season] = true
+		seasons = append(seasons, season)
+	}
+	sort.Strings(seasons)
+	return seasons
 }
 
 // ComputePointsStandings aggregates win/draw/loss points (3/1/0) per player over

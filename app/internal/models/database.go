@@ -1,6 +1,8 @@
 package models
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -63,9 +65,13 @@ type MatchPlayer struct {
 }
 
 // GroupMembership est la table de jointure many-to-many entre Player et
-// Group : un joueur peut appartenir à plusieurs groupes.
+// Group : un joueur peut appartenir à plusieurs groupes. CreatedAt (auto-rempli
+// par GORM à la création) permet de déterminer quel groupe un joueur a
+// rejoint en premier — l'ID d'un groupe est un UUID aléatoire (v4), donc trié
+// par ID ne dit rien sur l'ordre d'appartenance ou de création.
 type GroupMembership struct {
 	BaseModel
-	GroupID  uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_group_membership_group_player" json:"group_id"`
-	PlayerID uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_group_membership_group_player" json:"player_id"`
+	GroupID   uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_group_membership_group_player" json:"group_id"`
+	PlayerID  uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_group_membership_group_player" json:"player_id"`
+	CreatedAt time.Time `json:"-"`
 }

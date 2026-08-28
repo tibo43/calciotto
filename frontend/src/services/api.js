@@ -2,6 +2,11 @@ import axios from 'axios';
 
 const API_BASE_URL = process.env.VUE_API_BASE_URL || 'http://127.0.0.1:8080';
 
+const TOKEN_KEY = 'calciotto-token';
+
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,6 +15,38 @@ const api = axios.create({
     'Content-Type': 'application/json',
   }
 });
+
+api.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      clearToken();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Auth
+export const login = async (email, password) => {
+  const response = await api.post('/auth/login', { email, password });
+  return response.data;
+};
+
+export const signup = async (playerId, email, password) => {
+  const response = await api.post('/auth/signup', { player_id: playerId, email, password });
+  return response.data;
+};
 
 // Matches
 export const getMatchesDetails = async () => {
@@ -127,9 +164,13 @@ export async function searchPlayerByName(playerName) {
 }
 
 // Standings
-export const getPointsStandings = async () => {
+// season is optional: leaving it out asks the backend for every match, all
+// seasons mixed together (the behaviour before seasons existed).
+const seasonQuery = (season) => (season ? `?season=${encodeURIComponent(season)}` : '');
+
+export const getPointsStandings = async (season) => {
   try {
-    const response = await api.get(`/standings/points`);
+    const response = await api.get(`/standings/points${seasonQuery(season)}`);
     if (response.status !== 200) {
       throw new Error('Failed to fetch points standings');
     }
@@ -140,15 +181,28 @@ export const getPointsStandings = async () => {
   }
 };
 
-export const getScorers = async () => {
+export const getScorers = async (season) => {
   try {
-    const response = await api.get(`/standings/scorers`);
+    const response = await api.get(`/standings/scorers${seasonQuery(season)}`);
     if (response.status !== 200) {
       throw new Error('Failed to fetch scorers');
     }
     return response.data;
   } catch (error) {
     console.error('Error fetching scorers:', error);
+    throw error;
+  }
+};
+
+export const getSeasons = async () => {
+  try {
+    const response = await api.get(`/standings/seasons`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch seasons');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching seasons:', error);
     throw error;
   }
 };

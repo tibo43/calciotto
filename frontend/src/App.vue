@@ -60,8 +60,15 @@
 
             <!-- Actions -->
             <div class="nav-actions">
-              <button 
-                class="theme-toggle" 
+              <button
+                class="btn-base btn-cancel btn-small logout-btn"
+                @click="logout"
+              >
+                Log out
+              </button>
+
+              <button
+                class="theme-toggle"
                 @click="toggleTheme"
                 :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'"
               >
@@ -132,6 +139,8 @@
 </template>
 
 <script>
+import { clearToken } from '@/services/api';
+
 export default {
   name: 'App',
   data() {
@@ -146,7 +155,7 @@ export default {
   computed: {
     isRouterRoute() {
       // Check if current route should be handled by router
-      return this.$route.name === 'MatchesAll' || this.$route.name === 'MatchDetails' || this.$route.name === 'Standings';
+      return ['MatchesAll', 'MatchDetails', 'Standings', 'Login', 'Signup'].includes(this.$route.name);
     }
   },
   watch: {
@@ -175,12 +184,11 @@ export default {
   },
   methods: {
     toggleView() {
+      // Dismiss the splash without forcing navigation to '/' — otherwise a
+      // direct visit to /login or /signup gets hijacked back to '/' (and,
+      // for an unauthenticated visitor, immediately bounced to /login by
+      // the router guard) as soon as the splash is dismissed.
       this.showImage = !this.showImage;
-      if (!this.showImage) {
-        // Navigate to matches when entering app
-        this.$router.push('/');
-        this.activeTab = 'matches';
-      }
     },
     goHome() {
       this.$router.push('/');
@@ -200,6 +208,10 @@ export default {
     toggleTheme() {
       this.isDarkMode = !this.isDarkMode;
       localStorage.setItem('calciotto-theme', this.isDarkMode ? 'dark' : 'light');
+    },
+    logout() {
+      clearToken();
+      this.$router.push('/login');
     }
   }
 }

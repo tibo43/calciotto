@@ -120,7 +120,7 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 
 	// The points standings and scorers should now reflect this match: black
 	// (3-1) won, so alice gets 3 points, bob gets 0; both have their goals.
-	points, err := standingsService.GetPointsStandings(group.ID)
+	points, err := standingsService.GetPointsStandings(group.ID, "")
 	if err != nil {
 		t.Fatalf("GetPointsStandings returned error: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 		t.Errorf("bob points row = %+v, want 0 points / 1 goal", bobPoints)
 	}
 
-	scorers, err := standingsService.GetScorers(group.ID)
+	scorers, err := standingsService.GetScorers(group.ID, "")
 	if err != nil {
 		t.Fatalf("GetScorers returned error: %v", err)
 	}
