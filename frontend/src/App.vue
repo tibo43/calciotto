@@ -57,6 +57,20 @@
                 Standings
               </router-link>
               <router-link
+                to="/groups"
+                @click="closeMenu"
+                :class="{ 'active': $route.name === 'Groups' }"
+                class="nav-button"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  <path d="M21 21v-2a4 4 0 0 0-3-3.87"/>
+                </svg>
+                Groups
+              </router-link>
+              <router-link
                 to="/profile"
                 @click="closeMenu"
                 :class="{ 'active': $route.name === 'Profile' }"
@@ -167,7 +181,7 @@ export default {
   computed: {
     isRouterRoute() {
       // Check if current route should be handled by router
-      return ['MatchesAll', 'MatchDetails', 'Standings', 'Profile', 'Login', 'Signup'].includes(this.$route.name);
+      return ['MatchesAll', 'MatchDetails', 'Standings', 'Groups', 'Profile', 'Login', 'Signup'].includes(this.$route.name);
     }
   },
   watch: {

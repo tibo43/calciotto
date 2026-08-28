@@ -171,3 +171,35 @@ func (h *GroupHandler) GetGroupMembers(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, players)
 }
+
+// GetMyGroups returns the groups the authenticated caller belongs to. The
+// public GET /groups lists every group in the system, which is useless to a
+// client asking "which groups are mine" — and it can't be narrowed, being
+// unauthenticated by design.
+//
+// authRequired alone, no requireGroupMember: like GET /players/me/stats there
+// is no single group_id to authorize against, and the handler only ever
+// reports on the JWT's own player. No DTO is needed either — Group keeps
+// InviteCode behind json:"-", so the code stays exclusive to
+// GET /groups/:id/invite-code.
+func (h *GroupHandler) GetMyGroups(c *gin.Context) {
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+
+	groups, err := h.MembershipService.GetGroupsByPlayerID(playerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	// Belonging to no group is a normal state (a freshly signed-up player),
+	// not an error — but GORM leaves the slice nil, which would serialize as
+	// `null` and force every caller to special-case it.
+	if groups == nil {
+		groups = []models.Group{}
+	}
+
+	c.JSON(http.StatusOK, groups)
+}

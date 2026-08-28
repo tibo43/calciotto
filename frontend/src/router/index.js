@@ -20,6 +20,11 @@ const routes = [
     component: () => import('@/components/Standings.vue')
   },
   {
+    path: '/groups',
+    name: 'Groups',
+    component: () => import('@/components/Groups.vue')
+  },
+  {
     path: '/profile',
     name: 'Profile',
     component: () => import('@/components/Profile.vue')

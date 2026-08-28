@@ -223,3 +223,64 @@ export const getPlayerProfile = async (season) => {
     throw error;
   }
 };
+
+// Groups
+// Only /groups/me is scoped to the caller — the plain GET /groups is public
+// and lists every group in the system, which is never what this app wants.
+export const getMyGroups = async () => {
+  try {
+    const response = await api.get(`/groups/me`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch my groups');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching my groups:', error);
+    throw error;
+  }
+};
+
+// The caller becomes the new group's first member, server-side.
+export const createGroup = async (name) => {
+  try {
+    const response = await api.post(`/groups`, { name });
+    if (response.status !== 200) {
+      throw new Error('Failed to create group');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error creating group:', error);
+    throw error;
+  }
+};
+
+// 404 means "unknown code", 400 means "already a member" — callers are
+// expected to surface the backend's own message rather than flatten both into
+// one generic failure.
+export const joinGroup = async (inviteCode) => {
+  try {
+    const response = await api.post(`/groups/join`, { invite_code: inviteCode });
+    if (response.status !== 200) {
+      throw new Error('Failed to join group');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error joining group:', error);
+    throw error;
+  }
+};
+
+// The invite code never rides along in the group JSON (it's json:"-" on the
+// Go model), so it has to be fetched per group, on demand.
+export const getInviteCode = async (groupId) => {
+  try {
+    const response = await api.get(`/groups/${groupId}/invite-code`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch invite code');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching invite code:', error);
+    throw error;
+  }
+};

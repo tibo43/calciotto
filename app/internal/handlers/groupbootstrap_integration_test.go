@@ -51,6 +51,7 @@ func newBootstrapEnv(t *testing.T, tx *gorm.DB) *bootstrapEnv {
 	router.POST("/groups", authRequired, groupHandler.CreateGroup)
 	router.POST("/groups/join", authRequired, groupHandler.JoinGroup)
 	router.GET("/groups", groupHandler.GetGroups)
+	router.GET("/groups/me", authRequired, groupHandler.GetMyGroups)
 	router.GET("/groups/:id", groupHandler.GetGroupByID)
 	router.GET("/groups/:id/invite-code", authRequired, requireGroupMemberByPathID, groupHandler.GetInviteCode)
 	router.GET("/matches/details", authRequired, requireGroupMember, matchHandler.GetMatchesDetails)
@@ -374,5 +375,125 @@ func TestGroupJSON_Integration_NeverExposesInviteCode(t *testing.T) {
 		if strings.Contains(body, stored.InviteCode) {
 			t.Errorf("%s leaks the invite code %q: %s", tc.name, stored.InviteCode, body)
 		}
+	}
+}
+
+// decodeGroups reads a group list response into just the public fields, so a
+// leaked invite_code would show up as a body assertion failure rather than
+// being silently deserialized.
+func decodeGroups(t *testing.T, rec *httptest.ResponseRecorder) []struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+} {
+	t.Helper()
+	var groups []struct {
+		ID   uuid.UUID `json:"id"`
+		Name string    `json:"name"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &groups); err != nil {
+		t.Fatalf("failed to decode groups from response %s: %v", rec.Body.String(), err)
+	}
+	return groups
+}
+
+// TestGetMyGroups_Integration_ReturnsOnlyTheCallersGroups covers what GET
+// /groups can't do: it lists every group in the system, so a client has no way
+// to ask "which ones are mine". The caller here belongs to two of the three
+// groups that exist, and must get exactly those two.
+func TestGetMyGroups_Integration_ReturnsOnlyTheCallersGroups(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newBootstrapEnv(t, tx)
+
+	_, token := env.newAuthenticatedPlayer(t,
+		"Zzz My Groups Member", "my-groups-member@example.com")
+	_, otherToken := env.newAuthenticatedPlayer(t,
+		"Zzz My Groups Outsider", "my-groups-outsider@example.com")
+
+	firstRec := env.do(http.MethodPost, "/groups", token, map[string]string{"name": "Zzz My Groups First"})
+	if firstRec.Code != http.StatusOK {
+		t.Fatalf("POST /groups returned status %d, body: %s", firstRec.Code, firstRec.Body.String())
+	}
+	firstID := decodeGroupID(t, firstRec)
+
+	secondRec := env.do(http.MethodPost, "/groups", token, map[string]string{"name": "Zzz My Groups Second"})
+	if secondRec.Code != http.StatusOK {
+		t.Fatalf("POST /groups returned status %d, body: %s", secondRec.Code, secondRec.Body.String())
+	}
+	secondID := decodeGroupID(t, secondRec)
+
+	// A third group the caller has nothing to do with — it must not show up.
+	foreignRec := env.do(http.MethodPost, "/groups", otherToken, map[string]string{"name": "Zzz My Groups Foreign"})
+	if foreignRec.Code != http.StatusOK {
+		t.Fatalf("POST /groups returned status %d, body: %s", foreignRec.Code, foreignRec.Body.String())
+	}
+	foreignID := decodeGroupID(t, foreignRec)
+
+	rec := env.do(http.MethodGet, "/groups/me", token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /groups/me returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+
+	groups := decodeGroups(t, rec)
+	if len(groups) != 2 {
+		t.Fatalf("GET /groups/me returned %d groups, want 2: %s", len(groups), rec.Body.String())
+	}
+	seen := map[uuid.UUID]string{}
+	for _, group := range groups {
+		seen[group.ID] = group.Name
+	}
+	for _, want := range []uuid.UUID{firstID, secondID} {
+		if _, ok := seen[want]; !ok {
+			t.Errorf("group %s missing from GET /groups/me: %s", want, rec.Body.String())
+		}
+	}
+	if _, ok := seen[foreignID]; ok {
+		t.Errorf("GET /groups/me leaked a group the caller doesn't belong to: %s", rec.Body.String())
+	}
+	if name := seen[firstID]; name != "Zzz My Groups First" {
+		t.Errorf("group %s came back named %q, want %q", firstID, name, "Zzz My Groups First")
+	}
+
+	// Same json:"-" guarantee as everywhere else: the code stays exclusive to
+	// GET /groups/:id/invite-code.
+	if strings.Contains(rec.Body.String(), "invite_code") {
+		t.Errorf("GET /groups/me exposes an invite_code field: %s", rec.Body.String())
+	}
+}
+
+// TestGetMyGroups_Integration_RequiresAuth — the route derives its answer from
+// the JWT's player, so there is nothing to return without one.
+func TestGetMyGroups_Integration_RequiresAuth(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newBootstrapEnv(t, tx)
+
+	rec := env.do(http.MethodGet, "/groups/me", "", nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("anonymous GET /groups/me returned status %d, want 401, body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestGetMyGroups_Integration_NoGroupsIsEmptyList pins the state a freshly
+// signed-up player is in: belonging to no group is normal, so the answer is an
+// empty JSON array — not a 404, and not `null`, which would force the frontend
+// to special-case a list it should just be able to render.
+func TestGetMyGroups_Integration_NoGroupsIsEmptyList(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newBootstrapEnv(t, tx)
+
+	_, token := env.newAuthenticatedPlayer(t,
+		"Zzz My Groups Loner", "my-groups-loner@example.com")
+
+	rec := env.do(http.MethodGet, "/groups/me", token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /groups/me returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+	if body := strings.TrimSpace(rec.Body.String()); body != "[]" {
+		t.Errorf("GET /groups/me for a groupless player returned %s, want []", body)
+	}
+	if groups := decodeGroups(t, rec); len(groups) != 0 {
+		t.Errorf("GET /groups/me returned %d groups for a groupless player", len(groups))
 	}
 }

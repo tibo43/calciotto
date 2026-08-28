@@ -77,6 +77,11 @@ func main() {
 	r.POST("/groups", authRequired, groupHandler.CreateGroup)
 	r.POST("/groups/join", authRequired, groupHandler.JoinGroup)
 	r.GET("/groups", groupHandler.GetGroups)
+	// "My groups" — authRequired only, same reasoning as /players/me/stats:
+	// no single group to authorize against, and the answer is derived from
+	// the JWT's own player. Must stay distinct from the public GET /groups,
+	// which lists every group in the system.
+	r.GET("/groups/me", authRequired, groupHandler.GetMyGroups)
 	r.GET("/groups/:id", groupHandler.GetGroupByID)
 	// The invite code is a shared secret, so it gets its own member-only
 	// route rather than riding along in the (public) group JSON.
