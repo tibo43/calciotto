@@ -15,6 +15,12 @@ import (
 // group ownerless or deleting it outright.
 var ErrLastMember = errors.New("cannot leave the group: no other members to hand it off to")
 
+// ErrCannotRemoveSelf is returned by RemoveMember when the acting owner
+// targets their own membership: removing yourself is voluntary departure,
+// which goes through LeaveGroup (and its promotion logic) instead, not
+// through the owner's "remove a member" power.
+var ErrCannotRemoveSelf = errors.New("cannot remove yourself via this action: use the leave-group endpoint instead")
+
 type GroupMembershipService struct {
 	DB *gorm.DB
 }
@@ -162,6 +168,38 @@ func (s *GroupMembershipService) LeaveGroup(groupID, playerID uuid.UUID) error {
 
 		return tx.Delete(&membership).Error
 	})
+}
+
+// RemoveMember removes targetPlayerID's membership in groupID on behalf of
+// actingPlayerID, the group's owner (callers are expected to already be
+// authorized via RequireGroupOwnerByPathParam, which guarantees the group has
+// exactly one owner and actingPlayerID is it).
+//
+// Unlike LeaveGroup, there is no promotion or "last member" logic here: the
+// owner isn't leaving, so the group always keeps its owner regardless of who
+// else is removed.
+//
+// Rules:
+//  1. actingPlayerID cannot target itself — that's voluntary departure and
+//     belongs to LeaveGroup, which handles handing off ownership. Refused
+//     with ErrCannotRemoveSelf before touching the database.
+//  2. If targetPlayerID isn't a member of groupID at all, the lookup below
+//     returns gorm.ErrRecordNotFound, which is propagated as-is — same
+//     handling as LeaveGroup.
+//  3. Otherwise the target's membership row is simply deleted.
+func (s *GroupMembershipService) RemoveMember(groupID, actingPlayerID, targetPlayerID uuid.UUID) error {
+	if actingPlayerID == targetPlayerID {
+		return ErrCannotRemoveSelf
+	}
+
+	var membership models.GroupMembership
+	if err := s.DB.
+		Where("group_id = ? AND player_id = ?", groupID, targetPlayerID).
+		First(&membership).Error; err != nil {
+		return err
+	}
+
+	return s.DB.Delete(&membership).Error
 }
 
 func (s *GroupMembershipService) GetGroupsByPlayerID(playerID uuid.UUID) ([]models.Group, error) {

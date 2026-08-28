@@ -91,8 +91,12 @@ func main() {
 	r.GET("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupMembers)
 	// Self-service "leave a group" — the caller can only ever remove their own
 	// membership (from the JWT), never someone else's; removing another
-	// member is a separate feature that doesn't exist yet.
+	// member is handled by the owner-only route below instead.
 	r.DELETE("/groups/:id/members/me", authRequired, requireGroupMemberByPathID, groupHandler.LeaveGroup)
+	// Owner-only "remove a member" — unlike the self-service route above, this
+	// targets another player's membership, so it's gated by
+	// RequireGroupOwnerByPathParam rather than plain group membership.
+	r.DELETE("/groups/:id/members/:playerId", authRequired, handlers.RequireGroupOwnerByPathParam(groupMembershipService, "id"), groupHandler.RemoveMember)
 
 	// Matches
 	r.POST("/matches", authRequired, requireGroupMember, matchHandler.CreateMatch)
