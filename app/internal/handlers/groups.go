@@ -172,6 +172,38 @@ func (h *GroupHandler) GetGroupMembers(c *gin.Context) {
 	c.JSON(http.StatusOK, players)
 }
 
+// LeaveGroup lets the authenticated caller remove their own membership from
+// the group in the URL. It's deliberately self-service only — there is no way
+// to target another player's membership here, that's a separate "remove a
+// member" feature that doesn't exist yet. The route sits behind
+// RequireGroupMembershipByPathParam, so the caller is already known to be a
+// member by the time this runs; the actual leave/promote/last-member logic
+// lives in GroupMembershipService.LeaveGroup.
+func (h *GroupHandler) LeaveGroup(c *gin.Context) {
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		return
+	}
+
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+
+	if err := h.MembershipService.LeaveGroup(groupID, playerID); err != nil {
+		if errors.Is(err, services.ErrLastMember) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"left": true})
+}
+
 // GetMyGroups returns the groups the authenticated caller belongs to. The
 // public GET /groups lists every group in the system, which is useless to a
 // client asking "which groups are mine" — and it can't be narrowed, being

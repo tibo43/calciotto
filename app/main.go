@@ -89,6 +89,10 @@ func main() {
 	r.GET("/groups/:id/teams", authRequired, requireGroupMemberByPathID, teamHandler.GetTeamsByGroup)
 	r.POST("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.AddPlayerToGroup)
 	r.GET("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupMembers)
+	// Self-service "leave a group" — the caller can only ever remove their own
+	// membership (from the JWT), never someone else's; removing another
+	// member is a separate feature that doesn't exist yet.
+	r.DELETE("/groups/:id/members/me", authRequired, requireGroupMemberByPathID, groupHandler.LeaveGroup)
 
 	// Matches
 	r.POST("/matches", authRequired, requireGroupMember, matchHandler.CreateMatch)

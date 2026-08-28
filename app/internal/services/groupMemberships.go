@@ -1,11 +1,19 @@
 package services
 
 import (
+	"errors"
+
 	"app/internal/models"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+// ErrLastMember is returned by LeaveGroup when the departing player is the
+// group's only member (regardless of role): there would be no one left to
+// hand the group off to, so the departure is refused rather than leaving the
+// group ownerless or deleting it outright.
+var ErrLastMember = errors.New("cannot leave the group: no other members to hand it off to")
 
 type GroupMembershipService struct {
 	DB *gorm.DB
@@ -97,6 +105,63 @@ func (s *GroupMembershipService) GetFirstGroupForPlayer(playerID uuid.UUID) (*mo
 		return nil, result.Error
 	}
 	return &group, nil
+}
+
+// LeaveGroup removes playerID's own membership in groupID — a player can only
+// ever remove themselves through this method; removing someone else is a
+// separate feature that doesn't exist yet.
+//
+// Rules:
+//  1. The group's only member (whatever their role) cannot leave: a group
+//     with zero members would have no one to hand it off to, so the
+//     departure is refused with ErrLastMember instead of leaving the group
+//     memberless or deleting it.
+//  2. An owner leaving a group that still has other members first promotes
+//     the longest-standing remaining member (by GroupMembership.CreatedAt —
+//     same ordering GetFirstGroupForPlayer uses) to owner, so the group is
+//     never left without one.
+//  3. A plain member leaving a group that still has other members just has
+//     their membership row deleted, nothing else changes.
+//
+// If playerID isn't a member of groupID at all, the lookup below returns
+// gorm.ErrRecordNotFound, which is propagated as-is — this should normally
+// never happen because the route is behind RequireGroupMembershipByPathParam,
+// but the service stays safe on its own regardless.
+//
+// The promotion and the deletion run inside one transaction (same pattern as
+// GroupService.CreateGroup) so the group can never end up, even transiently,
+// with two owners or none.
+func (s *GroupMembershipService) LeaveGroup(groupID, playerID uuid.UUID) error {
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		var membership models.GroupMembership
+		if err := tx.
+			Where("group_id = ? AND player_id = ?", groupID, playerID).
+			First(&membership).Error; err != nil {
+			return err
+		}
+
+		var otherMembers []models.GroupMembership
+		if err := tx.
+			Where("group_id = ? AND player_id <> ?", groupID, playerID).
+			Order("created_at ASC").
+			Find(&otherMembers).Error; err != nil {
+			return err
+		}
+		if len(otherMembers) == 0 {
+			return ErrLastMember
+		}
+
+		if membership.Role == models.RoleOwner {
+			successor := otherMembers[0]
+			if err := tx.Model(&models.GroupMembership{}).
+				Where("id = ?", successor.ID).
+				Update("role", models.RoleOwner).Error; err != nil {
+				return err
+			}
+		}
+
+		return tx.Delete(&membership).Error
+	})
 }
 
 func (s *GroupMembershipService) GetGroupsByPlayerID(playerID uuid.UUID) ([]models.Group, error) {
