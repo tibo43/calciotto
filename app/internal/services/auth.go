@@ -392,20 +392,41 @@ func hashResetToken(rawToken string) string {
 	return hex.EncodeToString(digest[:])
 }
 
-// sendPasswordResetLink "delivers" the reset link. There is no mail transport
-// in this codebase, so the link is only written to the server log — the same
-// thing Rails and Django do with their development mailers.
+// sendPasswordResetLink "delivers" the reset link. With no BREVO_API_KEY set
+// it falls back to the original dev-only behavior — the link is only written
+// to the server log, the same thing Rails and Django do with their
+// development mailers — so nothing changes for local dev or CI. With
+// BREVO_API_KEY set, it sends a real email through Brevo's transactional
+// email API instead.
 //
-// TODO: replace with a real email send at deployment time. Until then the link
-// is visible to anyone who can read the server logs, so this stub is strictly a
-// development affordance.
+// Either way this is fire-and-forget from the caller's point of view: a
+// failed send (including a quota breach — Brevo's free plan caps at 300
+// emails/day) is only logged, never returned. ForgotPassword/
+// InviteExistingPlayer have already committed the token to the DB by the
+// time this runs, and neither must let mail delivery change what the caller
+// sees — a player can always fall back to asking an admin to re-invite them,
+// or requesting another reset, once delivery is actually working again.
 func sendPasswordResetLink(email, rawToken string) {
 	base := os.Getenv("FRONTEND_BASE_URL")
 	if base == "" {
 		base = defaultFrontendBaseURL
 	}
 	link := fmt.Sprintf("%s/reset-password?token=%s", strings.TrimSuffix(base, "/"), url.QueryEscape(rawToken))
-	log.Printf("[password reset] would email %s: %s", email, link)
+
+	apiKey := os.Getenv("BREVO_API_KEY")
+	if apiKey == "" {
+		log.Printf("[password reset] would email %s: %s", email, link)
+		return
+	}
+
+	subject := "Reset your Calciotto password"
+	htmlContent := fmt.Sprintf(
+		`<p>Click the link below to reset your Calciotto password:</p><p><a href="%s">%s</a></p><p>This link expires in one hour. If you didn't request this, you can ignore this email.</p>`,
+		link, link,
+	)
+	if err := sendViaBrevo(apiKey, email, subject, htmlContent); err != nil {
+		log.Printf("[password reset] failed to email %s via Brevo: %v", email, err)
+	}
 }
 
 // ParseToken validates a JWT and returns the player_id claim it carries. Used
