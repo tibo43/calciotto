@@ -50,7 +50,27 @@ type GroupWithRole struct {
 	Role string `json:"role"`
 }
 
+// PlayerWithRole is a Player tagged with the role that player holds in the
+// group being listed — the shape GET /groups/:id/players returns. It embeds
+// Player rather than restating its fields (same "embed the base type, add a
+// Role field" pattern as GroupWithRole), which is why its JSON keeps Player's
+// own lowercase convention (id, name, email) with role riding alongside as a
+// plain lowercase field — a different casing convention than GroupWithRole,
+// which is fine since each embeds a different base type.
+type PlayerWithRole struct {
+	Player
+	Role string `json:"role"`
+}
+
 // PointsStandingRow is one player's row in the win/draw/loss points standings.
+// IsMember is a post-processing tag applied by StandingsService.GetPointsStandings
+// (ComputePointsStandings itself knows nothing about current membership,
+// staying a pure function of already-loaded match data): it's true when
+// PlayerID still belongs to the group the standings were requested for, false
+// when they've since been removed. A departed player's historical points/goals
+// still appear here — standings are derived from match history, not current
+// membership — but the frontend uses this flag to label the row as
+// belonging to someone who's left the group.
 type PointsStandingRow struct {
 	PlayerID uuid.UUID `json:"PlayerID"`
 	Name     string    `json:"Name"`
@@ -60,14 +80,18 @@ type PointsStandingRow struct {
 	Lost     int       `json:"Lost"`
 	GoalsFor int       `json:"GoalsFor"`
 	Points   int       `json:"Points"`
+	IsMember bool      `json:"IsMember"`
 }
 
-// ScorerRow is one player's row in the top-scorers ranking.
+// ScorerRow is one player's row in the top-scorers ranking. IsMember carries
+// the same meaning and is applied the same way as on PointsStandingRow — see
+// its comment above.
 type ScorerRow struct {
 	PlayerID uuid.UUID `json:"PlayerID"`
 	Name     string    `json:"Name"`
 	Played   int       `json:"Played"`
 	Goals    int       `json:"Goals"`
+	IsMember bool      `json:"IsMember"`
 }
 
 // PlayerGroupStanding is one player's standings row inside a single group,

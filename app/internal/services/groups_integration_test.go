@@ -392,3 +392,149 @@ func TestJoinByInviteCode_Integration(t *testing.T) {
 		t.Errorf("unknown code error = %v, want ErrInviteCodeNotFound", err)
 	}
 }
+
+// TestGetPlayersWithRoleByGroupID_Integration covers the new member-listing
+// query backing GET /groups/:id/players: a mix of an admin and a plain
+// member in the same group must come back each tagged with their own role,
+// not both defaulting to one or the other.
+func TestGetPlayersWithRoleByGroupID_Integration(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+	playerService := services.NewPlayerService(tx)
+	membershipService := services.NewGroupMembershipService(tx)
+
+	group, err := groupService.CreateGroup("Zzz Integration Roles Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group: %v", err)
+	}
+
+	adminID, err := playerService.CreatePlayer("Zzz Integration Roles Admin")
+	if err != nil {
+		t.Fatalf("failed to create admin player: %v", err)
+	}
+	memberID, err := playerService.CreatePlayer("Zzz Integration Roles Member")
+	if err != nil {
+		t.Fatalf("failed to create member player: %v", err)
+	}
+
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, adminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add admin: %v", err)
+	}
+	if err := membershipService.AddPlayerToGroup(group.ID, memberID); err != nil {
+		t.Fatalf("failed to add member: %v", err)
+	}
+
+	players, err := membershipService.GetPlayersWithRoleByGroupID(group.ID)
+	if err != nil {
+		t.Fatalf("GetPlayersWithRoleByGroupID returned error: %v", err)
+	}
+	if len(players) != 2 {
+		t.Fatalf("expected 2 members, got %d: %+v", len(players), players)
+	}
+
+	var gotAdmin, gotMember *models.PlayerWithRole
+	for i := range players {
+		switch players[i].ID {
+		case adminID:
+			gotAdmin = &players[i]
+		case memberID:
+			gotMember = &players[i]
+		}
+	}
+	if gotAdmin == nil || gotAdmin.Role != models.RoleAdmin {
+		t.Errorf("admin row = %+v, want role %q", gotAdmin, models.RoleAdmin)
+	}
+	if gotMember == nil || gotMember.Role != models.RoleMember {
+		t.Errorf("member row = %+v, want role %q", gotMember, models.RoleMember)
+	}
+}
+
+// TestStandings_Integration_IsMemberAfterRemoval covers the new IsMember tag
+// on GetPointsStandings/GetScorers: a player removed from the group must
+// still appear in both — their historical goals aren't lost, since standings
+// are computed from match history, not current membership — but tagged
+// IsMember: false, while a player still in the group is IsMember: true.
+func TestStandings_Integration_IsMemberAfterRemoval(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+	teamService := services.NewTeamService(tx)
+	playerService := services.NewPlayerService(tx)
+	matchService := services.NewMatchService(tx)
+	membershipService := services.NewGroupMembershipService(tx)
+	standingsService := services.NewStandingsService(tx, membershipService)
+
+	group, err := groupService.CreateGroup("Zzz Integration IsMember Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group: %v", err)
+	}
+	teams, err := teamService.GetTeamsByGroupID(group.ID)
+	if err != nil || len(teams) != 2 {
+		t.Fatalf("failed to load group teams: err=%v teams=%+v", err, teams)
+	}
+
+	aliceID, err := playerService.CreatePlayer("Zzz Integration IsMember Alice")
+	if err != nil {
+		t.Fatalf("failed to create player alice: %v", err)
+	}
+	bobID, err := playerService.CreatePlayer("Zzz Integration IsMember Bob")
+	if err != nil {
+		t.Fatalf("failed to create player bob: %v", err)
+	}
+
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, aliceID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add alice: %v", err)
+	}
+	if err := membershipService.AddPlayerToGroup(group.ID, bobID); err != nil {
+		t.Fatalf("failed to add bob: %v", err)
+	}
+
+	matchID, err := matchService.CreateMatch(models.Date(time.Now()), group.ID)
+	if err != nil {
+		t.Fatalf("failed to create match: %v", err)
+	}
+	if err := matchService.UpdateMatch(models.MatchWithDetails{
+		ID: matchID,
+		Teams: []models.TeamWithPlayers{
+			{ID: teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
+			{ID: teams[1].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 1}}},
+		},
+	}); err != nil {
+		t.Fatalf("UpdateMatch returned error: %v", err)
+	}
+
+	// Bob leaves the group; alice (an admin) removes him.
+	if err := membershipService.RemoveMember(group.ID, aliceID, bobID); err != nil {
+		t.Fatalf("RemoveMember returned error: %v", err)
+	}
+
+	points, err := standingsService.GetPointsStandings(group.ID, "")
+	if err != nil {
+		t.Fatalf("GetPointsStandings returned error: %v", err)
+	}
+	alicePoints, bobPoints := pointsRowByID(points, aliceID), pointsRowByID(points, bobID)
+	if alicePoints == nil || !alicePoints.IsMember {
+		t.Errorf("alice's points row = %+v, want IsMember true", alicePoints)
+	}
+	if bobPoints == nil || bobPoints.IsMember {
+		t.Errorf("bob's points row = %+v, want IsMember false after removal", bobPoints)
+	}
+	if bobPoints != nil && bobPoints.GoalsFor != 1 {
+		t.Errorf("bob's points row = %+v, want his goal kept despite removal", bobPoints)
+	}
+
+	scorers, err := standingsService.GetScorers(group.ID, "")
+	if err != nil {
+		t.Fatalf("GetScorers returned error: %v", err)
+	}
+	aliceScorer, bobScorer := scorerRowByID(scorers, aliceID), scorerRowByID(scorers, bobID)
+	if aliceScorer == nil || !aliceScorer.IsMember {
+		t.Errorf("alice's scorer row = %+v, want IsMember true", aliceScorer)
+	}
+	if bobScorer == nil || bobScorer.IsMember {
+		t.Errorf("bob's scorer row = %+v, want IsMember false after removal", bobScorer)
+	}
+}

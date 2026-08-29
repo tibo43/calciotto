@@ -376,7 +376,7 @@
 </template>
 
 <script>
-import { getMatchDetailsByID, updateMatch, deleteMatch, getPlayers, createPlayer } from '@/services/api';
+import { getMatchDetailsByID, updateMatch, deleteMatch, getGroupMembers, createPlayer } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
 
 export default {
@@ -606,10 +606,28 @@ export default {
       }
     },
 
+    // Scoped to this match's own group (this.activeGroupId, resolved once in
+    // created() via resolveActiveGroup()) rather than every player in the
+    // database: a player removed from the group — or belonging to a
+    // different group entirely — must not be offered here.
     async reloadAllPlayers() {
+      if (!this.activeGroupId) {
+        // No group resolved (resolveActiveGroup failed) — degrade to an
+        // empty list rather than requesting a malformed URL.
+        this.allPlayers = [];
+        this.filterAvailablePlayers();
+        return;
+      }
       try {
-        const players = await getPlayers();
-        this.allPlayers = Array.isArray(players) ? players : [];
+        const members = await getGroupMembers(this.activeGroupId);
+        // getGroupMembers returns PlayerWithRole, which embeds Player's own
+        // lowercase JSON fields (id, name) plus role — translate to the
+        // PascalCase {ID, Name} shape the rest of this component already
+        // uses for players (matching PlayerCustom's convention from the
+        // getPlayers() call this replaces), role is not needed here.
+        this.allPlayers = Array.isArray(members)
+          ? members.map(member => ({ ID: member.id, Name: member.name }))
+          : [];
         this.filterAvailablePlayers();
       } catch (error) {
         console.error('Error reloading players:', error);

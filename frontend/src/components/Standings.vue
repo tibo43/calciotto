@@ -65,6 +65,7 @@
                     <div class="player-info">
                       <div class="player-avatar-small">{{ getPlayerInitials(row.Name) }}</div>
                       <span class="player-name">{{ formatPlayerNameForDisplay(row.Name) }}</span>
+                      <span v-if="row.IsMember === false" class="left-group-tag">(left the group)</span>
                     </div>
                   </td>
                   <td>{{ row.Played }}</td>
@@ -102,6 +103,7 @@
                     <div class="player-info">
                       <div class="player-avatar-small">{{ getPlayerInitials(row.Name) }}</div>
                       <span class="player-name">{{ formatPlayerNameForDisplay(row.Name) }}</span>
+                      <span v-if="row.IsMember === false" class="left-group-tag">(left the group)</span>
                     </div>
                   </td>
                   <td>{{ row.Played }}</td>
@@ -326,6 +328,15 @@ export default {
 
 .player-col .player-info {
   justify-content: flex-start;
+}
+
+/* Subtle marker for a row whose player is no longer a group member — their
+   historical stats stay fully visible, this just labels the row. */
+.left-group-tag {
+  color: var(--text-light);
+  font-size: 0.75rem;
+  font-weight: 400;
+  font-style: italic;
 }
 
 .points-col {

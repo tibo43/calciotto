@@ -91,6 +91,29 @@ func (s *GroupMembershipService) GetPlayersByGroupID(groupID uuid.UUID) ([]model
 	return players, nil
 }
 
+// GetPlayersWithRoleByGroupID is GetPlayersByGroupID plus each member's role,
+// backing GET /groups/:id/players — mirrors GetGroupsWithRoleByPlayerID's
+// query shape in the other direction (players tagged with role and filtered
+// by group, instead of groups tagged with role and filtered by player).
+// GetPlayersByGroupID itself is left untouched: it has its own callers
+// (HasMemberNamed's duplicate-name check goes through its own query, but
+// GroupMembershipService.currentMemberIDs in standings.go and a few
+// integration tests call GetPlayersByGroupID directly) that have no use for
+// the role.
+func (s *GroupMembershipService) GetPlayersWithRoleByGroupID(groupID uuid.UUID) ([]models.PlayerWithRole, error) {
+	var players []models.PlayerWithRole
+	result := s.DB.Model(&models.Player{}).
+		Select("players.*, group_memberships.role AS role").
+		Joins("JOIN group_memberships ON group_memberships.player_id = players.id").
+		Where("group_memberships.group_id = ?", groupID).
+		Order("group_memberships.created_at ASC").
+		Scan(&players)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return players, nil
+}
+
 // HasMemberNamed reports whether groupID already has a member whose
 // Player.Name matches name case-insensitively. Used by PlayerHandler.CreatePlayer
 // as the soft, per-group duplicate guard described by ErrDuplicatePlayerNameInGroup

@@ -71,6 +71,12 @@
                   <button class="btn-base btn-cancel btn-small" @click="toggleManageTeams(group.id)">
                     {{ expandedTeamsFor === group.id ? 'Hide teams' : 'Manage teams' }}
                   </button>
+
+                  <!-- The roster isn't part of the group JSON either — same
+                       fetch-on-demand pattern as invite code/teams above. -->
+                  <button class="btn-base btn-cancel btn-small" @click="toggleManageMembers(group.id)">
+                    {{ expandedMembersFor === group.id ? 'Hide members' : 'Members' }}
+                  </button>
                 </div>
 
                 <p v-if="codeErrors[group.id]" class="error-message group-error">{{ codeErrors[group.id] }}</p>
@@ -93,6 +99,38 @@
                     </div>
                   </div>
                 </div>
+
+                <!-- Members: visible to any member, role-change/remove
+                     controls only rendered for the caller if they're an
+                     admin of this group (this.groups already carries the
+                     caller's own role per group) — and never on the caller's
+                     own row, since the backend itself refuses self-targeting
+                     (ErrCannotChangeOwnRole/ErrCannotRemoveSelf). -->
+                <div v-if="expandedMembersFor === group.id" class="manage-members-box">
+                  <p v-if="membersLoadingFor === group.id" class="loading-text">Loading members...</p>
+                  <p v-else-if="membersErrors[group.id]" class="error-message">{{ membersErrors[group.id] }}</p>
+                  <ul v-else class="member-list">
+                    <li v-for="member in membersByGroup[group.id]" :key="member.id" class="member-row">
+                      <div class="member-identity">
+                        <span class="member-name">{{ member.name }}</span>
+                        <span v-if="member.role === 'admin'" class="admin-badge">Admin</span>
+                      </div>
+
+                      <div v-if="isGroupAdmin(group.id) && member.id !== currentPlayerId" class="member-actions">
+                        <button class="btn-base btn-cancel btn-small" :disabled="memberActionLoading[member.id]"
+                          @click="toggleMemberRole(group.id, member)">
+                          {{ member.role === 'admin' ? 'Make member' : 'Make admin' }}
+                        </button>
+                        <button class="btn-base btn-danger btn-small" :disabled="memberActionLoading[member.id]"
+                          @click="confirmRemoveMember(group.id, member)">
+                          Remove
+                        </button>
+                      </div>
+
+                      <p v-if="memberActionErrors[member.id]" class="error-message group-error">{{ memberActionErrors[member.id] }}</p>
+                    </li>
+                  </ul>
+                </div>
               </li>
             </ul>
           </div>
@@ -103,8 +141,30 @@
 </template>
 
 <script>
-import { getMyGroups, getInviteCode, getTeamsByGroup, updateTeam } from '@/services/api';
+import {
+  getMyGroups, getInviteCode, getTeamsByGroup, updateTeam,
+  getGroupMembers, updateMemberRole, removeMember, getToken
+} from '@/services/api';
 import TeamColourPicker from '@/components/TeamColourPicker.vue';
+
+// The JWT's own player_id claim is the only place the caller's player id is
+// available on this page (there's no "who am I" endpoint) — decoded locally,
+// read-only, just to hide the role-change/remove controls on the caller's
+// own member row (the backend already refuses self-targeting regardless).
+function currentPlayerIdFromToken() {
+  const token = getToken();
+  if (!token) {
+    return '';
+  }
+  try {
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return decoded.player_id || '';
+  } catch (error) {
+    console.error('Error decoding token:', error);
+    return '';
+  }
+}
 
 // Same 10-entry keyword-to-hex palette getTeamColor() in
 // MatchesAll.vue/MatchDetails.vue know about — duplicated here rather than
@@ -146,10 +206,23 @@ export default {
       teamsErrors: {},
       teamSaving: {},
       teamSaveErrors: {},
-      teamSaveSuccess: {}
+      teamSaveSuccess: {},
+      // Members — id of the one group currently expanded, plus its members
+      // fetched on demand (groupId -> array of PlayerWithRole).
+      expandedMembersFor: '',
+      membersByGroup: {},
+      membersLoadingFor: '',
+      membersErrors: {},
+      // Keyed by playerId rather than groupId: a role-change/remove action
+      // targets one member row, and two different groups never share a
+      // playerId collision that would matter here.
+      memberActionLoading: {},
+      memberActionErrors: {},
+      currentPlayerId: ''
     };
   },
   async created() {
+    this.currentPlayerId = currentPlayerIdFromToken();
     await this.loadGroups();
   },
   methods: {
@@ -252,6 +325,74 @@ export default {
         this.teamSaveErrors[team.id] = this.backendMessage(error, 'Failed to update the team.');
       } finally {
         this.teamSaving[team.id] = false;
+      }
+    },
+    async toggleManageMembers(groupId) {
+      if (this.expandedMembersFor === groupId) {
+        this.expandedMembersFor = '';
+        return;
+      }
+      this.expandedMembersFor = groupId;
+      if (this.membersByGroup[groupId]) {
+        // Already fetched earlier in this session — no need to refetch.
+        return;
+      }
+      await this.loadMembers(groupId);
+    },
+    async loadMembers(groupId) {
+      this.membersLoadingFor = groupId;
+      this.membersErrors[groupId] = '';
+      try {
+        const members = await getGroupMembers(groupId);
+        this.membersByGroup[groupId] = Array.isArray(members) ? members : [];
+      } catch (error) {
+        this.membersErrors[groupId] = this.backendMessage(error, 'Failed to load members.');
+      } finally {
+        this.membersLoadingFor = '';
+      }
+    },
+    // Whether the *caller* is an admin of groupId — this.groups already
+    // carries the caller's own role per group (GetGroupsWithRoleByPlayerID),
+    // same lookup MatchDetails.vue does for its own isAdmin gating.
+    isGroupAdmin(groupId) {
+      const group = this.groups.find(g => g.id === groupId);
+      return group?.role === 'admin';
+    },
+    async toggleMemberRole(groupId, member) {
+      const newRole = member.role === 'admin' ? 'member' : 'admin';
+      this.memberActionLoading[member.id] = true;
+      this.memberActionErrors[member.id] = '';
+      try {
+        await updateMemberRole(groupId, member.id, newRole);
+        // Re-fetch rather than patch in place: a role change can affect more
+        // than just this row (e.g. this was the last admin, which the
+        // backend would have refused anyway, but re-fetching keeps the list
+        // authoritative either way).
+        await this.loadMembers(groupId);
+      } catch (error) {
+        this.memberActionErrors[member.id] = this.backendMessage(error, 'Failed to update role.');
+      } finally {
+        this.memberActionLoading[member.id] = false;
+      }
+    },
+    // Confirm-before-acting, same pattern as MatchDetails.vue's "Delete
+    // Match" button — removal is a destructive action the admin could regret.
+    async confirmRemoveMember(groupId, member) {
+      const confirmed = window.confirm(
+        `Remove ${member.name} from this group? Their match history will be kept.`
+      );
+      if (!confirmed) {
+        return;
+      }
+      this.memberActionLoading[member.id] = true;
+      this.memberActionErrors[member.id] = '';
+      try {
+        await removeMember(groupId, member.id);
+        await this.loadMembers(groupId);
+      } catch (error) {
+        this.memberActionErrors[member.id] = this.backendMessage(error, 'Failed to remove member.');
+      } finally {
+        this.memberActionLoading[member.id] = false;
       }
     },
     backendMessage(error, fallback) {
@@ -388,6 +529,63 @@ export default {
   color: var(--primary-color);
   font-size: 0.875rem;
   margin-top: 0.5rem;
+}
+
+/* Members */
+.manage-members-box {
+  flex-basis: 100%;
+  margin-top: 0.5rem;
+  padding: 0.875rem;
+  border-radius: var(--border-radius);
+  background-color: var(--bg-tertiary);
+}
+
+.member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.member-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+}
+
+.member-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.member-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.admin-badge {
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.member-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 /* Responsive */

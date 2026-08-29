@@ -338,6 +338,57 @@ export const getInviteCode = async (groupId) => {
   }
 };
 
+// Members — fetched on demand per group, same pattern as the invite code and
+// teams above: a group's roster isn't part of the group JSON either. Each
+// entry is a Player (lowercase fields: id, name, email) plus its role
+// ("admin"/"member") in this group — a different casing convention than
+// getMyGroups' entries, since this mirrors Player's own JSON tags rather than
+// PlayerCustom's PascalCase ones.
+export const getGroupMembers = async (groupId) => {
+  try {
+    const response = await api.get(`/groups/${groupId}/players`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch group members');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching group members:', error);
+    throw error;
+  }
+};
+
+// Admin-only: promotes/demotes a member. role must be "admin" or "member" —
+// the backend rejects anything else, plus self-targeting and demoting the
+// group's last admin (services.ErrCannotChangeOwnRole/ErrLastAdmin).
+export const updateMemberRole = async (groupId, playerId, role) => {
+  try {
+    const response = await api.patch(`/groups/${groupId}/members/${playerId}/role`, { role });
+    if (response.status !== 200) {
+      throw new Error('Failed to update member role');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error updating member role:', error);
+    throw error;
+  }
+};
+
+// Admin-only: removes a member from the group. This only ever deletes the
+// GroupMembership row — it never touches the player's match history
+// (MatchPlayer rows are untouched), so their past goals/standings survive.
+export const removeMember = async (groupId, playerId) => {
+  try {
+    const response = await api.delete(`/groups/${groupId}/members/${playerId}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to remove member');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error removing member:', error);
+    throw error;
+  }
+};
+
 // Teams — fetched on demand per group, same pattern as the invite code
 // above: a group's teams aren't part of the group JSON either.
 export const getTeamsByGroup = async (groupId) => {

@@ -190,6 +190,13 @@ func (h *GroupHandler) AddPlayerToGroup(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"group_id": groupID, "player_id": body.PlayerID})
 }
 
+// GetGroupMembers lists the group's members, each tagged with their role
+// (models.PlayerWithRole) so a client can show who's an admin and, if the
+// caller is one themselves, offer role-change/remove controls — open to any
+// member (route sits behind RequireGroupMembershipByPathParam only, no admin
+// gate: seeing the roster and who administers it isn't privileged, only
+// acting on it is, and that's enforced by UpdateMemberRole/RemoveMember's own
+// admin-only routes).
 func (h *GroupHandler) GetGroupMembers(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -197,7 +204,7 @@ func (h *GroupHandler) GetGroupMembers(c *gin.Context) {
 		return
 	}
 
-	players, err := h.MembershipService.GetPlayersByGroupID(groupID)
+	players, err := h.MembershipService.GetPlayersWithRoleByGroupID(groupID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

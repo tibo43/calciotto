@@ -28,7 +28,16 @@ func (s *StandingsService) GetPointsStandings(groupID uuid.UUID, season string) 
 	if err != nil {
 		return nil, err
 	}
-	return ComputePointsStandings(FilterMatchesBySeason(matches, season)), nil
+	rows := ComputePointsStandings(FilterMatchesBySeason(matches, season))
+
+	currentMembers, err := s.currentMemberIDs(groupID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rows[i].IsMember = currentMembers[rows[i].PlayerID]
+	}
+	return rows, nil
 }
 
 func (s *StandingsService) GetScorers(groupID uuid.UUID, season string) ([]models.ScorerRow, error) {
@@ -36,7 +45,38 @@ func (s *StandingsService) GetScorers(groupID uuid.UUID, season string) ([]model
 	if err != nil {
 		return nil, err
 	}
-	return ComputeScorers(FilterMatchesBySeason(matches, season)), nil
+	rows := ComputeScorers(FilterMatchesBySeason(matches, season))
+
+	currentMembers, err := s.currentMemberIDs(groupID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rows[i].IsMember = currentMembers[rows[i].PlayerID]
+	}
+	return rows, nil
+}
+
+// currentMemberIDs returns the set of player IDs currently belonging to
+// groupID, as a post-processing step for GetPointsStandings/GetScorers: a
+// player who has since been removed from the group still keeps their
+// historical rows (standings are computed from match history, ComputePoints
+// Standings/ComputeScorers know nothing about membership), so this is what
+// lets those two callers tag each row IsMember: true/false without touching
+// the pure aggregation functions themselves. GetPlayerProfile deliberately
+// does not call this — every group it iterates is, by construction, one the
+// caller currently belongs to, so tagging IsMember there would be trivially
+// true for every row and isn't worth the extra query.
+func (s *StandingsService) currentMemberIDs(groupID uuid.UUID) (map[uuid.UUID]bool, error) {
+	members, err := s.MembershipService.GetPlayersByGroupID(groupID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make(map[uuid.UUID]bool, len(members))
+	for _, member := range members {
+		ids[member.ID] = true
+	}
+	return ids, nil
 }
 
 // GetSeasons lists the seasons a group actually has matches in. Seasons have
