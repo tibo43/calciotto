@@ -289,6 +289,14 @@ jobs:
             exit 1
           fi
 
+          # Diagnostic before the real call: "Could not retrieve Project
+          # Settings" is what the CLI says both for a token scoped to the wrong
+          # account and for a token whose stored value is corrupted, and the
+          # log masks the value either way. Listing the teams the token can
+          # actually see separates the two. Team names are not secret.
+          echo "Teams visible to this token:"
+          vercel teams ls --token="$VERCEL_TOKEN" || echo "(teams ls failed — the token is not usable at all)"
+
           vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
       - name: Inject the API base URL into the build environment
