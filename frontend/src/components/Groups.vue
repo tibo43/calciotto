@@ -82,9 +82,7 @@
                     <div v-for="team in teamsByGroup[group.id]" :key="team.id" class="team-edit-row">
                       <input v-model="team.name" class="form-input team-name-input" type="text"
                         placeholder="Team name" :disabled="teamSaving[team.id]">
-                      <select v-model="team.colour" class="form-input team-colour-select" :disabled="teamSaving[team.id]">
-                        <option v-for="option in teamColourOptions" :key="option" :value="option">{{ option }}</option>
-                      </select>
+                      <input type="color" v-model="team.colour" class="team-colour-picker" :disabled="teamSaving[team.id]">
                       <button class="btn-base btn-primary btn-small"
                         :disabled="teamSaving[team.id] || !team.name.trim()"
                         @click="saveTeam(group.id, team)">
@@ -115,9 +113,7 @@
                   <div class="team-spec-inputs">
                     <input :id="'new-team-name-' + index" v-model="team.name" class="form-input team-name-input"
                       type="text" placeholder="e.g. Les Rouges" :disabled="isCreating">
-                    <select v-model="team.colour" class="form-input team-colour-select" :disabled="isCreating">
-                      <option v-for="option in teamColourOptions" :key="option" :value="option">{{ option }}</option>
-                    </select>
+                    <input type="color" v-model="team.colour" class="team-colour-picker" :disabled="isCreating">
                   </div>
                 </div>
                 <button class="btn-base btn-primary" type="submit" :disabled="isCreating || !canSubmitCreate">
@@ -154,10 +150,24 @@
 <script>
 import { getMyGroups, createGroup, joinGroup, getInviteCode, getTeamsByGroup, updateTeam } from '@/services/api';
 
-// Same 10-entry palette getTeamColor() in MatchesAll.vue/MatchDetails.vue
-// know about — duplicated here rather than factored into a shared module,
-// consistent with how it's already duplicated between those two files.
-const TEAM_COLOUR_OPTIONS = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan', 'white', 'black'];
+// Same 10-entry keyword-to-hex palette getTeamColor() in
+// MatchesAll.vue/MatchDetails.vue know about — duplicated here rather than
+// factored into a shared module, consistent with how it's already
+// duplicated between those two files. Used only to translate a legacy
+// keyword colour (from a team created before the colour picker existed)
+// into the hex value the <input type="color"> needs.
+const LEGACY_TEAM_COLOUR_MAP = {
+  red: '#ef4444', blue: '#3b82f6', green: '#10b981', yellow: '#f59e0b',
+  purple: '#8b5cf6', orange: '#f97316', pink: '#ec4899', cyan: '#06b6d4',
+  white: '#f8fafc', black: '#1f2937'
+};
+
+function toHexColour(colour) {
+  if (colour && colour.startsWith('#')) {
+    return colour;
+  }
+  return LEGACY_TEAM_COLOUR_MAP[(colour || '').toLowerCase()] || '#6b7280';
+}
 
 export default {
   name: 'PlayerGroups',
@@ -173,10 +183,9 @@ export default {
       loadFailed: false,
       newGroupName: '',
       newTeams: [
-        { name: '', colour: 'black' },
-        { name: '', colour: 'white' }
+        { name: '', colour: '#1f2937' },
+        { name: '', colour: '#f8fafc' }
       ],
-      teamColourOptions: TEAM_COLOUR_OPTIONS,
       isCreating: false,
       createError: '',
       createSuccess: '',
@@ -274,8 +283,8 @@ export default {
         this.groups.push(group);
         this.newGroupName = '';
         this.newTeams = [
-          { name: '', colour: 'black' },
-          { name: '', colour: 'white' }
+          { name: '', colour: '#1f2937' },
+          { name: '', colour: '#f8fafc' }
         ];
         this.createSuccess = `Group "${group.name}" created.`;
       } catch (error) {
@@ -299,11 +308,13 @@ export default {
       try {
         const teams = await getTeamsByGroup(groupId);
         // Local editable copies, keyed by lower-case field names to match
-        // what the input/select v-model bind to.
+        // what the input v-model bind to. The colour picker requires a hex
+        // value, so a legacy keyword colour (from a team created before the
+        // picker existed) is translated up front.
         this.teamsByGroup[groupId] = (teams || []).map(team => ({
           id: team.id,
           name: team.name,
-          colour: team.colour
+          colour: toHexColour(team.colour)
         }));
       } catch (error) {
         this.teamsErrors[groupId] = this.backendMessage(error, 'Failed to load teams.');
@@ -498,8 +509,14 @@ export default {
   min-width: 10rem;
 }
 
-.team-colour-select {
-  min-width: 7rem;
+.team-colour-picker {
+  width: 3rem;
+  height: 2.5rem;
+  padding: 0.15rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  background-color: transparent;
+  cursor: pointer;
 }
 
 /* Create-group team specs */

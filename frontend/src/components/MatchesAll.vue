@@ -520,6 +520,10 @@ export default {
     },
 
     getTeamColor(colour) {
+      if (colour && colour.startsWith('#')) {
+        return colour;
+      }
+
       const colorMap = {
         'red': '#ef4444',
         'blue': '#3b82f6',
