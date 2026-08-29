@@ -1,25 +1,5 @@
 <template>
-  <div class="matches-container">
-    <!-- Header Section -->
-    <section class="matches-header">
-      <div class="container">
-        <div class="header-content">
-          <div class="title-section">
-            <h1 class="page-title">Football Matches</h1>
-            <p class="page-subtitle">Track live scores and match details</p>
-          </div>
-          <!-- Create Match Button -->
-          <button class="btn-base btn-primary btn-large create-match-btn" @click="showCreateModal = true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Create Match
-          </button>
-        </div>
-      </div>
-    </section>
-
+  <div class="matches-panel">
     <!-- Create Match Modal -->
     <transition name="modal">
       <div v-if="showCreateModal" class="modal-overlay" @click="closeModal">
@@ -129,7 +109,7 @@
                   <div v-for="(team, index) in match.Teams" :key="team.ID" class="team-horizontal">
                     <div class="team-info-horizontal">
                       <div class="team-color-horizontal" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-                      <span class="team-name-horizontal">{{ team.Colour }}</span>
+                      <span class="team-name-horizontal">{{ team.Name }}</span>
                     </div>
                     <div class="team-score-horizontal">{{ team.Score }}</div>
                     <div v-if="index < match.Teams.length - 1" class="vs-separator">vs</div>
@@ -141,6 +121,17 @@
                   <div class="status-indicator-horizontal" :class="getMatchStatus(match)"></div>
                 </div>
               </div>
+
+              <!-- Create Match — admin-only, integrated into the match list
+                   itself (as a trailing "+" card) rather than a separate
+                   toolbar above it. -->
+              <button v-if="isAdmin" class="match-card-horizontal add-match-card" @click="showCreateModal = true"
+                aria-label="Create match">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
             </div>
 
             <!-- Scroll indicators -->
@@ -162,12 +153,24 @@
               <div class="details-header">
                 <div class="details-title-section">
                   <h3>{{ formatDate(selectedMatch.Date) }} - Match Details</h3>
-                  <router-link :to="`/matches/${selectedMatch.ID}/edit`" class="btn-base btn-primary btn-small edit-match-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <!-- The destination page (MatchDetails.vue) stays viewable by
+                       any member — only its own editing controls are
+                       admin-gated — so this link is never hidden, just
+                       relabelled: showing "Edit Match" with a pencil icon to a
+                       non-admin implied an ability that isn't actually there. -->
+                  <router-link
+                    :to="`/matches/${selectedMatch.ID}/edit`"
+                    class="btn-base btn-primary btn-small edit-match-btn"
+                  >
+                    <svg v-if="isAdmin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                     </svg>
-                    Edit Match
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    {{ isAdmin ? 'Edit Match' : 'View Match' }}
                   </router-link>
                 </div>
                 <div class="details-divider"></div>
@@ -182,7 +185,7 @@
                         <th v-for="team in selectedMatch.Teams" :key="team.ID" class="team-col">
                           <div class="team-header">
                             <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-                            {{ team.Colour }}
+                            {{ team.Name }}
                           </div>
                         </th>
                         <th class="goal-number-col">Goal #</th>
@@ -225,7 +228,7 @@
             </svg>
             <h3 class="empty-title">No matches available</h3>
             <p class="empty-description">Create your first match to get started</p>
-            <button class="btn-base btn-primary btn-large" @click="showCreateModal = true">
+            <button v-if="isAdmin" class="btn-base btn-primary btn-large" @click="showCreateModal = true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
@@ -242,8 +245,34 @@
 <script>
 import { getMatchesDetails, createMatch } from '@/services/api';
 
+// The Matches sub-tab of MatchesAndStandings.vue: the match carousel, the
+// selected match's preview, and the admin-only create-match modal. Everything
+// it is scoped by — the active group, the caller's admin role, the selected
+// season — is resolved once by the page and passed down, so this component
+// only ever loads matches.
 export default {
-  name: 'MatchesAll',
+  name: 'MatchesPanel',
+  props: {
+    // The group the list (and any match created from here) belongs to. Empty
+    // means "let the backend pick the caller's first group", the same degraded
+    // behaviour resolveActiveGroupId() falls back to.
+    activeGroupId: {
+      type: String,
+      default: ''
+    },
+    // Whether the caller is an admin of that group — gates the "Create Match"
+    // button, since POST /matches is admin-only on the backend
+    // (RequireGroupAdmin in main.go).
+    isAdmin: {
+      type: Boolean,
+      default: false
+    },
+    // Empty means every season, exactly like the standings endpoints.
+    season: {
+      type: String,
+      default: ''
+    }
+  },
   data() {
     return {
       matches: [],
@@ -265,6 +294,13 @@ export default {
   },
   async created() {
     await this.loadMatches();
+  },
+  watch: {
+    // The page's season selector is shared with the standings tabs, so a
+    // change there has to re-scope this list too.
+    season() {
+      this.loadMatches();
+    }
   },
   mounted() {
     this.$nextTick(() => {
@@ -310,8 +346,9 @@ export default {
   methods: {
     async loadMatches() {
       this.isLoading = true;
+      this.selectedMatch = null;
       try {
-        const matches = await getMatchesDetails();
+        const matches = await getMatchesDetails(this.activeGroupId, this.season);
 
         // Validate matches data
         if (!Array.isArray(matches)) {
@@ -338,6 +375,9 @@ export default {
         }
       } catch (error) {
         console.error('Error fetching matches:', error);
+        // Don't leave the previous season's list on screen after a failed
+        // reload — an empty list is at least not misleading.
+        this.matches = [];
       } finally {
         this.isLoading = false;
       }
@@ -356,7 +396,7 @@ export default {
       this.match.Date = this.selectedDate;
       try {
         // Call your createMatch API function
-        const response = await createMatch(this.match);
+        const response = await createMatch(this.match, this.activeGroupId);
 
         if (response) {
           // Close modal
@@ -515,6 +555,10 @@ export default {
     },
 
     getTeamColor(colour) {
+      if (colour && colour.startsWith('#')) {
+        return colour;
+      }
+
       const colorMap = {
         'red': '#ef4444',
         'blue': '#3b82f6',
@@ -579,55 +623,8 @@ export default {
 /* Component-specific styles that couldn't be moved to global */
 
 /* Container */
-.matches-container {
+.matches-panel {
   background-color: var(--bg-secondary);
-}
-
-/* Header Section */
-.matches-header {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-  color: white;
-  padding: 1rem 0;
-  position: relative;
-  overflow: hidden;
-}
-
-.matches-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="2" fill="white" opacity="0.1"/></svg>') repeat;
-  animation: float 20s ease-in-out infinite;
-}
-
-.header-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  position: relative;
-  z-index: 1;
-}
-
-.title-section {
-  text-align: left;
-}
-
-/* Create Match Button Styling */
-.create-match-btn {
-  background-color: rgba(255, 255, 255, 0.15) !important;
-  backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.3) !important;
-  color: white !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-}
-
-.create-match-btn:hover {
-  background-color: rgba(255, 255, 255, 0.25) !important;
-  border-color: rgba(255, 255, 255, 0.5) !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
 }
 
 /* Modal Header Gradient */
@@ -856,6 +853,27 @@ export default {
   border-color: var(--primary-color);
   background-color: var(--bg-primary);
   box-shadow: var(--shadow-lg);
+}
+
+/* Trailing "+" card — replaces the old standalone "Create Match" toolbar,
+   living at the end of the match list instead. */
+.add-match-card {
+  flex: 0 0 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--border-color);
+  color: var(--primary-color);
+}
+
+.add-match-card:hover {
+  border-color: var(--primary-color);
+  background-color: var(--bg-primary);
+}
+
+.add-match-card svg {
+  width: 24px;
+  height: 24px;
 }
 
 .match-date-horizontal {
@@ -1157,23 +1175,13 @@ export default {
     padding: 2rem 0;
   }
 
-  .matches-header {
-    padding: 2rem 0;
-  }
-
-  .header-content {
-    flex-direction: column;
-    gap: 1rem;
-    text-align: center;
-  }
-
-  .title-section {
-    text-align: center;
-  }
-
   .match-card-horizontal {
     flex: 0 0 240px;
     padding: 0.75rem;
+  }
+
+  .add-match-card {
+    flex-basis: 64px;
   }
 
   .match-details-container {

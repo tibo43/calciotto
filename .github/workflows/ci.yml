@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (Go)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: calciotto
+          POSTGRES_PASSWORD: calciotto
+          POSTGRES_DB: calciotto
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U calciotto -d calciotto"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+
+      - name: Build
+        working-directory: app
+        run: go build ./...
+
+      - name: Vet
+        working-directory: app
+        run: go vet ./...
+
+      - name: Test
+        working-directory: app
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: calciotto
+          DB_PASSWORD: calciotto
+          DB_NAME: calciotto
+          JWT_SECRET: ci-placeholder-jwt-secret
+        run: go test ./... -count=1
+
+  frontend:
+    name: Frontend (Vue)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Unit test
+        working-directory: frontend
+        run: npm run test:unit
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build

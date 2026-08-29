@@ -2,16 +2,33 @@ services:
   backend:
     build:
       context: .
-      # Correct the path to your Dockerfile
-      dockerfile: Dockerfile
+      dockerfile: dockerfile.dev
     ports:
       - 8080:8080
+    env_file:
+      - env/develop.env
     # Important to bind/mount your codebase dir to /app dir for live reload
     volumes:
       - ./../app:/app
     depends_on:
       db:
         condition: service_healthy
+  seed:
+    build:
+      context: .
+      dockerfile: dockerfile.dev
+    env_file:
+      - env/develop.env
+    volumes:
+      - ./../app:/app
+    # Idempotent: cmd/seed skips itself once players already exist, so
+    # running this on every `up` is harmless — it only actually seeds once.
+    # Force a fresh reseed with `docker compose exec backend go run ./cmd/seed -reset`.
+    command: ["go", "run", "./cmd/seed"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
   frontend:
     image: node:24-alpine
     ports:
@@ -19,8 +36,9 @@ services:
     # Important to bind/mount your codebase dir to /frontend dir for live reload
     volumes:
       - ./../frontend:/frontend
+      - frontend_node_modules:/frontend/node_modules
     working_dir: /frontend
-    command: "npm run serve"
+    command: sh -c "npm install && npm run serve"
     environment:
       - VUE_API_BASE_URL="http://127.0.0.1:8080"
     depends_on:
@@ -56,3 +74,4 @@ services:
       restart: unless-stopped
 volumes:
   postgres:
+  frontend_node_modules:

@@ -2,10 +2,20 @@ package services
 
 import (
 	"app/internal/models"
+	"errors"
 	"sort"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+// ErrMatchNotFound is returned when the requested match either does not
+// exist at all, or exists but does not belong to the group it was requested
+// under — the latter is the mechanism that stops a match ID from one group
+// from being used to read another group's data, so it deliberately shares
+// the same sentinel/404 as a plain missing match rather than leaking a
+// distinct "forbidden" signal.
+var ErrMatchNotFound = errors.New("match not found")
 
 type MatchService struct {
 	DB *gorm.DB
@@ -15,49 +25,58 @@ func NewMatchService(db *gorm.DB) *MatchService {
 	return &MatchService{DB: db}
 }
 
-func (s *MatchService) CreateMatch(date string) (string, error) {
+func (s *MatchService) CreateMatch(date models.Date, groupID uuid.UUID) (uuid.UUID, error) {
 	match := &models.Match{
-		BaseModel: models.BaseModel{},
-		Date:      date,
+		GroupID: groupID,
+		Date:    date,
 	}
 	result := s.DB.Create(match)
 	if result.Error != nil {
-		return "", result.Error
+		return uuid.Nil, result.Error
 	}
 	return match.ID, nil
 }
 
-func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
+// GetMatchesDetails returns every match of a group, optionally narrowed to a
+// single season. The season is applied in Go, via the same
+// FilterMatchesBySeason the standings already use, rather than as a SQL
+// predicate: a season is a derived label (models.SeasonOf), not a stored
+// column, so there is nothing to filter on in the query. An empty season means
+// "no filtering" — which is what every standings caller passes, since they run
+// their own FilterMatchesBySeason pass on the result.
+func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]models.MatchWithDetails, error) {
 	var rowsMatches []models.RowsMatchDetails
 
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
-        SELECT matches.id as match_id, matches.date as match_date,
-               teams.id as team_id, teams.colour as team_colour,
+        SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
+               teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored
         FROM matches
         LEFT JOIN match_players ON match_players.match_id = matches.id
         LEFT JOIN teams ON teams.id = match_players.team_id
         LEFT JOIN players ON players.id = match_players.player_id
+		WHERE matches.group_id = ?
 		ORDER BY match_date DESC
-    `).Scan(&rowsMatches)
+    `, groupID).Scan(&rowsMatches)
 
 	if result.Error != nil {
 		return nil, result.Error
 	}
 
 	// Map the flat results into the hierarchical structure
-	matchesMap := make(map[string]*models.MatchWithDetails)
+	matchesMap := make(map[uuid.UUID]*models.MatchWithDetails)
 
 	for _, rowMatches := range rowsMatches {
 		// Get or create the match
 		match, exists := matchesMap[rowMatches.MatchID]
 		if !exists {
 			match = &models.MatchWithDetails{
-				ID:    rowMatches.MatchID,
-				Date:  rowMatches.MatchDate,
-				Teams: []models.TeamWithPlayers{},
+				ID:      rowMatches.MatchID,
+				GroupID: rowMatches.MatchGroupID,
+				Date:    rowMatches.MatchDate,
+				Teams:   []models.TeamWithPlayers{},
 			}
 			matchesMap[rowMatches.MatchID] = match
 		}
@@ -73,6 +92,7 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 		if team == nil {
 			newTeam := models.TeamWithPlayers{
 				ID:      rowMatches.TeamID,
+				Name:    rowMatches.TeamName,
 				Colour:  rowMatches.TeamColour,
 				Score:   0,
 				Players: []models.PlayerCustom{},
@@ -89,13 +109,19 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 		})
 	}
 
+	// Fetch this group's teams once, used below to backfill any team that has no roster yet in a given match.
+	var allTeams []models.Team
+	if result := s.DB.Where("group_id = ?", groupID).Find(&allTeams); result.Error != nil {
+		return nil, result.Error
+	}
+
 	// Convert the map to a slice
 	var matches []models.MatchWithDetails
 	for _, match := range matchesMap {
 		// Filter out teams with missing ID or Colour
 		var validTeams []models.TeamWithPlayers
 		for _, team := range match.Teams {
-			if team.ID != "" && team.Colour != "" && len(team.Players) > 0 {
+			if team.ID != uuid.Nil && team.Colour != "" && len(team.Players) > 0 {
 				for _, player := range team.Players {
 					// Update the team's score based on the number of goals scored by players
 					team.Score += player.GoalsScored
@@ -104,23 +130,24 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 			}
 		}
 
-		if len(validTeams) == 0 {
-			var rowsTeams []models.RowsTeamDetails
-			result := s.DB.Raw(`
-					SELECT teams.id as team_id, teams.colour as team_colour
-					FROM teams
-				`).Scan(&rowsTeams)
-			if result.Error != nil {
-				return nil, result.Error
+		// Backfill any team that has no players assigned yet in this match, so a match
+		// always shows every team instead of only the ones with a roster so far.
+		for _, allTeam := range allTeams {
+			found := false
+			for _, team := range validTeams {
+				if team.ID == allTeam.ID {
+					found = true
+					break
+				}
 			}
-			for _, rowTeams := range rowsTeams {
-				var team = &models.TeamWithPlayers{
-					ID:      rowTeams.TeamID,
-					Colour:  rowTeams.TeamColour,
+			if !found {
+				validTeams = append(validTeams, models.TeamWithPlayers{
+					ID:      allTeam.ID,
+					Name:    allTeam.Name,
+					Colour:  allTeam.Colour,
 					Score:   0,
 					Players: []models.PlayerCustom{},
-				}
-				validTeams = append(validTeams, *team)
+				})
 			}
 		}
 
@@ -132,13 +159,9 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 	}
 
 	// Sort matches by date in descending order
-	for i := 0; i < len(matches)-1; i++ {
-		for j := i + 1; j < len(matches); j++ {
-			if matches[i].Date < matches[j].Date {
-				matches[i], matches[j] = matches[j], matches[i]
-			}
-		}
-	}
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[j].Date.Before(matches[i].Date)
+	})
 	// Sort matched teams same colour in first position
 	for _, match := range matches {
 		sort.Slice(match.Teams, func(i, j int) bool {
@@ -154,98 +177,115 @@ func (s *MatchService) GetMatchesDetails() ([]models.MatchWithDetails, error) {
 			})
 		}
 	}
-	return matches, nil
+	return FilterMatchesBySeason(matches, season), nil
 }
 
-func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails, error) {
+// GetMatchDetailsByID returns the match with the given id, scoped to
+// groupID — a match belonging to a different group is treated as not found,
+// so a match ID from one group can't be used to read another group's data.
+func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*models.MatchWithDetails, error) {
 
 	var rowsMatch []*models.RowsMatchDetails
 
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
-        SELECT matches.id as match_id, matches.date as match_date, 
-               teams.id as team_id, teams.colour as team_colour, 
+        SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
+               teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored
         FROM matches
         LEFT JOIN match_players ON match_players.match_id = matches.id
         LEFT JOIN teams ON teams.id = match_players.team_id
         LEFT JOIN players ON players.id = match_players.player_id
-		WHERE matches.id = ?
-		ORDER BY match_date DESC`, id).Scan(&rowsMatch)
+		WHERE matches.id = ? AND matches.group_id = ?
+		ORDER BY match_date DESC`, id, groupID).Scan(&rowsMatch)
 
 	if result.Error != nil {
 		return nil, result.Error
 	}
 
-	// Initialisez l'objet match
-	match := &models.MatchWithDetails{
-		ID:    id,
-		Date:  rowsMatch[0].MatchDate,
-		Teams: []models.TeamWithPlayers{},
+	if len(rowsMatch) == 0 {
+		return nil, ErrMatchNotFound
 	}
 
-	if len(rowsMatch) > 1 {
-		for _, rowMatch := range rowsMatch {
-			// Get or create the team
-			var team *models.TeamWithPlayers
-			for i := range match.Teams {
-				if match.Teams[i].ID == rowMatch.TeamID {
-					team = &match.Teams[i]
-					break
-				}
-			}
+	// Initialisez l'objet match
+	match := &models.MatchWithDetails{
+		ID:      id,
+		GroupID: rowsMatch[0].MatchGroupID,
+		Date:    rowsMatch[0].MatchDate,
+		Teams:   []models.TeamWithPlayers{},
+	}
 
-			if team == nil {
-				newTeam := models.TeamWithPlayers{
-					ID:      rowMatch.TeamID,
-					Colour:  rowMatch.TeamColour,
-					Score:   0,
-					Players: []models.PlayerCustom{},
-				}
-				match.Teams = append(match.Teams, newTeam)
-				team = &match.Teams[len(match.Teams)-1] // Point to the newly appended team
-			}
-
-			team.Players = append(team.Players, models.PlayerCustom{
-				ID:          rowMatch.PlayerID,
-				Name:        rowMatch.PlayerName,
-				GoalsScored: rowMatch.GoalsScored,
-			})
-
+	for _, rowMatch := range rowsMatch {
+		if rowMatch.TeamID == uuid.Nil {
+			// No match_players row at all for this match yet.
+			continue
 		}
 
-		// Calculez le score pour chaque équipe
+		// Get or create the team
+		var team *models.TeamWithPlayers
 		for i := range match.Teams {
-			score := 0
-			for _, player := range match.Teams[i].Players {
-				score += player.GoalsScored
+			if match.Teams[i].ID == rowMatch.TeamID {
+				team = &match.Teams[i]
+				break
 			}
-			match.Teams[i].Score = score
 		}
-	} else {
-		var rowsTeams []models.RowsTeamDetails
-		result := s.DB.Raw(`
-				SELECT teams.id as team_id, teams.colour as team_colour
-				FROM teams
-			`).Scan(&rowsTeams)
-		if result.Error != nil {
-			return nil, result.Error
-		}
-		for _, rowTeams := range rowsTeams {
-			var team = &models.TeamWithPlayers{
-				ID:      rowTeams.TeamID,
-				Colour:  rowTeams.TeamColour,
+
+		if team == nil {
+			newTeam := models.TeamWithPlayers{
+				ID:      rowMatch.TeamID,
+				Name:    rowMatch.TeamName,
+				Colour:  rowMatch.TeamColour,
 				Score:   0,
 				Players: []models.PlayerCustom{},
 			}
-			match.Teams = append(match.Teams, *team)
+			match.Teams = append(match.Teams, newTeam)
+			team = &match.Teams[len(match.Teams)-1] // Point to the newly appended team
+		}
+
+		team.Players = append(team.Players, models.PlayerCustom{
+			ID:          rowMatch.PlayerID,
+			Name:        rowMatch.PlayerName,
+			GoalsScored: rowMatch.GoalsScored,
+		})
+	}
+
+	// Calculez le score pour chaque équipe
+	for i := range match.Teams {
+		score := 0
+		for _, player := range match.Teams[i].Players {
+			score += player.GoalsScored
+		}
+		match.Teams[i].Score = score
+	}
+
+	// Backfill any team that has no players assigned yet in this match, so the match
+	// always shows every team instead of only the ones with a roster so far.
+	var allTeams []models.Team
+	if result := s.DB.Where("group_id = ?", groupID).Find(&allTeams); result.Error != nil {
+		return nil, result.Error
+	}
+	for _, allTeam := range allTeams {
+		found := false
+		for _, team := range match.Teams {
+			if team.ID == allTeam.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			match.Teams = append(match.Teams, models.TeamWithPlayers{
+				ID:      allTeam.ID,
+				Name:    allTeam.Name,
+				Colour:  allTeam.Colour,
+				Score:   0,
+				Players: []models.PlayerCustom{},
+			})
 		}
 	}
 
-	// Triez les équipes par couleur, en plaçant une couleur aléatoire en première position
+	// Triez les équipes par couleur (ordre alphabétique)
 	if len(match.Teams) > 0 {
-		// Triez les équipes par couleur
 		sort.Slice(match.Teams, func(i, j int) bool {
 			return match.Teams[i].Colour < match.Teams[j].Colour
 		})
@@ -262,60 +302,86 @@ func (s *MatchService) GetMatchDetailsByID(id string) (*models.MatchWithDetails,
 	return match, nil
 }
 
+// DeleteMatch removes the match with the given id, scoped to groupID the same
+// way GetMatchDetailsByID is — a match belonging to a different group (or not
+// existing at all) is reported as ErrMatchNotFound rather than being
+// reachable. MatchPlayer.MatchID has no ON DELETE CASCADE, so every
+// match_players row for this match is deleted first, inside the same
+// transaction as the match itself, or the match delete would fail with a
+// foreign-key violation instead of a clean application-level result.
+func (s *MatchService) DeleteMatch(matchID, groupID uuid.UUID) error {
+	var match models.Match
+	if err := s.DB.Where("id = ? AND group_id = ?", matchID, groupID).First(&match).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrMatchNotFound
+		}
+		return err
+	}
+
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchPlayer{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.Match{}, "id = ?", matchID).Error
+	})
+}
+
 func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
-	var dbMatchPlayers []models.MatchPlayer
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		var dbMatchPlayers []models.MatchPlayer
 
-	for i := range match.Teams {
-		team := &match.Teams[i]
-		result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Find(&dbMatchPlayers)
-		if result.Error != nil {
-			return result.Error
-		}
-		for j := range team.Players {
-			player := &team.Players[j]
-			// Check if the player already exists in the team composition
-			exists := false
-			for _, dbMatchPlayer := range dbMatchPlayers {
-				if dbMatchPlayer.PlayerID == player.ID {
-					exists = true
-					break
-				}
+		for i := range match.Teams {
+			team := &match.Teams[i]
+			result := tx.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Find(&dbMatchPlayers)
+			if result.Error != nil {
+				return result.Error
 			}
-			if !exists {
-				// Create a new team composition if it doesn't exist
-				newMatchPlayer := models.MatchPlayer{
-					MatchID:     match.ID,
-					TeamID:      team.ID,
-					PlayerID:    player.ID,
-					GoalsScored: player.GoalsScored,
-				}
-				result := s.DB.Create(&newMatchPlayer)
-				if result.Error != nil {
-					return result.Error
-				}
-			}
-		}
-
-		for _, dbMatchPlayer := range dbMatchPlayers {
-			toDelete := true
 			for j := range team.Players {
 				player := &team.Players[j]
-				if dbMatchPlayer.PlayerID == player.ID {
-					toDelete = false
-					result := s.DB.Model(&models.MatchPlayer{}).Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", player.ID).Update("goals_scored", player.GoalsScored)
+				// Check if the player already exists in the team composition
+				exists := false
+				for _, dbMatchPlayer := range dbMatchPlayers {
+					if dbMatchPlayer.PlayerID == player.ID {
+						exists = true
+						break
+					}
+				}
+				if !exists {
+					// Create a new team composition if it doesn't exist
+					newMatchPlayer := models.MatchPlayer{
+						MatchID:     match.ID,
+						TeamID:      team.ID,
+						PlayerID:    player.ID,
+						GoalsScored: player.GoalsScored,
+					}
+					result := tx.Create(&newMatchPlayer)
 					if result.Error != nil {
 						return result.Error
 					}
-					break
 				}
 			}
-			if toDelete {
-				result := s.DB.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", dbMatchPlayer.PlayerID).Delete(&models.MatchPlayer{})
-				if result.Error != nil {
-					return result.Error
+
+			for _, dbMatchPlayer := range dbMatchPlayers {
+				toDelete := true
+				for j := range team.Players {
+					player := &team.Players[j]
+					if dbMatchPlayer.PlayerID == player.ID {
+						toDelete = false
+						result := tx.Model(&models.MatchPlayer{}).Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", player.ID).Update("goals_scored", player.GoalsScored)
+						if result.Error != nil {
+							return result.Error
+						}
+						break
+					}
+				}
+				if toDelete {
+					result := tx.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", dbMatchPlayer.PlayerID).Delete(&models.MatchPlayer{})
+					if result.Error != nil {
+						return result.Error
+					}
 				}
 			}
 		}
-	}
-	return nil
+		return nil
+	})
 }

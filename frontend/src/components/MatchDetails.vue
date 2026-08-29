@@ -39,7 +39,7 @@
             <div class="team-score">
               <div class="team-info">
                 <div class="team-color" :style="{ backgroundColor: getTeamColor(match.Teams[0].Colour) }"></div>
-                <h3 class="team-name">{{ match.Teams[0].Colour }}</h3>
+                <h3 class="team-name">{{ match.Teams[0].Name }}</h3>
               </div>
               <div class="score">{{ match.Teams[0].Score || 0 }}</div>
             </div>
@@ -55,7 +55,7 @@
             <div class="team-score">
               <div class="team-info">
                 <div class="team-color" :style="{ backgroundColor: getTeamColor(match.Teams[1].Colour) }"></div>
-                <h3 class="team-name">{{ match.Teams[1].Colour }}</h3>
+                <h3 class="team-name">{{ match.Teams[1].Name }}</h3>
               </div>
               <div class="score">{{ match.Teams[1].Score || 0 }}</div>
             </div>
@@ -69,12 +69,12 @@
               <button v-for="(team, index) in match.Teams" :key="team.ID" @click="activeTeam = index"
                 :class="['tab-button', { active: activeTeam === index }]">
                 <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-                {{ team.Colour }} Team ({{ team.Players ? team.Players.length : 0 }})
+                {{ team.Name }} ({{ team.Players ? team.Players.length : 0 }})
               </button>
             </div>
 
             <div class="action-buttons">
-              <button @click="showModal" class="btn-base btn-secondary btn-small">
+              <button v-if="isAdmin" @click="showModal" class="btn-base btn-secondary btn-small">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="16" />
@@ -82,7 +82,7 @@
                 </svg>
                 Add Player
               </button>
-              <button @click="saveChanges" class="btn-base btn-primary btn-small" :disabled="isSaving">
+              <button v-if="isAdmin" @click="saveChanges" class="btn-base btn-primary btn-small" :disabled="isSaving">
                 <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                   <polyline points="17,21 17,13 7,13 7,21" />
@@ -90,6 +90,17 @@
                 </svg>
                 <div v-else class="loading-spinner-small"></div>
                 {{ isSaving ? 'Saving...' : 'Save Changes' }}
+              </button>
+              <!-- Clearly separated from Save Changes so a click can't be
+                   mistaken between the two destructive/non-destructive actions. -->
+              <button v-if="isAdmin" @click="confirmDeleteMatch" class="btn-base btn-danger btn-small delete-match-btn"
+                :disabled="isDeleting">
+                <svg v-if="!isDeleting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3,6 5,6 21,6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+                <div v-else class="loading-spinner-small"></div>
+                {{ isDeleting ? 'Deleting...' : 'Delete Match' }}
               </button>
             </div>
           </div>
@@ -106,7 +117,7 @@
                   <h4 class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</h4>
                   <span class="player-goals">Goals: {{ player.GoalNumber || 0 }}</span>
                 </div>
-                <button @click="removePlayer(playerIndex)" class="btn-danger-icon">
+                <button v-if="isAdmin" @click="removePlayer(playerIndex)" class="btn-danger-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
@@ -116,8 +127,8 @@
 
               <!-- Goal Management -->
               <div class="goal-management">
-                <button @click="updateGoals(playerIndex, -1)" :disabled="!player.GoalNumber || player.GoalNumber <= 0"
-                  class="goal-btn decrease">
+                <button v-if="isAdmin" @click="updateGoals(playerIndex, -1)"
+                  :disabled="!player.GoalNumber || player.GoalNumber <= 0" class="goal-btn decrease">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
@@ -125,7 +136,7 @@
 
                 <span class="goal-count">{{ player.GoalNumber || 0 }}</span>
 
-                <button @click="updateGoals(playerIndex, 1)" class="goal-btn increase">
+                <button v-if="isAdmin" @click="updateGoals(playerIndex, 1)" class="goal-btn increase">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="12" y1="5" x2="12" y2="19" />
                     <line x1="5" y1="12" x2="19" y2="12" />
@@ -161,7 +172,7 @@
     <div v-if="showAddPlayerModal" class="modal-overlay" @click="closeModal">
       <div class="enhanced-multi-player-modal" @click.stop>
         <div class="modal-header enhanced-modal-header">
-          <h3>Add Players to {{ match.Teams[activeTeam].Colour }} Team</h3>
+          <h3>Add Players to {{ match.Teams[activeTeam].Name }} Team</h3>
           <button @click="closeModal" class="modal-close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -365,7 +376,8 @@
 </template>
 
 <script>
-import { getMatchDetailsByID, updateMatch, getPlayers, createPlayer } from '@/services/api';
+import { getMatchDetailsByID, updateMatch, deleteMatch, getGroupMembers, createPlayer } from '@/services/api';
+import { resolveActiveGroup } from '@/services/activeGroup';
 
 export default {
   name: 'MatchDetail',
@@ -375,34 +387,70 @@ export default {
   data() {
     return {
       match: null,
+      matchSnapshot: null,
       isLoading: true,
       isSaving: false,
+      isDeleting: false,
+      // Resolved once on load, reused when loading the match (scoped to the
+      // same group) and when deleting it.
+      activeGroupId: '',
+      // Whether the caller is an admin of the active group — gates every
+      // editing control (add/remove player, goals, save, delete). Editing and
+      // deleting a match are admin-only on the backend (RequireGroupAdmin in
+      // main.go); a non-admin can still view the match read-only.
+      isAdmin: false,
       activeTeam: 0,
       showAddPlayerModal: false,
       message: '',
       messageType: 'success',
       // New properties for player dropdown
       allPlayers: [],
-      filteredPlayers: [],
       selectedPlayers: [],
       filteredAvailablePlayers: [],
       isLoadingPlayers: false,
       playerSearchTerm: '',
-      isSearchingPlayer: false,
       messageKey: 0,
       showCreatePlayerOption: false,
       isCreatingPlayer: false,
     };
   },
   async created() {
+    try {
+      const { groups, activeGroupId } = await resolveActiveGroup();
+      this.activeGroupId = activeGroupId;
+      this.isAdmin = groups.find(g => g.id === activeGroupId)?.role === 'admin';
+    } catch (error) {
+      // Degrade instead of breaking the page: no group_id (backend's own
+      // first-group fallback) and isAdmin left false, which just hides the
+      // admin-only controls.
+      console.error('Error resolving the active group:', error);
+    }
     await this.loadMatch();
   },
+  beforeRouteLeave(to, from, next) {
+    if (this.hasUnsavedChanges()) {
+      const leave = window.confirm('You have unsaved changes. Leave without saving?');
+      next(leave);
+      return;
+    }
+    next();
+  },
   methods: {
+    hasUnsavedChanges() {
+      if (this.isSaving || !this.match) return false;
+      return JSON.stringify(this.match) !== this.matchSnapshot;
+    },
+
     async loadMatch() {
       this.isLoading = true;
       try {
         const matchId = this.$route.params.id;
-        this.match = await getMatchDetailsByID(matchId);
+        // GetMatchDetailsByID filters on (match id, group id), so a match from
+        // another group reads as "not found" — which is what we want: the URL
+        // alone must not pull a match out of a group we aren't scoped to.
+        // updateMatch needs no group of its own; it posts back this.match,
+        // whose GroupID already comes from this response.
+        this.match = await getMatchDetailsByID(matchId, this.activeGroupId);
 
         // Ensure each player has GoalNumber property
         if (this.match && this.match.Teams) {
@@ -417,6 +465,7 @@ export default {
           });
         }
 
+        this.matchSnapshot = JSON.stringify(this.match);
       } catch (error) {
         console.error('Error fetching match:', error);
         this.showMessage('Error loading match details', 'error');
@@ -471,17 +520,6 @@ export default {
       this.checkCreatePlayerOption();
     },
 
-    onPlayerNameInput() {
-      this.playerSearchTerm = this.newPlayerName;
-      this.isSearchingPlayer = true;
-
-      // Debounce the search
-      clearTimeout(this.searchTimeout);
-      this.searchTimeout = setTimeout(() => {
-        this.searchPlayers();
-      }, 300);
-    },
-
     // Check if we should show the create player option
     checkCreatePlayerOption() {
       if (!this.playerSearchTerm || this.playerSearchTerm.trim().length < 2) {
@@ -521,7 +559,14 @@ export default {
       this.isCreatingPlayer = true;
       try {
         const newPlayerData = {
-          Name: playerNameLowerCase // Send lowercase to backend
+          Name: playerNameLowerCase, // Send lowercase to backend
+          // Exact key, lowercase with an underscore: CreatePlayer binds this
+          // into a `json:"group_id"` field, and Gin's case-insensitive JSON
+          // binding does not bridge the underscore — sending `GroupID`
+          // instead would silently fail to bind and the new player would
+          // fall through to the backend's own-first-group fallback instead
+          // of joining this match's group.
+          group_id: this.match.GroupID
         };
 
         await createPlayer(newPlayerData);
@@ -548,93 +593,46 @@ export default {
 
       } catch (error) {
         console.error('Error creating player:', error);
-        this.showMessage('Error creating player. Please try again.', 'error');
+        // The backend's own per-group duplicate-name check (a case our own
+        // client-side check against this.allPlayers can't catch, since that
+        // check is global rather than scoped to this match's group) returns a
+        // specific message worth showing verbatim, same pattern as
+        // ForgotPassword.vue/Profile.vue. Fall back to a generic message for
+        // any other kind of failure.
+        const backendMessage = error.response?.data?.error;
+        this.showMessage(backendMessage || 'Error creating player. Please try again.', 'error');
       } finally {
         this.isCreatingPlayer = false;
       }
     },
 
+    // Scoped to this match's own group (this.activeGroupId, resolved once in
+    // created() via resolveActiveGroup()) rather than every player in the
+    // database: a player removed from the group — or belonging to a
+    // different group entirely — must not be offered here.
     async reloadAllPlayers() {
+      if (!this.activeGroupId) {
+        // No group resolved (resolveActiveGroup failed) — degrade to an
+        // empty list rather than requesting a malformed URL.
+        this.allPlayers = [];
+        this.filterAvailablePlayers();
+        return;
+      }
       try {
-        const players = await getPlayers();
-        this.allPlayers = Array.isArray(players) ? players : [];
+        const members = await getGroupMembers(this.activeGroupId);
+        // getGroupMembers returns PlayerWithRole, which embeds Player's own
+        // lowercase JSON fields (id, name) plus role — translate to the
+        // PascalCase {ID, Name} shape the rest of this component already
+        // uses for players (matching PlayerCustom's convention from the
+        // getPlayers() call this replaces), role is not needed here.
+        this.allPlayers = Array.isArray(members)
+          ? members.map(member => ({ ID: member.id, Name: member.name }))
+          : [];
         this.filterAvailablePlayers();
       } catch (error) {
         console.error('Error reloading players:', error);
         this.showMessage('Error reloading players list', 'error');
         // Don't reset allPlayers on error, keep the current data
-      }
-    },
-
-    async searchPlayers() {
-      if (!this.newPlayerName.trim()) {
-        this.playerSuggestions = [];
-        this.validationMessage = '';
-        this.playerNotFound = false;
-        this.playerAlreadyInTeam = false;
-        this.isSearchingPlayer = false;
-        return;
-      }
-
-      try {
-        // Load all players if not loaded
-        if (!this.allPlayers || this.allPlayers.length === 0) {
-          await this.loadAllPlayers();
-        }
-
-        // Filter players based on search term
-        const searchTerm = this.newPlayerName.toLowerCase().trim();
-        const matchingPlayers = this.allPlayers.filter(player =>
-          player && player.Name && player.Name.toLowerCase().includes(searchTerm)
-        );
-
-        this.playerSuggestions = matchingPlayers;
-
-        // Set validation states
-        if (matchingPlayers.length === 0) {
-          this.playerNotFound = true;
-          this.playerAlreadyInTeam = false;
-          this.validationMessage = 'No players found with that name';
-        } else if (matchingPlayers.length === 1) {
-          const player = matchingPlayers[0];
-          this.playerNotFound = false;
-          this.playerAlreadyInTeam = this.isPlayerInCurrentTeam(player.Name);
-
-          if (this.playerAlreadyInTeam) {
-            this.validationMessage = `${player.Name} is already in the ${this.match.Teams[this.activeTeam].Colour} team`;
-          } else if (this.isPlayerInAnyTeam(player.Name)) {
-            this.validationMessage = `${player.Name} is already in another team`;
-          } else {
-            this.validationMessage = `${player.Name} - Ready to add`;
-          }
-        } else {
-          this.playerNotFound = false;
-          this.playerAlreadyInTeam = false;
-          this.validationMessage = `Found ${matchingPlayers.length} matching players`;
-        }
-      } catch (error) {
-        console.error('Error searching players:', error);
-        this.playerSuggestions = [];
-        this.validationMessage = 'Error searching players';
-        this.playerNotFound = true;
-      } finally {
-        this.isSearchingPlayer = false;
-      }
-    },
-
-    selectPlayerSuggestion(player) {
-      this.selectedPlayer = player;
-      this.newPlayerName = player.Name;
-      this.playerSuggestions = [player]; // Show only selected player
-      this.playerNotFound = false;
-      this.playerAlreadyInTeam = this.isPlayerInCurrentTeam(player.Name);
-
-      if (this.playerAlreadyInTeam) {
-        this.validationMessage = `${player.Name} is already in the ${this.match.Teams[this.activeTeam].Colour} team`;
-      } else if (this.isPlayerInAnyTeam(player.Name)) {
-        this.validationMessage = `${player.Name} is already in another team`;
-      } else {
-        this.validationMessage = `${player.Name} - Ready to add`;
       }
     },
 
@@ -714,12 +712,6 @@ export default {
       this.closeModal();
     },
 
-    // Select a player from the list
-    selectPlayer(player) {
-      this.selectedPlayer = player;
-      this.newPlayerName = player.Name; // For compatibility with existing code
-    },
-
     // Check if player is in current team
     isPlayerInCurrentTeam(playerName) {
       if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
@@ -742,47 +734,6 @@ export default {
       );
     },
 
-    // Add selected player to team
-    async addPlayer() {
-      if (!this.newPlayerName.trim()) {
-        this.showMessage('Please enter a player name', 'error');
-        return;
-      }
-
-      // If we have suggestions, use the first one or the selected one
-      let playerToAdd = this.selectedPlayer;
-
-      if (!playerToAdd && this.playerSuggestions.length === 1) {
-        playerToAdd = this.playerSuggestions[0];
-      }
-
-      if (!playerToAdd) {
-        // Try to find player by name
-        playerToAdd = this.allPlayers.find(p =>
-          p.Name.toLowerCase() === this.newPlayerName.toLowerCase().trim()
-        );
-      }
-
-      if (!this.match.Teams || !this.match.Teams[this.activeTeam]) {
-        console.error('Invalid team data');
-        return;
-      }
-
-      if (!this.match.Teams[this.activeTeam].Players) {
-        this.match.Teams[this.activeTeam].Players = [];
-      }
-
-      const newPlayer = {
-        ID: playerToAdd.ID,
-        Name: playerToAdd.Name,
-        GoalNumber: this.newPlayerGoals || 0
-      };
-
-      this.match.Teams[this.activeTeam].Players.push(newPlayer);
-      this.updateTeamScore();
-      this.closeModal();
-    },
-
     // Show modal and load players
     async showModal() {
       this.showAddPlayerModal = true;
@@ -794,7 +745,6 @@ export default {
       this.selectedPlayers = [];
       this.playerSearchTerm = '';
       this.filteredAvailablePlayers = [];
-      this.isSearchingPlayer = false;
       this.showCreatePlayerOption = false;
       this.isCreatingPlayer = false;
       if (this.searchTimeout) {
@@ -862,12 +812,37 @@ export default {
       this.isSaving = true;
       try {
         await updateMatch(this.match.ID, this.match);
+        this.matchSnapshot = JSON.stringify(this.match);
         this.showMessage('Match updated successfully!', 'success');
       } catch (error) {
         console.error('Error saving match:', error);
         this.showMessage('Error saving changes', 'error');
       } finally {
         this.isSaving = false;
+      }
+    },
+
+    // Same confirm-before-acting pattern as beforeRouteLeave's unsaved-changes
+    // guard above — a plain window.confirm rather than a custom modal, since
+    // that's the existing precedent in this file for a destructive/irreversible
+    // action the user could regret.
+    confirmDeleteMatch() {
+      if (this.isDeleting) return;
+      const confirmed = window.confirm('Delete this match? This cannot be undone.');
+      if (!confirmed) return;
+      this.deleteMatchNow();
+    },
+
+    async deleteMatchNow() {
+      this.isDeleting = true;
+      try {
+        await deleteMatch(this.match.ID, this.activeGroupId);
+        this.goBack();
+      } catch (error) {
+        console.error('Error deleting match:', error);
+        this.showMessage('Error deleting match. Please try again.', 'error');
+      } finally {
+        this.isDeleting = false;
       }
     },
 
@@ -914,6 +889,10 @@ export default {
     },
 
     getTeamColor(colour) {
+      if (colour && colour.startsWith('#')) {
+        return colour;
+      }
+
       const colorMap = {
         'red': '#ef4444',
         'blue': '#3b82f6',
@@ -1196,6 +1175,12 @@ export default {
   align-items: center;
 }
 
+/* Pushed to the far end of the action bar and separated with extra margin so
+   a click can't land here by mistake while reaching for Save Changes. */
+.delete-match-btn {
+  margin-left: 1.5rem;
+}
+
 /* Players Grid */
 .players-grid {
   display: grid;
@@ -1227,9 +1212,31 @@ export default {
   flex: 1;
 }
 
+/* In the roster card header, stack name above goals instead of the
+   global .player-info row layout — and give it a real flex-basis so
+   overflow doesn't get shoved entirely onto the avatar/delete circles. */
+.player-header .player-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.125rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.player-header .player-name {
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
 .player-goals {
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.8rem;
+}
+
+.player-avatar {
+  flex-shrink: 0;
 }
 
 .btn-danger-icon {
@@ -1239,6 +1246,7 @@ export default {
   border-radius: 50%;
   width: 32px;
   height: 32px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;

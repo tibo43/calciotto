@@ -2,10 +2,14 @@ package services
 
 import (
 	"app/internal/models"
-	"log"
+	"errors"
+	"strings"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+var ErrEmptyPlayerName = errors.New("player name must not be empty")
 
 type PlayerService struct {
 	DB *gorm.DB
@@ -15,23 +19,26 @@ func NewPlayerService(db *gorm.DB) *PlayerService {
 	return &PlayerService{DB: db}
 }
 
-func (s *PlayerService) CreatePlayer(name string) (string, error) {
-	player := &models.Player{
-		BaseModel: models.BaseModel{},
-		Name:      name,
+func (s *PlayerService) CreatePlayer(name string) (uuid.UUID, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return uuid.Nil, ErrEmptyPlayerName
 	}
-	result := s.DB.Create(player)
-	if result.Error != nil {
-		return "", result.Error
+
+	player := &models.Player{Name: name}
+	if result := s.DB.Create(player); result.Error != nil {
+		return uuid.Nil, result.Error
 	}
 	return player.ID, nil
 }
 
 func (s *PlayerService) GetPlayers() ([]models.PlayerCustom, error) {
-	var playersCustom []models.PlayerCustom
 	var players []models.Player
-	result := s.DB.Find(&players)
+	if result := s.DB.Find(&players); result.Error != nil {
+		return nil, result.Error
+	}
 
+	var playersCustom []models.PlayerCustom
 	for i := range players {
 		playersCustom = append(playersCustom, models.PlayerCustom{
 			ID:          players[i].ID,
@@ -39,19 +46,29 @@ func (s *PlayerService) GetPlayers() ([]models.PlayerCustom, error) {
 			GoalsScored: 0,
 		})
 	}
-
-	if result.Error != nil {
-		return nil, result.Error
-	}
 	return playersCustom, nil
 }
 
-func (s *PlayerService) SearchPlayer(name string) (*models.Player, error) {
+// SearchPlayer returns a DTO without Email — this backs a public endpoint
+// (GET /players/search), and Player.Email now holds account data that must
+// not leak to anyone who merely knows a player's name.
+func (s *PlayerService) SearchPlayer(name string) (*models.PlayerCustom, error) {
 	var player models.Player
 	result := s.DB.First(&player, "name = ?", name)
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	log.Println("Found player:", player)
-	return &player, nil
+	return &models.PlayerCustom{ID: player.ID, Name: player.Name, GoalsScored: 0}, nil
+}
+
+// GetPlayerByID returns a player as a DTO, without Email — same reasoning as
+// SearchPlayer: Player.Email is account data and must not leak through
+// endpoints that only need a name.
+func (s *PlayerService) GetPlayerByID(id uuid.UUID) (*models.PlayerCustom, error) {
+	var player models.Player
+	result := s.DB.First(&player, "id = ?", id)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &models.PlayerCustom{ID: player.ID, Name: player.Name, GoalsScored: 0}, nil
 }

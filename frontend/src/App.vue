@@ -1,37 +1,24 @@
 <template>
   <div id="app" :class="{ 'dark-mode': isDarkMode }">
-    <!-- Initial Logo View -->
-    <transition name="initial-view">
-      <div v-if="showImage" class="initial-view" @click="toggleView">
-        <div class="logo-container">
-          <img alt="Calciotto Logo" src="./assets/campo.jpg" class="hero-image">
-          <div class="logo-overlay">
-            <h1 class="title-logo">Calciotto</h1>
-            <p class="subtitle">Click to enter</p>
-            <div class="pulse-indicator"></div>
-          </div>
-        </div>
-      </div>
-    </transition>
-
     <!-- Main App Container -->
-    <transition name="app-container">
-      <div v-if="!showImage" class="app-container">
+    <div class="app-container">
         <!-- Top Navigation -->
         <nav class="top-navbar" :class="{ 'scrolled': isScrolled }">
           <div class="nav-container">
             <!-- Logo/Brand -->
             <div class="nav-brand" @click="goHome">
-              <img src="@/assets/logo.png" alt="Logo" class="nav-logo">
               <span class="brand-text">Calciotto</span>
             </div>
 
-            <!-- Desktop Menu -->
-            <div class="nav-menu" :class="{ 'active': isMenuOpen }">
+            <!-- Desktop Menu — hidden on public routes (Login/Signup/...):
+                 these links require a token, so showing them on an
+                 unauthenticated page misrepresents it as the logged-in app
+                 shell rather than a standalone login view. -->
+            <div v-if="isAuthenticatedRoute" class="nav-menu" :class="{ 'active': isMenuOpen }">
               <router-link 
                 to="/" 
                 @click="closeMenu"
-                :class="{ 'active': $route.name === 'MatchesAll' }"
+                :class="{ 'active': $route.name === 'MatchesAndStandings' }"
                 class="nav-button"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -42,25 +29,37 @@
                 </svg>
                 Matches
               </router-link>
-              <button 
-                @click="setActiveTab('Standings')" 
-                :class="{ 'active': activeTab === 'Standings' }"
+              <router-link
+                to="/profile"
+                @click="closeMenu"
+                :class="{ 'active': $route.name === 'Profile' }"
                 class="nav-button"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
                 </svg>
-                Standings
-              </button>
+                Profile
+              </router-link>
             </div>
 
             <!-- Actions -->
             <div class="nav-actions">
-              <button 
-                class="theme-toggle" 
+              <button
+                v-if="isAuthenticatedRoute"
+                class="icon-nav-button logout-btn"
+                @click="logout"
+                aria-label="Log out"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <polyline points="16 17 21 12 16 7"/>
+                  <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+              </button>
+
+              <button
+                class="theme-toggle"
                 @click="toggleTheme"
                 :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'"
               >
@@ -75,9 +74,10 @@
                 </transition>
               </button>
 
-              <button 
-                class="mobile-menu-toggle" 
-                :class="{ 'active': isMenuOpen }" 
+              <button
+                v-if="isAuthenticatedRoute"
+                class="mobile-menu-toggle"
+                :class="{ 'active': isMenuOpen }"
                 @click="toggleMenu"
                 aria-label="Toggle navigation menu"
               >
@@ -125,17 +125,21 @@
         <transition name="overlay">
           <div v-if="isMenuOpen" class="mobile-overlay" @click="closeMenu"></div>
         </transition>
-      </div>
-    </transition>
+    </div>
   </div>
 </template>
 
 <script>
+import { clearToken } from '@/services/api';
+import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
+
+// Routes reachable without a token — nothing group-related is shown there.
+const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
+
 export default {
   name: 'App',
   data() {
     return {
-      showImage: true,
       activeTab: 'matches',
       isMenuOpen: false,
       isScrolled: false,
@@ -145,13 +149,20 @@ export default {
   computed: {
     isRouterRoute() {
       // Check if current route should be handled by router
-      return this.$route.name === 'MatchesAll' || this.$route.name === 'MatchDetails';
+      return ['MatchesAndStandings', 'MatchDetails', 'Profile', 'Login', 'Signup', 'ForgotPassword', 'ResetPassword'].includes(this.$route.name);
+    },
+    // Gates the nav-menu links (Matches/Groups) and the Profile/Logout icons:
+    // all three require a token, so showing them on a public route (where
+    // there's no session to act on) makes a standalone login/signup page
+    // read as the logged-in app shell instead of its own view.
+    isAuthenticatedRoute() {
+      return !PUBLIC_ROUTE_NAMES.includes(this.$route.name);
     }
   },
   watch: {
     '$route'(to) {
       // Update activeTab when route changes
-      if (to.name === 'MatchesAll') {
+      if (to.name === 'MatchesAndStandings') {
         this.activeTab = 'matches';
       }
       this.closeMenu();
@@ -173,26 +184,9 @@ export default {
     window.removeEventListener('scroll', this.handleScroll);
   },
   methods: {
-    toggleView() {
-      this.showImage = !this.showImage;
-      if (!this.showImage) {
-        // Navigate to matches when entering app
-        this.$router.push('/');
-        this.activeTab = 'matches';
-      }
-    },
     goHome() {
       this.$router.push('/');
       this.activeTab = 'matches';
-    },
-    setActiveTab(tab) {
-      this.activeTab = tab;
-      this.closeMenu();
-      
-      // If selecting matches tab, navigate to home route
-      if (tab === 'matches') {
-        this.$router.push('/');
-      }
     },
     toggleMenu() {
       this.isMenuOpen = !this.isMenuOpen;
@@ -208,6 +202,18 @@ export default {
     toggleTheme() {
       this.isDarkMode = !this.isDarkMode;
       localStorage.setItem('calciotto-theme', this.isDarkMode ? 'dark' : 'light');
+    },
+    logout() {
+      clearToken();
+      // The next account to log in on this browser must not inherit this
+      // one's group — the stale-id fallback would catch it, but only after a
+      // request scoped to a group they may not belong to.
+      clearActiveGroupId();
+      // Clear the cached groups promise to prevent the next logged-in user from
+      // seeing the previous user's group memberships/roles. Without this, the
+      // in-memory promise cache would survive the logout and return stale data.
+      clearMyGroupsCache();
+      this.$router.push('/login');
     }
   }
 }
@@ -220,76 +226,6 @@ export default {
 /* App-specific styles that can't be moved to global */
 #app {
   position: relative;
-}
-
-/* Initial View Styles - Component-specific */
-.initial-view {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-  cursor: pointer;
-  z-index: 9999;
-}
-
-.logo-container {
-  position: relative;
-  text-align: center;
-  transform: scale(1);
-  transition: transform var(--transition-smooth);
-}
-
-.initial-view:hover .logo-container {
-  transform: scale(1.05);
-}
-
-.hero-image {
-  width: 300px;
-  height: 300px;
-  border-radius: 50%;
-  object-fit: cover;
-  box-shadow: var(--shadow-xl);
-  border: 4px solid rgba(255, 255, 255, 0.2);
-}
-
-.logo-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: white;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.title-logo {
-  font-size: 3rem;
-  font-weight: 800;
-  margin-bottom: 0.5rem;
-  background: linear-gradient(45deg, #ffffff, #f0f9ff);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: none;
-}
-
-.subtitle {
-  font-size: 1.1rem;
-  opacity: 0.9;
-  margin-bottom: 1rem;
-}
-
-.pulse-indicator {
-  width: 12px;
-  height: 12px;
-  background-color: #ffffff;
-  border-radius: 50%;
-  margin: 0 auto;
-  animation: pulse 2s infinite;
 }
 
 /* Navigation Styles - Component-specific */
@@ -339,11 +275,6 @@ export default {
 
 .nav-brand:hover {
   transform: scale(1.05);
-}
-
-.nav-logo {
-  height: 40px;
-  width: auto;
 }
 
 .brand-text {
@@ -396,6 +327,36 @@ export default {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+.icon-nav-button {
+  background: none;
+  border: none;
+  padding: 0.5rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.icon-nav-button:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.icon-nav-button.active {
+  background-color: var(--primary-color);
+  color: white;
+  box-shadow: var(--shadow-md);
+}
+
+.icon-nav-button svg {
+  width: 20px;
+  height: 20px;
 }
 
 .theme-toggle {
@@ -488,17 +449,6 @@ export default {
 }
 
 /* Transitions */
-.initial-view-enter-active,
-.initial-view-leave-active {
-  transition: all var(--transition-smooth);
-}
-
-.initial-view-enter-from,
-.initial-view-leave-to {
-  opacity: 0;
-  transform: scale(0.9);
-}
-
 .app-container-enter-active,
 .app-container-leave-active {
   transition: all var(--transition-smooth);
@@ -587,28 +537,11 @@ export default {
     font-size: 1.1rem;
   }
 
-  .hero-image {
-    width: 250px;
-    height: 250px;
-  }
-
-  .title-logo {
-    font-size: 2.5rem;
-  }
-
   .nav-container {
     padding: 0 1rem;
   }
 }
 
 @media (max-width: 480px) {
-  .hero-image {
-    width: 200px;
-    height: 200px;
-  }
-
-  .title-logo {
-    font-size: 2rem;
-  }
 }
 </style>

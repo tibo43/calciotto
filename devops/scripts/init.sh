@@ -1,4 +1,4 @@
-!/bin/bash
+#!/bin/bash
 set -e
 PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -d "postgres" <<-EOSQL
     CREATE USER ${DB_USER} WITH ENCRYPTED PASSWORD '${DB_PASSWORD}';
