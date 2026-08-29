@@ -67,6 +67,13 @@ func (h *MatchHandler) GetMatchesDetails(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	// A group with no matches yet is a normal state (e.g. a brand-new group),
+	// not an error — but GORM leaves the slice nil, which would serialize as
+	// `null` and force every caller to special-case it (see GroupHandler.GetMyGroups
+	// for the same fix applied to GET /groups/me).
+	if matches == nil {
+		matches = []models.MatchWithDetails{}
+	}
 	c.JSON(http.StatusOK, matches)
 }
 

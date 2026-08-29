@@ -344,12 +344,20 @@ func (s *GroupMembershipService) GetGroupsByPlayerID(playerID uuid.UUID) ([]mode
 // it can act as an admin in (create a match, edit scores, change roles)
 // without asking group by group. GetGroupsByPlayerID stays as it is: its other
 // caller, StandingsService.GetPlayerProfile, has no use for the role.
+//
+// Ordered oldest-membership-first (group_memberships.created_at ASC) — the
+// same ordering GetFirstGroupForPlayer uses — so the result is deterministic
+// across calls. Without it, the frontend's resolveActiveGroup() fallback
+// (groups[0], used whenever the stored active-group preference doesn't match
+// anything) could pick a different "first" group on every page load for a
+// player in more than one group.
 func (s *GroupMembershipService) GetGroupsWithRoleByPlayerID(playerID uuid.UUID) ([]models.GroupWithRole, error) {
 	var groups []models.GroupWithRole
 	result := s.DB.Model(&models.Group{}).
 		Select("groups.*, group_memberships.role AS role").
 		Joins("JOIN group_memberships ON group_memberships.group_id = groups.id").
 		Where("group_memberships.player_id = ?", playerID).
+		Order("group_memberships.created_at ASC").
 		Scan(&groups)
 	if result.Error != nil {
 		return nil, result.Error
