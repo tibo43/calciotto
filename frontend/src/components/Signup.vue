@@ -21,6 +21,13 @@
             autocomplete="new-password" />
         </div>
 
+        <div class="form-group">
+          <label for="invite-code">Invite code</label>
+          <input id="invite-code" v-model="inviteCode" type="text" class="form-input" placeholder="e.g. AB2N7TQR"
+            autocapitalize="characters" />
+          <p class="field-hint">Optional — join a group right away if you have an invite code.</p>
+        </div>
+
         <p v-if="error" class="error-message">{{ error }}</p>
 
         <button type="submit" class="btn-base btn-primary btn-large" :disabled="isSubmitting"
@@ -46,6 +53,7 @@ export default {
       name: '',
       email: '',
       password: '',
+      inviteCode: '',
       error: '',
       isSubmitting: false,
     };
@@ -55,7 +63,7 @@ export default {
       this.error = '';
       this.isSubmitting = true;
       try {
-        await signup(this.name, this.email, this.password);
+        await signup(this.name, this.email, this.password, this.inviteCode);
         this.$router.push('/login');
       } catch (err) {
         this.error = err.response?.data?.error || 'Signup failed. Please try again.';
@@ -97,5 +105,11 @@ export default {
   margin-top: 1.5rem;
   text-align: center;
   color: var(--text-secondary);
+}
+
+.field-hint {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  margin: 0.35rem 0 0;
 }
 </style>

@@ -43,8 +43,8 @@ export const login = async (email, password) => {
   return response.data;
 };
 
-export const signup = async (name, email, password) => {
-  const response = await api.post('/auth/signup', { name, email, password });
+export const signup = async (name, email, password, inviteCode = '') => {
+  const response = await api.post('/auth/signup', { name, email, password, invite_code: inviteCode });
   return response.data;
 };
 
