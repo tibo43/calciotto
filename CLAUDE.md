@@ -29,16 +29,18 @@ There is no separate lint command configured for the Go module, and no test suit
 
 ### Frontend (`frontend/`)
 ```bash
-npm run serve   # dev server on port 4000
-npm run build   # production build
-npm run lint    # eslint (plugin:vue/vue3-essential + eslint:recommended)
+npm run serve       # dev server on port 4000
+npm run build       # production build
+npm run lint        # eslint (plugin:vue/vue3-essential + eslint:recommended)
+npm run test:unit   # Jest unit tests (added via `vue add unit-jest`), see tests/unit/
 ```
+`tests/unit/` currently covers `src/services/activeGroup.js` (the localStorage-backed active-group wrappers and the `resolveActiveGroup`/`resolveActiveGroupId` stale-id-fallback/no-groups/promise-cache logic, with `@/services/api`'s `getMyGroups` mocked) and `src/components/TeamColourPicker.vue` (preset-swatch rendering, click-to-emit, selected-state highlighting including the custom-colour escape hatch, and `disabled` actually suppressing emits) — a first slice proving the Jest setup works end to end, not a mandate for full coverage. Jest config is `jest.config.js` (the `@vue/cli-plugin-unit-jest` preset) plus the `jest` env override the plugin added to `package.json`'s `eslintConfig` for files under `tests/unit/**/*.spec.js`.
 
 ## Continuous Integration
 
 `.github/workflows/ci.yml` runs on every push and pull request, with two independent jobs (build/test only — no deployment step exists):
 - **Backend**: `actions/setup-go` pinned via `go-version-file: app/go.mod` (not a hardcoded Go version), a `postgres:17` service container with a `pg_isready` health check backing the network connection integration tests need (see `app/internal/testutil`), then from `app/`: `go build ./...`, `go vet ./...`, `go test ./... -count=1` with `DB_HOST=localhost`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME` matching the service container's own credentials, plus a placeholder `JWT_SECRET` (required by `main.go`'s fail-fast check, though no test currently reads it from the environment — they hardcode their own test secrets instead).
-- **Frontend**: `actions/setup-node` at `node-version: 24` (matching `devops/docker-compose.yaml`'s `node:24-alpine`), then from `frontend/`: `npm ci` (not `npm install` — installs strictly from the committed lockfile), `npm run lint`, `npm run build`.
+- **Frontend**: `actions/setup-node` at `node-version: 24` (matching `devops/docker-compose.yaml`'s `node:24-alpine`), then from `frontend/`: `npm ci` (not `npm install` — installs strictly from the committed lockfile), `npm run lint`, `npm run test:unit`, `npm run build` — unit tests run before the build so a broken test fails fast instead of waiting on a full webpack build.
 
 The CI Postgres credentials are chosen independently of `devops/env/develop.env` (a separate, local-only dev credential set) — they only need to be internally consistent between the service container and the job's own env vars.
 
