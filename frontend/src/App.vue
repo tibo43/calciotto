@@ -1,28 +1,12 @@
 <template>
   <div id="app" :class="{ 'dark-mode': isDarkMode }">
-    <!-- Initial Logo View -->
-    <transition name="initial-view">
-      <div v-if="showImage" class="initial-view" @click="toggleView">
-        <div class="logo-container">
-          <img alt="Calciotto Logo" src="./assets/campo.jpg" class="hero-image">
-          <div class="logo-overlay">
-            <h1 class="title-logo">Calciotto</h1>
-            <p class="subtitle">Click to enter</p>
-            <div class="pulse-indicator"></div>
-          </div>
-        </div>
-      </div>
-    </transition>
-
     <!-- Main App Container -->
-    <transition name="app-container">
-      <div v-if="!showImage" class="app-container">
+    <div class="app-container">
         <!-- Top Navigation -->
         <nav class="top-navbar" :class="{ 'scrolled': isScrolled }">
           <div class="nav-container">
             <!-- Logo/Brand -->
             <div class="nav-brand" @click="goHome">
-              <img src="@/assets/logo.png" alt="Logo" class="nav-logo">
               <span class="brand-text">Calciotto</span>
             </div>
 
@@ -180,8 +164,7 @@
         <transition name="overlay">
           <div v-if="isMenuOpen" class="mobile-overlay" @click="closeMenu"></div>
         </transition>
-      </div>
-    </transition>
+    </div>
   </div>
 </template>
 
@@ -193,7 +176,6 @@ export default {
   name: 'App',
   data() {
     return {
-      showImage: true,
       activeTab: 'matches',
       isMenuOpen: false,
       isScrolled: false,
@@ -236,13 +218,6 @@ export default {
     window.removeEventListener('scroll', this.handleScroll);
   },
   methods: {
-    toggleView() {
-      // Dismiss the splash without forcing navigation to '/' — otherwise a
-      // direct visit to /login or /signup gets hijacked back to '/' (and,
-      // for an unauthenticated visitor, immediately bounced to /login by
-      // the router guard) as soon as the splash is dismissed.
-      this.showImage = !this.showImage;
-    },
     goHome() {
       this.$router.push('/');
       this.activeTab = 'matches';
@@ -321,76 +296,6 @@ export default {
   position: relative;
 }
 
-/* Initial View Styles - Component-specific */
-.initial-view {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-  cursor: pointer;
-  z-index: 9999;
-}
-
-.logo-container {
-  position: relative;
-  text-align: center;
-  transform: scale(1);
-  transition: transform var(--transition-smooth);
-}
-
-.initial-view:hover .logo-container {
-  transform: scale(1.05);
-}
-
-.hero-image {
-  width: 300px;
-  height: 300px;
-  border-radius: 50%;
-  object-fit: cover;
-  box-shadow: var(--shadow-xl);
-  border: 4px solid rgba(255, 255, 255, 0.2);
-}
-
-.logo-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: white;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.title-logo {
-  font-size: 3rem;
-  font-weight: 800;
-  margin-bottom: 0.5rem;
-  background: linear-gradient(45deg, #ffffff, #f0f9ff);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: none;
-}
-
-.subtitle {
-  font-size: 1.1rem;
-  opacity: 0.9;
-  margin-bottom: 1rem;
-}
-
-.pulse-indicator {
-  width: 12px;
-  height: 12px;
-  background-color: #ffffff;
-  border-radius: 50%;
-  margin: 0 auto;
-  animation: pulse 2s infinite;
-}
-
 /* Navigation Styles - Component-specific */
 .top-navbar {
   position: fixed;
@@ -438,11 +343,6 @@ export default {
 
 .nav-brand:hover {
   transform: scale(1.05);
-}
-
-.nav-logo {
-  height: 40px;
-  width: auto;
 }
 
 .brand-text {
@@ -640,17 +540,6 @@ export default {
 }
 
 /* Transitions */
-.initial-view-enter-active,
-.initial-view-leave-active {
-  transition: all var(--transition-smooth);
-}
-
-.initial-view-enter-from,
-.initial-view-leave-to {
-  opacity: 0;
-  transform: scale(0.9);
-}
-
 .app-container-enter-active,
 .app-container-leave-active {
   transition: all var(--transition-smooth);
@@ -739,15 +628,6 @@ export default {
     font-size: 1.1rem;
   }
 
-  .hero-image {
-    width: 250px;
-    height: 250px;
-  }
-
-  .title-logo {
-    font-size: 2.5rem;
-  }
-
   .nav-container {
     padding: 0 1rem;
   }
@@ -759,13 +639,5 @@ export default {
 }
 
 @media (max-width: 480px) {
-  .hero-image {
-    width: 200px;
-    height: 200px;
-  }
-
-  .title-logo {
-    font-size: 2rem;
-  }
 }
 </style>
