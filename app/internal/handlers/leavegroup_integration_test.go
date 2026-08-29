@@ -50,7 +50,7 @@ func TestLeaveGroup_Integration_HappyPath(t *testing.T) {
 	membershipService := services.NewGroupMembershipService(tx)
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testLeaveGroupJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
 	group, err := groupService.CreateGroup("Zzz Leave HTTP Group")
 	if err != nil {
@@ -117,7 +117,7 @@ func TestLeaveGroup_Integration_NoToken(t *testing.T) {
 	groupService := services.NewGroupService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 	authService := services.NewAuthService(tx, testLeaveGroupJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
 	group, err := groupService.CreateGroup("Zzz Leave HTTP No Token Group")
 	if err != nil {
@@ -146,7 +146,7 @@ func TestLeaveGroup_Integration_NonMemberForbidden(t *testing.T) {
 	membershipService := services.NewGroupMembershipService(tx)
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testLeaveGroupJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
 	group, err := groupService.CreateGroup("Zzz Leave HTTP Outsider Group")
 	if err != nil {

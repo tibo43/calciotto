@@ -39,7 +39,7 @@ func newBootstrapEnv(t *testing.T, tx *gorm.DB) *bootstrapEnv {
 	groupService := services.NewGroupService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 	authService := services.NewAuthService(tx, testGroupBootstrapJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 	matchHandler := handlers.NewMatchHandler(services.NewMatchService(tx), membershipService)
 
 	authRequired := handlers.AuthMiddleware(authService)

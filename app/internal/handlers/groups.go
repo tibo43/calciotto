@@ -15,10 +15,14 @@ import (
 type GroupHandler struct {
 	Service           *services.GroupService
 	MembershipService *services.GroupMembershipService
+	// AuthService backs InvitePlayer only — turning a "ghost" member into a
+	// real account is a credentials operation, and credentials live in
+	// AuthService, not in GroupService.
+	AuthService *services.AuthService
 }
 
-func NewGroupHandler(service *services.GroupService, membershipService *services.GroupMembershipService) *GroupHandler {
-	return &GroupHandler{Service: service, MembershipService: membershipService}
+func NewGroupHandler(service *services.GroupService, membershipService *services.GroupMembershipService, authService *services.AuthService) *GroupHandler {
+	return &GroupHandler{Service: service, MembershipService: membershipService, AuthService: authService}
 }
 
 // CreateGroup creates a group and makes the authenticated caller its first
@@ -300,6 +304,73 @@ func (h *GroupHandler) UpdateMemberRole(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"group_id": groupID, "player_id": targetPlayerID, "role": body.Role})
+}
+
+// InvitePlayer gives a "ghost" member of the group in the URL — a Player with
+// a Name but no email, created by an admin via POST /players — the email the
+// admin supplies, and sends them a link to set their own password. That link
+// is an ordinary password-reset link consumed by the existing
+// POST /auth/reset-password and ResetPassword.vue; see
+// AuthService.InviteExistingPlayer for why no separate claim token exists.
+//
+// The route (POST /groups/:id/members/:playerId/invite) sits behind
+// RequireGroupAdminByPathParam, which only establishes that the *caller* is an
+// admin of :id — it says nothing about :playerId. Hence the explicit IsMember
+// check below: without it an admin of group A could hand an email (and thus an
+// account) to any player id at all, including one that belongs only to group B
+// or to no group they administer. Like the uuid.Parse calls above, that's
+// request validation guarding this route's authorization, not business logic,
+// so it belongs here rather than in the service.
+func (h *GroupHandler) InvitePlayer(c *gin.Context) {
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		return
+	}
+
+	targetPlayerID, err := uuid.Parse(c.Param("playerId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid player id"})
+		return
+	}
+
+	var body struct {
+		Email string `json:"email"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	isMember, err := h.MembershipService.IsMember(groupID, targetPlayerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusNotFound, gin.H{"error": "player is not a member of this group"})
+		return
+	}
+
+	if err := h.AuthService.InviteExistingPlayer(targetPlayerID, body.Email); err != nil {
+		switch {
+		case errors.Is(err, services.ErrEmailRequired),
+			errors.Is(err, services.ErrPlayerAlreadyClaimed),
+			errors.Is(err, services.ErrEmailAlreadyUsed):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		// The IsMember check above already proved the player row exists, so
+		// this can only fire if it were deleted in between. Mapped defensively
+		// to the same 404 as a non-member target rather than assumed
+		// impossible — same treatment RemoveMember gives gorm.ErrRecordNotFound.
+		case errors.Is(err, services.ErrPlayerNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"invited": true})
 }
 
 // GetMyGroups returns the groups the authenticated caller belongs to, each

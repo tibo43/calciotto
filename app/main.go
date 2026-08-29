@@ -42,12 +42,12 @@ func main() {
 	// Initialize handlers
 	groupService := services.NewGroupService(db)
 	groupMembershipService := services.NewGroupMembershipService(db)
+	authService := services.NewAuthService(db, jwtSecret)
 	playerHandler := handlers.NewPlayerHandler(services.NewPlayerService(db), groupService, groupMembershipService)
-	groupHandler := handlers.NewGroupHandler(groupService, groupMembershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, groupMembershipService, authService)
 	teamHandler := handlers.NewTeamHandler(services.NewTeamService(db))
 	matchHandler := handlers.NewMatchHandler(services.NewMatchService(db), groupMembershipService)
 	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(db, groupMembershipService), groupMembershipService)
-	authService := services.NewAuthService(db, jwtSecret)
 	authHandler := handlers.NewAuthHandler(authService)
 
 	// Auth middleware chains, reused across the group-scoped routes below.
@@ -105,6 +105,11 @@ func main() {
 	// admin besides its creator, so it has to be reachable by any existing
 	// admin, and by no one else.
 	r.PATCH("/groups/:id/members/:playerId/role", authRequired, requireGroupAdminByPathID, groupHandler.UpdateMemberRole)
+	// Admin-only "invite a ghost member": attaches an email to a member who has
+	// none (a roster entry created via POST /players) and sends them a link to
+	// set their own password. Same admin gate as the two routes above; the
+	// handler additionally checks the target is a member of *this* group.
+	r.POST("/groups/:id/members/:playerId/invite", authRequired, requireGroupAdminByPathID, groupHandler.InvitePlayer)
 
 	// Matches
 	// Creating a match and editing its scores are admin-only

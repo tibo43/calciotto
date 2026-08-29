@@ -34,7 +34,7 @@ func newRoleEnv(t *testing.T, tx *gorm.DB) *roleEnv {
 	groupService := services.NewGroupService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 	authService := services.NewAuthService(tx, testUpdateRoleJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

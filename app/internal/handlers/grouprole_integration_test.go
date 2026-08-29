@@ -47,7 +47,7 @@ func TestCreateGroup_Integration_CreatorBecomesAdmin(t *testing.T) {
 	membershipService := services.NewGroupMembershipService(tx)
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
 	creatorID, err := playerService.CreatePlayer("Zzz Role Creator")
 	if err != nil {
@@ -93,7 +93,7 @@ func TestJoinGroup_Integration_JoinerBecomesMember(t *testing.T) {
 	membershipService := services.NewGroupMembershipService(tx)
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
 	group, err := groupService.CreateGroup("Zzz Role Join Group")
 	if err != nil {
@@ -148,7 +148,7 @@ func TestAddPlayerToGroup_Integration_AddedPlayerBecomesMember(t *testing.T) {
 	membershipService := services.NewGroupMembershipService(tx)
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
 	group, err := groupService.CreateGroup("Zzz Role Add Group")
 	if err != nil {

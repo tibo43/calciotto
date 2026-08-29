@@ -217,22 +217,108 @@ func (s *AuthService) ForgotPassword(email string) error {
 		return nil
 	}
 
-	rawToken, tokenHash, err := generateResetToken()
+	rawToken, err := issuePasswordResetToken(s.DB, player.ID)
 	if err != nil {
-		return err
-	}
-
-	resetToken := models.PasswordResetToken{
-		PlayerID:  player.ID,
-		TokenHash: tokenHash,
-		ExpiresAt: time.Now().Add(passwordResetTTL),
-	}
-	if err := s.DB.Create(&resetToken).Error; err != nil {
 		return err
 	}
 
 	sendPasswordResetLink(email, rawToken)
 	return nil
+}
+
+// InviteExistingPlayer attaches email to a "ghost" Player — one created by an
+// admin via PlayerService.CreatePlayer, with a Name but no credentials — and
+// issues them a link to set their own password, turning the roster entry into
+// a real account. It is the counterpart of SignupNewPlayer for someone who is
+// already on a group's roster: the Player row (and its match history) already
+// exists, only the credentials are missing.
+//
+// It reuses the password-reset token machinery rather than inventing a
+// claim-specific token type, because the two are the same operation seen from
+// two angles: hand someone a single-use, short-lived, hashed-at-rest secret
+// that authorizes setting Player.PasswordHash once. ResetPassword already
+// overwrites PasswordHash unconditionally — it never asks whether one was
+// there before — so it consumes an invite token exactly as it consumes a
+// reset token, and the frontend needs no new page: the existing
+// /reset-password?token=... link works verbatim.
+//
+// A player who already has an email is refused with ErrPlayerAlreadyClaimed:
+// this path must not silently rewrite a live account's email (that would be a
+// takeover vector, and "change my email" is an unrelated feature that doesn't
+// exist). Authorizing *who* may invite whom is the caller's job — see
+// GroupHandler.InvitePlayer, gated by RequireGroupAdminByPathParam plus an
+// explicit IsMember check on the target.
+func (s *AuthService) InviteExistingPlayer(playerID uuid.UUID, email string) error {
+	email = normalizeEmail(email)
+	if email == "" {
+		return ErrEmailRequired
+	}
+
+	var player models.Player
+	if err := s.DB.First(&player, "id = ?", playerID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrPlayerNotFound
+		}
+		return err
+	}
+	if player.Email != nil {
+		return ErrPlayerAlreadyClaimed
+	}
+
+	var existing models.Player
+	result := s.DB.Where("email = ?", email).First(&existing)
+	if result.Error == nil {
+		return ErrEmailAlreadyUsed
+	}
+	if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return result.Error
+	}
+
+	// Attaching the email and issuing the token have to succeed or fail
+	// together: a player left with an email but no outstanding invite could
+	// neither log in nor be re-invited (the email is now set, so a retry would
+	// hit ErrPlayerAlreadyClaimed) — a dead end worse than failing outright.
+	var rawToken string
+	if err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.Player{}).
+			Where("id = ?", player.ID).
+			Update("email", email).Error; err != nil {
+			return err
+		}
+		var err error
+		rawToken, err = issuePasswordResetToken(tx, player.ID)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	// Sent only once the transaction has committed — a link pointing at a
+	// token that was rolled back would be worse than no link at all.
+	sendPasswordResetLink(email, rawToken)
+	return nil
+}
+
+// issuePasswordResetToken persists a fresh single-use reset token for playerID
+// and returns the raw value to put in the link — only its digest is stored.
+// Shared by ForgotPassword and InviteExistingPlayer, which differ solely in
+// how they establish that the caller may set that player's password (knowing
+// the email vs. being an admin of one of their groups). db is a parameter
+// rather than s.DB so it can run inside a caller's transaction.
+func issuePasswordResetToken(db *gorm.DB, playerID uuid.UUID) (string, error) {
+	rawToken, tokenHash, err := generateResetToken()
+	if err != nil {
+		return "", err
+	}
+
+	resetToken := models.PasswordResetToken{
+		PlayerID:  playerID,
+		TokenHash: tokenHash,
+		ExpiresAt: time.Now().Add(passwordResetTTL),
+	}
+	if err := db.Create(&resetToken).Error; err != nil {
+		return "", err
+	}
+	return rawToken, nil
 }
 
 // ResetPassword consumes a reset token and replaces the player's password.

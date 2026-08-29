@@ -51,7 +51,7 @@ func TestRemoveMember_Integration_HappyPath(t *testing.T) {
 	membershipService := services.NewGroupMembershipService(tx)
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testRemoveMemberJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
 	group, err := groupService.CreateGroup("Zzz Remove HTTP Group")
 	if err != nil {
@@ -126,7 +126,7 @@ func TestRemoveMember_Integration_NoToken(t *testing.T) {
 	membershipService := services.NewGroupMembershipService(tx)
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testRemoveMemberJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
 	group, err := groupService.CreateGroup("Zzz Remove HTTP No Token Group")
 	if err != nil {
@@ -162,7 +162,7 @@ func TestRemoveMember_Integration_NonAdminForbidden(t *testing.T) {
 	membershipService := services.NewGroupMembershipService(tx)
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testRemoveMemberJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
 	group, err := groupService.CreateGroup("Zzz Remove HTTP NonAdmin Group")
 	if err != nil {
