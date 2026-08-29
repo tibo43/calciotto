@@ -34,6 +34,14 @@ npm run build   # production build
 npm run lint    # eslint (plugin:vue/vue3-essential + eslint:recommended)
 ```
 
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs on every push and pull request, with two independent jobs (build/test only — no deployment step exists):
+- **Backend**: `actions/setup-go` pinned via `go-version-file: app/go.mod` (not a hardcoded Go version), a `postgres:17` service container with a `pg_isready` health check backing the network connection integration tests need (see `app/internal/testutil`), then from `app/`: `go build ./...`, `go vet ./...`, `go test ./... -count=1` with `DB_HOST=localhost`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME` matching the service container's own credentials, plus a placeholder `JWT_SECRET` (required by `main.go`'s fail-fast check, though no test currently reads it from the environment — they hardcode their own test secrets instead).
+- **Frontend**: `actions/setup-node` at `node-version: 24` (matching `devops/docker-compose.yaml`'s `node:24-alpine`), then from `frontend/`: `npm ci` (not `npm install` — installs strictly from the committed lockfile), `npm run lint`, `npm run build`.
+
+The CI Postgres credentials are chosen independently of `devops/env/develop.env` (a separate, local-only dev credential set) — they only need to be internally consistent between the service container and the job's own env vars.
+
 ## Architecture
 
 ### Backend layering
