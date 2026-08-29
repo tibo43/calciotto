@@ -57,12 +57,12 @@ func TestLeaveGroup_Integration_HappyPath(t *testing.T) {
 		t.Fatalf("failed to create group: %v", err)
 	}
 
-	ownerID, err := playerService.CreatePlayer("Zzz Leave HTTP Owner")
+	adminID, err := playerService.CreatePlayer("Zzz Leave HTTP Admin")
 	if err != nil {
-		t.Fatalf("failed to create owner player: %v", err)
+		t.Fatalf("failed to create admin player: %v", err)
 	}
-	if err := membershipService.AddPlayerToGroupWithRole(group.ID, ownerID, models.RoleOwner); err != nil {
-		t.Fatalf("failed to add owner: %v", err)
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, adminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add admin: %v", err)
 	}
 
 	leavingID, err := playerService.CreatePlayer("Zzz Leave HTTP Leaving")

@@ -37,6 +37,17 @@ type RowsMatchDetails struct {
 	GoalsScored  int
 }
 
+// GroupWithRole is a Group tagged with the role the *requesting* player holds
+// in it — the shape GET /groups/me returns, so a client can tell which of its
+// groups it may act as an admin in without a follow-up request per group. It
+// embeds Group rather than restating its fields (same pattern as
+// PlayerGroupStanding embedding PointsStandingRow), so the JSON stays flat and
+// InviteCode keeps its json:"-": listing your groups still never leaks a code.
+type GroupWithRole struct {
+	Group
+	Role string `json:"role"`
+}
+
 // PointsStandingRow is one player's row in the win/draw/loss points standings.
 type PointsStandingRow struct {
 	PlayerID uuid.UUID `json:"PlayerID"`

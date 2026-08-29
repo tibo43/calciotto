@@ -22,10 +22,12 @@ func NewGroupHandler(service *services.GroupService, membershipService *services
 }
 
 // CreateGroup creates a group and makes the authenticated caller its first
-// member. That membership is what closes the bootstrapping hole: a group with
-// no members can never gain one, since POST /groups/:id/players itself
-// requires membership of the target group. The service stays group-agnostic
-// about who created what — same split as PlayerHandler.CreatePlayer.
+// member — and its first admin, since a group whose only member were a plain
+// member could never gain one (promoting a member is itself admin-only). That
+// membership is also what closes the bootstrapping hole: a group with no
+// members can never gain one, since POST /groups/:id/players itself requires
+// membership of the target group. The service stays group-agnostic about who
+// created what — same split as PlayerHandler.CreatePlayer.
 //
 // The response deliberately doesn't include the invite code (Group carries
 // json:"-" on it); the creator reads it back from GET /groups/:id/invite-code
@@ -49,7 +51,7 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 		return
 	}
 
-	if err := h.MembershipService.AddPlayerToGroupWithRole(created.ID, playerID, models.RoleOwner); err != nil {
+	if err := h.MembershipService.AddPlayerToGroupWithRole(created.ID, playerID, models.RoleAdmin); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -205,15 +207,16 @@ func (h *GroupHandler) LeaveGroup(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"left": true})
 }
 
-// RemoveMember lets the group's owner remove another member's membership from
-// the group in the URL. The route sits behind RequireGroupOwnerByPathParam,
-// so the caller is already confirmed to be that group's (sole) owner by the
-// time this runs.
+// RemoveMember lets a group admin remove another member's membership from the
+// group in the URL. The route sits behind RequireGroupAdminByPathParam, so the
+// caller is already confirmed to be one of that group's admins by the time
+// this runs.
 //
 // It deliberately cannot be used to remove the caller's own membership — an
-// owner who wants to leave has to go through DELETE /groups/:id/members/me
-// (LeaveGroup), which handles promoting a successor. Targeting yourself here
-// is rejected with services.ErrCannotRemoveSelf before any deletion happens.
+// admin who wants to leave has to go through DELETE /groups/:id/members/me
+// (LeaveGroup), which handles promoting a successor when they were the last
+// admin. Targeting yourself here is rejected with
+// services.ErrCannotRemoveSelf before any deletion happens.
 func (h *GroupHandler) RemoveMember(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -248,16 +251,71 @@ func (h *GroupHandler) RemoveMember(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"removed": true})
 }
 
-// GetMyGroups returns the groups the authenticated caller belongs to. The
-// public GET /groups lists every group in the system, which is useless to a
-// client asking "which groups are mine" — and it can't be narrowed, being
-// unauthenticated by design.
+// UpdateMemberRole lets a group admin promote another member to admin, or
+// demote another admin back to plain member, in the group in the URL. The
+// route (PATCH /groups/:id/members/:playerId/role) sits behind
+// RequireGroupAdminByPathParam, so the caller is already confirmed to be one
+// of that group's admins by the time this runs; every other rule — valid role
+// value, no self-targeting, target must be a member, never demote the last
+// admin — lives in GroupMembershipService.UpdateMemberRole.
+func (h *GroupHandler) UpdateMemberRole(c *gin.Context) {
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		return
+	}
+
+	targetPlayerID, err := uuid.Parse(c.Param("playerId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid player id"})
+		return
+	}
+
+	actingPlayerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+
+	var body struct {
+		Role string `json:"role"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.MembershipService.UpdateMemberRole(groupID, actingPlayerID, targetPlayerID, body.Role); err != nil {
+		switch {
+		case errors.Is(err, services.ErrInvalidRole),
+			errors.Is(err, services.ErrCannotChangeOwnRole),
+			errors.Is(err, services.ErrLastAdmin):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "player is not a member of this group"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"group_id": groupID, "player_id": targetPlayerID, "role": body.Role})
+}
+
+// GetMyGroups returns the groups the authenticated caller belongs to, each
+// tagged with the caller's own role in it (models.GroupWithRole). The public
+// GET /groups lists every group in the system, which is useless to a client
+// asking "which groups are mine" — and it can't be narrowed, being
+// unauthenticated by design, nor carry a role, having no caller.
+//
+// The role is what lets a client know where it may act as an admin (create a
+// match, edit scores, change roles) without one request per group. The DTO
+// embeds Group, which keeps InviteCode behind json:"-", so the code stays
+// exclusive to GET /groups/:id/invite-code.
 //
 // authRequired alone, no requireGroupMember: like GET /players/me/stats there
 // is no single group_id to authorize against, and the handler only ever
-// reports on the JWT's own player. No DTO is needed either — Group keeps
-// InviteCode behind json:"-", so the code stays exclusive to
-// GET /groups/:id/invite-code.
+// reports on the JWT's own player.
 func (h *GroupHandler) GetMyGroups(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
@@ -265,7 +323,7 @@ func (h *GroupHandler) GetMyGroups(c *gin.Context) {
 		return
 	}
 
-	groups, err := h.MembershipService.GetGroupsByPlayerID(playerID)
+	groups, err := h.MembershipService.GetGroupsWithRoleByPlayerID(playerID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -274,7 +332,7 @@ func (h *GroupHandler) GetMyGroups(c *gin.Context) {
 	// not an error — but GORM leaves the slice nil, which would serialize as
 	// `null` and force every caller to special-case it.
 	if groups == nil {
-		groups = []models.Group{}
+		groups = []models.GroupWithRole{}
 	}
 
 	c.JSON(http.StatusOK, groups)

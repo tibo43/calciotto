@@ -99,13 +99,25 @@ type MatchPlayer struct {
 // rejoint en premier — l'ID d'un groupe est un UUID aléatoire (v4), donc trié
 // par ID ne dit rien sur l'ordre d'appartenance ou de création.
 //
-// Role distingue le créateur d'un groupe (RoleOwner) du reste des membres
-// (RoleMember) — c'est une simple string plutôt qu'un type enum Go dédié,
-// comme Team.Colour ci-dessus : le repo n'a pas de convention pour les enums
-// et deux valeurs constantes suffisent ici. Le rôle n'a aujourd'hui aucun
-// consommateur câblé sur une route (voir RequireGroupOwner dans
-// internal/handlers/groupowner.go) ; il prépare seulement les futures
-// features "quitter un groupe" / "retirer un membre".
+// Role distingue les administrateurs du groupe (RoleAdmin) des simples
+// membres (RoleMember) — c'est une simple string plutôt qu'un type enum Go
+// dédié, comme Team.Colour ci-dessus : le repo n'a pas de convention pour les
+// enums et deux valeurs constantes suffisent ici.
+//
+// Un groupe peut avoir *plusieurs* administrateurs : le créateur en est le
+// premier (POST /groups), et tout admin peut en promouvoir d'autres via
+// PATCH /groups/:id/members/:playerId/role. Le seul invariant maintenu est
+// qu'un groupe qui a au moins un membre a toujours au moins un admin — il est
+// défendu des deux côtés : GroupMembershipService.LeaveGroup promeut le plus
+// ancien membre restant si le dernier admin s'en va, et UpdateMemberRole
+// refuse de rétrograder le dernier admin (ErrLastAdmin).
+//
+// Le rôle gouverne aujourd'hui : retirer un membre (DELETE
+// /groups/:id/members/:playerId), changer le rôle d'un membre, créer un match
+// (POST /matches) et modifier ses scores (PUT /matches/:id) — voir
+// RequireGroupAdmin / RequireGroupAdminByPathParam dans
+// internal/handlers/groupadmin.go. Lire les matchs et les classements reste
+// ouvert à tout membre.
 type GroupMembership struct {
 	BaseModel
 	GroupID   uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_group_membership_group_player" json:"group_id"`
@@ -114,11 +126,16 @@ type GroupMembership struct {
 	CreatedAt time.Time `json:"-"`
 }
 
-// RoleOwner et RoleMember sont les deux seules valeurs valides de
+// RoleAdmin et RoleMember sont les deux seules valeurs valides de
 // GroupMembership.Role. Le créateur d'un groupe (POST /groups) devient
-// RoleOwner ; tout autre joueur ajouté (POST /groups/join, POST
-// /groups/:id/players) devient RoleMember.
+// RoleAdmin ; tout autre joueur ajouté (POST /groups/join, POST
+// /groups/:id/players) devient RoleMember, et peut ensuite être promu par un
+// admin existant (PATCH /groups/:id/members/:playerId/role).
+//
+// RoleAdmin valait "owner" avant le passage au modèle multi-admin : les
+// lignes déjà en base sont réécrites par la migration ponctuelle de
+// pkg/database.InitDB, AutoMigrate ne touchant jamais aux données.
 const (
-	RoleOwner  = "owner"
+	RoleAdmin  = "admin"
 	RoleMember = "member"
 )

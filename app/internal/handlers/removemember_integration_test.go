@@ -19,10 +19,10 @@ func newRemoveMemberTestRouter(authService *services.AuthService, membershipServ
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	requireGroupOwnerByPathID := handlers.RequireGroupOwnerByPathParam(membershipService, "id")
+	requireGroupAdminByPathID := handlers.RequireGroupAdminByPathParam(membershipService, "id")
 	router.DELETE("/groups/:id/members/:playerId",
 		handlers.AuthMiddleware(authService),
-		requireGroupOwnerByPathID,
+		requireGroupAdminByPathID,
 		groupHandler.RemoveMember)
 
 	// Mirrors a RequireGroupMembershipByPathParam-protected route wired in
@@ -40,7 +40,7 @@ func newRemoveMemberTestRouter(authService *services.AuthService, membershipServ
 }
 
 // TestRemoveMember_Integration_HappyPath exercises
-// DELETE /groups/:id/members/:playerId end to end: the owner removes another
+// DELETE /groups/:id/members/:playerId end to end: the admin removes another
 // member successfully, and afterward the removed player loses access to a
 // membership-protected route.
 func TestRemoveMember_Integration_HappyPath(t *testing.T) {
@@ -58,19 +58,19 @@ func TestRemoveMember_Integration_HappyPath(t *testing.T) {
 		t.Fatalf("failed to create group: %v", err)
 	}
 
-	ownerID, err := playerService.CreatePlayer("Zzz Remove HTTP Owner")
+	adminID, err := playerService.CreatePlayer("Zzz Remove HTTP Admin")
 	if err != nil {
-		t.Fatalf("failed to create owner player: %v", err)
+		t.Fatalf("failed to create admin player: %v", err)
 	}
-	if err := membershipService.AddPlayerToGroupWithRole(group.ID, ownerID, models.RoleOwner); err != nil {
-		t.Fatalf("failed to add owner: %v", err)
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, adminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add admin: %v", err)
 	}
-	if err := authService.Signup(ownerID, "remove-http-owner@example.com", "s3cret-pass"); err != nil {
-		t.Fatalf("failed to sign up owner: %v", err)
+	if err := authService.Signup(adminID, "remove-http-admin@example.com", "s3cret-pass"); err != nil {
+		t.Fatalf("failed to sign up admin: %v", err)
 	}
-	ownerToken, err := authService.Login("remove-http-owner@example.com", "s3cret-pass")
+	adminToken, err := authService.Login("remove-http-admin@example.com", "s3cret-pass")
 	if err != nil {
-		t.Fatalf("failed to log in owner: %v", err)
+		t.Fatalf("failed to log in admin: %v", err)
 	}
 
 	targetID, err := playerService.CreatePlayer("Zzz Remove HTTP Target")
@@ -91,7 +91,7 @@ func TestRemoveMember_Integration_HappyPath(t *testing.T) {
 	router := newRemoveMemberTestRouter(authService, membershipService, groupHandler)
 
 	req := httptest.NewRequest(http.MethodDelete, "/groups/"+group.ID.String()+"/members/"+targetID.String(), nil)
-	req.Header.Set("Authorization", "Bearer "+ownerToken)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -117,7 +117,7 @@ func TestRemoveMember_Integration_HappyPath(t *testing.T) {
 
 // TestRemoveMember_Integration_NoToken covers the unauthenticated case: no
 // Authorization header at all must be rejected by AuthMiddleware before the
-// handler or the owner middleware ever runs.
+// handler or the admin middleware ever runs.
 func TestRemoveMember_Integration_NoToken(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -151,10 +151,10 @@ func TestRemoveMember_Integration_NoToken(t *testing.T) {
 	}
 }
 
-// TestRemoveMember_Integration_NonOwnerForbidden covers a valid token for a
-// plain member (not the owner) of the target group: RequireGroupOwnerByPathParam
+// TestRemoveMember_Integration_NonAdminForbidden covers a valid token for a
+// plain member (not the admin) of the target group: RequireGroupAdminByPathParam
 // must reject with 403 without ever reaching the removal logic.
-func TestRemoveMember_Integration_NonOwnerForbidden(t *testing.T) {
+func TestRemoveMember_Integration_NonAdminForbidden(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
@@ -164,35 +164,35 @@ func TestRemoveMember_Integration_NonOwnerForbidden(t *testing.T) {
 	authService := services.NewAuthService(tx, testRemoveMemberJWTSecret)
 	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
 
-	group, err := groupService.CreateGroup("Zzz Remove HTTP NonOwner Group")
+	group, err := groupService.CreateGroup("Zzz Remove HTTP NonAdmin Group")
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
 
-	ownerID, err := playerService.CreatePlayer("Zzz Remove HTTP NonOwner Owner")
+	adminID, err := playerService.CreatePlayer("Zzz Remove HTTP NonAdmin Admin")
 	if err != nil {
-		t.Fatalf("failed to create owner player: %v", err)
+		t.Fatalf("failed to create admin player: %v", err)
 	}
-	if err := membershipService.AddPlayerToGroupWithRole(group.ID, ownerID, models.RoleOwner); err != nil {
-		t.Fatalf("failed to add owner: %v", err)
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, adminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add admin: %v", err)
 	}
 
-	memberID, err := playerService.CreatePlayer("Zzz Remove HTTP NonOwner Member")
+	memberID, err := playerService.CreatePlayer("Zzz Remove HTTP NonAdmin Member")
 	if err != nil {
 		t.Fatalf("failed to create member player: %v", err)
 	}
 	if err := membershipService.AddPlayerToGroup(group.ID, memberID); err != nil {
 		t.Fatalf("failed to add member: %v", err)
 	}
-	if err := authService.Signup(memberID, "remove-http-nonowner@example.com", "s3cret-pass"); err != nil {
+	if err := authService.Signup(memberID, "remove-http-nonadmin@example.com", "s3cret-pass"); err != nil {
 		t.Fatalf("failed to sign up member: %v", err)
 	}
-	memberToken, err := authService.Login("remove-http-nonowner@example.com", "s3cret-pass")
+	memberToken, err := authService.Login("remove-http-nonadmin@example.com", "s3cret-pass")
 	if err != nil {
 		t.Fatalf("failed to log in member: %v", err)
 	}
 
-	targetID, err := playerService.CreatePlayer("Zzz Remove HTTP NonOwner Target")
+	targetID, err := playerService.CreatePlayer("Zzz Remove HTTP NonAdmin Target")
 	if err != nil {
 		t.Fatalf("failed to create target player: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestRemoveMember_Integration_NonOwnerForbidden(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
-		t.Errorf("non-owner remove request returned status %d, want 403, body: %s", rec.Code, rec.Body.String())
+		t.Errorf("non-admin remove request returned status %d, want 403, body: %s", rec.Code, rec.Body.String())
 	}
 
 	isMember, err := membershipService.IsMember(group.ID, targetID)

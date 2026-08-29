@@ -35,11 +35,11 @@ func signupAndLoginRole(t *testing.T, authService *services.AuthService, playerI
 	return token
 }
 
-// TestCreateGroup_Integration_CreatorBecomesOwner exercises the role side of
+// TestCreateGroup_Integration_CreatorBecomesAdmin exercises the role side of
 // GroupHandler.CreateGroup: the authenticated caller who creates the group
-// must come out of it as RoleOwner, not the RoleMember every other join path
+// must come out of it as RoleAdmin, not the RoleMember every other join path
 // assigns.
-func TestCreateGroup_Integration_CreatorBecomesOwner(t *testing.T) {
+func TestCreateGroup_Integration_CreatorBecomesAdmin(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
@@ -59,7 +59,7 @@ func TestCreateGroup_Integration_CreatorBecomesOwner(t *testing.T) {
 	router := gin.New()
 	router.POST("/groups", handlers.AuthMiddleware(authService), groupHandler.CreateGroup)
 
-	body := []byte(`{"name":"Zzz Role Owner Group"}`)
+	body := []byte(`{"name":"Zzz Role Admin Group"}`)
 	req := httptest.NewRequest(http.MethodPost, "/groups", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -78,13 +78,13 @@ func TestCreateGroup_Integration_CreatorBecomesOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get role: %v", err)
 	}
-	if role != models.RoleOwner {
-		t.Errorf("creator role = %q, want %q", role, models.RoleOwner)
+	if role != models.RoleAdmin {
+		t.Errorf("creator role = %q, want %q", role, models.RoleAdmin)
 	}
 }
 
 // TestJoinGroup_Integration_JoinerBecomesMember covers POST /groups/join:
-// joining by invite code must assign RoleMember, never RoleOwner.
+// joining by invite code must assign RoleMember, never RoleAdmin.
 func TestJoinGroup_Integration_JoinerBecomesMember(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -100,12 +100,12 @@ func TestJoinGroup_Integration_JoinerBecomesMember(t *testing.T) {
 		t.Fatalf("failed to create group: %v", err)
 	}
 
-	ownerID, err := playerService.CreatePlayer("Zzz Role Join Owner")
+	adminID, err := playerService.CreatePlayer("Zzz Role Join Admin")
 	if err != nil {
-		t.Fatalf("failed to create owner player: %v", err)
+		t.Fatalf("failed to create admin player: %v", err)
 	}
-	if err := membershipService.AddPlayerToGroupWithRole(group.ID, ownerID, models.RoleOwner); err != nil {
-		t.Fatalf("failed to add owner to group: %v", err)
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, adminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add admin to group: %v", err)
 	}
 
 	joinerID, err := playerService.CreatePlayer("Zzz Role Joiner")
@@ -139,7 +139,7 @@ func TestJoinGroup_Integration_JoinerBecomesMember(t *testing.T) {
 
 // TestAddPlayerToGroup_Integration_AddedPlayerBecomesMember covers POST
 // /groups/:id/players: an existing member adding another player must assign
-// that player RoleMember, never RoleOwner.
+// that player RoleMember, never RoleAdmin.
 func TestAddPlayerToGroup_Integration_AddedPlayerBecomesMember(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -159,7 +159,7 @@ func TestAddPlayerToGroup_Integration_AddedPlayerBecomesMember(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create actor player: %v", err)
 	}
-	if err := membershipService.AddPlayerToGroupWithRole(group.ID, actorID, models.RoleOwner); err != nil {
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, actorID, models.RoleAdmin); err != nil {
 		t.Fatalf("failed to add actor to group: %v", err)
 	}
 	token := signupAndLoginRole(t, authService, actorID, "role-add-member@example.com")
@@ -193,19 +193,19 @@ func TestAddPlayerToGroup_Integration_AddedPlayerBecomesMember(t *testing.T) {
 	}
 }
 
-func newGroupOwnerTestRouter(authService *services.AuthService, membershipService *services.GroupMembershipService) *gin.Engine {
+func newGroupAdminTestRouter(authService *services.AuthService, membershipService *services.GroupMembershipService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	protected := router.Group("/owner-only")
-	protected.Use(handlers.AuthMiddleware(authService), handlers.RequireGroupOwner(membershipService))
+	protected := router.Group("/admin-only")
+	protected.Use(handlers.AuthMiddleware(authService), handlers.RequireGroupAdmin(membershipService))
 	protected.GET("", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
-	router.GET("/owner-only-by-path/:id",
+	router.GET("/admin-only-by-path/:id",
 		handlers.AuthMiddleware(authService),
-		handlers.RequireGroupOwnerByPathParam(membershipService, "id"),
+		handlers.RequireGroupAdminByPathParam(membershipService, "id"),
 		func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"ok": true})
 		})
@@ -213,10 +213,10 @@ func newGroupOwnerTestRouter(authService *services.AuthService, membershipServic
 	return router
 }
 
-// TestRequireGroupOwner_Integration exercises the query-param path of
-// RequireGroupOwner: the owner gets 200, a plain member gets 403, an
+// TestRequireGroupAdmin_Integration exercises the query-param path of
+// RequireGroupAdmin: the admin gets 200, a plain member gets 403, an
 // outsider gets 403, and a request with no token gets 401.
-func TestRequireGroupOwner_Integration(t *testing.T) {
+func TestRequireGroupAdmin_Integration(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
@@ -225,21 +225,21 @@ func TestRequireGroupOwner_Integration(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
 
-	group, err := groupService.CreateGroup("Zzz Role Owner Middleware Group")
+	group, err := groupService.CreateGroup("Zzz Role Admin Middleware Group")
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
 
-	ownerID, err := playerService.CreatePlayer("Zzz Role Owner Middleware Owner")
+	adminID, err := playerService.CreatePlayer("Zzz Role Admin Middleware Admin")
 	if err != nil {
-		t.Fatalf("failed to create owner player: %v", err)
+		t.Fatalf("failed to create admin player: %v", err)
 	}
-	if err := membershipService.AddPlayerToGroupWithRole(group.ID, ownerID, models.RoleOwner); err != nil {
-		t.Fatalf("failed to add owner to group: %v", err)
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, adminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add admin to group: %v", err)
 	}
-	ownerToken := signupAndLoginRole(t, authService, ownerID, "role-mw-owner@example.com")
+	adminToken := signupAndLoginRole(t, authService, adminID, "role-mw-admin@example.com")
 
-	memberID, err := playerService.CreatePlayer("Zzz Role Owner Middleware Member")
+	memberID, err := playerService.CreatePlayer("Zzz Role Admin Middleware Member")
 	if err != nil {
 		t.Fatalf("failed to create member player: %v", err)
 	}
@@ -248,23 +248,23 @@ func TestRequireGroupOwner_Integration(t *testing.T) {
 	}
 	memberToken := signupAndLoginRole(t, authService, memberID, "role-mw-member@example.com")
 
-	outsiderID, err := playerService.CreatePlayer("Zzz Role Owner Middleware Outsider")
+	outsiderID, err := playerService.CreatePlayer("Zzz Role Admin Middleware Outsider")
 	if err != nil {
 		t.Fatalf("failed to create outsider player: %v", err)
 	}
 	outsiderToken := signupAndLoginRole(t, authService, outsiderID, "role-mw-outsider@example.com")
 
-	router := newGroupOwnerTestRouter(authService, membershipService)
+	router := newGroupAdminTestRouter(authService, membershipService)
 
-	ownerReq := httptest.NewRequest(http.MethodGet, "/owner-only?group_id="+group.ID.String(), nil)
-	ownerReq.Header.Set("Authorization", "Bearer "+ownerToken)
-	ownerRec := httptest.NewRecorder()
-	router.ServeHTTP(ownerRec, ownerReq)
-	if ownerRec.Code != http.StatusOK {
-		t.Errorf("owner request returned status %d, want 200, body: %s", ownerRec.Code, ownerRec.Body.String())
+	adminReq := httptest.NewRequest(http.MethodGet, "/admin-only?group_id="+group.ID.String(), nil)
+	adminReq.Header.Set("Authorization", "Bearer "+adminToken)
+	adminRec := httptest.NewRecorder()
+	router.ServeHTTP(adminRec, adminReq)
+	if adminRec.Code != http.StatusOK {
+		t.Errorf("admin request returned status %d, want 200, body: %s", adminRec.Code, adminRec.Body.String())
 	}
 
-	memberReq := httptest.NewRequest(http.MethodGet, "/owner-only?group_id="+group.ID.String(), nil)
+	memberReq := httptest.NewRequest(http.MethodGet, "/admin-only?group_id="+group.ID.String(), nil)
 	memberReq.Header.Set("Authorization", "Bearer "+memberToken)
 	memberRec := httptest.NewRecorder()
 	router.ServeHTTP(memberRec, memberReq)
@@ -272,7 +272,7 @@ func TestRequireGroupOwner_Integration(t *testing.T) {
 		t.Errorf("member request returned status %d, want 403, body: %s", memberRec.Code, memberRec.Body.String())
 	}
 
-	outsiderReq := httptest.NewRequest(http.MethodGet, "/owner-only?group_id="+group.ID.String(), nil)
+	outsiderReq := httptest.NewRequest(http.MethodGet, "/admin-only?group_id="+group.ID.String(), nil)
 	outsiderReq.Header.Set("Authorization", "Bearer "+outsiderToken)
 	outsiderRec := httptest.NewRecorder()
 	router.ServeHTTP(outsiderRec, outsiderReq)
@@ -280,7 +280,7 @@ func TestRequireGroupOwner_Integration(t *testing.T) {
 		t.Errorf("outsider request returned status %d, want 403, body: %s", outsiderRec.Code, outsiderRec.Body.String())
 	}
 
-	noTokenReq := httptest.NewRequest(http.MethodGet, "/owner-only?group_id="+group.ID.String(), nil)
+	noTokenReq := httptest.NewRequest(http.MethodGet, "/admin-only?group_id="+group.ID.String(), nil)
 	noTokenRec := httptest.NewRecorder()
 	router.ServeHTTP(noTokenRec, noTokenReq)
 	if noTokenRec.Code != http.StatusUnauthorized {
@@ -288,9 +288,9 @@ func TestRequireGroupOwner_Integration(t *testing.T) {
 	}
 }
 
-// TestRequireGroupOwnerByPathParam_Integration exercises the path-param
-// variant, same shape as TestRequireGroupOwner_Integration.
-func TestRequireGroupOwnerByPathParam_Integration(t *testing.T) {
+// TestRequireGroupAdminByPathParam_Integration exercises the path-param
+// variant, same shape as TestRequireGroupAdmin_Integration.
+func TestRequireGroupAdminByPathParam_Integration(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
@@ -299,21 +299,21 @@ func TestRequireGroupOwnerByPathParam_Integration(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
 
-	group, err := groupService.CreateGroup("Zzz Role Owner Path Group")
+	group, err := groupService.CreateGroup("Zzz Role Admin Path Group")
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
 
-	ownerID, err := playerService.CreatePlayer("Zzz Role Owner Path Owner")
+	adminID, err := playerService.CreatePlayer("Zzz Role Admin Path Admin")
 	if err != nil {
-		t.Fatalf("failed to create owner player: %v", err)
+		t.Fatalf("failed to create admin player: %v", err)
 	}
-	if err := membershipService.AddPlayerToGroupWithRole(group.ID, ownerID, models.RoleOwner); err != nil {
-		t.Fatalf("failed to add owner to group: %v", err)
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, adminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add admin to group: %v", err)
 	}
-	ownerToken := signupAndLoginRole(t, authService, ownerID, "role-mw-path-owner@example.com")
+	adminToken := signupAndLoginRole(t, authService, adminID, "role-mw-path-admin@example.com")
 
-	memberID, err := playerService.CreatePlayer("Zzz Role Owner Path Member")
+	memberID, err := playerService.CreatePlayer("Zzz Role Admin Path Member")
 	if err != nil {
 		t.Fatalf("failed to create member player: %v", err)
 	}
@@ -322,23 +322,23 @@ func TestRequireGroupOwnerByPathParam_Integration(t *testing.T) {
 	}
 	memberToken := signupAndLoginRole(t, authService, memberID, "role-mw-path-member@example.com")
 
-	outsiderID, err := playerService.CreatePlayer("Zzz Role Owner Path Outsider")
+	outsiderID, err := playerService.CreatePlayer("Zzz Role Admin Path Outsider")
 	if err != nil {
 		t.Fatalf("failed to create outsider player: %v", err)
 	}
 	outsiderToken := signupAndLoginRole(t, authService, outsiderID, "role-mw-path-outsider@example.com")
 
-	router := newGroupOwnerTestRouter(authService, membershipService)
+	router := newGroupAdminTestRouter(authService, membershipService)
 
-	ownerReq := httptest.NewRequest(http.MethodGet, "/owner-only-by-path/"+group.ID.String(), nil)
-	ownerReq.Header.Set("Authorization", "Bearer "+ownerToken)
-	ownerRec := httptest.NewRecorder()
-	router.ServeHTTP(ownerRec, ownerReq)
-	if ownerRec.Code != http.StatusOK {
-		t.Errorf("owner request returned status %d, want 200, body: %s", ownerRec.Code, ownerRec.Body.String())
+	adminReq := httptest.NewRequest(http.MethodGet, "/admin-only-by-path/"+group.ID.String(), nil)
+	adminReq.Header.Set("Authorization", "Bearer "+adminToken)
+	adminRec := httptest.NewRecorder()
+	router.ServeHTTP(adminRec, adminReq)
+	if adminRec.Code != http.StatusOK {
+		t.Errorf("admin request returned status %d, want 200, body: %s", adminRec.Code, adminRec.Body.String())
 	}
 
-	memberReq := httptest.NewRequest(http.MethodGet, "/owner-only-by-path/"+group.ID.String(), nil)
+	memberReq := httptest.NewRequest(http.MethodGet, "/admin-only-by-path/"+group.ID.String(), nil)
 	memberReq.Header.Set("Authorization", "Bearer "+memberToken)
 	memberRec := httptest.NewRecorder()
 	router.ServeHTTP(memberRec, memberReq)
@@ -346,7 +346,7 @@ func TestRequireGroupOwnerByPathParam_Integration(t *testing.T) {
 		t.Errorf("member request returned status %d, want 403, body: %s", memberRec.Code, memberRec.Body.String())
 	}
 
-	outsiderReq := httptest.NewRequest(http.MethodGet, "/owner-only-by-path/"+group.ID.String(), nil)
+	outsiderReq := httptest.NewRequest(http.MethodGet, "/admin-only-by-path/"+group.ID.String(), nil)
 	outsiderReq.Header.Set("Authorization", "Bearer "+outsiderToken)
 	outsiderRec := httptest.NewRecorder()
 	router.ServeHTTP(outsiderRec, outsiderReq)
@@ -354,7 +354,7 @@ func TestRequireGroupOwnerByPathParam_Integration(t *testing.T) {
 		t.Errorf("outsider request returned status %d, want 403, body: %s", outsiderRec.Code, outsiderRec.Body.String())
 	}
 
-	noTokenReq := httptest.NewRequest(http.MethodGet, "/owner-only-by-path/"+group.ID.String(), nil)
+	noTokenReq := httptest.NewRequest(http.MethodGet, "/admin-only-by-path/"+group.ID.String(), nil)
 	noTokenRec := httptest.NewRecorder()
 	router.ServeHTTP(noTokenRec, noTokenReq)
 	if noTokenRec.Code != http.StatusUnauthorized {

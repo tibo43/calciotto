@@ -12,14 +12,32 @@ import (
 // ErrLastMember is returned by LeaveGroup when the departing player is the
 // group's only member (regardless of role): there would be no one left to
 // hand the group off to, so the departure is refused rather than leaving the
-// group ownerless or deleting it outright.
+// group adminless or deleting it outright.
 var ErrLastMember = errors.New("cannot leave the group: no other members to hand it off to")
 
-// ErrCannotRemoveSelf is returned by RemoveMember when the acting owner
+// ErrCannotRemoveSelf is returned by RemoveMember when the acting admin
 // targets their own membership: removing yourself is voluntary departure,
 // which goes through LeaveGroup (and its promotion logic) instead, not
-// through the owner's "remove a member" power.
+// through an admin's "remove a member" power.
 var ErrCannotRemoveSelf = errors.New("cannot remove yourself via this action: use the leave-group endpoint instead")
+
+// ErrInvalidRole is returned by UpdateMemberRole when the requested role is
+// neither models.RoleAdmin nor models.RoleMember — the only two values
+// GroupMembership.Role is ever allowed to hold.
+var ErrInvalidRole = errors.New("invalid role: must be \"admin\" or \"member\"")
+
+// ErrCannotChangeOwnRole is returned by UpdateMemberRole when the acting
+// admin targets their own membership. There is no self-service "step down"
+// feature: changing a role always goes through this admin-only path, and
+// self-targeting isn't supported — an admin who wants out of the group leaves
+// it via LeaveGroup, which hands the role over on their behalf.
+var ErrCannotChangeOwnRole = errors.New("cannot change your own role")
+
+// ErrLastAdmin is returned by UpdateMemberRole when demoting the target would
+// leave the group with members but no admin — the same invariant LeaveGroup
+// maintains by promoting a successor, enforced here too since a role change
+// is the second way it could be broken.
+var ErrLastAdmin = errors.New("cannot demote the group's last admin")
 
 type GroupMembershipService struct {
 	DB *gorm.DB
@@ -122,11 +140,15 @@ func (s *GroupMembershipService) GetFirstGroupForPlayer(playerID uuid.UUID) (*mo
 //     with zero members would have no one to hand it off to, so the
 //     departure is refused with ErrLastMember instead of leaving the group
 //     memberless or deleting it.
-//  2. An owner leaving a group that still has other members first promotes
-//     the longest-standing remaining member (by GroupMembership.CreatedAt —
-//     same ordering GetFirstGroupForPlayer uses) to owner, so the group is
-//     never left without one.
-//  3. A plain member leaving a group that still has other members just has
+//  2. An admin leaving a group where at least one *other* admin remains
+//     just has their membership row deleted — the group still has an admin,
+//     so there is nothing to hand over. This is the case multiple admins per
+//     group made possible.
+//  3. The *last* admin leaving a group that still has other members first
+//     promotes the longest-standing remaining member (by
+//     GroupMembership.CreatedAt — same ordering GetFirstGroupForPlayer uses)
+//     to admin, so the group is never left with members but no admin.
+//  4. A plain member leaving a group that still has other members just has
 //     their membership row deleted, nothing else changes.
 //
 // If playerID isn't a member of groupID at all, the lookup below returns
@@ -136,7 +158,7 @@ func (s *GroupMembershipService) GetFirstGroupForPlayer(playerID uuid.UUID) (*mo
 //
 // The promotion and the deletion run inside one transaction (same pattern as
 // GroupService.CreateGroup) so the group can never end up, even transiently,
-// with two owners or none.
+// with no admin at all.
 func (s *GroupMembershipService) LeaveGroup(groupID, playerID uuid.UUID) error {
 	return s.DB.Transaction(func(tx *gorm.DB) error {
 		var membership models.GroupMembership
@@ -157,11 +179,11 @@ func (s *GroupMembershipService) LeaveGroup(groupID, playerID uuid.UUID) error {
 			return ErrLastMember
 		}
 
-		if membership.Role == models.RoleOwner {
+		if membership.Role == models.RoleAdmin && !containsAdmin(otherMembers) {
 			successor := otherMembers[0]
 			if err := tx.Model(&models.GroupMembership{}).
 				Where("id = ?", successor.ID).
-				Update("role", models.RoleOwner).Error; err != nil {
+				Update("role", models.RoleAdmin).Error; err != nil {
 				return err
 			}
 		}
@@ -170,18 +192,96 @@ func (s *GroupMembershipService) LeaveGroup(groupID, playerID uuid.UUID) error {
 	})
 }
 
+// containsAdmin reports whether any of the given memberships carries
+// models.RoleAdmin — LeaveGroup's test for "does the group still have an
+// admin once this player is gone?".
+func containsAdmin(memberships []models.GroupMembership) bool {
+	for _, m := range memberships {
+		if m.Role == models.RoleAdmin {
+			return true
+		}
+	}
+	return false
+}
+
+// UpdateMemberRole promotes targetPlayerID to admin or demotes them back to
+// plain member within groupID, on behalf of actingPlayerID, one of the
+// group's admins (callers are expected to already be authorized via
+// RequireGroupAdminByPathParam). It is the only way a group gains an admin
+// besides its creator, and therefore the only way "several admins per group"
+// is reachable at all.
+//
+// Rules:
+//  1. newRole must be models.RoleAdmin or models.RoleMember; anything else is
+//     refused with ErrInvalidRole before touching the database.
+//  2. actingPlayerID cannot target itself — refused with
+//     ErrCannotChangeOwnRole. There is no self-service "step down"; an admin
+//     who wants out leaves the group via LeaveGroup instead.
+//  3. If targetPlayerID isn't a member of groupID at all, the lookup below
+//     returns gorm.ErrRecordNotFound, which is propagated as-is — same
+//     handling as RemoveMember.
+//  4. Setting the role the target already has is a successful no-op: the
+//     caller asked for a state the group is already in, and reporting an
+//     error would make a retried request fail for no reason.
+//  5. Demoting the group's last admin is refused with ErrLastAdmin, so a
+//     group with members always keeps at least one admin — the same invariant
+//     LeaveGroup upholds by promoting a successor. Through the HTTP route
+//     this can't actually trigger (the acting admin is themselves an admin
+//     and, by rule 2, not the target, so another admin always remains); it's
+//     a service-level safety net for any other caller.
+//
+// The check and the update run inside one transaction so a concurrent
+// demotion of another admin can't slip between them and strip the group's
+// last admin.
+func (s *GroupMembershipService) UpdateMemberRole(groupID, actingPlayerID, targetPlayerID uuid.UUID, newRole string) error {
+	if newRole != models.RoleAdmin && newRole != models.RoleMember {
+		return ErrInvalidRole
+	}
+	if actingPlayerID == targetPlayerID {
+		return ErrCannotChangeOwnRole
+	}
+
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		var membership models.GroupMembership
+		if err := tx.
+			Where("group_id = ? AND player_id = ?", groupID, targetPlayerID).
+			First(&membership).Error; err != nil {
+			return err
+		}
+
+		if membership.Role == newRole {
+			return nil
+		}
+
+		if newRole == models.RoleMember {
+			var otherAdmins int64
+			if err := tx.Model(&models.GroupMembership{}).
+				Where("group_id = ? AND player_id <> ? AND role = ?", groupID, targetPlayerID, models.RoleAdmin).
+				Count(&otherAdmins).Error; err != nil {
+				return err
+			}
+			if otherAdmins == 0 {
+				return ErrLastAdmin
+			}
+		}
+
+		return tx.Model(&models.GroupMembership{}).
+			Where("id = ?", membership.ID).
+			Update("role", newRole).Error
+	})
+}
+
 // RemoveMember removes targetPlayerID's membership in groupID on behalf of
-// actingPlayerID, the group's owner (callers are expected to already be
-// authorized via RequireGroupOwnerByPathParam, which guarantees the group has
-// exactly one owner and actingPlayerID is it).
+// actingPlayerID, one of the group's admins (callers are expected to already
+// be authorized via RequireGroupAdminByPathParam).
 //
 // Unlike LeaveGroup, there is no promotion or "last member" logic here: the
-// owner isn't leaving, so the group always keeps its owner regardless of who
-// else is removed.
+// acting admin isn't leaving, so the group always keeps at least that one
+// admin regardless of who else is removed.
 //
 // Rules:
 //  1. actingPlayerID cannot target itself — that's voluntary departure and
-//     belongs to LeaveGroup, which handles handing off ownership. Refused
+//     belongs to LeaveGroup, which hands the admin role over. Refused
 //     with ErrCannotRemoveSelf before touching the database.
 //  2. If targetPlayerID isn't a member of groupID at all, the lookup below
 //     returns gorm.ErrRecordNotFound, which is propagated as-is — same
@@ -207,6 +307,24 @@ func (s *GroupMembershipService) GetGroupsByPlayerID(playerID uuid.UUID) ([]mode
 	result := s.DB.Joins("JOIN group_memberships ON group_memberships.group_id = groups.id").
 		Where("group_memberships.player_id = ?", playerID).
 		Find(&groups)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return groups, nil
+}
+
+// GetGroupsWithRoleByPlayerID is GetGroupsByPlayerID plus the player's role in
+// each group, for GET /groups/me — a client needs to know which of its groups
+// it can act as an admin in (create a match, edit scores, change roles)
+// without asking group by group. GetGroupsByPlayerID stays as it is: its other
+// caller, StandingsService.GetPlayerProfile, has no use for the role.
+func (s *GroupMembershipService) GetGroupsWithRoleByPlayerID(playerID uuid.UUID) ([]models.GroupWithRole, error) {
+	var groups []models.GroupWithRole
+	result := s.DB.Model(&models.Group{}).
+		Select("groups.*, group_memberships.role AS role").
+		Joins("JOIN group_memberships ON group_memberships.group_id = groups.id").
+		Where("group_memberships.player_id = ?", playerID).
+		Scan(&groups)
 	if result.Error != nil {
 		return nil, result.Error
 	}

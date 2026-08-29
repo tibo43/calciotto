@@ -54,5 +54,18 @@ func InitDB() (*gorm.DB, error) {
 		log.Fatal(err)
 	}
 
+	// GroupMembership.Role used to have "owner" as its privileged value, with
+	// exactly one owner per group. The model now uses "admin" (models.RoleAdmin)
+	// and allows several per group — but renaming the Go constant does nothing
+	// to rows already stored: AutoMigrate only ever touches schema, never data.
+	// Without this rewrite every pre-existing group would keep role = 'owner',
+	// which no longer matches models.RoleAdmin, so its creator would be locked
+	// out of every admin-gated action (removing a member, changing a role,
+	// creating a match, editing scores) with no admin left able to grant it
+	// back. Idempotent: after the first run no 'owner' row is left to update.
+	if err := db.Exec(`UPDATE group_memberships SET role = 'admin' WHERE role = 'owner'`).Error; err != nil {
+		log.Fatal(err)
+	}
+
 	return db, nil
 }

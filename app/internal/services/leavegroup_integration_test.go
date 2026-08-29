@@ -9,12 +9,12 @@ import (
 	"app/internal/testutil"
 )
 
-// TestLeaveGroup_Integration_OwnerPromotesOldestRemainingMember covers the
-// core "leave a group" rule for an owner: when other members remain, the
+// TestLeaveGroup_Integration_AdminPromotesOldestRemainingMember covers the
+// core "leave a group" rule for an admin: when other members remain, the
 // longest-standing one among them (by GroupMembership.CreatedAt, the same
-// ordering GetFirstGroupForPlayer uses) must become the new owner, and the
-// departing owner must end up with no membership at all.
-func TestLeaveGroup_Integration_OwnerPromotesOldestRemainingMember(t *testing.T) {
+// ordering GetFirstGroupForPlayer uses) must become the new admin, and the
+// departing admin must end up with no membership at all.
+func TestLeaveGroup_Integration_AdminPromotesOldestRemainingMember(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
@@ -22,17 +22,17 @@ func TestLeaveGroup_Integration_OwnerPromotesOldestRemainingMember(t *testing.T)
 	playerService := services.NewPlayerService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 
-	group, err := groupService.CreateGroup("Zzz Leave Owner Group")
+	group, err := groupService.CreateGroup("Zzz Leave Admin Group")
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
 
-	ownerID, err := playerService.CreatePlayer("Zzz Leave Owner")
+	adminID, err := playerService.CreatePlayer("Zzz Leave Admin")
 	if err != nil {
-		t.Fatalf("failed to create owner player: %v", err)
+		t.Fatalf("failed to create admin player: %v", err)
 	}
-	if err := membershipService.AddPlayerToGroupWithRole(group.ID, ownerID, models.RoleOwner); err != nil {
-		t.Fatalf("failed to add owner: %v", err)
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, adminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add admin: %v", err)
 	}
 
 	// Two remaining members added in order — earlierMemberID joins first, so
@@ -53,24 +53,24 @@ func TestLeaveGroup_Integration_OwnerPromotesOldestRemainingMember(t *testing.T)
 		t.Fatalf("failed to add later member: %v", err)
 	}
 
-	if err := membershipService.LeaveGroup(group.ID, ownerID); err != nil {
+	if err := membershipService.LeaveGroup(group.ID, adminID); err != nil {
 		t.Fatalf("LeaveGroup returned error: %v", err)
 	}
 
-	isMember, err := membershipService.IsMember(group.ID, ownerID)
+	isMember, err := membershipService.IsMember(group.ID, adminID)
 	if err != nil {
-		t.Fatalf("IsMember(owner) returned error: %v", err)
+		t.Fatalf("IsMember(admin) returned error: %v", err)
 	}
 	if isMember {
-		t.Error("former owner is still a member after LeaveGroup")
+		t.Error("former admin is still a member after LeaveGroup")
 	}
 
 	newRole, err := membershipService.GetRole(group.ID, earlierMemberID)
 	if err != nil {
 		t.Fatalf("GetRole(earlierMember) returned error: %v", err)
 	}
-	if newRole != models.RoleOwner {
-		t.Errorf("earlier member role = %q, want %q (should be promoted)", newRole, models.RoleOwner)
+	if newRole != models.RoleAdmin {
+		t.Errorf("earlier member role = %q, want %q (should be promoted)", newRole, models.RoleAdmin)
 	}
 
 	laterRole, err := membershipService.GetRole(group.ID, laterMemberID)
@@ -83,8 +83,8 @@ func TestLeaveGroup_Integration_OwnerPromotesOldestRemainingMember(t *testing.T)
 }
 
 // TestLeaveGroup_Integration_PlainMemberLeavesWithoutSideEffects covers a
-// non-owner leaving: only their own membership should disappear, and the
-// existing owner (and any other member) must be left untouched.
+// non-admin leaving: only their own membership should disappear, and the
+// existing admin (and any other member) must be left untouched.
 func TestLeaveGroup_Integration_PlainMemberLeavesWithoutSideEffects(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -98,12 +98,12 @@ func TestLeaveGroup_Integration_PlainMemberLeavesWithoutSideEffects(t *testing.T
 		t.Fatalf("failed to create group: %v", err)
 	}
 
-	ownerID, err := playerService.CreatePlayer("Zzz Leave Member Owner")
+	adminID, err := playerService.CreatePlayer("Zzz Leave Member Admin")
 	if err != nil {
-		t.Fatalf("failed to create owner player: %v", err)
+		t.Fatalf("failed to create admin player: %v", err)
 	}
-	if err := membershipService.AddPlayerToGroupWithRole(group.ID, ownerID, models.RoleOwner); err != nil {
-		t.Fatalf("failed to add owner: %v", err)
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, adminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add admin: %v", err)
 	}
 
 	leavingMemberID, err := playerService.CreatePlayer("Zzz Leave Member Leaving")
@@ -126,17 +126,17 @@ func TestLeaveGroup_Integration_PlainMemberLeavesWithoutSideEffects(t *testing.T
 		t.Error("member is still a member after LeaveGroup")
 	}
 
-	ownerRole, err := membershipService.GetRole(group.ID, ownerID)
+	adminRole, err := membershipService.GetRole(group.ID, adminID)
 	if err != nil {
-		t.Fatalf("GetRole(owner) returned error: %v", err)
+		t.Fatalf("GetRole(admin) returned error: %v", err)
 	}
-	if ownerRole != models.RoleOwner {
-		t.Errorf("owner role changed to %q after an unrelated member left, want unchanged %q", ownerRole, models.RoleOwner)
+	if adminRole != models.RoleAdmin {
+		t.Errorf("admin role changed to %q after an unrelated member left, want unchanged %q", adminRole, models.RoleAdmin)
 	}
 }
 
 // TestLeaveGroup_Integration_LastMemberCannotLeave covers the block on a
-// group's sole member (owner or not) leaving: LeaveGroup must fail with
+// group's sole member (admin or not) leaving: LeaveGroup must fail with
 // ErrLastMember and the membership must remain intact.
 func TestLeaveGroup_Integration_LastMemberCannotLeave(t *testing.T) {
 	db := testutil.OpenDB(t)
@@ -151,23 +151,95 @@ func TestLeaveGroup_Integration_LastMemberCannotLeave(t *testing.T) {
 		t.Fatalf("failed to create group: %v", err)
 	}
 
-	soleOwnerID, err := playerService.CreatePlayer("Zzz Leave Sole Owner")
+	soleAdminID, err := playerService.CreatePlayer("Zzz Leave Sole Admin")
 	if err != nil {
-		t.Fatalf("failed to create sole owner player: %v", err)
+		t.Fatalf("failed to create sole admin player: %v", err)
 	}
-	if err := membershipService.AddPlayerToGroupWithRole(group.ID, soleOwnerID, models.RoleOwner); err != nil {
-		t.Fatalf("failed to add sole owner: %v", err)
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, soleAdminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add sole admin: %v", err)
 	}
 
-	if err := membershipService.LeaveGroup(group.ID, soleOwnerID); !errors.Is(err, services.ErrLastMember) {
+	if err := membershipService.LeaveGroup(group.ID, soleAdminID); !errors.Is(err, services.ErrLastMember) {
 		t.Fatalf("LeaveGroup(sole member) error = %v, want ErrLastMember", err)
 	}
 
-	isMember, err := membershipService.IsMember(group.ID, soleOwnerID)
+	isMember, err := membershipService.IsMember(group.ID, soleAdminID)
 	if err != nil {
 		t.Fatalf("IsMember returned error: %v", err)
 	}
 	if !isMember {
-		t.Error("sole owner is no longer a member after a refused LeaveGroup")
+		t.Error("sole admin is no longer a member after a refused LeaveGroup")
+	}
+}
+
+// TestLeaveGroup_Integration_AdminLeavesWhileAnotherAdminRemains covers what
+// multiple admins per group changed: when the departing admin isn't the last
+// one, there is nothing to hand over — the remaining admin keeps their role
+// and no plain member gets promoted behind their back.
+func TestLeaveGroup_Integration_AdminLeavesWhileAnotherAdminRemains(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+	playerService := services.NewPlayerService(tx)
+	membershipService := services.NewGroupMembershipService(tx)
+
+	group, err := groupService.CreateGroup("Zzz Leave Two Admins Group")
+	if err != nil {
+		t.Fatalf("failed to create group: %v", err)
+	}
+
+	leavingAdminID, err := playerService.CreatePlayer("Zzz Leave Two Admins Leaving")
+	if err != nil {
+		t.Fatalf("failed to create leaving admin player: %v", err)
+	}
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, leavingAdminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add leaving admin: %v", err)
+	}
+
+	// A plain member joined before the second admin, so it is the one
+	// LeaveGroup would promote if it wrongly considered the group adminless.
+	memberID, err := playerService.CreatePlayer("Zzz Leave Two Admins Member")
+	if err != nil {
+		t.Fatalf("failed to create member player: %v", err)
+	}
+	if err := membershipService.AddPlayerToGroup(group.ID, memberID); err != nil {
+		t.Fatalf("failed to add member: %v", err)
+	}
+
+	remainingAdminID, err := playerService.CreatePlayer("Zzz Leave Two Admins Remaining")
+	if err != nil {
+		t.Fatalf("failed to create remaining admin player: %v", err)
+	}
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, remainingAdminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add remaining admin: %v", err)
+	}
+
+	if err := membershipService.LeaveGroup(group.ID, leavingAdminID); err != nil {
+		t.Fatalf("LeaveGroup returned error: %v", err)
+	}
+
+	isMember, err := membershipService.IsMember(group.ID, leavingAdminID)
+	if err != nil {
+		t.Fatalf("IsMember(leavingAdmin) returned error: %v", err)
+	}
+	if isMember {
+		t.Error("departing admin is still a member after LeaveGroup")
+	}
+
+	remainingRole, err := membershipService.GetRole(group.ID, remainingAdminID)
+	if err != nil {
+		t.Fatalf("GetRole(remainingAdmin) returned error: %v", err)
+	}
+	if remainingRole != models.RoleAdmin {
+		t.Errorf("remaining admin role = %q, want unchanged %q", remainingRole, models.RoleAdmin)
+	}
+
+	memberRole, err := membershipService.GetRole(group.ID, memberID)
+	if err != nil {
+		t.Fatalf("GetRole(member) returned error: %v", err)
+	}
+	if memberRole != models.RoleMember {
+		t.Errorf("plain member role = %q, want unchanged %q — no promotion was needed", memberRole, models.RoleMember)
 	}
 }

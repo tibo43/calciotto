@@ -68,12 +68,21 @@ func main() {
 	log.Printf("created group %q (%s)", group.Name, group.ID)
 
 	players := make([]models.Player, 0, len(playerNames))
-	for _, name := range playerNames {
+	for i, name := range playerNames {
 		id, err := playerService.CreatePlayer(name)
 		if err != nil {
 			log.Fatalf("failed to create player %q: %v", name, err)
 		}
-		if err := groupMembershipService.AddPlayerToGroup(group.ID, id); err != nil {
+		// The seeded group has no creator going through POST /groups, which is
+		// the only HTTP path that assigns RoleAdmin — so the first player gets
+		// it explicitly here. Without it nobody in a freshly seeded database
+		// could create a match or edit scores (both admin-gated), and no admin
+		// would exist to grant the role either.
+		role := models.RoleMember
+		if i == 0 {
+			role = models.RoleAdmin
+		}
+		if err := groupMembershipService.AddPlayerToGroupWithRole(group.ID, id, role); err != nil {
 			log.Fatalf("failed to add player %q to group: %v", name, err)
 		}
 		email := name + "@mail.com"
@@ -82,7 +91,7 @@ func main() {
 		}
 		players = append(players, models.Player{BaseModel: models.BaseModel{ID: id}, Name: name})
 	}
-	log.Printf("created %d players, each with an account (name@mail.com / %s)", len(players), seedPassword)
+	log.Printf("created %d players, each with an account (name@mail.com / %s); %q is the group's admin", len(players), seedPassword, playerNames[0])
 
 	teams, err := teamService.GetTeamsByGroupID(group.ID)
 	if err != nil {

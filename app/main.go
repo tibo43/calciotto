@@ -26,7 +26,7 @@ func main() {
 	// Configuration CORS
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:4000", "http://127.0.0.1:4000"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
@@ -54,6 +54,8 @@ func main() {
 	authRequired := handlers.AuthMiddleware(authService)
 	requireGroupMember := handlers.RequireGroupMembership(groupMembershipService)
 	requireGroupMemberByPathID := handlers.RequireGroupMembershipByPathParam(groupMembershipService, "id")
+	requireGroupAdmin := handlers.RequireGroupAdmin(groupMembershipService)
+	requireGroupAdminByPathID := handlers.RequireGroupAdminByPathParam(groupMembershipService, "id")
 
 	// Setup routes
 	// Players — public: creating a player still needs no token (the group
@@ -91,18 +93,27 @@ func main() {
 	r.GET("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupMembers)
 	// Self-service "leave a group" — the caller can only ever remove their own
 	// membership (from the JWT), never someone else's; removing another
-	// member is handled by the owner-only route below instead.
+	// member is handled by the admin-only route below instead.
 	r.DELETE("/groups/:id/members/me", authRequired, requireGroupMemberByPathID, groupHandler.LeaveGroup)
-	// Owner-only "remove a member" — unlike the self-service route above, this
+	// Admin-only "remove a member" — unlike the self-service route above, this
 	// targets another player's membership, so it's gated by
-	// RequireGroupOwnerByPathParam rather than plain group membership.
-	r.DELETE("/groups/:id/members/:playerId", authRequired, handlers.RequireGroupOwnerByPathParam(groupMembershipService, "id"), groupHandler.RemoveMember)
+	// RequireGroupAdminByPathParam rather than plain group membership.
+	r.DELETE("/groups/:id/members/:playerId", authRequired, requireGroupAdminByPathID, groupHandler.RemoveMember)
+	// Admin-only "change a member's role" — the only way a group gains an
+	// admin besides its creator, so it has to be reachable by any existing
+	// admin, and by no one else.
+	r.PATCH("/groups/:id/members/:playerId/role", authRequired, requireGroupAdminByPathID, groupHandler.UpdateMemberRole)
 
 	// Matches
-	r.POST("/matches", authRequired, requireGroupMember, matchHandler.CreateMatch)
+	// Creating a match and editing its scores are admin-only
+	// (requireGroupAdmin); reading them stays open to any member
+	// (requireGroupMember). Both write routes carry the group_id in the body,
+	// not the path, hence the body/query-resolving middleware rather than the
+	// ByPathID one.
+	r.POST("/matches", authRequired, requireGroupAdmin, matchHandler.CreateMatch)
 	r.GET("/matches/details", authRequired, requireGroupMember, matchHandler.GetMatchesDetails)
 	r.GET("/matches/:id/details", authRequired, requireGroupMember, matchHandler.GetMatchDetailsByID)
-	r.PUT("/matches/:id", authRequired, requireGroupMember, matchHandler.UpdateMatch)
+	r.PUT("/matches/:id", authRequired, requireGroupAdmin, matchHandler.UpdateMatch)
 
 	// Standings
 	r.GET("/standings/points", authRequired, requireGroupMember, standingsHandler.GetPointsStandings)
