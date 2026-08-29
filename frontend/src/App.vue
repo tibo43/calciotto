@@ -70,18 +70,6 @@
                 </svg>
                 Groups
               </router-link>
-              <router-link
-                to="/profile"
-                @click="closeMenu"
-                :class="{ 'active': $route.name === 'Profile' }"
-                class="nav-button"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
-                </svg>
-                Profile
-              </router-link>
             </div>
 
             <!-- Actions -->
@@ -102,11 +90,28 @@
                 </option>
               </select>
 
-              <button
-                class="btn-base btn-cancel btn-small logout-btn"
-                @click="logout"
+              <router-link
+                to="/profile"
+                class="icon-nav-button"
+                :class="{ 'active': $route.name === 'Profile' }"
+                :aria-label="$route.name === 'Profile' ? 'Profile (current page)' : 'Profile'"
               >
-                Log out
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+              </router-link>
+
+              <button
+                class="icon-nav-button logout-btn"
+                @click="logout"
+                aria-label="Log out"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <polyline points="16 17 21 12 16 7"/>
+                  <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
               </button>
 
               <button
@@ -509,6 +514,36 @@ export default {
 .group-select:focus {
   outline: none;
   border-color: var(--primary-color);
+}
+
+.icon-nav-button {
+  background: none;
+  border: none;
+  padding: 0.5rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.icon-nav-button:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.icon-nav-button.active {
+  background-color: var(--primary-color);
+  color: white;
+  box-shadow: var(--shadow-md);
+}
+
+.icon-nav-button svg {
+  width: 20px;
+  height: 20px;
 }
 
 .theme-toggle {
