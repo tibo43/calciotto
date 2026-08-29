@@ -195,7 +195,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          koyeb apps get "$KOYEB_APP" >/dev/null 2>&1 || koyeb apps create "$KOYEB_APP"
+          if koyeb apps get "$KOYEB_APP" >/dev/null 2>&1; then
+            # The app can be left PAUSED by an earlier experiment, in which
+            # case a service deployed into it never starts. Resuming an app
+            # that is already running is a no-op.
+            koyeb apps resume "$KOYEB_APP" >/dev/null 2>&1 || true
+          else
+            koyeb apps create "$KOYEB_APP"
+          fi
 
           # Shared between the update and create paths so a service that already
           # exists and one being created for the first time get the same config.
