@@ -70,7 +70,7 @@
       </div>
     </transition>
 
-    <CreateGroupModal v-if="showCreateModal" @close="showCreateModal = false" />
+    <CreateGroupModal v-if="showCreateModal" :is-dark-mode="isDarkMode" @close="showCreateModal = false" />
   </div>
 </template>
 
@@ -84,7 +84,11 @@ export default {
   components: { CreateGroupModal },
   props: {
     groups: { type: Array, default: () => [] },
-    activeGroupId: { type: String, default: '' }
+    activeGroupId: { type: String, default: '' },
+    // Passed straight through to CreateGroupModal: it's teleported to
+    // <body>, outside #app, so it can't inherit the .dark-mode class App.vue
+    // sets there — it needs its own copy of the flag instead.
+    isDarkMode: { type: Boolean, default: false }
   },
   data() {
     return {

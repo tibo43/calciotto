@@ -56,6 +56,7 @@
                 v-if="showGroupSwitcher"
                 :groups="groups"
                 :active-group-id="activeGroupId"
+                :is-dark-mode="isDarkMode"
               />
 
               <router-link

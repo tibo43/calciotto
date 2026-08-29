@@ -5,9 +5,14 @@
        for any position:fixed descendant — so .modal-overlay's fixed
        inset:0 would resolve against the 69px-tall navbar box instead of the
        viewport. Teleporting escapes that entirely, regardless of where this
-       component sits in the Vue tree. -->
+       component sits in the Vue tree.
+
+       That same escape means this DOM subtree is no longer a descendant of
+       #app, so it can't inherit the .dark-mode class App.vue toggles there
+       (CSS custom properties only cascade down the actual DOM tree) — the
+       isDarkMode prop reapplies the class directly on this root instead. -->
   <Teleport to="body">
-    <div class="modal-overlay" @click="close">
+    <div class="modal-overlay" :class="{ 'dark-mode': isDarkMode }" @click="close">
       <div class="modal-container create-group-modal" @click.stop>
         <div class="modal-header">
           <h3>Create a group</h3>
@@ -75,6 +80,9 @@ import TeamColourPicker from '@/components/TeamColourPicker.vue';
 export default {
   name: 'CreateGroupModal',
   components: { TeamColourPicker },
+  props: {
+    isDarkMode: { type: Boolean, default: false }
+  },
   emits: ['close'],
   data() {
     return {
