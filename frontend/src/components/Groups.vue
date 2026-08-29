@@ -82,7 +82,7 @@
                     <div v-for="team in teamsByGroup[group.id]" :key="team.id" class="team-edit-row">
                       <input v-model="team.name" class="form-input team-name-input" type="text"
                         placeholder="Team name" :disabled="teamSaving[team.id]">
-                      <input type="color" v-model="team.colour" class="team-colour-picker" :disabled="teamSaving[team.id]">
+                      <TeamColourPicker v-model="team.colour" :disabled="teamSaving[team.id]" />
                       <button class="btn-base btn-primary btn-small"
                         :disabled="teamSaving[team.id] || !team.name.trim()"
                         @click="saveTeam(group.id, team)">
@@ -113,7 +113,7 @@
                   <div class="team-spec-inputs">
                     <input :id="'new-team-name-' + index" v-model="team.name" class="form-input team-name-input"
                       type="text" placeholder="e.g. Les Rouges" :disabled="isCreating">
-                    <input type="color" v-model="team.colour" class="team-colour-picker" :disabled="isCreating">
+                    <TeamColourPicker v-model="team.colour" :disabled="isCreating" />
                   </div>
                 </div>
                 <button class="btn-base btn-primary" type="submit" :disabled="isCreating || !canSubmitCreate">
@@ -149,6 +149,7 @@
 
 <script>
 import { getMyGroups, createGroup, joinGroup, getInviteCode, getTeamsByGroup, updateTeam } from '@/services/api';
+import TeamColourPicker from '@/components/TeamColourPicker.vue';
 
 // Same 10-entry keyword-to-hex palette getTeamColor() in
 // MatchesAll.vue/MatchDetails.vue know about — duplicated here rather than
@@ -171,6 +172,7 @@ function toHexColour(colour) {
 
 export default {
   name: 'PlayerGroups',
+  components: { TeamColourPicker },
   data() {
     return {
       groups: [],
@@ -507,16 +509,6 @@ export default {
 .team-name-input {
   flex: 1;
   min-width: 10rem;
-}
-
-.team-colour-picker {
-  width: 3rem;
-  height: 2.5rem;
-  padding: 0.15rem;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  background-color: transparent;
-  cursor: pointer;
 }
 
 /* Create-group team specs */
