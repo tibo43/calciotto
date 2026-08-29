@@ -1,11 +1,10 @@
 <template>
-  <!-- Teleported to <body> for the same reason CreateGroupModal is: any
-       ancestor with backdrop-filter/filter would otherwise hijack
-       position:fixed. Escaping #app also means it can't inherit .dark-mode
-       — unlike CreateGroupModal (a direct App.vue descendant chain, so
-       App.vue can just pass isDarkMode down as a prop), this one is opened
-       from a routed view with no such prop path back to App.vue, so it
-       reads the live class off #app itself instead (see isDarkModeSnapshot). -->
+  <!-- Teleported to <body>: opened from Profile.vue's "Your groups" card,
+       and any ancestor with backdrop-filter/filter would otherwise hijack
+       this modal's position:fixed. Escaping #app also means it can't
+       inherit .dark-mode — see src/services/theme.js's isDarkModeActive()
+       for why isDarkModeSnapshot below reads the class directly rather than
+       relying on inheritance or a prop. -->
   <Teleport to="body">
     <div class="modal-overlay" :class="{ 'dark-mode': isDarkModeSnapshot }" @click="close">
       <div class="modal-container group-settings-modal" @click.stop>
@@ -66,6 +65,7 @@
 
 <script>
 import { getInviteCode, getTeamsByGroup, updateTeam } from '@/services/api';
+import { isDarkModeActive } from '@/services/theme';
 import TeamColourPicker from '@/components/TeamColourPicker.vue';
 
 const LEGACY_TEAM_COLOUR_MAP = {
@@ -95,14 +95,7 @@ export default {
       // time it's opened (v-if), so it only needs the theme as it is right
       // now — toggling theme while the dialog happens to be open is not a
       // case worth a live DOM observer for.
-      //
-      // Queries by class, not by #app's id: public/index.html's own mount
-      // container also carries id="app", and Vue 3 doesn't replace that
-      // container — it nests its rendered root (which is the one actually
-      // carrying .dark-mode) inside it. That leaves two elements sharing the
-      // id, so getElementById('app') can return the wrong (always-class-less)
-      // one; only one element in the document ever carries .dark-mode.
-      isDarkModeSnapshot: document.querySelector('.dark-mode') !== null,
+      isDarkModeSnapshot: isDarkModeActive(),
       inviteCode: '',
       codeError: '',
       loadingCode: false,

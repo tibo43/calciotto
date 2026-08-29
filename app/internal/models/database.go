@@ -121,12 +121,24 @@ type MatchPlayer struct {
 // RequireGroupAdmin / RequireGroupAdminByPathParam dans
 // internal/handlers/groupadmin.go. Lire les matchs et les classements reste
 // ouvert à tout membre.
+// IsFavorite marks which one of a player's groups resolveActiveGroup()
+// (frontend) lands on by default — on a fresh device, after logging in, or
+// whenever the locally-stored active group doesn't match anything (the
+// player left it, or this browser belongs to a different account). Exactly
+// one of a player's memberships carries it at any time, as long as they
+// belong to at least one group at all: AddPlayerToGroupWithRole grants it to
+// a player's very first membership automatically, GroupMembershipService.
+// SetFavoriteGroup is the only way to move it elsewhere, and LeaveGroup/
+// RemoveMember reassign it to the oldest remaining membership if the one
+// being deleted held it — the invariant is enforced service-side, not by a
+// DB constraint, the same way the "a group always has an admin" invariant is.
 type GroupMembership struct {
 	BaseModel
-	GroupID   uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_group_membership_group_player" json:"group_id"`
-	PlayerID  uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_group_membership_group_player" json:"player_id"`
-	Role      string    `gorm:"type:string;not null;default:member" json:"role"`
-	CreatedAt time.Time `json:"-"`
+	GroupID    uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_group_membership_group_player" json:"group_id"`
+	PlayerID   uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_group_membership_group_player" json:"player_id"`
+	Role       string    `gorm:"type:string;not null;default:member" json:"role"`
+	IsFavorite bool      `gorm:"not null;default:false" json:"-"`
+	CreatedAt  time.Time `json:"-"`
 }
 
 // RoleAdmin et RoleMember sont les deux seules valeurs valides de

@@ -244,6 +244,31 @@ func (h *GroupHandler) LeaveGroup(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"left": true})
 }
 
+// SetFavoriteGroup marks the group in the URL as the caller's favorite — a
+// personal preference, not an admin action, so it's self-service the same
+// way LeaveGroup is: RequireGroupMembershipByPathParam already establishes
+// the caller belongs to this group by the time this runs.
+func (h *GroupHandler) SetFavoriteGroup(c *gin.Context) {
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		return
+	}
+
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+
+	if err := h.MembershipService.SetFavoriteGroup(playerID, groupID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"favorite": true})
+}
+
 // RemoveMember lets a group admin remove another member's membership from the
 // group in the URL. The route sits behind RequireGroupAdminByPathParam, so the
 // caller is already confirmed to be one of that group's admins by the time

@@ -1,18 +1,11 @@
 <template>
-  <!-- Teleported to <body>: this component is instantiated inside
-       GroupSwitcher, which lives inside .top-navbar. .top-navbar has
-       backdrop-filter, which (like filter) creates a new containing block
-       for any position:fixed descendant — so .modal-overlay's fixed
-       inset:0 would resolve against the 69px-tall navbar box instead of the
-       viewport. Teleporting escapes that entirely, regardless of where this
-       component sits in the Vue tree.
-
-       That same escape means this DOM subtree is no longer a descendant of
-       #app, so it can't inherit the .dark-mode class App.vue toggles there
-       (CSS custom properties only cascade down the actual DOM tree) — the
-       isDarkMode prop reapplies the class directly on this root instead. -->
+  <!-- Teleported to <body>: opened from Profile.vue's "Your groups" card,
+       and any ancestor with backdrop-filter/filter would otherwise hijack
+       this modal's position:fixed (see GroupSettingsModal.vue for the fuller
+       explanation, and for why isDarkModeSnapshot below — not a prop — is
+       what reapplies .dark-mode on this now-detached root). -->
   <Teleport to="body">
-    <div class="modal-overlay" :class="{ 'dark-mode': isDarkMode }" @click="close">
+    <div class="modal-overlay" :class="{ 'dark-mode': isDarkModeSnapshot }" @click="close">
       <div class="modal-container create-group-modal" @click.stop>
         <div class="modal-header">
           <h3>Create a group</h3>
@@ -75,17 +68,19 @@
 <script>
 import { createGroup } from '@/services/api';
 import { setActiveGroupId } from '@/services/activeGroup';
+import { isDarkModeActive } from '@/services/theme';
 import TeamColourPicker from '@/components/TeamColourPicker.vue';
 
 export default {
   name: 'CreateGroupModal',
   components: { TeamColourPicker },
-  props: {
-    isDarkMode: { type: Boolean, default: false }
-  },
   emits: ['close'],
   data() {
     return {
+      // Snapshot rather than reactive: this component is created fresh each
+      // time it's opened (v-if), so it only needs the theme as it is right
+      // now.
+      isDarkModeSnapshot: isDarkModeActive(),
       name: '',
       teams: [
         { name: '', colour: '#1f2937' },

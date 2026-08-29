@@ -409,6 +409,23 @@ export const invitePlayer = async (groupId, playerId, email) => {
   }
 };
 
+// Self-service: marks groupId as the caller's favorite — the group
+// resolveActiveGroup() falls back to on a fresh device/session instead of an
+// arbitrary "first group" ordering. Every group a player belongs to keeps
+// exactly one favorite; this only moves the flag, it never turns it off.
+export const setFavoriteGroup = async (groupId) => {
+  try {
+    const response = await api.patch(`/groups/${groupId}/favorite`);
+    if (response.status !== 200) {
+      throw new Error('Failed to set favorite group');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error setting favorite group:', error);
+    throw error;
+  }
+};
+
 // Teams — fetched on demand per group, same pattern as the invite code
 // above: a group's teams aren't part of the group JSON either.
 export const getTeamsByGroup = async (groupId) => {

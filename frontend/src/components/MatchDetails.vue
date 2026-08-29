@@ -69,7 +69,7 @@
               <button v-for="(team, index) in match.Teams" :key="team.ID" @click="activeTeam = index"
                 :class="['tab-button', { active: activeTeam === index }]">
                 <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-                {{ team.Colour }} Team ({{ team.Players ? team.Players.length : 0 }})
+                {{ team.Name }} ({{ team.Players ? team.Players.length : 0 }})
               </button>
             </div>
 

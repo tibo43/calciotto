@@ -39,14 +39,23 @@ export function clearMyGroupsCache() {
 }
 
 // The stored id can go stale: the player left the group, or another account
-// used this browser. Sending it anyway would scope every request to a group
-// the caller isn't a member of, which RequireGroupMembership rejects — so
-// fall back to the first group of the list instead, and rewrite the stored
-// preference so the nav selector and the views agree on the same group.
+// used this browser (or this is a brand-new device with nothing stored yet,
+// e.g. right after logging in). Sending it anyway would scope every request
+// to a group the caller isn't a member of, which RequireGroupMembership
+// rejects — so fall back to the player's favorite group (is_favorite, set
+// server-side — see GroupMembershipService.SetFavoriteGroup) instead of an
+// arbitrary "first group" ordering, and rewrite the stored preference so the
+// selector and the views agree on the same group. A player always has
+// exactly one favorite as long as they belong to at least one group, so
+// groups[0] is only ever reached as a defensive fallback (e.g. the favorite
+// flag somehow missing from a stale cached response).
 export async function resolveActiveGroup(options) {
   const groups = await loadMyGroups(options);
   const stored = getActiveGroupId();
-  const active = groups.find((group) => group.id === stored) || groups[0] || null;
+  const active = groups.find((group) => group.id === stored)
+    || groups.find((group) => group.is_favorite)
+    || groups[0]
+    || null;
 
   if (!active) {
     clearActiveGroupId();

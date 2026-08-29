@@ -101,6 +101,7 @@ func main() {
 	// membership (from the JWT), never someone else's; removing another
 	// member is handled by the admin-only route below instead.
 	r.DELETE("/groups/:id/members/me", authRequired, requireGroupMemberByPathID, groupHandler.LeaveGroup)
+	r.PATCH("/groups/:id/favorite", authRequired, requireGroupMemberByPathID, groupHandler.SetFavoriteGroup)
 	// Admin-only "remove a member" — unlike the self-service route above, this
 	// targets another player's membership, so it's gated by
 	// RequireGroupAdminByPathParam rather than plain group membership.

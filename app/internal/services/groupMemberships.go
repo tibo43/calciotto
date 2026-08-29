@@ -71,8 +71,21 @@ func (s *GroupMembershipService) AddPlayerToGroup(groupID, playerID uuid.UUID) e
 // AddPlayerToGroupWithRole adds a player to a group with the given role.
 // Duplicate memberships are rejected by the DB-level unique index on
 // (group_id, player_id).
+//
+// A player's very first group ever becomes their favorite automatically —
+// there being only one candidate makes the choice for us, and it means a
+// brand-new player (or a ghost player an admin just created) always has
+// exactly one favorite the moment they have any group at all, with no extra
+// step required anywhere else.
 func (s *GroupMembershipService) AddPlayerToGroupWithRole(groupID, playerID uuid.UUID, role string) error {
-	membership := &models.GroupMembership{GroupID: groupID, PlayerID: playerID, Role: role}
+	var existingCount int64
+	if err := s.DB.Model(&models.GroupMembership{}).
+		Where("player_id = ?", playerID).
+		Count(&existingCount).Error; err != nil {
+		return err
+	}
+
+	membership := &models.GroupMembership{GroupID: groupID, PlayerID: playerID, Role: role, IsFavorite: existingCount == 0}
 	result := s.DB.Create(membership)
 	if result.Error != nil {
 		return result.Error
@@ -237,8 +250,34 @@ func (s *GroupMembershipService) LeaveGroup(groupID, playerID uuid.UUID) error {
 			}
 		}
 
-		return tx.Delete(&membership).Error
+		if err := tx.Delete(&membership).Error; err != nil {
+			return err
+		}
+
+		if membership.IsFavorite {
+			return reassignFavorite(tx, playerID)
+		}
+		return nil
 	})
+}
+
+// reassignFavorite promotes a player's oldest remaining membership to
+// favorite. Called after deleting a membership that held the flag, so the
+// "always exactly one favorite" invariant survives LeaveGroup and
+// RemoveMember, not just SetFavoriteGroup. A no-op if the player has no
+// memberships left at all — there's nothing to favorite.
+func reassignFavorite(tx *gorm.DB, playerID uuid.UUID) error {
+	var oldest models.GroupMembership
+	result := tx.Where("player_id = ?", playerID).Order("created_at ASC").First(&oldest)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return result.Error
+	}
+	return tx.Model(&models.GroupMembership{}).
+		Where("id = ?", oldest.ID).
+		Update("is_favorite", true).Error
 }
 
 // containsAdmin reports whether any of the given memberships carries
@@ -341,14 +380,45 @@ func (s *GroupMembershipService) RemoveMember(groupID, actingPlayerID, targetPla
 		return ErrCannotRemoveSelf
 	}
 
-	var membership models.GroupMembership
-	if err := s.DB.
-		Where("group_id = ? AND player_id = ?", groupID, targetPlayerID).
-		First(&membership).Error; err != nil {
-		return err
-	}
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		var membership models.GroupMembership
+		if err := tx.
+			Where("group_id = ? AND player_id = ?", groupID, targetPlayerID).
+			First(&membership).Error; err != nil {
+			return err
+		}
 
-	return s.DB.Delete(&membership).Error
+		if err := tx.Delete(&membership).Error; err != nil {
+			return err
+		}
+
+		if membership.IsFavorite {
+			return reassignFavorite(tx, targetPlayerID)
+		}
+		return nil
+	})
+}
+
+// SetFavoriteGroup marks groupID as playerID's favorite — the group
+// resolveActiveGroup() (frontend) falls back to on a fresh device, after
+// logging in, or whenever the locally-stored active group doesn't match
+// anything, instead of an arbitrary "first group" ordering. Callers are
+// expected to have already verified playerID belongs to groupID (this route
+// sits behind RequireGroupMembershipByPathParam), since "which group" is
+// caller-supplied path data, not business logic this service needs to
+// re-check. Moving the flag, rather than ever unsetting it outright, is what
+// keeps "exactly one favorite" true.
+func (s *GroupMembershipService) SetFavoriteGroup(playerID, groupID uuid.UUID) error {
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.GroupMembership{}).
+			Where("player_id = ? AND is_favorite = ?", playerID, true).
+			Update("is_favorite", false).Error; err != nil {
+			return err
+		}
+		return tx.Model(&models.GroupMembership{}).
+			Where("group_id = ? AND player_id = ?", groupID, playerID).
+			Update("is_favorite", true).Error
+	})
 }
 
 func (s *GroupMembershipService) GetGroupsByPlayerID(playerID uuid.UUID) ([]models.Group, error) {
@@ -377,7 +447,7 @@ func (s *GroupMembershipService) GetGroupsByPlayerID(playerID uuid.UUID) ([]mode
 func (s *GroupMembershipService) GetGroupsWithRoleByPlayerID(playerID uuid.UUID) ([]models.GroupWithRole, error) {
 	var groups []models.GroupWithRole
 	result := s.DB.Model(&models.Group{}).
-		Select("groups.*, group_memberships.role AS role").
+		Select("groups.*, group_memberships.role AS role, group_memberships.is_favorite AS is_favorite").
 		Joins("JOIN group_memberships ON group_memberships.group_id = groups.id").
 		Where("group_memberships.player_id = ?", playerID).
 		Order("group_memberships.created_at ASC").

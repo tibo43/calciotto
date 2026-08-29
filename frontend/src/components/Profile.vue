@@ -52,12 +52,34 @@
                it — replaces the old standalone Groups page. Click a card to
                see (and, if you're an admin there, manage) its roster below. -->
           <div class="groups-card card-base card-large">
-            <h2 class="section-title">Your groups</h2>
+            <div class="groups-section-header">
+              <h2 class="section-title">Your groups</h2>
+              <!-- Create/join used to live behind a navbar selector that only
+                   ever scoped the Matches page — switching moved there
+                   (same level as its season selector), and these two,
+                   onboarding-only actions moved here instead, next to the
+                   stats they'll eventually produce. -->
+              <div class="groups-header-actions">
+                <button class="icon-action-btn" @click="showJoinModal = true" aria-label="Join a group">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                    <polyline points="10 17 15 12 10 7" />
+                    <line x1="15" y1="12" x2="3" y2="12" />
+                  </svg>
+                </button>
+                <button class="icon-action-btn" @click="showCreateModal = true" aria-label="Create a group">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
 
             <div v-if="perGroup.length === 0" class="empty-state">
               <div class="empty-content">
                 <h3 class="empty-title">No group yet</h3>
-                <p class="empty-description">Use the group switcher in the top navigation to create one or join an existing one with its invite code.</p>
+                <p class="empty-description">Use the + and join buttons above to create one or join an existing one with its invite code.</p>
               </div>
             </div>
 
@@ -67,6 +89,22 @@
                   <div v-for="row in perGroup" :key="row.GroupID" class="group-card-horizontal"
                     :class="{ active: selectedGroupId === row.GroupID }" @click="selectGroup(row.GroupID)">
                     <div class="group-card-header">
+                      <!-- Favorite: the group resolveActiveGroup() lands the
+                           player on for a fresh device/session, instead of
+                           an arbitrary "first group" ordering. Always
+                           exactly one across a player's groups — the current
+                           favorite's star is filled and disabled (nothing to
+                           do), any other group's star is an outline you can
+                           click to make it the new one. -->
+                      <button class="group-favorite-btn" :class="{ 'is-favorite': isGroupFavorite(row.GroupID) }"
+                        :disabled="isGroupFavorite(row.GroupID) || favoriteLoading[row.GroupID]"
+                        @click.stop="setFavorite(row.GroupID)"
+                        :aria-label="isGroupFavorite(row.GroupID) ? 'Favorite group' : 'Set as favorite group'">
+                        <svg viewBox="0 0 24 24" :fill="isGroupFavorite(row.GroupID) ? 'currentColor' : 'none'"
+                          stroke="currentColor" stroke-width="2">
+                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                        </svg>
+                      </button>
                       <span class="group-card-name">{{ row.GroupName }}</span>
                       <span v-if="isGroupAdmin(row.GroupID)" class="admin-badge">Admin</span>
                     </div>
@@ -98,6 +136,7 @@
                   </div>
                 </div>
               </div>
+              <p v-if="favoriteError" class="error-message">{{ favoriteError }}</p>
 
               <!-- Roster panel for the selected group. Open to any member
                    (viewing is never gated) — only an admin of *this*
@@ -164,15 +203,19 @@
 
     <GroupSettingsModal v-if="settingsForGroup" :group-id="settingsForGroup.id" :group-name="settingsForGroup.name"
       @close="settingsForGroup = null" />
+    <CreateGroupModal v-if="showCreateModal" @close="showCreateModal = false" />
+    <JoinGroupModal v-if="showJoinModal" @close="showJoinModal = false" />
   </div>
 </template>
 
 <script>
 import {
   getPlayerProfile, getMyGroups, getGroupMembers,
-  updateMemberRole, removeMember, invitePlayer, getToken
+  updateMemberRole, removeMember, invitePlayer, setFavoriteGroup, getToken
 } from '@/services/api';
 import GroupSettingsModal from '@/components/GroupSettingsModal.vue';
+import CreateGroupModal from '@/components/CreateGroupModal.vue';
+import JoinGroupModal from '@/components/JoinGroupModal.vue';
 
 // The JWT's own player_id claim is the only place the caller's player id is
 // available on this page (there's no "who am I" endpoint) — decoded locally,
@@ -195,7 +238,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'PlayerProfile',
-  components: { GroupSettingsModal },
+  components: { GroupSettingsModal, CreateGroupModal, JoinGroupModal },
   data() {
     return {
       overall: { Name: '', Played: 0, Won: 0, Drawn: 0, Lost: 0, GoalsFor: 0, Points: 0 },
@@ -203,11 +246,18 @@ export default {
       isLoading: true,
       loadFailed: false,
 
-      // GroupID -> role ("admin"/"member"), resolved separately from the
+      // GroupID -> { role, isFavorite }, resolved separately from the
       // profile call (GET /players/me/stats has no reason to know about
-      // roles) — same GetGroupsWithRoleByPlayerID data every other
+      // either) — same GetGroupsWithRoleByPlayerID data every other
       // role-gated view in this app already reads.
-      groupRoles: {},
+      groupMeta: {},
+      favoriteLoading: {},
+      favoriteError: '',
+
+      // Create/join dialogs — the onboarding actions that used to live
+      // behind the navbar's group selector.
+      showCreateModal: false,
+      showJoinModal: false,
 
       // The one group whose roster is currently expanded, plus a
       // fetch-on-demand cache per group (switching between two groups you
@@ -262,7 +312,7 @@ export default {
   },
   async created() {
     this.currentPlayerId = currentPlayerIdFromToken();
-    await Promise.all([this.loadProfile(), this.loadGroupRoles()]);
+    await Promise.all([this.loadProfile(), this.loadGroupMeta()]);
   },
   methods: {
     async loadProfile() {
@@ -281,22 +331,44 @@ export default {
         this.isLoading = false;
       }
     },
-    async loadGroupRoles() {
+    async loadGroupMeta() {
       try {
         const groups = await getMyGroups();
-        const roles = {};
+        const meta = {};
         (Array.isArray(groups) ? groups : []).forEach(group => {
-          roles[group.id] = group.role;
+          meta[group.id] = { role: group.role, isFavorite: Boolean(group.is_favorite) };
         });
-        this.groupRoles = roles;
+        this.groupMeta = meta;
       } catch (error) {
-        // Non-fatal: this only gates admin-only controls, which just stay
-        // hidden (the backend's own 403 is the real boundary anyway).
+        // Non-fatal: this only gates admin-only controls and the favorite
+        // star, which just stay in their default state (the backend's own
+        // 403/404 is the real boundary anyway).
         console.error('Error fetching group roles:', error);
       }
     },
     isGroupAdmin(groupId) {
-      return this.groupRoles[groupId] === 'admin';
+      return this.groupMeta[groupId]?.role === 'admin';
+    },
+    isGroupFavorite(groupId) {
+      return Boolean(this.groupMeta[groupId]?.isFavorite);
+    },
+    async setFavorite(groupId) {
+      if (this.isGroupFavorite(groupId) || this.favoriteLoading[groupId]) {
+        return;
+      }
+      this.favoriteLoading[groupId] = true;
+      this.favoriteError = '';
+      try {
+        await setFavoriteGroup(groupId);
+        // Re-fetch rather than patch in place: setting a new favorite also
+        // un-favorites whichever group held it before, and that other
+        // card's star needs to update too.
+        await this.loadGroupMeta();
+      } catch (error) {
+        this.favoriteError = this.backendMessage(error, 'Failed to set favorite group.');
+      } finally {
+        this.favoriteLoading[groupId] = false;
+      }
     },
     async selectGroup(groupId) {
       if (this.selectedGroupId === groupId) {
@@ -500,11 +572,49 @@ export default {
 }
 
 /* Groups card */
+.groups-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
 .section-title {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0 0 1rem;
+  margin: 0;
+}
+
+.groups-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.icon-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.icon-action-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.icon-action-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .groups-bar-container {
@@ -548,6 +658,37 @@ export default {
   gap: 0.5rem;
   margin-bottom: 0.75rem;
   padding-right: 1.5rem;
+}
+
+.group-favorite-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-light);
+  cursor: pointer;
+  transition: color var(--transition-fast), transform var(--transition-fast);
+}
+
+.group-favorite-btn:hover:not(:disabled) {
+  color: var(--accent-color);
+  transform: scale(1.1);
+}
+
+.group-favorite-btn:disabled {
+  cursor: default;
+}
+
+.group-favorite-btn.is-favorite {
+  color: var(--accent-color);
+}
+
+.group-favorite-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .group-card-name {

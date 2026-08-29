@@ -47,7 +47,8 @@ type RowsMatchDetails struct {
 // InviteCode keeps its json:"-": listing your groups still never leaks a code.
 type GroupWithRole struct {
 	Group
-	Role string `json:"role"`
+	Role       string `json:"role"`
+	IsFavorite bool   `json:"is_favorite"`
 }
 
 // PlayerWithRole is a Player tagged with the role that player holds in the

@@ -58,7 +58,7 @@ describe('activeGroup', () => {
       expect(localStorage.getItem('calciotto-active-group')).toBe('group-b');
     });
 
-    it('falls back to the first group and rewrites storage when the stored id matches nothing', async () => {
+    it('falls back to the first group and rewrites storage when the stored id matches nothing (no favorite present)', async () => {
       getMyGroups.mockResolvedValue([GROUP_A, GROUP_B]);
       const { setActiveGroupId, resolveActiveGroup } = loadActiveGroupModule();
       setActiveGroupId('stale-id');
@@ -67,6 +67,18 @@ describe('activeGroup', () => {
 
       expect(result).toEqual({ groups: [GROUP_A, GROUP_B], activeGroupId: 'group-a' });
       expect(localStorage.getItem('calciotto-active-group')).toBe('group-a');
+    });
+
+    it('falls back to the favorite group, not just the first one, when the stored id matches nothing', async () => {
+      const favoriteSecond = { id: 'group-b', name: 'B', is_favorite: true };
+      getMyGroups.mockResolvedValue([GROUP_A, favoriteSecond]);
+      const { setActiveGroupId, resolveActiveGroup } = loadActiveGroupModule();
+      setActiveGroupId('stale-id');
+
+      const result = await resolveActiveGroup();
+
+      expect(result.activeGroupId).toBe('group-b');
+      expect(localStorage.getItem('calciotto-active-group')).toBe('group-b');
     });
 
     it('clears the stored id and returns an empty active id when there are no groups at all', async () => {

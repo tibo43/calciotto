@@ -45,18 +45,6 @@
 
             <!-- Actions -->
             <div class="nav-actions">
-              <!-- The group Matches/Standings are scoped to, plus the
-                   onboarding actions (join/create) that used to live on the
-                   Groups page. Rendered for any authenticated, non-public
-                   route so a player with zero groups still has a way to get
-                   into one. -->
-              <GroupSwitcher
-                v-if="showGroupSwitcher"
-                :groups="groups"
-                :active-group-id="activeGroupId"
-                :is-dark-mode="isDarkMode"
-              />
-
               <button
                 v-if="isAuthenticatedRoute"
                 class="icon-nav-button logout-btn"
@@ -142,33 +130,20 @@
 </template>
 
 <script>
-import { clearToken, getToken } from '@/services/api';
-import { clearActiveGroupId, clearMyGroupsCache, resolveActiveGroup } from '@/services/activeGroup';
-import GroupSwitcher from '@/components/GroupSwitcher.vue';
+import { clearToken } from '@/services/api';
+import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 
-// Routes reachable without a token — the group selector has nothing to show
-// there (no /groups/me to call), same list refreshGroups() early-returns on.
+// Routes reachable without a token — nothing group-related is shown there.
 const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
 
 export default {
   name: 'App',
-  components: { GroupSwitcher },
   data() {
     return {
       activeTab: 'matches',
       isMenuOpen: false,
       isScrolled: false,
-      isDarkMode: false,
-      groups: [],
-      activeGroupId: '',
-      // Plain reactive data rather than a computed: a computed reading the
-      // non-reactive getToken() alongside the reactive $route.name has shown
-      // stale/stuck values in practice (the cached computed not
-      // re-evaluating on a route change even though a fresh call of the same
-      // expression returns the right answer). Setting this explicitly,
-      // synchronously, at the top of refreshGroups() sidesteps that
-      // entirely.
-      showGroupSwitcher: false
+      isDarkMode: false
     };
   },
   computed: {
@@ -191,7 +166,6 @@ export default {
         this.activeTab = 'matches';
       }
       this.closeMenu();
-      this.refreshGroups();
     }
   },
   mounted() {
@@ -205,8 +179,6 @@ export default {
 
     // Add scroll listener
     window.addEventListener('scroll', this.handleScroll);
-
-    this.refreshGroups();
   },
   beforeUnmount() {
     window.removeEventListener('scroll', this.handleScroll);
@@ -231,31 +203,6 @@ export default {
       this.isDarkMode = !this.isDarkMode;
       localStorage.setItem('calciotto-theme', this.isDarkMode ? 'dark' : 'light');
     },
-    // App.vue outlives every route, so the selector has to be (re)filled on
-    // navigation and not only on mount: logging in doesn't remount it, it just
-    // pushes a route, and at mount time there was no token to call
-    // /groups/me with.
-    async refreshGroups() {
-      this.showGroupSwitcher = Boolean(getToken()) && !PUBLIC_ROUTE_NAMES.includes(this.$route.name);
-      if (!this.showGroupSwitcher) {
-        this.groups = [];
-        this.activeGroupId = '';
-        return;
-      }
-      try {
-        // Switching, joining, and creating a group all go through a full
-        // page reload (see GroupSwitcher/CreateGroupModal), so the cached
-        // list is never stale on a plain in-app navigation — no force-refresh
-        // heuristic needed here.
-        const { groups, activeGroupId } = await resolveActiveGroup();
-        this.groups = groups;
-        this.activeGroupId = activeGroupId;
-      } catch (error) {
-        // The selector is a convenience; every view still falls back to the
-        // backend's own group resolution without it.
-        console.error('Error loading the group selector:', error);
-      }
-    },
     logout() {
       clearToken();
       // The next account to log in on this browser must not inherit this
@@ -266,9 +213,6 @@ export default {
       // seeing the previous user's group memberships/roles. Without this, the
       // in-memory promise cache would survive the logout and return stale data.
       clearMyGroupsCache();
-      this.groups = [];
-      this.activeGroupId = '';
-      this.showGroupSwitcher = false;
       this.$router.push('/login');
     }
   }

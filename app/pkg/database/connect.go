@@ -87,7 +87,35 @@ func applySchema(db *gorm.DB) error {
 	// out of every admin-gated action (removing a member, changing a role,
 	// creating a match, editing scores) with no admin left able to grant it
 	// back. Idempotent: after the first run no 'owner' row is left to update.
-	return db.Exec(`UPDATE group_memberships SET role = 'admin' WHERE role = 'owner'`).Error
+	if err := db.Exec(`UPDATE group_memberships SET role = 'admin' WHERE role = 'owner'`).Error; err != nil {
+		return err
+	}
+
+	// GroupMembership.IsFavorite is new: AutoMigrate adds the column with its
+	// declared default (false) for every existing row, leaving every
+	// pre-existing player with zero favorites — breaking the "always exactly
+	// one, as long as you belong to at least one group" invariant the rest of
+	// GroupMembershipService relies on (AddPlayerToGroupWithRole only grants it
+	// to a brand-new player's very first membership, which doesn't help anyone
+	// who already had memberships before this column existed). Backfill: for
+	// every player with no favorite yet, promote their oldest membership
+	// (DISTINCT ON ... ORDER BY player_id, created_at picks exactly that row
+	// per player). Idempotent — after the first run every player already has a
+	// favorite, so the NOT EXISTS guard makes this a no-op on every later start.
+	return db.Exec(`
+		UPDATE group_memberships gm
+		SET is_favorite = true
+		FROM (
+			SELECT DISTINCT ON (player_id) id
+			FROM group_memberships
+			ORDER BY player_id, created_at ASC
+		) AS oldest
+		WHERE gm.id = oldest.id
+		AND NOT EXISTS (
+			SELECT 1 FROM group_memberships gm2
+			WHERE gm2.player_id = gm.player_id AND gm2.is_favorite = true
+		)
+	`).Error
 }
 
 func InitDB() (*gorm.DB, error) {

@@ -109,7 +109,7 @@
                   <div v-for="(team, index) in match.Teams" :key="team.ID" class="team-horizontal">
                     <div class="team-info-horizontal">
                       <div class="team-color-horizontal" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-                      <span class="team-name-horizontal">{{ team.Colour }}</span>
+                      <span class="team-name-horizontal">{{ team.Name }}</span>
                     </div>
                     <div class="team-score-horizontal">{{ team.Score }}</div>
                     <div v-if="index < match.Teams.length - 1" class="vs-separator">vs</div>
@@ -185,7 +185,7 @@
                         <th v-for="team in selectedMatch.Teams" :key="team.ID" class="team-col">
                           <div class="team-header">
                             <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-                            {{ team.Colour }}
+                            {{ team.Name }}
                           </div>
                         </th>
                         <th class="goal-number-col">Goal #</th>

@@ -29,6 +29,14 @@
           </div>
 
           <div class="season-bar">
+            <template v-if="groups.length > 0">
+              <label class="season-label" for="group-select">Group</label>
+              <select id="group-select" class="season-select" v-model="activeGroupId" @change="switchGroup">
+                <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
+              </select>
+            </template>
+            <span v-else class="no-group-hint">No group yet — join or create one from your Profile.</span>
+
             <label class="season-label" for="season-select">Season</label>
             <select id="season-select" class="season-select" v-model="selectedSeason" @change="loadStandings">
               <option v-for="season in seasons" :key="season" :value="season">{{ season }}</option>
@@ -57,7 +65,7 @@
 
 <script>
 import { getPointsStandings, getScorers, getSeasons } from '@/services/api';
-import { resolveActiveGroup } from '@/services/activeGroup';
+import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
 import MatchesPanel from '@/components/MatchesPanel.vue';
 import PointsStandingsTable from '@/components/PointsStandingsTable.vue';
 import ScorersTable from '@/components/ScorersTable.vue';
@@ -74,6 +82,11 @@ export default {
       // Resolved once, before any child mounts: MatchesPanel creates matches
       // in this group and the standings are scoped to it.
       activeGroupId: '',
+      // The full list backing the group selector, same level as the season
+      // one — this is the one and only place the active group is switched
+      // from now (it used to be a global navbar selector, but nothing
+      // outside Matches/Standings ever consumed it).
+      groups: [],
       // Caller's role on the active group — only gates UI (the backend's
       // requireGroupAdmin is the real boundary), see MatchesPanel.
       isAdmin: false,
@@ -99,6 +112,7 @@ export default {
   async created() {
     try {
       const { groups, activeGroupId } = await resolveActiveGroup();
+      this.groups = groups;
       this.activeGroupId = activeGroupId;
       this.isAdmin = groups.find(g => g.id === activeGroupId)?.role === 'admin';
     } catch (error) {
@@ -113,6 +127,13 @@ export default {
     await this.loadStandings();
   },
   methods: {
+    // Same reasoning as the old navbar selector: there is no reactive store,
+    // every scoped view resolves the active group once in created(), so a
+    // full reload is what actually re-scopes the page.
+    switchGroup() {
+      setActiveGroupId(this.activeGroupId);
+      window.location.reload();
+    },
     async loadSeasons() {
       try {
         const seasons = await getSeasons(this.activeGroupId);
@@ -236,6 +257,11 @@ export default {
 .season-select:focus {
   border-color: var(--primary-color);
   outline: none;
+}
+
+.no-group-hint {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
 }
 
 /* Sub tabs */
