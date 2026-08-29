@@ -381,9 +381,6 @@ import { resolveActiveGroup } from '@/services/activeGroup';
 
 export default {
   name: 'MatchDetail',
-  mounted() {
-    document.title = 'Calciotto';
-  },
   data() {
     return {
       match: null,
