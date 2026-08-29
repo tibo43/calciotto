@@ -82,9 +82,11 @@ const query = (params) => {
 };
 
 // Matches
-export const getMatchesDetails = async (groupId) => {
+// season is optional and behaves exactly like it does on the standings
+// endpoints below: leaving it out asks for every season at once.
+export const getMatchesDetails = async (groupId, season) => {
   try {
-    const response = await api.get(`/matches/details${query({ group_id: groupId })}`);
+    const response = await api.get(`/matches/details${query({ group_id: groupId, season })}`);
     if (response.status !== 200) {
       throw new Error('Failed to fetch matches details');
     }

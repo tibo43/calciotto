@@ -15,7 +15,7 @@
               <router-link 
                 to="/" 
                 @click="closeMenu"
-                :class="{ 'active': $route.name === 'MatchesAll' }"
+                :class="{ 'active': $route.name === 'MatchesAndStandings' }"
                 class="nav-button"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -25,20 +25,6 @@
                   <line x1="3" y1="10" x2="21" y2="10"/>
                 </svg>
                 Matches
-              </router-link>
-              <router-link
-                to="/standings"
-                @click="closeMenu"
-                :class="{ 'active': $route.name === 'Standings' }"
-                class="nav-button"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
-                Standings
               </router-link>
               <router-link
                 to="/groups"
@@ -196,13 +182,13 @@ export default {
   computed: {
     isRouterRoute() {
       // Check if current route should be handled by router
-      return ['MatchesAll', 'MatchDetails', 'Standings', 'Groups', 'Profile', 'Login', 'Signup', 'ForgotPassword', 'ResetPassword'].includes(this.$route.name);
+      return ['MatchesAndStandings', 'MatchDetails', 'Groups', 'Profile', 'Login', 'Signup', 'ForgotPassword', 'ResetPassword'].includes(this.$route.name);
     }
   },
   watch: {
     '$route'(to) {
       // Update activeTab when route changes
-      if (to.name === 'MatchesAll') {
+      if (to.name === 'MatchesAndStandings') {
         this.activeTab = 'matches';
       }
       this.closeMenu();

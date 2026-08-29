@@ -261,7 +261,7 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 
 	// GetMatchesDetails for group A must not include group B's match, and its
 	// team backfill must only ever show group A's 2 teams.
-	matchesA, err := matchService.GetMatchesDetails(groupA.ID)
+	matchesA, err := matchService.GetMatchesDetails(groupA.ID, "")
 	if err != nil {
 		t.Fatalf("GetMatchesDetails(groupA) returned error: %v", err)
 	}
@@ -272,7 +272,7 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 		t.Fatalf("expected exactly group A's 2 teams, got %d: %+v", len(matchesA[0].Teams), matchesA[0].Teams)
 	}
 
-	matchesB, err := matchService.GetMatchesDetails(groupB.ID)
+	matchesB, err := matchService.GetMatchesDetails(groupB.ID, "")
 	if err != nil {
 		t.Fatalf("GetMatchesDetails(groupB) returned error: %v", err)
 	}

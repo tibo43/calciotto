@@ -23,8 +23,13 @@ func NewStandingsService(db *gorm.DB, membershipService *GroupMembershipService)
 	}
 }
 
+// The GetMatchesDetails calls below deliberately pass an empty season: these
+// callers load every match of the group and do their own FilterMatchesBySeason
+// pass (or, for GetSeasons, need every season there is). Pushing the season
+// down would either double-filter or, in GetSeasons' case, collapse the list to
+// the one season asked for.
 func (s *StandingsService) GetPointsStandings(groupID uuid.UUID, season string) ([]models.PointsStandingRow, error) {
-	matches, err := s.MatchService.GetMatchesDetails(groupID)
+	matches, err := s.MatchService.GetMatchesDetails(groupID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +46,7 @@ func (s *StandingsService) GetPointsStandings(groupID uuid.UUID, season string) 
 }
 
 func (s *StandingsService) GetScorers(groupID uuid.UUID, season string) ([]models.ScorerRow, error) {
-	matches, err := s.MatchService.GetMatchesDetails(groupID)
+	matches, err := s.MatchService.GetMatchesDetails(groupID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +88,7 @@ func (s *StandingsService) currentMemberIDs(groupID uuid.UUID) (map[uuid.UUID]bo
 // no table of their own — they're derived from the match dates already loaded
 // for the group, so no extra query is needed.
 func (s *StandingsService) GetSeasons(groupID uuid.UUID) ([]string, error) {
-	matches, err := s.MatchService.GetMatchesDetails(groupID)
+	matches, err := s.MatchService.GetMatchesDetails(groupID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +128,7 @@ func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (
 
 	var allMatches []models.MatchWithDetails
 	for _, group := range groups {
-		matches, err := s.MatchService.GetMatchesDetails(group.ID)
+		matches, err := s.MatchService.GetMatchesDetails(group.ID, "")
 		if err != nil {
 			return nil, err
 		}

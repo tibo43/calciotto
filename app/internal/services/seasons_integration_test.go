@@ -143,6 +143,43 @@ func TestStandings_Integration_ScopedPerSeason(t *testing.T) {
 		t.Errorf("alice's %s scorer row = %+v, want 0 goals", seasonNew, aliceScorerNew)
 	}
 
+	// The matches list itself is filtered on the same axis: GetMatchesDetails
+	// takes the season the standings endpoints already took, so the Matches
+	// tab and the standings tabs of the unified page always agree on which
+	// matches a season contains.
+	matchesOld, err := matchService.GetMatchesDetails(group.ID, seasonOld)
+	if err != nil {
+		t.Fatalf("GetMatchesDetails(%s) returned error: %v", seasonOld, err)
+	}
+	if len(matchesOld) != 1 || matchesOld[0].ID != oldMatchID {
+		t.Errorf("GetMatchesDetails(%s) = %+v, want only the old-season match %s", seasonOld, matchesOld, oldMatchID)
+	}
+	matchesNew, err := matchService.GetMatchesDetails(group.ID, seasonNew)
+	if err != nil {
+		t.Fatalf("GetMatchesDetails(%s) returned error: %v", seasonNew, err)
+	}
+	if len(matchesNew) != 1 || matchesNew[0].ID != newMatchID {
+		t.Errorf("GetMatchesDetails(%s) = %+v, want only the new-season match %s", seasonNew, matchesNew, newMatchID)
+	}
+	// An empty season is what every standings call site passes — it must keep
+	// meaning "no filtering", or those callers' own FilterMatchesBySeason pass
+	// would be operating on an already-narrowed slice.
+	matchesAll, err := matchService.GetMatchesDetails(group.ID, "")
+	if err != nil {
+		t.Fatalf("GetMatchesDetails(no season) returned error: %v", err)
+	}
+	if len(matchesAll) != 2 {
+		t.Errorf("GetMatchesDetails(no season) returned %d matches, want both", len(matchesAll))
+	}
+	// A season the group has no matches in yields nothing, not everything.
+	matchesUnknown, err := matchService.GetMatchesDetails(group.ID, "1999-2000")
+	if err != nil {
+		t.Fatalf("GetMatchesDetails(unknown season) returned error: %v", err)
+	}
+	if len(matchesUnknown) != 0 {
+		t.Errorf("GetMatchesDetails(unknown season) = %+v, want none", matchesUnknown)
+	}
+
 	// The group's available seasons are derived from those two match dates.
 	seasons, err := standingsService.GetSeasons(group.ID)
 	if err != nil {

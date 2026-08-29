@@ -37,7 +37,14 @@ func (s *MatchService) CreateMatch(date models.Date, groupID uuid.UUID) (uuid.UU
 	return match.ID, nil
 }
 
-func (s *MatchService) GetMatchesDetails(groupID uuid.UUID) ([]models.MatchWithDetails, error) {
+// GetMatchesDetails returns every match of a group, optionally narrowed to a
+// single season. The season is applied in Go, via the same
+// FilterMatchesBySeason the standings already use, rather than as a SQL
+// predicate: a season is a derived label (models.SeasonOf), not a stored
+// column, so there is nothing to filter on in the query. An empty season means
+// "no filtering" — which is what every standings caller passes, since they run
+// their own FilterMatchesBySeason pass on the result.
+func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]models.MatchWithDetails, error) {
 	var rowsMatches []models.RowsMatchDetails
 
 	// Execute the SQL query and scan the results into a flat structure
@@ -170,7 +177,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID) ([]models.MatchWithD
 			})
 		}
 	}
-	return matches, nil
+	return FilterMatchesBySeason(matches, season), nil
 }
 
 // GetMatchDetailsByID returns the match with the given id, scoped to

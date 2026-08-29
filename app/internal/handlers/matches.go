@@ -62,7 +62,10 @@ func (h *MatchHandler) GetMatchesDetails(c *gin.Context) {
 	if !ok {
 		return
 	}
-	matches, err := h.Service.GetMatchesDetails(groupID)
+	// season is optional and read the same way StandingsHandler reads it: an
+	// absent/empty value means "every season", the behaviour before the
+	// matches list gained a season filter.
+	matches, err := h.Service.GetMatchesDetails(groupID, c.Query("season"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

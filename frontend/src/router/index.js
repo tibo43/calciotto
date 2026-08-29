@@ -4,8 +4,8 @@ import { getToken } from '@/services/api';
 const routes = [
   {
     path: '/',
-    name: 'MatchesAll',
-    component: () => import('@/components/MatchesAll.vue'),
+    name: 'MatchesAndStandings',
+    component: () => import('@/components/MatchesAndStandings.vue'),
     props: true
   },
   {
@@ -14,10 +14,12 @@ const routes = [
     component: () => import('@/components/MatchDetails.vue'),
     props: true
   },
+  // Matches and standings used to be two pages; they are one now. Kept as a
+  // redirect so an old bookmark or link still lands on the merged page rather
+  // than a blank 404.
   {
     path: '/standings',
-    name: 'Standings',
-    component: () => import('@/components/Standings.vue')
+    redirect: '/'
   },
   {
     path: '/groups',

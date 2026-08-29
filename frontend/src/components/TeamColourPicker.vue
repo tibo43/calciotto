@@ -26,7 +26,7 @@
 
 <script>
 // Exactly the 10 legacy keyword colours' hex values, in the same order
-// getTeamColor() (MatchesAll.vue/MatchDetails.vue) maps them from —
+// getTeamColor() (MatchesPanel.vue/MatchDetails.vue) maps them from —
 // picking a preset here must produce the exact same hex a legacy
 // keyword-coloured team already renders as.
 const PRESET_COLOURS = [

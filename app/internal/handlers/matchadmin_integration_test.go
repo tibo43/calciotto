@@ -144,7 +144,7 @@ func TestCreateMatch_Integration_AdminOnly(t *testing.T) {
 		t.Fatalf("plain member POST /matches returned status %d, want 403, body: %s", memberRec.Code, memberRec.Body.String())
 	}
 
-	before, err := env.matches.GetMatchesDetails(groupID)
+	before, err := env.matches.GetMatchesDetails(groupID, "")
 	if err != nil {
 		t.Fatalf("GetMatchesDetails returned error: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestCreateMatch_Integration_AdminOnly(t *testing.T) {
 		t.Fatalf("admin POST /matches returned status %d, want 200, body: %s", adminRec.Code, adminRec.Body.String())
 	}
 
-	after, err := env.matches.GetMatchesDetails(groupID)
+	after, err := env.matches.GetMatchesDetails(groupID, "")
 	if err != nil {
 		t.Fatalf("GetMatchesDetails returned error: %v", err)
 	}

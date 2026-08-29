@@ -163,7 +163,7 @@ export default {
 </script>
 
 <style scoped>
-/* Layout mirrors Standings.vue — same container/header/table treatment, so
+/* Layout mirrors MatchesAndStandings.vue — same container/header/table treatment, so
    the two ranking pages read as one screen family. */
 .profile-container {
   background-color: var(--bg-secondary);
@@ -245,7 +245,7 @@ export default {
   color: var(--text-secondary);
 }
 
-/* Table — same rules as Standings.vue's per-group ranking */
+/* Table — same rules as PointsStandingsTable.vue's ranking */
 .standings-table-container {
   overflow-x: auto;
 }

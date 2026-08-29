@@ -81,7 +81,7 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 	}
 
 	// The list endpoint must show the same shape, not just the by-ID one.
-	all, err := matchService.GetMatchesDetails(group.ID)
+	all, err := matchService.GetMatchesDetails(group.ID, "")
 	if err != nil {
 		t.Fatalf("GetMatchesDetails returned error: %v", err)
 	}

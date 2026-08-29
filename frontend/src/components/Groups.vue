@@ -167,7 +167,7 @@ function currentPlayerIdFromToken() {
 }
 
 // Same 10-entry keyword-to-hex palette getTeamColor() in
-// MatchesAll.vue/MatchDetails.vue know about — duplicated here rather than
+// MatchesPanel.vue/MatchDetails.vue know about — duplicated here rather than
 // factored into a shared module, consistent with how it's already
 // duplicated between those two files. Used only to translate a legacy
 // keyword colour (from a team created before the colour picker existed)
@@ -410,7 +410,7 @@ export default {
 </script>
 
 <style scoped>
-/* Same container/header/card treatment as Standings.vue and Profile.vue. */
+/* Same container/header/card treatment as MatchesAndStandings.vue and Profile.vue. */
 .groups-container {
   background-color: var(--bg-secondary);
 }

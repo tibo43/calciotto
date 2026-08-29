@@ -1,25 +1,5 @@
 <template>
-  <div class="matches-container">
-    <!-- Header Section -->
-    <section class="matches-header">
-      <div class="container">
-        <div class="header-content">
-          <div class="title-section">
-            <h1 class="page-title">Football Matches</h1>
-            <p class="page-subtitle">Track live scores and match details</p>
-          </div>
-          <!-- Create Match Button — admin-only, see resolveActiveGroup()'s role field -->
-          <button v-if="isAdmin" class="btn-base btn-primary btn-large create-match-btn" @click="showCreateModal = true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Create Match
-          </button>
-        </div>
-      </div>
-    </section>
-
+  <div class="matches-panel">
     <!-- Create Match Modal -->
     <transition name="modal">
       <div v-if="showCreateModal" class="modal-overlay" @click="closeModal">
@@ -100,6 +80,18 @@
     <!-- Matches Section -->
     <section class="matches-section">
       <div class="container">
+        <!-- Create Match Button — admin-only, gated on the isAdmin the page
+             resolved once for the active group and passes down. -->
+        <div v-if="isAdmin" class="matches-toolbar">
+          <button class="btn-base btn-primary create-match-btn" @click="showCreateModal = true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Create Match
+          </button>
+        </div>
+
         <!-- Loading State -->
         <div v-if="isLoading" class="loading-container">
           <div class="loading-spinner"></div>
@@ -241,20 +233,38 @@
 
 <script>
 import { getMatchesDetails, createMatch } from '@/services/api';
-import { resolveActiveGroup } from '@/services/activeGroup';
 
+// The Matches sub-tab of MatchesAndStandings.vue: the match carousel, the
+// selected match's preview, and the admin-only create-match modal. Everything
+// it is scoped by — the active group, the caller's admin role, the selected
+// season — is resolved once by the page and passed down, so this component
+// only ever loads matches.
 export default {
-  name: 'MatchesAll',
+  name: 'MatchesPanel',
+  props: {
+    // The group the list (and any match created from here) belongs to. Empty
+    // means "let the backend pick the caller's first group", the same degraded
+    // behaviour resolveActiveGroupId() falls back to.
+    activeGroupId: {
+      type: String,
+      default: ''
+    },
+    // Whether the caller is an admin of that group — gates the "Create Match"
+    // button, since POST /matches is admin-only on the backend
+    // (RequireGroupAdmin in main.go).
+    isAdmin: {
+      type: Boolean,
+      default: false
+    },
+    // Empty means every season, exactly like the standings endpoints.
+    season: {
+      type: String,
+      default: ''
+    }
+  },
   data() {
     return {
       matches: [],
-      // Resolved once on load and reused for both listing and creating, so a
-      // match always gets created in the same group the list is showing.
-      activeGroupId: '',
-      // Whether the caller is an admin of the active group — gates the
-      // "Create Match" button, since POST /matches is admin-only on the
-      // backend (RequireGroupAdmin in main.go).
-      isAdmin: false,
       selectedMatch: null,
       isLoading: true,
       canScrollLeft: false,
@@ -272,17 +282,14 @@ export default {
     };
   },
   async created() {
-    try {
-      const { groups, activeGroupId } = await resolveActiveGroup();
-      this.activeGroupId = activeGroupId;
-      this.isAdmin = groups.find(g => g.id === activeGroupId)?.role === 'admin';
-    } catch (error) {
-      // Same degrade-instead-of-break contract as resolveActiveGroupId():
-      // fall through with no group_id (backend's own first-group fallback)
-      // and isAdmin left false, which just hides the admin-only controls.
-      console.error('Error resolving the active group:', error);
-    }
     await this.loadMatches();
+  },
+  watch: {
+    // The page's season selector is shared with the standings tabs, so a
+    // change there has to re-scope this list too.
+    season() {
+      this.loadMatches();
+    }
   },
   mounted() {
     this.$nextTick(() => {
@@ -328,8 +335,9 @@ export default {
   methods: {
     async loadMatches() {
       this.isLoading = true;
+      this.selectedMatch = null;
       try {
-        const matches = await getMatchesDetails(this.activeGroupId);
+        const matches = await getMatchesDetails(this.activeGroupId, this.season);
 
         // Validate matches data
         if (!Array.isArray(matches)) {
@@ -356,6 +364,9 @@ export default {
         }
       } catch (error) {
         console.error('Error fetching matches:', error);
+        // Don't leave the previous season's list on screen after a failed
+        // reload — an empty list is at least not misleading.
+        this.matches = [];
       } finally {
         this.isLoading = false;
       }
@@ -601,55 +612,17 @@ export default {
 /* Component-specific styles that couldn't be moved to global */
 
 /* Container */
-.matches-container {
+.matches-panel {
   background-color: var(--bg-secondary);
 }
 
-/* Header Section */
-.matches-header {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-  color: white;
-  padding: 1rem 0;
-  position: relative;
-  overflow: hidden;
-}
-
-.matches-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="2" fill="white" opacity="0.1"/></svg>') repeat;
-  animation: float 20s ease-in-out infinite;
-}
-
-.header-content {
+/* Create Match toolbar — the button used to sit in this view's own gradient
+   header, which the unified page now owns; on the page's plain background it
+   is a regular primary button rather than the translucent-on-gradient one. */
+.matches-toolbar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  position: relative;
-  z-index: 1;
-}
-
-.title-section {
-  text-align: left;
-}
-
-/* Create Match Button Styling */
-.create-match-btn {
-  background-color: rgba(255, 255, 255, 0.15) !important;
-  backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.3) !important;
-  color: white !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-}
-
-.create-match-btn:hover {
-  background-color: rgba(255, 255, 255, 0.25) !important;
-  border-color: rgba(255, 255, 255, 0.5) !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  justify-content: flex-end;
+  margin-bottom: 1.5rem;
 }
 
 /* Modal Header Gradient */
@@ -1179,18 +1152,13 @@ export default {
     padding: 2rem 0;
   }
 
-  .matches-header {
-    padding: 2rem 0;
+  .matches-toolbar {
+    justify-content: stretch;
   }
 
-  .header-content {
-    flex-direction: column;
-    gap: 1rem;
-    text-align: center;
-  }
-
-  .title-section {
-    text-align: center;
+  .matches-toolbar .create-match-btn {
+    flex: 1;
+    justify-content: center;
   }
 
   .match-card-horizontal {
