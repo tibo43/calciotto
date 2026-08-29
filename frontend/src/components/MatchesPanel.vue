@@ -80,18 +80,6 @@
     <!-- Matches Section -->
     <section class="matches-section">
       <div class="container">
-        <!-- Create Match Button — admin-only, gated on the isAdmin the page
-             resolved once for the active group and passes down. -->
-        <div v-if="isAdmin" class="matches-toolbar">
-          <button class="btn-base btn-primary create-match-btn" @click="showCreateModal = true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Create Match
-          </button>
-        </div>
-
         <!-- Loading State -->
         <div v-if="isLoading" class="loading-container">
           <div class="loading-spinner"></div>
@@ -133,6 +121,17 @@
                   <div class="status-indicator-horizontal" :class="getMatchStatus(match)"></div>
                 </div>
               </div>
+
+              <!-- Create Match — admin-only, integrated into the match list
+                   itself (as a trailing "+" card) rather than a separate
+                   toolbar above it. -->
+              <button v-if="isAdmin" class="match-card-horizontal add-match-card" @click="showCreateModal = true"
+                aria-label="Create match">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
             </div>
 
             <!-- Scroll indicators -->
@@ -628,15 +627,6 @@ export default {
   background-color: var(--bg-secondary);
 }
 
-/* Create Match toolbar — the button used to sit in this view's own gradient
-   header, which the unified page now owns; on the page's plain background it
-   is a regular primary button rather than the translucent-on-gradient one. */
-.matches-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 1.5rem;
-}
-
 /* Modal Header Gradient */
 .modal-header-gradient {
   background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%) !important;
@@ -863,6 +853,27 @@ export default {
   border-color: var(--primary-color);
   background-color: var(--bg-primary);
   box-shadow: var(--shadow-lg);
+}
+
+/* Trailing "+" card — replaces the old standalone "Create Match" toolbar,
+   living at the end of the match list instead. */
+.add-match-card {
+  flex: 0 0 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--border-color);
+  color: var(--primary-color);
+}
+
+.add-match-card:hover {
+  border-color: var(--primary-color);
+  background-color: var(--bg-primary);
+}
+
+.add-match-card svg {
+  width: 24px;
+  height: 24px;
 }
 
 .match-date-horizontal {
@@ -1164,18 +1175,13 @@ export default {
     padding: 2rem 0;
   }
 
-  .matches-toolbar {
-    justify-content: stretch;
-  }
-
-  .matches-toolbar .create-match-btn {
-    flex: 1;
-    justify-content: center;
-  }
-
   .match-card-horizontal {
     flex: 0 0 240px;
     padding: 0.75rem;
+  }
+
+  .add-match-card {
+    flex-basis: 64px;
   }
 
   .match-details-container {

@@ -20,19 +20,19 @@
           <p class="loading-text">Loading...</p>
         </div>
 
-        <div v-else class="controls-layout">
-          <div class="season-bar card-base">
-            <label class="season-label" for="season-select">Season</label>
-            <select id="season-select" class="season-select" v-model="selectedSeason" @change="loadStandings">
-              <option v-for="season in seasons" :key="season" :value="season">{{ season }}</option>
-            </select>
-          </div>
-
-          <div class="sub-tabs-bar card-base">
+        <div v-else class="controls-bar card-base">
+          <div class="sub-tabs-bar">
             <button v-for="tab in subTabs" :key="tab.key" @click="activeSubTab = tab.key"
               :class="['sub-tab-button', { active: activeSubTab === tab.key }]">
               {{ tab.label }}
             </button>
+          </div>
+
+          <div class="season-bar">
+            <label class="season-label" for="season-select">Season</label>
+            <select id="season-select" class="season-select" v-model="selectedSeason" @change="loadStandings">
+              <option v-for="season in seasons" :key="season" :value="season">{{ season }}</option>
+            </select>
           </div>
         </div>
       </div>
@@ -194,10 +194,14 @@ export default {
   padding: 2rem 0 0;
 }
 
-.controls-layout {
+/* Sub-tabs and season selector, merged into a single bar: tabs on the
+   left, season picker on the right. */
+.controls-bar {
   display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
 }
 
 /* Season selector */
@@ -205,7 +209,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem 1rem;
+  flex-shrink: 0;
 }
 
 .season-label {
@@ -217,8 +221,6 @@ export default {
 }
 
 .season-select {
-  flex: 1;
-  max-width: 220px;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
@@ -240,7 +242,8 @@ export default {
 .sub-tabs-bar {
   display: flex;
   gap: 0.5rem;
-  padding: 0.5rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .sub-tab-button {
@@ -288,13 +291,13 @@ export default {
     text-align: center;
   }
 
-  .season-bar {
+  .controls-bar {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .season-select {
-    max-width: none;
+  .season-bar {
+    justify-content: space-between;
   }
 
   .sub-tabs-bar {

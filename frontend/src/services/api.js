@@ -391,6 +391,24 @@ export const removeMember = async (groupId, playerId) => {
   }
 };
 
+// Admin-only: attaches an email to a "ghost" member (one with a Name but no
+// Email, created via createPlayer's admin-only ghost flow) and sends them a
+// link to set their own password — the frontend counterpart to
+// AuthService.InviteExistingPlayer. Rejects with the backend's own message
+// for an already-claimed player, an email already used elsewhere, etc.
+export const invitePlayer = async (groupId, playerId, email) => {
+  try {
+    const response = await api.post(`/groups/${groupId}/members/${playerId}/invite`, { email });
+    if (response.status !== 200) {
+      throw new Error('Failed to invite player');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error inviting player:', error);
+    throw error;
+  }
+};
+
 // Teams — fetched on demand per group, same pattern as the invite code
 // above: a group's teams aren't part of the group JSON either.
 export const getTeamsByGroup = async (groupId) => {
