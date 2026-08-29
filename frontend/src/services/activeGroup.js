@@ -31,6 +31,13 @@ export function loadMyGroups({ force = false } = {}) {
   return myGroupsPromise;
 }
 
+// Clear the cached groups promise. This is needed on logout/login transitions
+// where the active group changes but the page does not reload — the module-scope
+// cache would otherwise return the previous user's groups/roles to the new user.
+export function clearMyGroupsCache() {
+  myGroupsPromise = null;
+}
+
 // The stored id can go stale: the player left the group, or another account
 // used this browser. Sending it anyway would scope every request to a group
 // the caller isn't a member of, which RequireGroupMembership rejects — so

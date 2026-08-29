@@ -187,7 +187,7 @@
 
 <script>
 import { clearToken, getToken } from '@/services/api';
-import { clearActiveGroupId, resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
+import { clearActiveGroupId, clearMyGroupsCache, resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
 
 export default {
   name: 'App',
@@ -300,6 +300,10 @@ export default {
       // one's group — the stale-id fallback would catch it, but only after a
       // request scoped to a group they may not belong to.
       clearActiveGroupId();
+      // Clear the cached groups promise to prevent the next logged-in user from
+      // seeing the previous user's group memberships/roles. Without this, the
+      // in-memory promise cache would survive the logout and return stale data.
+      clearMyGroupsCache();
       this.groups = [];
       this.activeGroupId = '';
       this.$router.push('/login');
