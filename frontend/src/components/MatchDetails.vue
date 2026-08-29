@@ -39,7 +39,7 @@
             <div class="team-score">
               <div class="team-info">
                 <div class="team-color" :style="{ backgroundColor: getTeamColor(match.Teams[0].Colour) }"></div>
-                <h3 class="team-name">{{ match.Teams[0].Colour }}</h3>
+                <h3 class="team-name">{{ match.Teams[0].Name }}</h3>
               </div>
               <div class="score">{{ match.Teams[0].Score || 0 }}</div>
             </div>
@@ -55,7 +55,7 @@
             <div class="team-score">
               <div class="team-info">
                 <div class="team-color" :style="{ backgroundColor: getTeamColor(match.Teams[1].Colour) }"></div>
-                <h3 class="team-name">{{ match.Teams[1].Colour }}</h3>
+                <h3 class="team-name">{{ match.Teams[1].Name }}</h3>
               </div>
               <div class="score">{{ match.Teams[1].Score || 0 }}</div>
             </div>
@@ -172,7 +172,7 @@
     <div v-if="showAddPlayerModal" class="modal-overlay" @click="closeModal">
       <div class="enhanced-multi-player-modal" @click.stop>
         <div class="modal-header enhanced-modal-header">
-          <h3>Add Players to {{ match.Teams[activeTeam].Colour }} Team</h3>
+          <h3>Add Players to {{ match.Teams[activeTeam].Name }} Team</h3>
           <button @click="closeModal" class="modal-close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18" />
