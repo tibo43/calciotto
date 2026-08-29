@@ -43,8 +43,8 @@ export const login = async (email, password) => {
   return response.data;
 };
 
-export const signup = async (name, email, password) => {
-  const response = await api.post('/auth/signup', { name, email, password });
+export const signup = async (name, email, password, inviteCode = '') => {
+  const response = await api.post('/auth/signup', { name, email, password, invite_code: inviteCode });
   return response.data;
 };
 
@@ -274,6 +274,15 @@ export const getPlayerProfile = async (season) => {
     console.error('Error fetching player profile:', error);
     throw error;
   }
+};
+
+// Lets the authenticated player rename themselves. Same "no id needed" shape
+// as getPlayerProfile — the backend takes the player from the JWT — but this
+// one rejects with a 400 (surfaced via error.response.data.error) if another
+// player anywhere already holds the requested name.
+export const updateMyName = async (name) => {
+  const response = await api.patch('/players/me', { name });
+  return response.data;
 };
 
 // Groups

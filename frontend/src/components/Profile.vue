@@ -34,8 +34,27 @@
           <div class="overall-card card-base card-large">
             <div class="overall-identity">
               <div class="player-avatar-small">{{ getPlayerInitials(overall.Name) }}</div>
-              <div>
-                <h2 class="overall-name">{{ formatPlayerNameForDisplay(overall.Name) }}</h2>
+              <div class="overall-name-block">
+                <div v-if="!isEditingName" class="overall-name-row">
+                  <h2 class="overall-name">{{ formatPlayerNameForDisplay(overall.Name) }}</h2>
+                  <button class="icon-action-btn edit-name-btn" @click="startEditName" aria-label="Edit your name">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                    </svg>
+                  </button>
+                </div>
+                <div v-else class="invite-form name-edit-form">
+                  <input v-model="nameEditInput" class="form-input invite-email-input" type="text"
+                    placeholder="Your name" :disabled="nameEditLoading" @keyup.enter="saveEditName">
+                  <button class="btn-base btn-primary btn-small"
+                    :disabled="nameEditLoading || !nameEditInput.trim()" @click="saveEditName">
+                    {{ nameEditLoading ? 'Saving...' : 'Save' }}
+                  </button>
+                  <button class="btn-base btn-cancel btn-small" :disabled="nameEditLoading" @click="cancelEditName">
+                    Cancel
+                  </button>
+                </div>
+                <p v-if="nameEditError" class="error-message">{{ nameEditError }}</p>
                 <p class="overall-scope">{{ scopeLabel }}</p>
               </div>
             </div>
@@ -211,7 +230,7 @@
 <script>
 import {
   getPlayerProfile, getMyGroups, getGroupMembers,
-  updateMemberRole, removeMember, invitePlayer, setFavoriteGroup, getToken
+  updateMemberRole, removeMember, invitePlayer, setFavoriteGroup, updateMyName, getToken
 } from '@/services/api';
 import GroupSettingsModal from '@/components/GroupSettingsModal.vue';
 import CreateGroupModal from '@/components/CreateGroupModal.vue';
@@ -245,6 +264,14 @@ export default {
       perGroup: [],
       isLoading: true,
       loadFailed: false,
+
+      // Inline "edit your display name" form on the overall card — a
+      // separate concern from favoriteError/inviteErrors below, so it gets
+      // its own local error field rather than reusing one of those.
+      isEditingName: false,
+      nameEditInput: '',
+      nameEditLoading: false,
+      nameEditError: '',
 
       // GroupID -> { role, isFavorite }, resolved separately from the
       // profile call (GET /players/me/stats has no reason to know about
@@ -465,6 +492,39 @@ export default {
         this.inviteLoading[member.id] = false;
       }
     },
+    startEditName() {
+      this.nameEditInput = this.overall.Name;
+      this.nameEditError = '';
+      this.isEditingName = true;
+    },
+    cancelEditName() {
+      this.isEditingName = false;
+      this.nameEditError = '';
+    },
+    async saveEditName() {
+      const newName = this.nameEditInput.trim();
+      if (!newName) {
+        // Cheap client-side guard against an obviously-empty submit — the
+        // backend rejects this too (ErrEmptyPlayerName), but there's no
+        // reason to round-trip for it.
+        return;
+      }
+      this.nameEditLoading = true;
+      this.nameEditError = '';
+      try {
+        await updateMyName(newName);
+        // No need to refetch the whole /players/me/stats payload — just
+        // reflect the new name locally, same idea as this component's
+        // other actions patching in place where a full re-fetch isn't
+        // otherwise required.
+        this.overall.Name = newName;
+        this.isEditingName = false;
+      } catch (error) {
+        this.nameEditError = this.backendMessage(error, 'Failed to update your name.');
+      } finally {
+        this.nameEditLoading = false;
+      }
+    },
     openSettings(row) {
       this.settingsForGroup = { id: row.GroupID, name: row.GroupName };
     },
@@ -524,11 +584,36 @@ export default {
   gap: 1rem;
 }
 
+.overall-name-block {
+  min-width: 0;
+}
+
+.overall-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .overall-name {
   font-size: 1.35rem;
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
+}
+
+.edit-name-btn {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.edit-name-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.name-edit-form {
+  margin: 0;
+  max-width: 22rem;
 }
 
 .overall-scope {

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"app/internal/models"
 	"app/internal/services"
 	"app/internal/testutil"
 
@@ -105,7 +106,7 @@ func TestSignupNewPlayer_Integration_Success(t *testing.T) {
 
 	authService := services.NewAuthService(tx, testJWTSecret)
 
-	playerID, err := authService.SignupNewPlayer("  Zzz Integration Auth Gwen  ", "  Gwen@Example.com ", "s3cret-pass")
+	playerID, err := authService.SignupNewPlayer("  Zzz Integration Auth Gwen  ", "  Gwen@Example.com ", "s3cret-pass", "")
 	if err != nil {
 		t.Fatalf("SignupNewPlayer returned error: %v", err)
 	}
@@ -136,7 +137,7 @@ func TestSignupNewPlayer_Integration_EmptyNameFails(t *testing.T) {
 
 	authService := services.NewAuthService(tx, testJWTSecret)
 
-	_, err := authService.SignupNewPlayer("   ", "empty-name@example.com", "s3cret-pass")
+	_, err := authService.SignupNewPlayer("   ", "empty-name@example.com", "s3cret-pass", "")
 	if !errors.Is(err, services.ErrEmptyPlayerName) {
 		t.Errorf("SignupNewPlayer with an empty name error = %v, want ErrEmptyPlayerName", err)
 	}
@@ -148,7 +149,7 @@ func TestSignupNewPlayer_Integration_EmptyEmailFails(t *testing.T) {
 
 	authService := services.NewAuthService(tx, testJWTSecret)
 
-	_, err := authService.SignupNewPlayer("Zzz Integration Auth Holly", "   ", "s3cret-pass")
+	_, err := authService.SignupNewPlayer("Zzz Integration Auth Holly", "   ", "s3cret-pass", "")
 	if !errors.Is(err, services.ErrEmailRequired) {
 		t.Errorf("SignupNewPlayer with an empty email error = %v, want ErrEmailRequired", err)
 	}
@@ -160,7 +161,7 @@ func TestSignupNewPlayer_Integration_EmptyPasswordFails(t *testing.T) {
 
 	authService := services.NewAuthService(tx, testJWTSecret)
 
-	_, err := authService.SignupNewPlayer("Zzz Integration Auth Ivy", "ivy@example.com", "")
+	_, err := authService.SignupNewPlayer("Zzz Integration Auth Ivy", "ivy@example.com", "", "")
 	if !errors.Is(err, services.ErrPasswordRequired) {
 		t.Errorf("SignupNewPlayer with an empty password error = %v, want ErrPasswordRequired", err)
 	}
@@ -172,11 +173,11 @@ func TestSignupNewPlayer_Integration_DuplicateEmailFails(t *testing.T) {
 
 	authService := services.NewAuthService(tx, testJWTSecret)
 
-	if _, err := authService.SignupNewPlayer("Zzz Integration Auth Jack", "shared-new@example.com", "s3cret-pass"); err != nil {
+	if _, err := authService.SignupNewPlayer("Zzz Integration Auth Jack", "shared-new@example.com", "s3cret-pass", ""); err != nil {
 		t.Fatalf("first SignupNewPlayer returned error: %v", err)
 	}
 
-	_, err := authService.SignupNewPlayer("Zzz Integration Auth Jill", "SHARED-NEW@example.com", "another-pass")
+	_, err := authService.SignupNewPlayer("Zzz Integration Auth Jill", "SHARED-NEW@example.com", "another-pass", "")
 	if !errors.Is(err, services.ErrEmailAlreadyUsed) {
 		t.Errorf("SignupNewPlayer with an already-used email error = %v, want ErrEmailAlreadyUsed", err)
 	}
@@ -193,12 +194,12 @@ func TestSignupNewPlayer_Integration_DuplicateNameSucceeds(t *testing.T) {
 
 	authService := services.NewAuthService(tx, testJWTSecret)
 
-	firstID, err := authService.SignupNewPlayer("Zzz Integration Auth Kim", "kim-one@example.com", "s3cret-pass")
+	firstID, err := authService.SignupNewPlayer("Zzz Integration Auth Kim", "kim-one@example.com", "s3cret-pass", "")
 	if err != nil {
 		t.Fatalf("first SignupNewPlayer returned error: %v", err)
 	}
 
-	secondID, err := authService.SignupNewPlayer("Zzz Integration Auth Kim", "kim-two@example.com", "another-pass")
+	secondID, err := authService.SignupNewPlayer("Zzz Integration Auth Kim", "kim-two@example.com", "another-pass", "")
 	if err != nil {
 		t.Errorf("second SignupNewPlayer with a duplicate name returned error: %v, want nil (names are not unique)", err)
 	}
@@ -212,6 +213,100 @@ func TestSignupNewPlayer_Integration_DuplicateNameSucceeds(t *testing.T) {
 	}
 	if _, err := authService.Login("kim-two@example.com", "another-pass"); err != nil {
 		t.Errorf("Login for the second Kim account returned error: %v", err)
+	}
+}
+
+// TestSignupNewPlayer_Integration_WithValidInviteCodeJoinsGroup covers the
+// happy path of the optional invite_code parameter: a brand-new player is
+// created AND enrolled as a member of the group owning the code, in the same
+// call.
+func TestSignupNewPlayer_Integration_WithValidInviteCodeJoinsGroup(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+	membershipService := services.NewGroupMembershipService(tx)
+	authService := services.NewAuthService(tx, testJWTSecret)
+
+	group, err := groupService.CreateGroup("Zzz Signup Invite Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("CreateGroup returned error: %v", err)
+	}
+
+	playerID, err := authService.SignupNewPlayer("Zzz Integration Auth Liam", "liam@example.com", "s3cret-pass", group.InviteCode)
+	if err != nil {
+		t.Fatalf("SignupNewPlayer with a valid invite code returned error: %v", err)
+	}
+	if playerID == uuid.Nil {
+		t.Fatal("SignupNewPlayer returned a nil player ID")
+	}
+
+	isMember, err := membershipService.IsMember(group.ID, playerID)
+	if err != nil {
+		t.Fatalf("IsMember returned error: %v", err)
+	}
+	if !isMember {
+		t.Error("player signed up with a valid invite code is not a member of that group")
+	}
+
+	// Also lower-cased/whitespace-padded, mirroring how a human would type it
+	// back — normalizeInviteCode must handle this the same way JoinByInviteCode
+	// does.
+	groups, err := membershipService.GetGroupsWithRoleByPlayerID(playerID)
+	if err != nil {
+		t.Fatalf("GetGroupsWithRoleByPlayerID returned error: %v", err)
+	}
+	if len(groups) != 1 || groups[0].ID != group.ID {
+		t.Errorf("GetGroupsWithRoleByPlayerID = %+v, want exactly one entry for group %s", groups, group.ID)
+	}
+}
+
+// TestSignupNewPlayer_Integration_WithInvalidInviteCodeFailsAtomically is the
+// most important guarantee this feature adds: an unknown/invalid invite code
+// must fail the whole signup, not just skip joining a group — no orphaned
+// Player row left behind with no group membership.
+func TestSignupNewPlayer_Integration_WithInvalidInviteCodeFailsAtomically(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+
+	_, err := authService.SignupNewPlayer("Zzz Integration Auth Mia", "mia@example.com", "s3cret-pass", "NOTAREALCODE")
+	if !errors.Is(err, services.ErrInviteCodeNotFound) {
+		t.Errorf("SignupNewPlayer with an invalid invite code error = %v, want ErrInviteCodeNotFound", err)
+	}
+
+	var count int64
+	if err := tx.Model(&models.Player{}).Where("email = ?", "mia@example.com").Count(&count).Error; err != nil {
+		t.Fatalf("failed to count players by email: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("player row was created despite the invalid invite code failing the transaction (count = %d, want 0)", count)
+	}
+}
+
+// TestSignupNewPlayer_Integration_WithoutInviteCodeBehavesAsBefore pins the
+// empty-string case (the default when the frontend field is left blank) to
+// the pre-existing behavior: a player is created with no group membership at
+// all.
+func TestSignupNewPlayer_Integration_WithoutInviteCodeBehavesAsBefore(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	membershipService := services.NewGroupMembershipService(tx)
+	authService := services.NewAuthService(tx, testJWTSecret)
+
+	playerID, err := authService.SignupNewPlayer("Zzz Integration Auth Noah", "noah@example.com", "s3cret-pass", "")
+	if err != nil {
+		t.Fatalf("SignupNewPlayer with no invite code returned error: %v", err)
+	}
+
+	groups, err := membershipService.GetGroupsWithRoleByPlayerID(playerID)
+	if err != nil {
+		t.Fatalf("GetGroupsWithRoleByPlayerID returned error: %v", err)
+	}
+	if len(groups) != 0 {
+		t.Errorf("GetGroupsWithRoleByPlayerID = %+v, want no groups for a signup with no invite code", groups)
 	}
 }
 

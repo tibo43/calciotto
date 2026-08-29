@@ -133,7 +133,21 @@ func (s *AuthService) Signup(playerID uuid.UUID, email, password string) error {
 // check here, and do not route this through PlayerService.CreatePlayer,
 // which enforces exactly that check for a different flow (admin-created
 // "ghost" players).
-func (s *AuthService) SignupNewPlayer(name, email, password string) (uuid.UUID, error) {
+//
+// inviteCode is optional — pass "" to sign up without joining any group,
+// the same behavior as before this parameter existed. When non-empty (after
+// normalizeInviteCode trims/uppercases it), it must resolve to an existing
+// group or the whole signup fails with ErrInviteCodeNotFound: the player row
+// and the group membership are created inside a single s.DB.Transaction, so
+// a typo'd or stale code can never leave behind an orphaned account with no
+// group, and a valid code can never silently fail to attach the new player
+// to it. This intentionally does not reuse GroupService.JoinByInviteCode —
+// that helper's IsMember check is meaningless for a player created moments
+// earlier in the same transaction, and it queries s.DB rather than the
+// transaction's tx, which would break atomicity. Instead the group lookup
+// and services.NewGroupMembershipService(tx).AddPlayerToGroupWithRole(...)
+// call are inlined here, both scoped to tx.
+func (s *AuthService) SignupNewPlayer(name, email, password, inviteCode string) (uuid.UUID, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return uuid.Nil, ErrEmptyPlayerName
@@ -166,11 +180,25 @@ func (s *AuthService) SignupNewPlayer(name, email, password string) (uuid.UUID, 
 		Email:        &email,
 		PasswordHash: string(hash),
 	}
-	// A single Create writes the player row and its credentials together —
-	// there's no second statement that could fail halfway, so no
-	// transaction is needed here (unlike ResetPassword's two-statement
-	// update).
-	if err := s.DB.Create(&player).Error; err != nil {
+	normalizedInviteCode := normalizeInviteCode(inviteCode)
+	err = s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&player).Error; err != nil {
+			return err
+		}
+		if normalizedInviteCode == "" {
+			return nil
+		}
+
+		var group models.Group
+		if err := tx.First(&group, "invite_code = ?", normalizedInviteCode).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrInviteCodeNotFound
+			}
+			return err
+		}
+		return NewGroupMembershipService(tx).AddPlayerToGroupWithRole(group.ID, player.ID, models.RoleMember)
+	})
+	if err != nil {
 		return uuid.Nil, err
 	}
 	return player.ID, nil

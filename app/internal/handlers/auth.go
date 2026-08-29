@@ -24,22 +24,24 @@ func NewAuthHandler(service *services.AuthService) *AuthHandler {
 // to back this route (see AuthService.Signup / AuthService.SignupNewPlayer).
 func (h *AuthHandler) Signup(c *gin.Context) {
 	var req struct {
-		Name     string `json:"name"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Name       string `json:"name"`
+		Email      string `json:"email"`
+		Password   string `json:"password"`
+		InviteCode string `json:"invite_code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	playerID, err := h.Service.SignupNewPlayer(req.Name, req.Email, req.Password)
+	playerID, err := h.Service.SignupNewPlayer(req.Name, req.Email, req.Password, req.InviteCode)
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrEmptyPlayerName),
 			errors.Is(err, services.ErrEmailRequired),
 			errors.Is(err, services.ErrPasswordRequired),
-			errors.Is(err, services.ErrEmailAlreadyUsed):
+			errors.Is(err, services.ErrEmailAlreadyUsed),
+			errors.Is(err, services.ErrInviteCodeNotFound):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
