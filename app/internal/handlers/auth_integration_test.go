@@ -32,19 +32,13 @@ func TestAuthEndpoints_Integration_SignupThenLogin(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
-	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testAuthJWTSecret)
 	router := newAuthTestRouter(authService)
 
-	playerID, err := playerService.CreatePlayer("Zzz Integration Handler Grace")
-	if err != nil {
-		t.Fatalf("failed to create player: %v", err)
-	}
-
 	signupBody, _ := json.Marshal(map[string]string{
-		"player_id": playerID.String(),
-		"email":     "grace@example.com",
-		"password":  "s3cret-pass",
+		"name":     "Zzz Integration Handler Grace",
+		"email":    "grace@example.com",
+		"password": "s3cret-pass",
 	})
 	signupReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(signupBody))
 	signupReq.Header.Set("Content-Type", "application/json")
@@ -53,6 +47,16 @@ func TestAuthEndpoints_Integration_SignupThenLogin(t *testing.T) {
 	if signupRec.Code != http.StatusOK {
 		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())
 	}
+	var signupResp struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(signupRec.Body.Bytes(), &signupResp); err != nil {
+		t.Fatalf("failed to decode signup response: %v", err)
+	}
+	if signupResp.ID == "" {
+		t.Fatal("signup response has an empty id")
+	}
+	playerID := signupResp.ID
 
 	loginBody, _ := json.Marshal(map[string]string{
 		"email":    "grace@example.com",
@@ -90,8 +94,8 @@ func TestAuthEndpoints_Integration_SignupThenLogin(t *testing.T) {
 	if err := json.Unmarshal(protectedRec.Body.Bytes(), &protectedResp); err != nil {
 		t.Fatalf("failed to decode protected response: %v", err)
 	}
-	if protectedResp.PlayerID != playerID.String() {
-		t.Errorf("protected route injected player_id = %q, want %q", protectedResp.PlayerID, playerID.String())
+	if protectedResp.PlayerID != playerID {
+		t.Errorf("protected route injected player_id = %q, want %q", protectedResp.PlayerID, playerID)
 	}
 }
 
@@ -122,33 +126,56 @@ func TestAuthHandler_Integration_SignupErrors(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
-	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testAuthJWTSecret)
 	router := newAuthTestRouter(authService)
 
-	// Unknown player_id -> 404.
-	unknownBody, _ := json.Marshal(map[string]string{
-		"player_id": "00000000-0000-0000-0000-000000000000",
-		"email":     "ghost@example.com",
-		"password":  "s3cret-pass",
+	// Empty name -> 400.
+	emptyNameBody, _ := json.Marshal(map[string]string{
+		"name":     "  ",
+		"email":    "ghost@example.com",
+		"password": "s3cret-pass",
 	})
-	unknownReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(unknownBody))
-	unknownReq.Header.Set("Content-Type", "application/json")
-	unknownRec := httptest.NewRecorder()
-	router.ServeHTTP(unknownRec, unknownReq)
-	if unknownRec.Code != http.StatusNotFound {
-		t.Errorf("signup for unknown player returned status %d, want 404, body: %s", unknownRec.Code, unknownRec.Body.String())
+	emptyNameReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(emptyNameBody))
+	emptyNameReq.Header.Set("Content-Type", "application/json")
+	emptyNameRec := httptest.NewRecorder()
+	router.ServeHTTP(emptyNameRec, emptyNameReq)
+	if emptyNameRec.Code != http.StatusBadRequest {
+		t.Errorf("signup with an empty name returned status %d, want 400, body: %s", emptyNameRec.Code, emptyNameRec.Body.String())
 	}
 
-	// Already-claimed player -> 400.
-	playerID, err := playerService.CreatePlayer("Zzz Integration Handler Heidi")
-	if err != nil {
-		t.Fatalf("failed to create player: %v", err)
+	// Empty email -> 400.
+	emptyEmailBody, _ := json.Marshal(map[string]string{
+		"name":     "Zzz Integration Handler Heidi",
+		"email":    "",
+		"password": "s3cret-pass",
+	})
+	emptyEmailReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(emptyEmailBody))
+	emptyEmailReq.Header.Set("Content-Type", "application/json")
+	emptyEmailRec := httptest.NewRecorder()
+	router.ServeHTTP(emptyEmailRec, emptyEmailReq)
+	if emptyEmailRec.Code != http.StatusBadRequest {
+		t.Errorf("signup with an empty email returned status %d, want 400, body: %s", emptyEmailRec.Code, emptyEmailRec.Body.String())
 	}
+
+	// Empty password -> 400.
+	emptyPasswordBody, _ := json.Marshal(map[string]string{
+		"name":     "Zzz Integration Handler Heidi",
+		"email":    "heidi@example.com",
+		"password": "",
+	})
+	emptyPasswordReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(emptyPasswordBody))
+	emptyPasswordReq.Header.Set("Content-Type", "application/json")
+	emptyPasswordRec := httptest.NewRecorder()
+	router.ServeHTTP(emptyPasswordRec, emptyPasswordReq)
+	if emptyPasswordRec.Code != http.StatusBadRequest {
+		t.Errorf("signup with an empty password returned status %d, want 400, body: %s", emptyPasswordRec.Code, emptyPasswordRec.Body.String())
+	}
+
+	// A first, valid signup succeeds...
 	firstBody, _ := json.Marshal(map[string]string{
-		"player_id": playerID.String(),
-		"email":     "heidi@example.com",
-		"password":  "s3cret-pass",
+		"name":     "Zzz Integration Handler Heidi",
+		"email":    "heidi@example.com",
+		"password": "s3cret-pass",
 	})
 	firstReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(firstBody))
 	firstReq.Header.Set("Content-Type", "application/json")
@@ -158,17 +185,33 @@ func TestAuthHandler_Integration_SignupErrors(t *testing.T) {
 		t.Fatalf("first signup returned status %d, body: %s", firstRec.Code, firstRec.Body.String())
 	}
 
-	secondBody, _ := json.Marshal(map[string]string{
-		"player_id": playerID.String(),
-		"email":     "heidi-other@example.com",
-		"password":  "another-pass",
+	// ...but re-using the same email fails, even with a different name.
+	duplicateEmailBody, _ := json.Marshal(map[string]string{
+		"name":     "Zzz Integration Handler Heidi Two",
+		"email":    "heidi@example.com",
+		"password": "another-pass",
 	})
-	secondReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(secondBody))
-	secondReq.Header.Set("Content-Type", "application/json")
-	secondRec := httptest.NewRecorder()
-	router.ServeHTTP(secondRec, secondReq)
-	if secondRec.Code != http.StatusBadRequest {
-		t.Errorf("signup on already-claimed player returned status %d, want 400, body: %s", secondRec.Code, secondRec.Body.String())
+	duplicateEmailReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(duplicateEmailBody))
+	duplicateEmailReq.Header.Set("Content-Type", "application/json")
+	duplicateEmailRec := httptest.NewRecorder()
+	router.ServeHTTP(duplicateEmailRec, duplicateEmailReq)
+	if duplicateEmailRec.Code != http.StatusBadRequest {
+		t.Errorf("signup with an already-used email returned status %d, want 400, body: %s", duplicateEmailRec.Code, duplicateEmailRec.Body.String())
+	}
+
+	// Re-using the same name (with a different email) is fine — names are not
+	// unique, unlike PlayerService.CreatePlayer's ghost-player flow.
+	duplicateNameBody, _ := json.Marshal(map[string]string{
+		"name":     "Zzz Integration Handler Heidi",
+		"email":    "heidi-second-account@example.com",
+		"password": "another-pass",
+	})
+	duplicateNameReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(duplicateNameBody))
+	duplicateNameReq.Header.Set("Content-Type", "application/json")
+	duplicateNameRec := httptest.NewRecorder()
+	router.ServeHTTP(duplicateNameRec, duplicateNameReq)
+	if duplicateNameRec.Code != http.StatusOK {
+		t.Errorf("signup re-using an existing display name returned status %d, want 200, body: %s", duplicateNameRec.Code, duplicateNameRec.Body.String())
 	}
 }
 
@@ -176,18 +219,13 @@ func TestAuthHandler_Integration_LoginWrongPasswordReturns401(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
-	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testAuthJWTSecret)
 	router := newAuthTestRouter(authService)
 
-	playerID, err := playerService.CreatePlayer("Zzz Integration Handler Ivan")
-	if err != nil {
-		t.Fatalf("failed to create player: %v", err)
-	}
 	signupBody, _ := json.Marshal(map[string]string{
-		"player_id": playerID.String(),
-		"email":     "ivan@example.com",
-		"password":  "correct-pass",
+		"name":     "Zzz Integration Handler Ivan",
+		"email":    "ivan@example.com",
+		"password": "correct-pass",
 	})
 	signupReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(signupBody))
 	signupReq.Header.Set("Content-Type", "application/json")

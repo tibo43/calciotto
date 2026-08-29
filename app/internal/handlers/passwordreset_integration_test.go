@@ -64,18 +64,13 @@ func TestPasswordResetEndpoints_Integration_ForgotThenReset(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
-	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testAuthJWTSecret)
 	router := newPasswordResetTestRouter(authService)
 
-	playerID, err := playerService.CreatePlayer("Zzz Integration Handler Quinn")
-	if err != nil {
-		t.Fatalf("failed to create player: %v", err)
-	}
 	signupRec := postJSON(t, router, "/auth/signup", map[string]string{
-		"player_id": playerID.String(),
-		"email":     "quinn@example.com",
-		"password":  "old-pass",
+		"name":     "Zzz Integration Handler Quinn",
+		"email":    "quinn@example.com",
+		"password": "old-pass",
 	})
 	if signupRec.Code != http.StatusOK {
 		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())
@@ -128,18 +123,13 @@ func TestPasswordResetEndpoints_Integration_ForgotPasswordAlwaysReturnsTheSameAn
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
-	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testAuthJWTSecret)
 	router := newPasswordResetTestRouter(authService)
 
-	playerID, err := playerService.CreatePlayer("Zzz Integration Handler Rita")
-	if err != nil {
-		t.Fatalf("failed to create player: %v", err)
-	}
 	signupRec := postJSON(t, router, "/auth/signup", map[string]string{
-		"player_id": playerID.String(),
-		"email":     "rita@example.com",
-		"password":  "old-pass",
+		"name":     "Zzz Integration Handler Rita",
+		"email":    "rita@example.com",
+		"password": "old-pass",
 	})
 	if signupRec.Code != http.StatusOK {
 		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())

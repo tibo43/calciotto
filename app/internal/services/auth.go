@@ -57,9 +57,12 @@ type playerClaims struct {
 	jwt.RegisteredClaims
 }
 
-// AuthService implements the "claim by name" flow: a Player row must already
-// exist (created via PlayerService) before it can be attached to
-// email/password credentials through Signup.
+// AuthService covers the account lifecycle: SignupNewPlayer is the public
+// signup flow (creates a new Player and attaches credentials in one step),
+// Signup is the "claim by name" flow for a Player row that already exists
+// (created via PlayerService) but has no credentials yet — not currently
+// wired to any route, kept for an upcoming "claim an existing ghost player"
+// feature.
 type AuthService struct {
 	DB     *gorm.DB
 	secret []byte
@@ -74,8 +77,10 @@ func NewAuthService(db *gorm.DB, secret string) *AuthService {
 }
 
 // Signup attaches email/password credentials to an existing Player. It never
-// creates a new Player — the caller must already know the Player's ID (e.g.
-// picked from a list in the UI).
+// creates a new Player — the caller must already know the Player's ID. Not
+// wired to any HTTP route today (see SignupNewPlayer for the public
+// POST /auth/signup flow); kept for an upcoming "claim an existing ghost
+// player" feature that will reuse this.
 func (s *AuthService) Signup(playerID uuid.UUID, email, password string) error {
 	email = normalizeEmail(email)
 	if email == "" {
@@ -113,6 +118,62 @@ func (s *AuthService) Signup(playerID uuid.UUID, email, password string) error {
 	player.Email = &email
 	player.PasswordHash = string(hash)
 	return s.DB.Save(&player).Error
+}
+
+// SignupNewPlayer is the public signup flow: it creates a brand-new Player
+// and attaches email/password credentials to it in a single step, for
+// someone who has never been added to a group before and has no existing
+// Player row to claim.
+//
+// Unlike Signup, it never checks Player.Name for uniqueness — a display
+// name may legitimately collide with another unrelated player's, and since
+// a player only ever has one account name shared across every group they
+// belong to, per-group uniqueness wouldn't make sense either. That's a
+// deliberate product decision, not an oversight: do not add a duplicate-name
+// check here, and do not route this through PlayerService.CreatePlayer,
+// which enforces exactly that check for a different flow (admin-created
+// "ghost" players).
+func (s *AuthService) SignupNewPlayer(name, email, password string) (uuid.UUID, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return uuid.Nil, ErrEmptyPlayerName
+	}
+
+	email = normalizeEmail(email)
+	if email == "" {
+		return uuid.Nil, ErrEmailRequired
+	}
+	if password == "" {
+		return uuid.Nil, ErrPasswordRequired
+	}
+
+	var existing models.Player
+	result := s.DB.Where("email = ?", email).First(&existing)
+	if result.Error == nil {
+		return uuid.Nil, ErrEmailAlreadyUsed
+	}
+	if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return uuid.Nil, result.Error
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	player := models.Player{
+		Name:         name,
+		Email:        &email,
+		PasswordHash: string(hash),
+	}
+	// A single Create writes the player row and its credentials together —
+	// there's no second statement that could fail halfway, so no
+	// transaction is needed here (unlike ResetPassword's two-statement
+	// update).
+	if err := s.DB.Create(&player).Error; err != nil {
+		return uuid.Nil, err
+	}
+	return player.ID, nil
 }
 
 // Login checks email/password and returns a signed JWT on success. The error

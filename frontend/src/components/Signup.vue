@@ -2,15 +2,12 @@
   <div class="auth-page">
     <div class="auth-card card-base card-large">
       <h1 class="page-title">Sign up</h1>
-      <p class="auth-hint">Pick your name from the existing player list, then set an email and password.</p>
+      <p class="auth-hint">Create your account to start joining and organizing matches.</p>
 
       <form @submit.prevent="submit">
         <div class="form-group">
-          <label for="player">You are</label>
-          <select id="player" v-model="playerId" class="form-input" required :disabled="isLoadingPlayers">
-            <option value="" disabled>{{ isLoadingPlayers ? 'Loading players...' : 'Select your name' }}</option>
-            <option v-for="player in players" :key="player.ID" :value="player.ID">{{ player.Name }}</option>
-          </select>
+          <label for="name">Name</label>
+          <input id="name" v-model="name" type="text" class="form-input" required autocomplete="name" />
         </div>
 
         <div class="form-group">
@@ -40,36 +37,25 @@
 </template>
 
 <script>
-import { getPlayers, signup } from '@/services/api';
+import { signup } from '@/services/api';
 
 export default {
   name: 'SignupPage',
   data() {
     return {
-      players: [],
-      isLoadingPlayers: true,
-      playerId: '',
+      name: '',
       email: '',
       password: '',
       error: '',
       isSubmitting: false,
     };
   },
-  async created() {
-    try {
-      this.players = await getPlayers();
-    } catch (err) {
-      this.error = 'Failed to load the player list.';
-    } finally {
-      this.isLoadingPlayers = false;
-    }
-  },
   methods: {
     async submit() {
       this.error = '';
       this.isSubmitting = true;
       try {
-        await signup(this.playerId, this.email, this.password);
+        await signup(this.name, this.email, this.password);
         this.$router.push('/login');
       } catch (err) {
         this.error = err.response?.data?.error || 'Signup failed. Please try again.';

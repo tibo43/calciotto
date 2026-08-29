@@ -44,5 +44,15 @@ func InitDB() (*gorm.DB, error) {
 
 	log.Println("Tables created successfully!")
 
+	// Player.Name used to carry a uniqueIndex tag (see PlayerService.CreatePlayer's
+	// duplicate check). AuthService.SignupNewPlayer deliberately allows two
+	// accounts to share a display name, so the tag was dropped from the model —
+	// but AutoMigrate only ever adds schema, it never removes an index that's no
+	// longer declared. A database created before this change keeps the old
+	// idx_players_name constraint forever unless it's dropped explicitly here.
+	if err := db.Exec(`DROP INDEX IF EXISTS idx_players_name`).Error; err != nil {
+		log.Fatal(err)
+	}
+
 	return db, nil
 }

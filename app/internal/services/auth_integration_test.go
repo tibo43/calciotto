@@ -99,6 +99,122 @@ func TestSignup_Integration_UnknownPlayerFails(t *testing.T) {
 	}
 }
 
+func TestSignupNewPlayer_Integration_Success(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+
+	playerID, err := authService.SignupNewPlayer("  Zzz Integration Auth Gwen  ", "  Gwen@Example.com ", "s3cret-pass")
+	if err != nil {
+		t.Fatalf("SignupNewPlayer returned error: %v", err)
+	}
+	if playerID == uuid.Nil {
+		t.Fatal("SignupNewPlayer returned a nil player ID")
+	}
+
+	token, err := authService.Login("gwen@example.com", "s3cret-pass")
+	if err != nil {
+		t.Fatalf("Login after SignupNewPlayer returned error: %v", err)
+	}
+	if token == "" {
+		t.Fatal("Login returned an empty token")
+	}
+
+	decodedID, err := authService.ParseToken(token)
+	if err != nil {
+		t.Fatalf("ParseToken returned error: %v", err)
+	}
+	if decodedID != playerID {
+		t.Errorf("ParseToken player_id = %s, want %s", decodedID, playerID)
+	}
+}
+
+func TestSignupNewPlayer_Integration_EmptyNameFails(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+
+	_, err := authService.SignupNewPlayer("   ", "empty-name@example.com", "s3cret-pass")
+	if !errors.Is(err, services.ErrEmptyPlayerName) {
+		t.Errorf("SignupNewPlayer with an empty name error = %v, want ErrEmptyPlayerName", err)
+	}
+}
+
+func TestSignupNewPlayer_Integration_EmptyEmailFails(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+
+	_, err := authService.SignupNewPlayer("Zzz Integration Auth Holly", "   ", "s3cret-pass")
+	if !errors.Is(err, services.ErrEmailRequired) {
+		t.Errorf("SignupNewPlayer with an empty email error = %v, want ErrEmailRequired", err)
+	}
+}
+
+func TestSignupNewPlayer_Integration_EmptyPasswordFails(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+
+	_, err := authService.SignupNewPlayer("Zzz Integration Auth Ivy", "ivy@example.com", "")
+	if !errors.Is(err, services.ErrPasswordRequired) {
+		t.Errorf("SignupNewPlayer with an empty password error = %v, want ErrPasswordRequired", err)
+	}
+}
+
+func TestSignupNewPlayer_Integration_DuplicateEmailFails(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+
+	if _, err := authService.SignupNewPlayer("Zzz Integration Auth Jack", "shared-new@example.com", "s3cret-pass"); err != nil {
+		t.Fatalf("first SignupNewPlayer returned error: %v", err)
+	}
+
+	_, err := authService.SignupNewPlayer("Zzz Integration Auth Jill", "SHARED-NEW@example.com", "another-pass")
+	if !errors.Is(err, services.ErrEmailAlreadyUsed) {
+		t.Errorf("SignupNewPlayer with an already-used email error = %v, want ErrEmailAlreadyUsed", err)
+	}
+}
+
+// TestSignupNewPlayer_Integration_DuplicateNameSucceeds asserts the
+// deliberate behavior change this method introduces: unlike
+// PlayerService.CreatePlayer (used by the separate ghost-player admin flow),
+// SignupNewPlayer never rejects a name that's already in use. Two unrelated
+// people can share a display name/nickname across different groups.
+func TestSignupNewPlayer_Integration_DuplicateNameSucceeds(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+
+	firstID, err := authService.SignupNewPlayer("Zzz Integration Auth Kim", "kim-one@example.com", "s3cret-pass")
+	if err != nil {
+		t.Fatalf("first SignupNewPlayer returned error: %v", err)
+	}
+
+	secondID, err := authService.SignupNewPlayer("Zzz Integration Auth Kim", "kim-two@example.com", "another-pass")
+	if err != nil {
+		t.Errorf("second SignupNewPlayer with a duplicate name returned error: %v, want nil (names are not unique)", err)
+	}
+	if firstID == secondID {
+		t.Error("two signups with the same name got the same player ID")
+	}
+
+	// Both accounts must be independently usable.
+	if _, err := authService.Login("kim-one@example.com", "s3cret-pass"); err != nil {
+		t.Errorf("Login for the first Kim account returned error: %v", err)
+	}
+	if _, err := authService.Login("kim-two@example.com", "another-pass"); err != nil {
+		t.Errorf("Login for the second Kim account returned error: %v", err)
+	}
+}
+
 func TestLogin_Integration_WrongPasswordFails(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)

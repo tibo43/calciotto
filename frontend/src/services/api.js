@@ -43,8 +43,8 @@ export const login = async (email, password) => {
   return response.data;
 };
 
-export const signup = async (playerId, email, password) => {
-  const response = await api.post('/auth/signup', { player_id: playerId, email, password });
+export const signup = async (name, email, password) => {
+  const response = await api.post('/auth/signup', { name, email, password });
   return response.data;
 };
 

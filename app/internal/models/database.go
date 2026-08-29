@@ -23,7 +23,7 @@ func (bm *BaseModel) BeforeCreate(tx *gorm.DB) error {
 // peut donc exister sans jamais être associé à des identifiants de connexion.
 type Player struct {
 	BaseModel
-	Name             string        `gorm:"type:string;uniqueIndex" json:"name"`
+	Name             string        `gorm:"type:string" json:"name"`
 	Email            *string       `gorm:"type:string;uniqueIndex" json:"email,omitempty"`
 	PasswordHash     string        `gorm:"type:string" json:"-"`
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:PlayerID"`
