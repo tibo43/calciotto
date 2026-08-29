@@ -80,3 +80,210 @@ jobs:
       - name: Build
         working-directory: frontend
         run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # Deployment. Both jobs are part of this workflow rather than separate ones so
+  # that `needs: [backend, frontend]` is a real gate: a failing Go test or Jest
+  # test makes deployment impossible, which a `workflow_run` trigger in another
+  # file cannot guarantee (it fires on completion, not on success). They only run
+  # on a direct push to master — never on a pull request, whose fork variant has
+  # no access to the production environment's secrets anyway.
+  # ---------------------------------------------------------------------------
+
+  deploy-backend:
+    name: Deploy backend (Koyeb)
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    environment: production
+
+    env:
+      KOYEB_APP: calciotto
+      KOYEB_SERVICE: backend
+      KOYEB_REGION: fra
+      KOYEB_INSTANCE_TYPE: free
+      # The container listens here; Koyeb routes public traffic to it.
+      SERVICE_PORT: "8080"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          # Repo root: the Dockerfile needs app/, and .dockerignore keeps the
+          # context small. Explicit rather than relying on the action's default
+          # remote-Git context, so what gets built is what got checked out.
+          context: .
+          file: ./devops/Dockerfile.prod.backend
+          # Koyeb instances are amd64. Building arm64 too would mean emulating
+          # the whole Go toolchain under QEMU for an image nothing pulls.
+          platforms: linux/amd64
+          push: true
+          # The commit SHA is the tag actually deployed below: :latest alone is
+          # ambiguous (no rollback target, and Koyeb cannot tell one push from
+          # the next). :latest is kept only as a human-facing pointer.
+          tags: |
+            ${{ vars.DOCKERHUB_IMAGE }}:${{ github.sha }}
+            ${{ vars.DOCKERHUB_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install the Koyeb CLI
+        uses: koyeb-community/koyeb-actions@v2
+        with:
+          api_token: ${{ secrets.KOYEB_API_TOKEN }}
+
+      - name: Sync secrets to Koyeb
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          # GitHub is the source of truth; Koyeb needs its own copy because the
+          # values are read at every container start, not just at deploy time.
+          # --value-from-stdin keeps them out of the process argument list.
+          # There is no upsert in the CLI, hence update-then-create.
+          sync_secret() {
+            local name="$1" value="$2"
+            if [ -z "$value" ]; then
+              echo "::error::secret $name is empty — set it in the 'production' environment"
+              exit 1
+            fi
+            if printf '%s' "$value" | koyeb secrets update "$name" --value-from-stdin >/dev/null 2>&1; then
+              echo "updated secret $name"
+            else
+              printf '%s' "$value" | koyeb secrets create "$name" --value-from-stdin >/dev/null
+              echo "created secret $name"
+            fi
+          }
+
+          sync_secret DATABASE_URL "$DATABASE_URL"
+          sync_secret DATABASE_URL_UNPOOLED "$DATABASE_URL_UNPOOLED"
+          sync_secret JWT_SECRET "$JWT_SECRET"
+
+          # Brevo is optional: with no API key the app keeps logging reset links
+          # instead of emailing them (see services/mailer.go), which is a
+          # degraded but working state rather than a startup failure.
+          if [ -n "$BREVO_API_KEY" ]; then
+            sync_secret BREVO_API_KEY "$BREVO_API_KEY"
+          else
+            echo "::warning::BREVO_API_KEY is not set — password-reset and invite emails will only be written to the Koyeb logs"
+          fi
+
+      - name: Deploy to Koyeb
+        env:
+          IMAGE: ${{ vars.DOCKERHUB_IMAGE }}:${{ github.sha }}
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+          FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
+          BREVO_SENDER_EMAIL: ${{ vars.BREVO_SENDER_EMAIL }}
+          BREVO_SENDER_NAME: ${{ vars.BREVO_SENDER_NAME }}
+          HAS_BREVO_KEY: ${{ secrets.BREVO_API_KEY != '' }}
+        run: |
+          set -euo pipefail
+
+          koyeb apps get "$KOYEB_APP" >/dev/null 2>&1 || koyeb apps create "$KOYEB_APP"
+
+          # Shared between the update and create paths so a service that already
+          # exists and one being created for the first time get the same config.
+          args=(
+            --docker "$IMAGE"
+            --instance-type "$KOYEB_INSTANCE_TYPE"
+            --regions "$KOYEB_REGION"
+            --ports "$SERVICE_PORT:http"
+            # Root path, not /api: Koyeb passes the route path through
+            # unchanged, so a /api prefix would reach Gin as /api/auth/login and
+            # match none of its routes. The frontend is on its own domain, so
+            # there is nothing to share the path space with anyway.
+            --routes "/:$SERVICE_PORT"
+            --checks "$SERVICE_PORT:http:/health"
+            --env "PORT=$SERVICE_PORT"
+            --env GIN_MODE=release
+            # @NAME resolves to the Koyeb secret synced in the previous step.
+            --env DATABASE_URL=@DATABASE_URL
+            --env DATABASE_URL_UNPOOLED=@DATABASE_URL_UNPOOLED
+            --env JWT_SECRET=@JWT_SECRET
+            --env "CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS"
+            --env "FRONTEND_BASE_URL=$FRONTEND_BASE_URL"
+            --wait
+          )
+
+          if [ "$HAS_BREVO_KEY" = "true" ]; then
+            args+=(
+              --env BREVO_API_KEY=@BREVO_API_KEY
+              --env "BREVO_SENDER_EMAIL=$BREVO_SENDER_EMAIL"
+              --env "BREVO_SENDER_NAME=$BREVO_SENDER_NAME"
+            )
+          fi
+
+          koyeb services update "$KOYEB_APP/$KOYEB_SERVICE" "${args[@]}" \
+            || koyeb services create "$KOYEB_SERVICE" --app "$KOYEB_APP" --type web "${args[@]}"
+
+  deploy-frontend:
+    name: Deploy frontend (Vercel)
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    environment: production
+
+    env:
+      # The Vercel CLI reads these two from the environment to know which
+      # project it is acting on, instead of an interactive `vercel link`.
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install the Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel project settings
+        run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Inject the API base URL into the build environment
+        env:
+          VUE_APP_API_BASE_URL: ${{ vars.VUE_APP_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$VUE_APP_API_BASE_URL" ]; then
+            echo "::error::VUE_APP_API_BASE_URL is not set — the bundle would fall back to http://127.0.0.1:8080 and every visitor's browser would call their own machine"
+            exit 1
+          fi
+
+          # `vercel build` runs the framework build with the environment from
+          # .vercel/.env.production.local (what `vercel pull` just wrote), not
+          # with this job's arbitrary env vars — so the value is appended there
+          # rather than exported. This keeps GitHub the single source of truth
+          # instead of duplicating the setting in the Vercel dashboard.
+          #
+          # Vue CLI only inlines variables prefixed VUE_APP_ into the bundle
+          # (see resolveClientEnv.js), which is why the name matters.
+          mkdir -p .vercel
+          printf '\nVUE_APP_API_BASE_URL=%s\n' "$VUE_APP_API_BASE_URL" >> .vercel/.env.production.local
+
+      - name: Build
+        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Deploy
+        run: vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"

@@ -1,0 +1,40 @@
+# Production image for the Go API. The dev image (dockerfile.dev) runs `air`
+# against a bind-mounted source tree and is not deployable; this one compiles a
+# static binary and ships it alone.
+#
+# The build context is the repository root (not devops/), so the COPY paths
+# below are repo-relative — see the deploy-backend job in .github/workflows/ci.yml.
+
+FROM golang:1.25-alpine AS build
+
+WORKDIR /src
+
+# go.mod/go.sum first so the module download layer is reused whenever only
+# application code changed.
+COPY app/go.mod app/go.sum ./
+RUN go mod download
+
+COPY app/ ./
+# CGO off makes the binary static, which is what lets the runtime stage stay
+# minimal. -trimpath keeps build paths out of the binary; -s -w drops the
+# symbol table and DWARF data.
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/backend .
+
+FROM alpine:3.22
+
+# ca-certificates is NOT part of the base alpine image, and both outbound TLS
+# clients in this binary need it: Neon refuses plaintext connections, and the
+# Brevo transactional API is HTTPS. Without this the app starts and then fails
+# every database query and every password-reset email with
+# "x509: certificate signed by unknown authority".
+RUN apk add --no-cache ca-certificates \
+    && adduser --disabled-password --uid 10001 app
+
+COPY --from=build /out/backend /usr/local/bin/backend
+
+USER app
+
+# Documentation only — the actual port comes from PORT at runtime (see main.go).
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/backend"]
