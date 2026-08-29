@@ -529,7 +529,14 @@ export default {
       this.isCreatingPlayer = true;
       try {
         const newPlayerData = {
-          Name: playerNameLowerCase // Send lowercase to backend
+          Name: playerNameLowerCase, // Send lowercase to backend
+          // Exact key, lowercase with an underscore: CreatePlayer binds this
+          // into a `json:"group_id"` field, and Gin's case-insensitive JSON
+          // binding does not bridge the underscore — sending `GroupID`
+          // instead would silently fail to bind and the new player would
+          // fall through to the backend's own-first-group fallback instead
+          // of joining this match's group.
+          group_id: this.match.GroupID
         };
 
         await createPlayer(newPlayerData);
@@ -556,7 +563,14 @@ export default {
 
       } catch (error) {
         console.error('Error creating player:', error);
-        this.showMessage('Error creating player. Please try again.', 'error');
+        // The backend's own per-group duplicate-name check (a case our own
+        // client-side check against this.allPlayers can't catch, since that
+        // check is global rather than scoped to this match's group) returns a
+        // specific message worth showing verbatim, same pattern as
+        // ForgotPassword.vue/Groups.vue. Fall back to a generic message for
+        // any other kind of failure.
+        const backendMessage = error.response?.data?.error;
+        this.showMessage(backendMessage || 'Error creating player. Please try again.', 'error');
       } finally {
         this.isCreatingPlayer = false;
       }

@@ -86,7 +86,8 @@ func playerIDFromContext(c *gin.Context) (uuid.UUID, bool) {
 // POST /matches and PUT /matches/:id carry group_id in the body, not the
 // query string, under two different JSON keys (models.Match uses "group_id",
 // models.MatchWithDetails uses "GroupID"). See resolveGroupID for why this
-// deliberately never falls back to GroupService.GetDefaultGroup().
+// deliberately never falls back to the old sort-by-random-UUID default
+// (GroupService.GetDefaultGroup, since removed).
 func resolveGroupIDForMembership(c *gin.Context, membershipService *services.GroupMembershipService, playerID uuid.UUID) (uuid.UUID, bool) {
 	if raw := c.Query("group_id"); raw != "" {
 		parsed, err := uuid.Parse(raw)

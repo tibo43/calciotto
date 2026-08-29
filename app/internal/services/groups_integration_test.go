@@ -50,27 +50,6 @@ func TestCreateGroup_Integration_CreatesDefaultTeams(t *testing.T) {
 	}
 }
 
-func TestGetDefaultGroup_Integration(t *testing.T) {
-	db := testutil.OpenDB(t)
-	tx := testutil.BeginTx(t, db)
-
-	groupService := services.NewGroupService(tx)
-
-	group, err := groupService.CreateGroup("Zzz Integration Default Group")
-	if err != nil {
-		t.Fatalf("CreateGroup returned error: %v", err)
-	}
-
-	defaultGroup, err := groupService.GetDefaultGroup()
-	if err != nil {
-		t.Fatalf("GetDefaultGroup returned error: %v", err)
-	}
-	if defaultGroup.ID == uuid.Nil {
-		t.Fatal("GetDefaultGroup returned a nil group ID")
-	}
-	_ = group // the default group isn't necessarily the one just created when others already exist
-}
-
 func TestGroupMembership_Integration(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)

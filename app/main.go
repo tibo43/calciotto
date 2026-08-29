@@ -58,10 +58,12 @@ func main() {
 	requireGroupAdminByPathID := handlers.RequireGroupAdminByPathParam(groupMembershipService, "id")
 
 	// Setup routes
-	// Players — public: creating a player still needs no token (the group
-	// invite flow below covers group membership, not player creation), see
-	// CLAUDE.md.
-	r.POST("/players", playerHandler.CreatePlayer)
+	// Players — creating a player ("ghost" roster entry, e.g. from
+	// MatchDetails.vue's create-on-the-fly flow) is admin-only, gated to the
+	// admin of the target group the same way POST /matches is: group_id
+	// travels in the JSON body, so this reuses the body/query-resolving
+	// requireGroupAdmin rather than a path-param variant. See CLAUDE.md.
+	r.POST("/players", authRequired, requireGroupAdmin, playerHandler.CreatePlayer)
 	r.GET("/players", playerHandler.GetPlayers)
 	r.GET("/players/search", playerHandler.SearchPlayer)
 	// Cross-group profile of the caller themselves: authRequired only, with no

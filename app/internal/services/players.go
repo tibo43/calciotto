@@ -9,10 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	ErrEmptyPlayerName     = errors.New("player name must not be empty")
-	ErrPlayerAlreadyExists = errors.New("player already exists")
-)
+var ErrEmptyPlayerName = errors.New("player name must not be empty")
 
 type PlayerService struct {
 	DB *gorm.DB
@@ -26,15 +23,6 @@ func (s *PlayerService) CreatePlayer(name string) (uuid.UUID, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return uuid.Nil, ErrEmptyPlayerName
-	}
-
-	var existing models.Player
-	result := s.DB.Where("LOWER(name) = LOWER(?)", name).First(&existing)
-	if result.Error == nil {
-		return uuid.Nil, ErrPlayerAlreadyExists
-	}
-	if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		return uuid.Nil, result.Error
 	}
 
 	player := &models.Player{Name: name}

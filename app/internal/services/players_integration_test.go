@@ -1,7 +1,6 @@
 package services_test
 
 import (
-	"errors"
 	"testing"
 
 	"app/internal/models"
@@ -33,17 +32,28 @@ func TestCreatePlayer_Integration_Success(t *testing.T) {
 	}
 }
 
-func TestCreatePlayer_Integration_DuplicateNameCaseInsensitive(t *testing.T) {
+// TestCreatePlayer_Integration_SameNameAnywhereAllowed pins the behavior
+// change from the global duplicate-name rejection: Player.Name is no longer
+// unique across the whole database (see AuthService.SignupNewPlayer's design
+// decision) — PlayerService.CreatePlayer must happily create a second player
+// with the same name, case-insensitive collision included. Per-group
+// duplicate protection, where it still matters, lives one layer up in
+// GroupMembershipService.HasMemberNamed.
+func TestCreatePlayer_Integration_SameNameAnywhereAllowed(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 	s := services.NewPlayerService(tx)
 
-	if _, err := s.CreatePlayer("Zzz Integration Bob"); err != nil {
+	firstID, err := s.CreatePlayer("Zzz Integration Bob")
+	if err != nil {
 		t.Fatalf("first CreatePlayer returned error: %v", err)
 	}
 
-	_, err := s.CreatePlayer("zzz integration bob")
-	if !errors.Is(err, services.ErrPlayerAlreadyExists) {
-		t.Errorf("CreatePlayer(duplicate, different case) error = %v, want ErrPlayerAlreadyExists", err)
+	secondID, err := s.CreatePlayer("zzz integration bob")
+	if err != nil {
+		t.Fatalf("CreatePlayer(same name, different case) returned error: %v, want no error", err)
+	}
+	if firstID == secondID {
+		t.Fatal("expected two distinct players, got the same ID twice")
 	}
 }

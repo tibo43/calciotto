@@ -14,10 +14,10 @@ import (
 // context) actually belongs to — so existing callers, like the current
 // frontend, keep working without passing a group_id explicitly. This must
 // only be used behind AuthMiddleware; it deliberately does NOT fall back to
-// GroupService.GetDefaultGroup(), whose "default" is just whichever group's
-// random UUID sorts first and has no relation to who the caller is — that
-// mismatch let anyone flip every existing user's default group (and thus
-// their access) just by creating an unrelated second group. On failure it
+// the old sort-by-random-UUID default (GroupService.GetDefaultGroup, since
+// removed), which had no relation to who the caller is — that mismatch let
+// anyone flip every existing user's default group (and thus their access)
+// just by creating an unrelated second group. On failure it
 // writes the error response itself and returns ok=false.
 func resolveGroupID(c *gin.Context, membershipService *services.GroupMembershipService) (id uuid.UUID, ok bool) {
 	if raw := c.Query("group_id"); raw != "" {

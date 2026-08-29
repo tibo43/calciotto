@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"app/internal/services"
 
@@ -29,16 +30,18 @@ func (h *PlayerHandler) GetPlayers(c *gin.Context) {
 	c.JSON(http.StatusOK, players)
 }
 
-// CreatePlayer creates a player, then attaches it to a group — group_id in
-// the body if provided, else GroupService.GetDefaultGroup(). This route is
-// intentionally public: the invite-code flow (POST /groups/join) lets an
-// existing player join a group, but creating the player itself still requires
-// no token, so unlike the authenticated handlers there's no player_id to
-// resolve a real group from instead — GetDefaultGroup's "whichever group sorts
-// first" quirk is a known, accepted limitation here until this route requires
-// auth too.
-// PlayerService itself stays group-agnostic; the membership is created here
-// in the handler.
+// CreatePlayer creates a player (a "ghost" roster entry — see
+// MatchDetails.vue's create-on-the-fly flow), then attaches it to a group —
+// group_id in the body if provided, else the caller's own first group
+// (GroupMembershipService.GetFirstGroupForPlayer), same fallback
+// RequireGroupAdmin's own group resolution (resolveGroupIDForMembership)
+// already uses. The route sits behind authRequired + requireGroupAdmin
+// (main.go), which authorizes the request against whichever group it
+// resolves via that same fallback — resolving to a *different* group here
+// would let an admin of group A silently create the player in an unrelated
+// group B, so this must stay in lockstep with the middleware.
+// PlayerService itself stays group-agnostic; the membership (and the
+// per-group duplicate-name check) is handled here in the handler.
 func (h *PlayerHandler) CreatePlayer(c *gin.Context) {
 	var req struct {
 		Name    string    `json:"name"`
@@ -49,24 +52,44 @@ func (h *PlayerHandler) CreatePlayer(c *gin.Context) {
 		return
 	}
 
-	id, err := h.Service.CreatePlayer(req.Name)
+	groupID := req.GroupID
+	if groupID == uuid.Nil {
+		playerID, ok := playerIDFromContext(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+			return
+		}
+		group, err := h.MembershipService.GetFirstGroupForPlayer(playerID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "authenticated player does not belong to any group"})
+			return
+		}
+		groupID = group.ID
+	}
+
+	// Soft, per-group duplicate guard: Player.Name is no longer globally
+	// unique (see AuthService.SignupNewPlayer), so this only rejects a name
+	// collision within the target group's own roster — a safety net against
+	// an admin accidentally creating the same "ghost" player twice.
+	name := strings.TrimSpace(req.Name)
+	hasMember, err := h.MembershipService.HasMemberNamed(groupID, name)
 	if err != nil {
-		if errors.Is(err, services.ErrEmptyPlayerName) || errors.Is(err, services.ErrPlayerAlreadyExists) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if hasMember {
+		c.JSON(http.StatusBadRequest, gin.H{"error": services.ErrDuplicatePlayerNameInGroup.Error()})
+		return
+	}
+
+	id, err := h.Service.CreatePlayer(name)
+	if err != nil {
+		if errors.Is(err, services.ErrEmptyPlayerName) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
-	}
-
-	groupID := req.GroupID
-	if groupID == uuid.Nil {
-		group, err := h.GroupService.GetDefaultGroup()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "no default group available: " + err.Error()})
-			return
-		}
-		groupID = group.ID
 	}
 
 	if err := h.MembershipService.AddPlayerToGroup(groupID, id); err != nil {

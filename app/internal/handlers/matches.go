@@ -23,9 +23,9 @@ func NewMatchHandler(service *services.MatchService, membershipService *services
 // CreateMatch requires authentication (see main.go), so when the payload
 // carries no group_id it falls back to a group the caller actually belongs
 // to — the same resolution RequireGroupMembership already authorized against
-// — rather than GroupService.GetDefaultGroup(), which has no relation to the
-// caller and would let the match get created in a group the caller was never
-// even checked against.
+// — rather than the old sort-by-random-UUID default (GroupService.GetDefaultGroup,
+// since removed), which had no relation to the caller and would let the match
+// get created in a group the caller was never even checked against.
 func (h *MatchHandler) CreateMatch(c *gin.Context) {
 	var match models.Match
 	if err := c.ShouldBindJSON(&match); err != nil {
