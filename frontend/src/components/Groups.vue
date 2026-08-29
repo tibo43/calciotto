@@ -6,7 +6,7 @@
         <div class="header-content">
           <div class="title-section">
             <h1 class="page-title">My groups</h1>
-            <p class="page-subtitle">Create a group, or join one with an invite code</p>
+            <p class="page-subtitle">See invite codes and manage teams for the groups you belong to</p>
           </div>
         </div>
       </div>
@@ -36,7 +36,7 @@
             <div v-else-if="groups.length === 0" class="empty-state">
               <div class="empty-content">
                 <h3 class="empty-title">No group yet</h3>
-                <p class="empty-description">Create one below, or join an existing one with its invite code.</p>
+                <p class="empty-description">Use the group switcher in the top navigation to create one or join an existing one with its invite code.</p>
               </div>
             </div>
 
@@ -96,51 +96,6 @@
               </li>
             </ul>
           </div>
-
-          <!-- Create / join -->
-          <div class="forms-grid">
-            <div class="form-card card-base card-large">
-              <h2 class="section-title">Create a group</h2>
-              <p class="section-hint">You become its first member, and get an invite code to share.</p>
-              <form @submit.prevent="submitCreate">
-                <div class="form-group">
-                  <label for="group-name">Group name</label>
-                  <input id="group-name" v-model="newGroupName" class="form-input" type="text"
-                    placeholder="e.g. Tuesday night calciotto" :disabled="isCreating">
-                </div>
-                <div class="form-group team-spec-group" v-for="(team, index) in newTeams" :key="index">
-                  <label :for="'new-team-name-' + index">Team {{ index + 1 }} name</label>
-                  <div class="team-spec-inputs">
-                    <input :id="'new-team-name-' + index" v-model="team.name" class="form-input team-name-input"
-                      type="text" placeholder="e.g. Les Rouges" :disabled="isCreating">
-                    <TeamColourPicker v-model="team.colour" :disabled="isCreating" />
-                  </div>
-                </div>
-                <button class="btn-base btn-primary" type="submit" :disabled="isCreating || !canSubmitCreate">
-                  {{ isCreating ? 'Creating...' : 'Create group' }}
-                </button>
-                <p v-if="createError" class="error-message">{{ createError }}</p>
-                <p v-if="createSuccess" class="success-message">{{ createSuccess }}</p>
-              </form>
-            </div>
-
-            <div class="form-card card-base card-large">
-              <h2 class="section-title">Join a group</h2>
-              <p class="section-hint">Ask a member for the group's invite code.</p>
-              <form @submit.prevent="submitJoin">
-                <div class="form-group">
-                  <label for="invite-code-input">Invite code</label>
-                  <input id="invite-code-input" v-model="inviteCodeInput" class="form-input invite-code-input"
-                    type="text" placeholder="ABCD2345" autocapitalize="characters" :disabled="isJoining">
-                </div>
-                <button class="btn-base btn-primary" type="submit" :disabled="isJoining || !inviteCodeInput.trim()">
-                  {{ isJoining ? 'Joining...' : 'Join group' }}
-                </button>
-                <p v-if="joinError" class="error-message">{{ joinError }}</p>
-                <p v-if="joinSuccess" class="success-message">{{ joinSuccess }}</p>
-              </form>
-            </div>
-          </div>
         </div>
       </div>
     </section>
@@ -148,7 +103,7 @@
 </template>
 
 <script>
-import { getMyGroups, createGroup, joinGroup, getInviteCode, getTeamsByGroup, updateTeam } from '@/services/api';
+import { getMyGroups, getInviteCode, getTeamsByGroup, updateTeam } from '@/services/api';
 import TeamColourPicker from '@/components/TeamColourPicker.vue';
 
 // Same 10-entry keyword-to-hex palette getTeamColor() in
@@ -183,18 +138,6 @@ export default {
       copiedGroupId: '',
       isLoading: true,
       loadFailed: false,
-      newGroupName: '',
-      newTeams: [
-        { name: '', colour: '#1f2937' },
-        { name: '', colour: '#f8fafc' }
-      ],
-      isCreating: false,
-      createError: '',
-      createSuccess: '',
-      inviteCodeInput: '',
-      isJoining: false,
-      joinError: '',
-      joinSuccess: '',
       // "Manage teams" — id of the one group currently expanded, plus its
       // teams fetched on demand (groupId -> array of {id, name, colour}).
       expandedTeamsFor: '',
@@ -205,14 +148,6 @@ export default {
       teamSaveErrors: {},
       teamSaveSuccess: {}
     };
-  },
-  computed: {
-    canSubmitCreate() {
-      return Boolean(
-        this.newGroupName.trim() &&
-        this.newTeams.every(team => team.name.trim() && team.colour)
-      );
-    }
   },
   async created() {
     await this.loadGroups();
@@ -269,32 +204,6 @@ export default {
         this.codeErrors[groupId] = 'Copying failed — select the code and copy it manually.';
       }
     },
-    async submitCreate() {
-      const name = this.newGroupName.trim();
-      if (!name || !this.canSubmitCreate) {
-        return;
-      }
-      const teams = this.newTeams.map(team => ({ name: team.name.trim(), colour: team.colour }));
-      this.isCreating = true;
-      this.createError = '';
-      this.createSuccess = '';
-      try {
-        const group = await createGroup(name, teams);
-        // Append rather than reload: the response is the created group, and
-        // the caller is already its first member server-side.
-        this.groups.push(group);
-        this.newGroupName = '';
-        this.newTeams = [
-          { name: '', colour: '#1f2937' },
-          { name: '', colour: '#f8fafc' }
-        ];
-        this.createSuccess = `Group "${group.name}" created.`;
-      } catch (error) {
-        this.createError = this.backendMessage(error, 'Failed to create the group.');
-      } finally {
-        this.isCreating = false;
-      }
-    },
     async toggleManageTeams(groupId) {
       if (this.expandedTeamsFor === groupId) {
         this.expandedTeamsFor = '';
@@ -345,30 +254,6 @@ export default {
         this.teamSaving[team.id] = false;
       }
     },
-    async submitJoin() {
-      const code = this.inviteCodeInput.trim();
-      if (!code) {
-        return;
-      }
-      this.isJoining = true;
-      this.joinError = '';
-      this.joinSuccess = '';
-      try {
-        const group = await joinGroup(code);
-        if (!this.groups.some(existing => existing.id === group.id)) {
-          this.groups.push(group);
-        }
-        this.inviteCodeInput = '';
-        this.joinSuccess = `You joined "${group.name}".`;
-      } catch (error) {
-        // The backend already tells the two failure modes apart — 404 for an
-        // unknown code, 400 for "you are already a member" — so show its own
-        // message rather than collapsing both into one generic error.
-        this.joinError = this.backendMessage(error, 'Failed to join the group.');
-      } finally {
-        this.isJoining = false;
-      }
-    },
     backendMessage(error, fallback) {
       return error.response?.data?.error || fallback;
     },
@@ -410,12 +295,6 @@ export default {
   font-weight: 700;
   color: var(--text-primary);
   margin: 0 0 0.25rem;
-}
-
-.section-hint {
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  margin: 0 0 1.25rem;
 }
 
 /* Group list */
@@ -473,12 +352,6 @@ export default {
   letter-spacing: 0.12em;
 }
 
-.invite-code-input {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
 .group-error {
   flex-basis: 100%;
   margin-top: 0;
@@ -511,32 +384,6 @@ export default {
   min-width: 10rem;
 }
 
-/* Create-group team specs */
-.team-spec-group {
-  margin-bottom: 1rem;
-}
-
-.team-spec-inputs {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.team-spec-inputs .team-name-input {
-  flex: 1;
-}
-
-/* Create / join forms */
-.forms-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1.5rem;
-  align-items: start;
-}
-
-.form-card .form-group:last-of-type {
-  margin-bottom: 1rem;
-}
-
 .success-message {
   color: var(--primary-color);
   font-size: 0.875rem;
@@ -547,10 +394,6 @@ export default {
 @media (max-width: 768px) {
   .groups-header {
     padding: 2rem 0;
-  }
-
-  .forms-grid {
-    grid-template-columns: 1fr;
   }
 
   .group-row {

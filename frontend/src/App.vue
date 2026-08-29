@@ -58,21 +58,16 @@
 
             <!-- Actions -->
             <div class="nav-actions">
-              <!-- The group Matches/Standings are scoped to. Rendered even
-                   with a single group (one option) so it behaves the same the
-                   moment a second one is joined; only a player with no group
-                   at all gets nothing. -->
-              <select
-                v-if="groups.length"
-                class="group-select"
-                :value="activeGroupId"
-                @change="changeActiveGroup($event.target.value)"
-                aria-label="Active group"
-              >
-                <option v-for="group in groups" :key="group.id" :value="group.id">
-                  {{ group.name }}
-                </option>
-              </select>
+              <!-- The group Matches/Standings are scoped to, plus the
+                   onboarding actions (join/create) that used to live on the
+                   Groups page. Rendered for any authenticated, non-public
+                   route so a player with zero groups still has a way to get
+                   into one. -->
+              <GroupSwitcher
+                v-if="showGroupSwitcher"
+                :groups="groups"
+                :active-group-id="activeGroupId"
+              />
 
               <router-link
                 to="/profile"
@@ -170,10 +165,16 @@
 
 <script>
 import { clearToken, getToken } from '@/services/api';
-import { clearActiveGroupId, clearMyGroupsCache, resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
+import { clearActiveGroupId, clearMyGroupsCache, resolveActiveGroup } from '@/services/activeGroup';
+import GroupSwitcher from '@/components/GroupSwitcher.vue';
+
+// Routes reachable without a token — the group selector has nothing to show
+// there (no /groups/me to call), same list refreshGroups() early-returns on.
+const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
 
 export default {
   name: 'App',
+  components: { GroupSwitcher },
   data() {
     return {
       activeTab: 'matches',
@@ -181,7 +182,15 @@ export default {
       isScrolled: false,
       isDarkMode: false,
       groups: [],
-      activeGroupId: ''
+      activeGroupId: '',
+      // Plain reactive data rather than a computed: a computed reading the
+      // non-reactive getToken() alongside the reactive $route.name has shown
+      // stale/stuck values in practice (the cached computed not
+      // re-evaluating on a route change even though a fresh call of the same
+      // expression returns the right answer). Setting this explicitly,
+      // synchronously, at the top of refreshGroups() sidesteps that
+      // entirely.
+      showGroupSwitcher: false
     };
   },
   computed: {
@@ -191,13 +200,13 @@ export default {
     }
   },
   watch: {
-    '$route'(to, from) {
+    '$route'(to) {
       // Update activeTab when route changes
       if (to.name === 'MatchesAll') {
         this.activeTab = 'matches';
       }
       this.closeMenu();
-      this.refreshGroups(from);
+      this.refreshGroups();
     }
   },
   mounted() {
@@ -241,17 +250,19 @@ export default {
     // navigation and not only on mount: logging in doesn't remount it, it just
     // pushes a route, and at mount time there was no token to call
     // /groups/me with.
-    async refreshGroups(from) {
-      if (!getToken() || ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'].includes(this.$route.name)) {
+    async refreshGroups() {
+      this.showGroupSwitcher = Boolean(getToken()) && !PUBLIC_ROUTE_NAMES.includes(this.$route.name);
+      if (!this.showGroupSwitcher) {
         this.groups = [];
         this.activeGroupId = '';
         return;
       }
       try {
-        // Groups.vue creates and joins without reloading the page, so the
-        // cached list is stale the moment we navigate away from it.
-        const force = Boolean(from) && from.name === 'Groups';
-        const { groups, activeGroupId } = await resolveActiveGroup({ force });
+        // Switching, joining, and creating a group all go through a full
+        // page reload (see GroupSwitcher/CreateGroupModal), so the cached
+        // list is never stale on a plain in-app navigation — no force-refresh
+        // heuristic needed here.
+        const { groups, activeGroupId } = await resolveActiveGroup();
         this.groups = groups;
         this.activeGroupId = activeGroupId;
       } catch (error) {
@@ -259,15 +270,6 @@ export default {
         // backend's own group resolution without it.
         console.error('Error loading the group selector:', error);
       }
-    },
-    changeActiveGroup(groupId) {
-      if (!groupId || groupId === this.activeGroupId) {
-        return;
-      }
-      setActiveGroupId(groupId);
-      // No store to notify: the scoped views read the active group once, in
-      // created(), so a full reload is what actually re-scopes the app.
-      window.location.reload();
     },
     logout() {
       clearToken();
@@ -281,6 +283,7 @@ export default {
       clearMyGroupsCache();
       this.groups = [];
       this.activeGroupId = '';
+      this.showGroupSwitcher = false;
       this.$router.push('/login');
     }
   }
@@ -395,29 +398,6 @@ export default {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-}
-
-.group-select {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 0.9rem;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  max-width: 12rem;
-  transition: all var(--transition-fast);
-}
-
-.group-select:hover {
-  border-color: var(--primary-color);
-}
-
-.group-select:focus {
-  outline: none;
-  border-color: var(--primary-color);
 }
 
 .icon-nav-button {
@@ -630,11 +610,6 @@ export default {
 
   .nav-container {
     padding: 0 1rem;
-  }
-
-  .group-select {
-    max-width: 7rem;
-    padding: 0.5rem;
   }
 }
 
