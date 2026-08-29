@@ -94,12 +94,7 @@ jobs:
     name: Deploy backend (Koyeb)
     runs-on: ubuntu-latest
     needs: [backend, frontend]
-    # TEMPORAIRE — feat/deployment-production est listée le temps de valider le
-    # pipeline de bout en bout sans passer par master. À retirer avant le merge.
-    if: >-
-      github.event_name == 'push' &&
-      (github.ref == 'refs/heads/master' ||
-       github.ref == 'refs/heads/feat/deployment-production')
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     environment: production
 
     env:
@@ -248,12 +243,7 @@ jobs:
     name: Deploy frontend (Vercel)
     runs-on: ubuntu-latest
     needs: [backend, frontend]
-    # TEMPORAIRE — feat/deployment-production est listée le temps de valider le
-    # pipeline de bout en bout sans passer par master. À retirer avant le merge.
-    if: >-
-      github.event_name == 'push' &&
-      (github.ref == 'refs/heads/master' ||
-       github.ref == 'refs/heads/feat/deployment-production')
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     environment: production
 
     env:

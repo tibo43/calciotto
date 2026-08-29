@@ -76,6 +76,8 @@ Because `vercel build` runs the framework build with the environment from `.verc
 ### Configuration inventory
 Set on the `production` GitHub environment. Secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `KOYEB_API_TOKEN`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `JWT_SECRET` (must be generated fresh for production — never the one in `devops/env/develop.env`), `BREVO_API_KEY` (optional), `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`. Variables: `DOCKERHUB_IMAGE`, `CORS_ALLOWED_ORIGINS`, `FRONTEND_BASE_URL`, `VUE_APP_API_BASE_URL`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`. The last five are URLs and addresses, not secrets — storing them as variables keeps them readable in build logs, which is what you want when diagnosing a CORS rejection.
 
+The database role in `DATABASE_URL`/`DATABASE_URL_UNPOOLED` must **own** the tables (or be a member of the role that does). `AutoMigrate` issues DDL at *every* boot, so a role with only read/write grants starts fine, reports `Successfully connected to the database!`, and then dies on the first `ALTER TABLE` with `must be owner of table … (SQLSTATE 42501)` — ownership is not a privilege that `GRANT ... ON TABLE` confers. Neon projects come with two roles (here `calciotto_owner` and `calciotto`); the secrets use the owner. The alternative, if you want the app on a non-owner role, is `GRANT calciotto_owner TO calciotto;` — Postgres accepts an ownership check from any *member* of the owning role.
+
 There is **no seeding step in production**: `cmd/seed` is a development tool, and the schema is created by `AutoMigrate` on first boot (through `DATABASE_URL_UNPOOLED`, off the pooler).
 
 ## Architecture
