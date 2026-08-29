@@ -1,6 +1,8 @@
 package services
 
 import (
+	"strings"
+
 	"app/internal/models"
 
 	"github.com/google/uuid"
@@ -51,4 +53,37 @@ func (s *TeamService) GetTeamsByGroupID(groupID uuid.UUID) ([]models.Team, error
 		return nil, result.Error
 	}
 	return teams, nil
+}
+
+// UpdateTeam renames a team and/or changes its colour. The lookup is scoped
+// to both teamID and groupID in the same query — exactly the same pattern
+// MatchService.GetMatchDetailsByID uses for matches — so a team belonging to
+// a different group reads as gorm.ErrRecordNotFound rather than being
+// silently updatable: RequireGroupAdminByPathParam only proves the caller
+// administers groupID, it says nothing about whether teamID actually belongs
+// to it.
+//
+// It returns the updated team so the handler can hand the caller a fresh
+// copy without a follow-up fetch.
+func (s *TeamService) UpdateTeam(teamID, groupID uuid.UUID, name, colour string) (*models.Team, error) {
+	name = strings.TrimSpace(name)
+	colour = strings.TrimSpace(colour)
+	if name == "" {
+		return nil, ErrTeamNameRequired
+	}
+	if colour == "" {
+		return nil, ErrTeamColourRequired
+	}
+
+	var team models.Team
+	if err := s.DB.Where("id = ? AND group_id = ?", teamID, groupID).First(&team).Error; err != nil {
+		return nil, err
+	}
+
+	team.Name = name
+	team.Colour = colour
+	if err := s.DB.Save(&team).Error; err != nil {
+		return nil, err
+	}
+	return &team, nil
 }

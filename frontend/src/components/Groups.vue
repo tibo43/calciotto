@@ -61,9 +61,40 @@
                       {{ copiedGroupId === group.id ? 'Copied!' : 'Copy' }}
                     </button>
                   </div>
+
+                  <!-- Teams aren't part of the group JSON either, so they are
+                       fetched on demand the first time this is opened for a
+                       given group — same fetch-on-demand pattern as the
+                       invite code above. There is no role-based hiding here:
+                       a non-admin can open this and try to save, and the
+                       backend's 403 is what actually stops them. -->
+                  <button class="btn-base btn-cancel btn-small" @click="toggleManageTeams(group.id)">
+                    {{ expandedTeamsFor === group.id ? 'Hide teams' : 'Manage teams' }}
+                  </button>
                 </div>
 
                 <p v-if="codeErrors[group.id]" class="error-message group-error">{{ codeErrors[group.id] }}</p>
+
+                <div v-if="expandedTeamsFor === group.id" class="manage-teams-box">
+                  <p v-if="teamsLoadingFor === group.id" class="loading-text">Loading teams...</p>
+                  <p v-else-if="teamsErrors[group.id]" class="error-message">{{ teamsErrors[group.id] }}</p>
+                  <div v-else class="team-edit-list">
+                    <div v-for="team in teamsByGroup[group.id]" :key="team.id" class="team-edit-row">
+                      <input v-model="team.name" class="form-input team-name-input" type="text"
+                        placeholder="Team name" :disabled="teamSaving[team.id]">
+                      <select v-model="team.colour" class="form-input team-colour-select" :disabled="teamSaving[team.id]">
+                        <option v-for="option in teamColourOptions" :key="option" :value="option">{{ option }}</option>
+                      </select>
+                      <button class="btn-base btn-primary btn-small"
+                        :disabled="teamSaving[team.id] || !team.name.trim()"
+                        @click="saveTeam(group.id, team)">
+                        {{ teamSaving[team.id] ? 'Saving...' : 'Save' }}
+                      </button>
+                      <p v-if="teamSaveErrors[team.id]" class="error-message group-error">{{ teamSaveErrors[team.id] }}</p>
+                      <p v-if="teamSaveSuccess[team.id]" class="success-message">{{ teamSaveSuccess[team.id] }}</p>
+                    </div>
+                  </div>
+                </div>
               </li>
             </ul>
           </div>
@@ -79,7 +110,17 @@
                   <input id="group-name" v-model="newGroupName" class="form-input" type="text"
                     placeholder="e.g. Tuesday night calciotto" :disabled="isCreating">
                 </div>
-                <button class="btn-base btn-primary" type="submit" :disabled="isCreating || !newGroupName.trim()">
+                <div class="form-group team-spec-group" v-for="(team, index) in newTeams" :key="index">
+                  <label :for="'new-team-name-' + index">Team {{ index + 1 }} name</label>
+                  <div class="team-spec-inputs">
+                    <input :id="'new-team-name-' + index" v-model="team.name" class="form-input team-name-input"
+                      type="text" placeholder="e.g. Les Rouges" :disabled="isCreating">
+                    <select v-model="team.colour" class="form-input team-colour-select" :disabled="isCreating">
+                      <option v-for="option in teamColourOptions" :key="option" :value="option">{{ option }}</option>
+                    </select>
+                  </div>
+                </div>
+                <button class="btn-base btn-primary" type="submit" :disabled="isCreating || !canSubmitCreate">
                   {{ isCreating ? 'Creating...' : 'Create group' }}
                 </button>
                 <p v-if="createError" class="error-message">{{ createError }}</p>
@@ -111,7 +152,12 @@
 </template>
 
 <script>
-import { getMyGroups, createGroup, joinGroup, getInviteCode } from '@/services/api';
+import { getMyGroups, createGroup, joinGroup, getInviteCode, getTeamsByGroup, updateTeam } from '@/services/api';
+
+// Same 10-entry palette getTeamColor() in MatchesAll.vue/MatchDetails.vue
+// know about — duplicated here rather than factored into a shared module,
+// consistent with how it's already duplicated between those two files.
+const TEAM_COLOUR_OPTIONS = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan', 'white', 'black'];
 
 export default {
   name: 'PlayerGroups',
@@ -126,14 +172,36 @@ export default {
       isLoading: true,
       loadFailed: false,
       newGroupName: '',
+      newTeams: [
+        { name: '', colour: 'black' },
+        { name: '', colour: 'white' }
+      ],
+      teamColourOptions: TEAM_COLOUR_OPTIONS,
       isCreating: false,
       createError: '',
       createSuccess: '',
       inviteCodeInput: '',
       isJoining: false,
       joinError: '',
-      joinSuccess: ''
+      joinSuccess: '',
+      // "Manage teams" — id of the one group currently expanded, plus its
+      // teams fetched on demand (groupId -> array of {id, name, colour}).
+      expandedTeamsFor: '',
+      teamsByGroup: {},
+      teamsLoadingFor: '',
+      teamsErrors: {},
+      teamSaving: {},
+      teamSaveErrors: {},
+      teamSaveSuccess: {}
     };
+  },
+  computed: {
+    canSubmitCreate() {
+      return Boolean(
+        this.newGroupName.trim() &&
+        this.newTeams.every(team => team.name.trim() && team.colour)
+      );
+    }
   },
   async created() {
     await this.loadGroups();
@@ -192,23 +260,76 @@ export default {
     },
     async submitCreate() {
       const name = this.newGroupName.trim();
-      if (!name) {
+      if (!name || !this.canSubmitCreate) {
         return;
       }
+      const teams = this.newTeams.map(team => ({ name: team.name.trim(), colour: team.colour }));
       this.isCreating = true;
       this.createError = '';
       this.createSuccess = '';
       try {
-        const group = await createGroup(name);
+        const group = await createGroup(name, teams);
         // Append rather than reload: the response is the created group, and
         // the caller is already its first member server-side.
         this.groups.push(group);
         this.newGroupName = '';
+        this.newTeams = [
+          { name: '', colour: 'black' },
+          { name: '', colour: 'white' }
+        ];
         this.createSuccess = `Group "${group.name}" created.`;
       } catch (error) {
         this.createError = this.backendMessage(error, 'Failed to create the group.');
       } finally {
         this.isCreating = false;
+      }
+    },
+    async toggleManageTeams(groupId) {
+      if (this.expandedTeamsFor === groupId) {
+        this.expandedTeamsFor = '';
+        return;
+      }
+      this.expandedTeamsFor = groupId;
+      if (this.teamsByGroup[groupId]) {
+        // Already fetched earlier in this session — no need to refetch.
+        return;
+      }
+      this.teamsLoadingFor = groupId;
+      this.teamsErrors[groupId] = '';
+      try {
+        const teams = await getTeamsByGroup(groupId);
+        // Local editable copies, keyed by lower-case field names to match
+        // what the input/select v-model bind to.
+        this.teamsByGroup[groupId] = (teams || []).map(team => ({
+          id: team.id,
+          name: team.name,
+          colour: team.colour
+        }));
+      } catch (error) {
+        this.teamsErrors[groupId] = this.backendMessage(error, 'Failed to load teams.');
+      } finally {
+        this.teamsLoadingFor = '';
+      }
+    },
+    async saveTeam(groupId, team) {
+      const name = team.name.trim();
+      if (!name) {
+        return;
+      }
+      this.teamSaving[team.id] = true;
+      this.teamSaveErrors[team.id] = '';
+      this.teamSaveSuccess[team.id] = '';
+      try {
+        const updated = await updateTeam(groupId, team.id, name, team.colour);
+        team.name = updated.name;
+        team.colour = updated.colour;
+        this.teamSaveSuccess[team.id] = 'Saved.';
+      } catch (error) {
+        // No role-based UI hiding anywhere in this app — a non-admin can get
+        // this far and only finds out from the backend's own 403 message.
+        this.teamSaveErrors[team.id] = this.backendMessage(error, 'Failed to update the team.');
+      } finally {
+        this.teamSaving[team.id] = false;
       }
     },
     async submitJoin() {
@@ -348,6 +469,51 @@ export default {
 .group-error {
   flex-basis: 100%;
   margin-top: 0;
+}
+
+/* Manage teams */
+.manage-teams-box {
+  flex-basis: 100%;
+  margin-top: 0.5rem;
+  padding: 0.875rem;
+  border-radius: var(--border-radius);
+  background-color: var(--bg-tertiary);
+}
+
+.team-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.team-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.team-name-input {
+  flex: 1;
+  min-width: 10rem;
+}
+
+.team-colour-select {
+  min-width: 7rem;
+}
+
+/* Create-group team specs */
+.team-spec-group {
+  margin-bottom: 1rem;
+}
+
+.team-spec-inputs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.team-spec-inputs .team-name-input {
+  flex: 1;
 }
 
 /* Create / join forms */

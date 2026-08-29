@@ -11,12 +11,27 @@ import (
 	"gorm.io/gorm"
 )
 
-// defaultTeamColours are the two teams every group is given automatically.
-var defaultTeamColours = []string{"black", "white"}
+// TeamSpec is one team's name/colour, as supplied by the admin creating a
+// group — see CreateGroup, which takes exactly two of these (a group always
+// has exactly two teams).
+type TeamSpec struct {
+	Name   string
+	Colour string
+}
+
+// DefaultTeamSpecs are the black/white team specs cmd/seed uses to preserve
+// the pre-TeamSpec look of every seeded group, and that most tests reach for
+// when the actual team name/colour don't matter to the scenario under test.
+var DefaultTeamSpecs = [2]TeamSpec{
+	{Name: "Black", Colour: "black"},
+	{Name: "White", Colour: "white"},
+}
 
 var (
 	ErrInviteCodeNotFound = errors.New("no group matches this invite code")
 	ErrAlreadyMember      = errors.New("player is already a member of this group")
+	ErrTeamNameRequired   = errors.New("team name must not be empty")
+	ErrTeamColourRequired = errors.New("team colour must not be empty")
 )
 
 const (
@@ -39,15 +54,15 @@ func NewGroupService(db *gorm.DB) *GroupService {
 	return &GroupService{DB: db}
 }
 
-// CreateGroup creates a new group along with its two default teams
-// (black/white), since every group must always have exactly these two teams,
-// plus the invite code other players will use to join it.
+// CreateGroup creates a new group along with its two teams — built from the
+// two TeamSpecs the caller provides, since a group's teams no longer have a
+// reasonable default name to invent on its behalf — plus the invite code
+// other players will use to join it.
 //
 // It deliberately says nothing about who is creating the group: the creator's
 // membership is added by GroupHandler.CreateGroup from the JWT, the same way
-// PlayerHandler.CreatePlayer attaches a new player to a group. That keeps this
-// signature usable from cmd/seed, which has no authenticated caller.
-func (s *GroupService) CreateGroup(name string) (*models.Group, error) {
+// PlayerHandler.CreatePlayer attaches a new player to a group.
+func (s *GroupService) CreateGroup(name string, teams [2]TeamSpec) (*models.Group, error) {
 	inviteCode, err := s.uniqueInviteCode()
 	if err != nil {
 		return nil, err
@@ -55,12 +70,23 @@ func (s *GroupService) CreateGroup(name string) (*models.Group, error) {
 
 	group := &models.Group{Name: name, InviteCode: inviteCode}
 	err = s.DB.Transaction(func(tx *gorm.DB) error {
+		trimmed := make([]TeamSpec, len(teams))
+		for i, spec := range teams {
+			trimmed[i] = TeamSpec{Name: strings.TrimSpace(spec.Name), Colour: strings.TrimSpace(spec.Colour)}
+			if trimmed[i].Name == "" {
+				return ErrTeamNameRequired
+			}
+			if trimmed[i].Colour == "" {
+				return ErrTeamColourRequired
+			}
+		}
+
 		if result := tx.Create(group); result.Error != nil {
 			return result.Error
 		}
 		teamService := NewTeamService(tx)
-		for _, colour := range defaultTeamColours {
-			team := &models.Team{GroupID: group.ID, Colour: colour}
+		for _, spec := range trimmed {
+			team := &models.Team{GroupID: group.ID, Name: spec.Name, Colour: spec.Colour}
 			if err := teamService.CreateTeam(team); err != nil {
 				return err
 			}

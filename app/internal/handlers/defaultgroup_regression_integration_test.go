@@ -36,7 +36,7 @@ func TestMatchesDetails_Integration_SurvivesNewGroupWithLowerUUID(t *testing.T) 
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
 	matchHandler := handlers.NewMatchHandler(services.NewMatchService(tx), membershipService)
 
-	groupA, err := groupService.CreateGroup("Zzz Bug Repro Group A")
+	groupA, err := groupService.CreateGroup("Zzz Bug Repro Group A", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group A: %v", err)
 	}

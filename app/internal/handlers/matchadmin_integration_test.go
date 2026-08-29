@@ -105,7 +105,7 @@ func (e *matchAdminEnv) do(method, path, token string, body any) *httptest.Respo
 func (e *matchAdminEnv) matchAdminGroup(t *testing.T, tx *gorm.DB, name, adminEmail, memberEmail string) (uuid.UUID, string, string) {
 	t.Helper()
 
-	group, err := services.NewGroupService(tx).CreateGroup(name)
+	group, err := services.NewGroupService(tx).CreateGroup(name, services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}

@@ -48,7 +48,7 @@ func TestStandingsSeasons_Integration(t *testing.T) {
 	membershipService := services.NewGroupMembershipService(tx)
 	authService := services.NewAuthService(tx, testStandingsJWTSecret)
 
-	group, err := groupService.CreateGroup("Zzz Integration Standings Season Group")
+	group, err := groupService.CreateGroup("Zzz Integration Standings Season Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}

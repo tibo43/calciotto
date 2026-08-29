@@ -46,11 +46,11 @@ func TestGetMatchDetailsByID_Integration_CrossGroupReturns404(t *testing.T) {
 	// membership of the group_id in the query string) lets his request for
 	// group_id=groupB through — the point under test is what the
 	// service/handler do once inside, not the membership gate itself.
-	groupA, err := groupService.CreateGroup("Zzz Match Details 404 Group A")
+	groupA, err := groupService.CreateGroup("Zzz Match Details 404 Group A", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group A: %v", err)
 	}
-	groupB, err := groupService.CreateGroup("Zzz Match Details 404 Group B")
+	groupB, err := groupService.CreateGroup("Zzz Match Details 404 Group B", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group B: %v", err)
 	}

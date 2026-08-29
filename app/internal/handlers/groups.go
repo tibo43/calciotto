@@ -25,6 +25,18 @@ func NewGroupHandler(service *services.GroupService, membershipService *services
 	return &GroupHandler{Service: service, MembershipService: membershipService, AuthService: authService}
 }
 
+// createGroupRequest is the body POST /groups expects: the group's own name,
+// plus exactly two team specs (name + colour) for its two teams — there is
+// no reasonable default team name to invent on the admin's behalf, so the
+// caller must supply both.
+type createGroupRequest struct {
+	Name  string `json:"name"`
+	Teams []struct {
+		Name   string `json:"name"`
+		Colour string `json:"colour"`
+	} `json:"teams"`
+}
+
 // CreateGroup creates a group and makes the authenticated caller its first
 // member — and its first admin, since a group whose only member were a plain
 // member could never gain one (promoting a member is itself admin-only). That
@@ -43,15 +55,29 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 		return
 	}
 
-	var group models.Group
-	if err := c.ShouldBindJSON(&group); err != nil {
+	var body createGroupRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if len(body.Teams) != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "exactly 2 teams are required"})
+		return
+	}
 
-	created, err := h.Service.CreateGroup(group.Name)
+	teams := [2]services.TeamSpec{
+		{Name: body.Teams[0].Name, Colour: body.Teams[0].Colour},
+		{Name: body.Teams[1].Name, Colour: body.Teams[1].Colour},
+	}
+
+	created, err := h.Service.CreateGroup(body.Name, teams)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		switch {
+		case errors.Is(err, services.ErrTeamNameRequired), errors.Is(err, services.ErrTeamColourRequired):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 

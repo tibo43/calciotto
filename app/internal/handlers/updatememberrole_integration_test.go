@@ -84,7 +84,7 @@ func (e *roleEnv) patchRole(groupID, targetID uuid.UUID, token, role string) *ht
 // newRoleGroup creates a group with the given admin and one plain member.
 func (e *roleEnv) newRoleGroup(t *testing.T, tx *gorm.DB, name string, adminID uuid.UUID) uuid.UUID {
 	t.Helper()
-	group, err := services.NewGroupService(tx).CreateGroup(name)
+	group, err := services.NewGroupService(tx).CreateGroup(name, services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}

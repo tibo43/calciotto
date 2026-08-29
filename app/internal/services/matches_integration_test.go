@@ -22,7 +22,7 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 	matchService := services.NewMatchService(tx)
 	standingsService := services.NewStandingsService(tx, services.NewGroupMembershipService(tx))
 
-	group, err := groupService.CreateGroup("Zzz Integration Group")
+	group, err := groupService.CreateGroup("Zzz Integration Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -182,11 +182,11 @@ func TestGetMatchDetailsByID_Integration_WrongGroupNotFound(t *testing.T) {
 	groupService := services.NewGroupService(tx)
 	matchService := services.NewMatchService(tx)
 
-	groupA, err := groupService.CreateGroup("Zzz Integration Group A")
+	groupA, err := groupService.CreateGroup("Zzz Integration Group A", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group A: %v", err)
 	}
-	groupB, err := groupService.CreateGroup("Zzz Integration Group B")
+	groupB, err := groupService.CreateGroup("Zzz Integration Group B", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group B: %v", err)
 	}

@@ -21,7 +21,7 @@ func roleTestGroup(t *testing.T, tx *gorm.DB, name string) (*services.GroupMembe
 	playerService := services.NewPlayerService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 
-	group, err := groupService.CreateGroup(name)
+	group, err := groupService.CreateGroup(name, services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}

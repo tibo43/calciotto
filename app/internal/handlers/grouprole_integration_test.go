@@ -59,7 +59,7 @@ func TestCreateGroup_Integration_CreatorBecomesAdmin(t *testing.T) {
 	router := gin.New()
 	router.POST("/groups", handlers.AuthMiddleware(authService), groupHandler.CreateGroup)
 
-	body := []byte(`{"name":"Zzz Role Admin Group"}`)
+	body := []byte(`{"name":"Zzz Role Admin Group","teams":[{"name":"Black","colour":"black"},{"name":"White","colour":"white"}]}`)
 	req := httptest.NewRequest(http.MethodPost, "/groups", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -95,7 +95,7 @@ func TestJoinGroup_Integration_JoinerBecomesMember(t *testing.T) {
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
 	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
-	group, err := groupService.CreateGroup("Zzz Role Join Group")
+	group, err := groupService.CreateGroup("Zzz Role Join Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestAddPlayerToGroup_Integration_AddedPlayerBecomesMember(t *testing.T) {
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
 	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
-	group, err := groupService.CreateGroup("Zzz Role Add Group")
+	group, err := groupService.CreateGroup("Zzz Role Add Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestRequireGroupAdmin_Integration(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
 
-	group, err := groupService.CreateGroup("Zzz Role Admin Middleware Group")
+	group, err := groupService.CreateGroup("Zzz Role Admin Middleware Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestRequireGroupAdminByPathParam_Integration(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
 
-	group, err := groupService.CreateGroup("Zzz Role Admin Path Group")
+	group, err := groupService.CreateGroup("Zzz Role Admin Path Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}

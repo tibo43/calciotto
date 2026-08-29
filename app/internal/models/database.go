@@ -66,12 +66,15 @@ type Group struct {
 	InviteCode string `gorm:"type:string;uniqueIndex" json:"-"`
 }
 
-// Team représente une équipe. Chaque groupe a exactement deux équipes
-// (noir/blanc), créées automatiquement à la création du groupe — voir
-// GroupService.CreateGroup.
+// Team représente une équipe. Chaque groupe a exactement deux équipes,
+// créées à la création du groupe à partir des deux noms/couleurs fournis par
+// l'admin qui le crée — voir GroupService.CreateGroup. Name est le nom
+// affiché (ex: "Les Rouges"), distinct de Colour qui reste la couleur du
+// maillot/swatch utilisée par le frontend.
 type Team struct {
 	BaseModel
 	GroupID          uuid.UUID     `gorm:"type:uuid;index" json:"group_id"`
+	Name             string        `gorm:"type:string" json:"name"`
 	Colour           string        `gorm:"type:string" json:"colour"`
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:TeamID"`
 }

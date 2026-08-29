@@ -20,7 +20,7 @@ func TestCreateGroup_Integration_CreatesDefaultTeams(t *testing.T) {
 	groupService := services.NewGroupService(tx)
 	teamService := services.NewTeamService(tx)
 
-	group, err := groupService.CreateGroup("Zzz Integration Group")
+	group, err := groupService.CreateGroup("Zzz Integration Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("CreateGroup returned error: %v", err)
 	}
@@ -39,14 +39,102 @@ func TestCreateGroup_Integration_CreatesDefaultTeams(t *testing.T) {
 		t.Fatalf("expected exactly 2 teams for a new group, got %d: %+v", len(teams), teams)
 	}
 	colours := map[string]bool{}
+	names := map[string]bool{}
 	for _, team := range teams {
 		if team.GroupID != group.ID {
 			t.Errorf("team %+v has GroupID %s, want %s", team, team.GroupID, group.ID)
 		}
 		colours[team.Colour] = true
+		names[team.Name] = true
 	}
 	if !colours["black"] || !colours["white"] {
 		t.Errorf("expected teams with colours black and white, got %+v", teams)
+	}
+	if !names["Black"] || !names["White"] {
+		t.Errorf("expected teams named Black and White, got %+v", teams)
+	}
+}
+
+// TestCreateGroup_Integration_CustomTeamSpecs pins that the caller's own
+// team names/colours are what get persisted — not some default — now that
+// CreateGroup takes them explicitly instead of hardcoding black/white.
+func TestCreateGroup_Integration_CustomTeamSpecs(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+	teamService := services.NewTeamService(tx)
+
+	specs := [2]services.TeamSpec{
+		{Name: "Les Rouges", Colour: "red"},
+		{Name: "Les Bleus", Colour: "blue"},
+	}
+	group, err := groupService.CreateGroup("Zzz Integration Custom Teams Group", specs)
+	if err != nil {
+		t.Fatalf("CreateGroup returned error: %v", err)
+	}
+
+	teams, err := teamService.GetTeamsByGroupID(group.ID)
+	if err != nil {
+		t.Fatalf("GetTeamsByGroupID returned error: %v", err)
+	}
+	if len(teams) != 2 {
+		t.Fatalf("expected exactly 2 teams, got %d: %+v", len(teams), teams)
+	}
+	got := map[string]string{}
+	for _, team := range teams {
+		got[team.Name] = team.Colour
+	}
+	for _, spec := range specs {
+		if got[spec.Name] != spec.Colour {
+			t.Errorf("team %q has colour %q, want %q (teams: %+v)", spec.Name, got[spec.Name], spec.Colour, teams)
+		}
+	}
+}
+
+// TestCreateGroup_Integration_RequiresTeamNameAndColour covers both
+// validation sentinels CreateGroup added alongside explicit TeamSpecs: an
+// empty (or whitespace-only) name or colour on either team must reject the
+// whole creation, and must not leave a half-created group behind.
+func TestCreateGroup_Integration_RequiresTeamNameAndColour(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+
+	cases := []struct {
+		name    string
+		teams   [2]services.TeamSpec
+		wantErr error
+	}{
+		{
+			name: "missing first team name",
+			teams: [2]services.TeamSpec{
+				{Name: "  ", Colour: "red"},
+				{Name: "White", Colour: "white"},
+			},
+			wantErr: services.ErrTeamNameRequired,
+		},
+		{
+			name: "missing second team colour",
+			teams: [2]services.TeamSpec{
+				{Name: "Black", Colour: "black"},
+				{Name: "White", Colour: ""},
+			},
+			wantErr: services.ErrTeamColourRequired,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			group, err := groupService.CreateGroup("Zzz Integration Invalid Teams Group "+tc.name, tc.teams)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("CreateGroup error = %v, want %v", err, tc.wantErr)
+			}
+			if group != nil {
+				t.Errorf("CreateGroup returned a non-nil group on validation failure: %+v", group)
+			}
+		})
 	}
 }
 
@@ -58,11 +146,11 @@ func TestGroupMembership_Integration(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 
-	groupA, err := groupService.CreateGroup("Zzz Integration Group A")
+	groupA, err := groupService.CreateGroup("Zzz Integration Group A", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group A: %v", err)
 	}
-	groupB, err := groupService.CreateGroup("Zzz Integration Group B")
+	groupB, err := groupService.CreateGroup("Zzz Integration Group B", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group B: %v", err)
 	}
@@ -112,11 +200,11 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 	matchService := services.NewMatchService(tx)
 	standingsService := services.NewStandingsService(tx, services.NewGroupMembershipService(tx))
 
-	groupA, err := groupService.CreateGroup("Zzz Integration Scoped Group A")
+	groupA, err := groupService.CreateGroup("Zzz Integration Scoped Group A", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group A: %v", err)
 	}
-	groupB, err := groupService.CreateGroup("Zzz Integration Scoped Group B")
+	groupB, err := groupService.CreateGroup("Zzz Integration Scoped Group B", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group B: %v", err)
 	}
@@ -237,11 +325,11 @@ func TestCreateGroup_Integration_GeneratesInviteCode(t *testing.T) {
 
 	groupService := services.NewGroupService(tx)
 
-	first, err := groupService.CreateGroup("Zzz Integration Invite Group A")
+	first, err := groupService.CreateGroup("Zzz Integration Invite Group A", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("CreateGroup returned error: %v", err)
 	}
-	second, err := groupService.CreateGroup("Zzz Integration Invite Group B")
+	second, err := groupService.CreateGroup("Zzz Integration Invite Group B", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("CreateGroup returned error: %v", err)
 	}
@@ -273,7 +361,7 @@ func TestJoinByInviteCode_Integration(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 
-	group, err := groupService.CreateGroup("Zzz Integration Join Group")
+	group, err := groupService.CreateGroup("Zzz Integration Join Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("CreateGroup returned error: %v", err)
 	}

@@ -274,10 +274,13 @@ export const getMyGroups = async () => {
   }
 };
 
-// The caller becomes the new group's first member, server-side.
-export const createGroup = async (name) => {
+// The caller becomes the new group's first member, server-side. teams must
+// be exactly the group's two team specs, e.g.
+// [{ name: 'Les Rouges', colour: 'red' }, { name: 'Les Bleus', colour: 'blue' }]
+// — the backend rejects anything but exactly 2.
+export const createGroup = async (name, teams) => {
   try {
-    const response = await api.post(`/groups`, { name });
+    const response = await api.post(`/groups`, { name, teams });
     if (response.status !== 200) {
       throw new Error('Failed to create group');
     }
@@ -315,6 +318,36 @@ export const getInviteCode = async (groupId) => {
     return response.data;
   } catch (error) {
     console.error('Error fetching invite code:', error);
+    throw error;
+  }
+};
+
+// Teams — fetched on demand per group, same pattern as the invite code
+// above: a group's teams aren't part of the group JSON either.
+export const getTeamsByGroup = async (groupId) => {
+  try {
+    const response = await api.get(`/groups/${groupId}/teams`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch teams');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching teams:', error);
+    throw error;
+  }
+};
+
+// Admin-only: renames a team and/or changes its colour. The backend replaces
+// both fields wholesale (no partial patch), so both must always be sent.
+export const updateTeam = async (groupId, teamId, name, colour) => {
+  try {
+    const response = await api.patch(`/groups/${groupId}/teams/${teamId}`, { name, colour });
+    if (response.status !== 200) {
+      throw new Error('Failed to update team');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error updating team:', error);
     throw error;
   }
 };

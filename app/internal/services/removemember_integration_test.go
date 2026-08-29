@@ -22,7 +22,7 @@ func TestRemoveMember_Integration_AdminRemovesPlainMember(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 
-	group, err := groupService.CreateGroup("Zzz Remove Member Group")
+	group, err := groupService.CreateGroup("Zzz Remove Member Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestRemoveMember_Integration_AdminCannotRemoveSelf(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 
-	group, err := groupService.CreateGroup("Zzz Remove Self Group")
+	group, err := groupService.CreateGroup("Zzz Remove Self Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestRemoveMember_Integration_TargetNotMember(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 
-	group, err := groupService.CreateGroup("Zzz Remove NotMember Group")
+	group, err := groupService.CreateGroup("Zzz Remove NotMember Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}

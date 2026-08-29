@@ -47,7 +47,7 @@ func TestGetMyGroups_Integration_IncludesCallerRole(t *testing.T) {
 	joinerID, joinerToken := env.newAuthenticatedPlayer(t,
 		"Zzz My Groups Role Joiner", "my-groups-role-joiner@example.com")
 
-	createRec := env.do(http.MethodPost, "/groups", creatorToken, map[string]string{"name": "Zzz My Groups Role Group"})
+	createRec := env.do(http.MethodPost, "/groups", creatorToken, createGroupBody("Zzz My Groups Role Group"))
 	if createRec.Code != http.StatusOK {
 		t.Fatalf("POST /groups returned status %d, body: %s", createRec.Code, createRec.Body.String())
 	}
@@ -56,7 +56,7 @@ func TestGetMyGroups_Integration_IncludesCallerRole(t *testing.T) {
 	// A second group the joiner creates, so the joiner's list mixes both
 	// roles and a wrong query (e.g. one dropping the per-player filter on the
 	// membership row) can't accidentally pass.
-	joinerOwnRec := env.do(http.MethodPost, "/groups", joinerToken, map[string]string{"name": "Zzz My Groups Role Own Group"})
+	joinerOwnRec := env.do(http.MethodPost, "/groups", joinerToken, createGroupBody("Zzz My Groups Role Own Group"))
 	if joinerOwnRec.Code != http.StatusOK {
 		t.Fatalf("POST /groups returned status %d, body: %s", joinerOwnRec.Code, joinerOwnRec.Body.String())
 	}

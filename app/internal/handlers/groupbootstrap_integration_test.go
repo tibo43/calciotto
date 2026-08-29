@@ -106,6 +106,20 @@ func (e *bootstrapEnv) do(method, path, token string, body any) *httptest.Respon
 	return rec
 }
 
+// createGroupBody builds a POST /groups request body with the given group
+// name and two throwaway team specs (name/colour don't matter to any of
+// these tests, only that exactly 2 are present) — CreateGroup now requires
+// both on every group, mirroring services.DefaultTeamSpecs.
+func createGroupBody(name string) map[string]any {
+	return map[string]any{
+		"name": name,
+		"teams": []map[string]string{
+			{"name": "Black", "colour": "black"},
+			{"name": "White", "colour": "white"},
+		},
+	}
+}
+
 func decodeGroupID(t *testing.T, rec *httptest.ResponseRecorder) uuid.UUID {
 	t.Helper()
 	var created struct {
@@ -140,7 +154,7 @@ func TestCreateGroup_Integration_CreatorBecomesFirstMember(t *testing.T) {
 	creatorID, creatorToken := env.newAuthenticatedPlayer(t,
 		"Zzz Bootstrap Creator", "bootstrap-creator@example.com")
 
-	rec := env.do(http.MethodPost, "/groups", creatorToken, map[string]string{"name": "Zzz Bootstrap Group"})
+	rec := env.do(http.MethodPost, "/groups", creatorToken, createGroupBody("Zzz Bootstrap Group"))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST /groups returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
 	}
@@ -179,9 +193,64 @@ func TestCreateGroup_Integration_RequiresAuth(t *testing.T) {
 	tx := testutil.BeginTx(t, db)
 	env := newBootstrapEnv(t, tx)
 
-	rec := env.do(http.MethodPost, "/groups", "", map[string]string{"name": "Zzz Bootstrap Anonymous Group"})
+	rec := env.do(http.MethodPost, "/groups", "", createGroupBody("Zzz Bootstrap Anonymous Group"))
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("anonymous POST /groups returned status %d, want 401, body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestCreateGroup_Integration_WrongNumberOfTeamsRejected covers the request
+// shape change: POST /groups now requires exactly 2 team specs, and a
+// mismatched count (here, one) must be rejected with 400 before the service
+// is ever called — not silently defaulted or padded.
+func TestCreateGroup_Integration_WrongNumberOfTeamsRejected(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newBootstrapEnv(t, tx)
+
+	_, token := env.newAuthenticatedPlayer(t,
+		"Zzz Bootstrap Wrong Team Count", "bootstrap-wrong-team-count@example.com")
+
+	rec := env.do(http.MethodPost, "/groups", token, map[string]any{
+		"name":  "Zzz Bootstrap Wrong Team Count Group",
+		"teams": []map[string]string{{"name": "Black", "colour": "black"}},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("POST /groups with 1 team returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestCreateGroup_Integration_RequiresTeamNameAndColour covers the
+// service-level sentinels (ErrTeamNameRequired/ErrTeamColourRequired)
+// surfacing as 400s through the handler.
+func TestCreateGroup_Integration_RequiresTeamNameAndColour(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newBootstrapEnv(t, tx)
+
+	_, token := env.newAuthenticatedPlayer(t,
+		"Zzz Bootstrap Missing Team Fields", "bootstrap-missing-team-fields@example.com")
+
+	rec := env.do(http.MethodPost, "/groups", token, map[string]any{
+		"name": "Zzz Bootstrap Missing Team Name Group",
+		"teams": []map[string]string{
+			{"name": "", "colour": "black"},
+			{"name": "White", "colour": "white"},
+		},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("POST /groups with an empty team name returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = env.do(http.MethodPost, "/groups", token, map[string]any{
+		"name": "Zzz Bootstrap Missing Team Colour Group",
+		"teams": []map[string]string{
+			{"name": "Black", "colour": "black"},
+			{"name": "White", "colour": ""},
+		},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("POST /groups with an empty team colour returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -198,7 +267,7 @@ func TestJoinGroup_Integration_GrantsAccessToGroupData(t *testing.T) {
 	joinerID, joinerToken := env.newAuthenticatedPlayer(t,
 		"Zzz Bootstrap Joiner", "bootstrap-joiner@example.com")
 
-	createRec := env.do(http.MethodPost, "/groups", creatorToken, map[string]string{"name": "Zzz Bootstrap Join Group"})
+	createRec := env.do(http.MethodPost, "/groups", creatorToken, createGroupBody("Zzz Bootstrap Join Group"))
 	if createRec.Code != http.StatusOK {
 		t.Fatalf("POST /groups returned status %d, body: %s", createRec.Code, createRec.Body.String())
 	}
@@ -293,7 +362,7 @@ func TestGetInviteCode_Integration_MembersOnly(t *testing.T) {
 	_, outsiderToken := env.newAuthenticatedPlayer(t,
 		"Zzz Bootstrap Code Outsider", "bootstrap-code-outsider@example.com")
 
-	createRec := env.do(http.MethodPost, "/groups", memberToken, map[string]string{"name": "Zzz Bootstrap Code Group"})
+	createRec := env.do(http.MethodPost, "/groups", memberToken, createGroupBody("Zzz Bootstrap Code Group"))
 	if createRec.Code != http.StatusOK {
 		t.Fatalf("POST /groups returned status %d, body: %s", createRec.Code, createRec.Body.String())
 	}
@@ -335,7 +404,7 @@ func TestGroupJSON_Integration_NeverExposesInviteCode(t *testing.T) {
 	_, memberToken := env.newAuthenticatedPlayer(t,
 		"Zzz Bootstrap Leak Member", "bootstrap-leak-member@example.com")
 
-	createRec := env.do(http.MethodPost, "/groups", memberToken, map[string]string{"name": "Zzz Bootstrap Leak Group"})
+	createRec := env.do(http.MethodPost, "/groups", memberToken, createGroupBody("Zzz Bootstrap Leak Group"))
 	if createRec.Code != http.StatusOK {
 		t.Fatalf("POST /groups returned status %d, body: %s", createRec.Code, createRec.Body.String())
 	}
@@ -410,20 +479,20 @@ func TestGetMyGroups_Integration_ReturnsOnlyTheCallersGroups(t *testing.T) {
 	_, otherToken := env.newAuthenticatedPlayer(t,
 		"Zzz My Groups Outsider", "my-groups-outsider@example.com")
 
-	firstRec := env.do(http.MethodPost, "/groups", token, map[string]string{"name": "Zzz My Groups First"})
+	firstRec := env.do(http.MethodPost, "/groups", token, createGroupBody("Zzz My Groups First"))
 	if firstRec.Code != http.StatusOK {
 		t.Fatalf("POST /groups returned status %d, body: %s", firstRec.Code, firstRec.Body.String())
 	}
 	firstID := decodeGroupID(t, firstRec)
 
-	secondRec := env.do(http.MethodPost, "/groups", token, map[string]string{"name": "Zzz My Groups Second"})
+	secondRec := env.do(http.MethodPost, "/groups", token, createGroupBody("Zzz My Groups Second"))
 	if secondRec.Code != http.StatusOK {
 		t.Fatalf("POST /groups returned status %d, body: %s", secondRec.Code, secondRec.Body.String())
 	}
 	secondID := decodeGroupID(t, secondRec)
 
 	// A third group the caller has nothing to do with — it must not show up.
-	foreignRec := env.do(http.MethodPost, "/groups", otherToken, map[string]string{"name": "Zzz My Groups Foreign"})
+	foreignRec := env.do(http.MethodPost, "/groups", otherToken, createGroupBody("Zzz My Groups Foreign"))
 	if foreignRec.Code != http.StatusOK {
 		t.Fatalf("POST /groups returned status %d, body: %s", foreignRec.Code, foreignRec.Body.String())
 	}

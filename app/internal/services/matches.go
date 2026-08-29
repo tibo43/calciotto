@@ -43,7 +43,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID) ([]models.MatchWithD
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
         SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
-               teams.id as team_id, teams.colour as team_colour,
+               teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored
         FROM matches
@@ -85,6 +85,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID) ([]models.MatchWithD
 		if team == nil {
 			newTeam := models.TeamWithPlayers{
 				ID:      rowMatches.TeamID,
+				Name:    rowMatches.TeamName,
 				Colour:  rowMatches.TeamColour,
 				Score:   0,
 				Players: []models.PlayerCustom{},
@@ -135,6 +136,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID) ([]models.MatchWithD
 			if !found {
 				validTeams = append(validTeams, models.TeamWithPlayers{
 					ID:      allTeam.ID,
+					Name:    allTeam.Name,
 					Colour:  allTeam.Colour,
 					Score:   0,
 					Players: []models.PlayerCustom{},
@@ -181,7 +183,7 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
         SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
-               teams.id as team_id, teams.colour as team_colour,
+               teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored
         FROM matches
@@ -225,6 +227,7 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 		if team == nil {
 			newTeam := models.TeamWithPlayers{
 				ID:      rowMatch.TeamID,
+				Name:    rowMatch.TeamName,
 				Colour:  rowMatch.TeamColour,
 				Score:   0,
 				Players: []models.PlayerCustom{},
@@ -266,6 +269,7 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 		if !found {
 			match.Teams = append(match.Teams, models.TeamWithPlayers{
 				ID:      allTeam.ID,
+				Name:    allTeam.Name,
 				Colour:  allTeam.Colour,
 				Score:   0,
 				Players: []models.PlayerCustom{},

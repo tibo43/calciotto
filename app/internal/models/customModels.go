@@ -12,6 +12,7 @@ type PlayerCustom struct {
 // TeamWithPlayers représente une équipe avec ses joueurs.
 type TeamWithPlayers struct {
 	ID      uuid.UUID      `json:"ID"`
+	Name    string         `json:"Name"`
 	Colour  string         `json:"Colour"`
 	Score   int            `json:"Score"`
 	Players []PlayerCustom `json:"Players"`
@@ -30,6 +31,7 @@ type RowsMatchDetails struct {
 	MatchGroupID uuid.UUID
 	MatchDate    Date
 	TeamID       uuid.UUID
+	TeamName     string
 	TeamColour   string
 	Score        int
 	PlayerID     uuid.UUID

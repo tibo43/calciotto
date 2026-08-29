@@ -92,7 +92,7 @@ func (e *inviteEnv) ghostMember(t *testing.T, groupID uuid.UUID, name string) uu
 
 func (e *inviteEnv) newInviteGroup(t *testing.T, tx *gorm.DB, name string, adminID uuid.UUID) uuid.UUID {
 	t.Helper()
-	group, err := services.NewGroupService(tx).CreateGroup(name)
+	group, err := services.NewGroupService(tx).CreateGroup(name, services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}

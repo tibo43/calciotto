@@ -61,7 +61,7 @@ func main() {
 	matchPlayerService := services.NewMatchPlayerService(db)
 	authService := services.NewAuthService(db, seedAuthSecret)
 
-	group, err := groupService.CreateGroup("Default")
+	group, err := groupService.CreateGroup("Default", services.DefaultTeamSpecs)
 	if err != nil {
 		log.Fatalf("failed to create default group: %v", err)
 	}

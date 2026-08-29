@@ -52,7 +52,7 @@ func TestLeaveGroup_Integration_HappyPath(t *testing.T) {
 	authService := services.NewAuthService(tx, testLeaveGroupJWTSecret)
 	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
-	group, err := groupService.CreateGroup("Zzz Leave HTTP Group")
+	group, err := groupService.CreateGroup("Zzz Leave HTTP Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestLeaveGroup_Integration_NoToken(t *testing.T) {
 	authService := services.NewAuthService(tx, testLeaveGroupJWTSecret)
 	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
-	group, err := groupService.CreateGroup("Zzz Leave HTTP No Token Group")
+	group, err := groupService.CreateGroup("Zzz Leave HTTP No Token Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestLeaveGroup_Integration_NonMemberForbidden(t *testing.T) {
 	authService := services.NewAuthService(tx, testLeaveGroupJWTSecret)
 	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
-	group, err := groupService.CreateGroup("Zzz Leave HTTP Outsider Group")
+	group, err := groupService.CreateGroup("Zzz Leave HTTP Outsider Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}

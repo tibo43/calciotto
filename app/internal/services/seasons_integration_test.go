@@ -23,7 +23,7 @@ func TestStandings_Integration_ScopedPerSeason(t *testing.T) {
 	matchService := services.NewMatchService(tx)
 	standingsService := services.NewStandingsService(tx, services.NewGroupMembershipService(tx))
 
-	group, err := groupService.CreateGroup("Zzz Integration Season Group")
+	group, err := groupService.CreateGroup("Zzz Integration Season Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}

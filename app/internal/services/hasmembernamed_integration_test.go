@@ -20,11 +20,11 @@ func TestHasMemberNamed_Integration(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 
-	groupA, err := groupService.CreateGroup("Zzz HasMemberNamed Group A")
+	groupA, err := groupService.CreateGroup("Zzz HasMemberNamed Group A", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group A: %v", err)
 	}
-	groupB, err := groupService.CreateGroup("Zzz HasMemberNamed Group B")
+	groupB, err := groupService.CreateGroup("Zzz HasMemberNamed Group B", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group B: %v", err)
 	}

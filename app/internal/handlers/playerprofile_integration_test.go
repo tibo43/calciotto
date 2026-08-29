@@ -49,15 +49,15 @@ func TestPlayerProfile_Integration(t *testing.T) {
 	authService := services.NewAuthService(tx, testProfileJWTSecret)
 
 	// Three groups: two Alice plays in, one she only belongs to.
-	groupA, err := groupService.CreateGroup("Zzz Integration Profile Group A")
+	groupA, err := groupService.CreateGroup("Zzz Integration Profile Group A", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group A: %v", err)
 	}
-	groupB, err := groupService.CreateGroup("Zzz Integration Profile Group B")
+	groupB, err := groupService.CreateGroup("Zzz Integration Profile Group B", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group B: %v", err)
 	}
-	groupC, err := groupService.CreateGroup("Zzz Integration Profile Group C")
+	groupC, err := groupService.CreateGroup("Zzz Integration Profile Group C", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group C: %v", err)
 	}

@@ -91,6 +91,10 @@ func main() {
 	// route rather than riding along in the (public) group JSON.
 	r.GET("/groups/:id/invite-code", authRequired, requireGroupMemberByPathID, groupHandler.GetInviteCode)
 	r.GET("/groups/:id/teams", authRequired, requireGroupMemberByPathID, teamHandler.GetTeamsByGroup)
+	// Admin-only "rename/recolour a team" — same admin gate as the member-role
+	// and invite routes above; TeamService.UpdateTeam additionally scopes the
+	// lookup to :id so :teamId can't reach into another group.
+	r.PATCH("/groups/:id/teams/:teamId", authRequired, requireGroupAdminByPathID, teamHandler.UpdateTeam)
 	r.POST("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.AddPlayerToGroup)
 	r.GET("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupMembers)
 	// Self-service "leave a group" — the caller can only ever remove their own

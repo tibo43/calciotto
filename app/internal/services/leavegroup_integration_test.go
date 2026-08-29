@@ -22,7 +22,7 @@ func TestLeaveGroup_Integration_AdminPromotesOldestRemainingMember(t *testing.T)
 	playerService := services.NewPlayerService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 
-	group, err := groupService.CreateGroup("Zzz Leave Admin Group")
+	group, err := groupService.CreateGroup("Zzz Leave Admin Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestLeaveGroup_Integration_PlainMemberLeavesWithoutSideEffects(t *testing.T
 	playerService := services.NewPlayerService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 
-	group, err := groupService.CreateGroup("Zzz Leave Member Group")
+	group, err := groupService.CreateGroup("Zzz Leave Member Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestLeaveGroup_Integration_LastMemberCannotLeave(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 
-	group, err := groupService.CreateGroup("Zzz Leave Last Member Group")
+	group, err := groupService.CreateGroup("Zzz Leave Last Member Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestLeaveGroup_Integration_AdminLeavesWhileAnotherAdminRemains(t *testing.T
 	playerService := services.NewPlayerService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 
-	group, err := groupService.CreateGroup("Zzz Leave Two Admins Group")
+	group, err := groupService.CreateGroup("Zzz Leave Two Admins Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}

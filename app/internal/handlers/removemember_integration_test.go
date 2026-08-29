@@ -53,7 +53,7 @@ func TestRemoveMember_Integration_HappyPath(t *testing.T) {
 	authService := services.NewAuthService(tx, testRemoveMemberJWTSecret)
 	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
-	group, err := groupService.CreateGroup("Zzz Remove HTTP Group")
+	group, err := groupService.CreateGroup("Zzz Remove HTTP Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestRemoveMember_Integration_NoToken(t *testing.T) {
 	authService := services.NewAuthService(tx, testRemoveMemberJWTSecret)
 	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
-	group, err := groupService.CreateGroup("Zzz Remove HTTP No Token Group")
+	group, err := groupService.CreateGroup("Zzz Remove HTTP No Token Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestRemoveMember_Integration_NonAdminForbidden(t *testing.T) {
 	authService := services.NewAuthService(tx, testRemoveMemberJWTSecret)
 	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
 
-	group, err := groupService.CreateGroup("Zzz Remove HTTP NonAdmin Group")
+	group, err := groupService.CreateGroup("Zzz Remove HTTP NonAdmin Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}

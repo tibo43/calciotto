@@ -55,7 +55,7 @@ func TestRequireGroupMembership_Integration(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
 
-	group, err := groupService.CreateGroup("Zzz Integration Membership Group")
+	group, err := groupService.CreateGroup("Zzz Integration Membership Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestRequireGroupMembership_Integration_BodyGroupID(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
 
-	group, err := groupService.CreateGroup("Zzz Integration Membership Body Group")
+	group, err := groupService.CreateGroup("Zzz Integration Membership Body Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestRequireGroupMembershipByPathParam_Integration(t *testing.T) {
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
 
-	group, err := groupService.CreateGroup("Zzz Integration Membership Path Group")
+	group, err := groupService.CreateGroup("Zzz Integration Membership Path Group", services.DefaultTeamSpecs)
 	if err != nil {
 		t.Fatalf("failed to create group: %v", err)
 	}
