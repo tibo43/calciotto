@@ -19,27 +19,51 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-func InitDB() (*gorm.DB, error) {
-	host := getEnv("DB_HOST", "db")
-	port := getEnv("DB_PORT", "5432")
-	user := getEnv("DB_USER", "calciotto")
-	password := os.Getenv("DB_PASSWORD")
-	dbname := getEnv("DB_NAME", "calciotto")
-
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		host, port, user, password, dbname)
-
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		return nil, err
+// appDSN is what the running app queries through. A managed provider (Neon and
+// friends) hands out a single connection URL rather than a set of discrete
+// fields, so DATABASE_URL wins whenever it's set; the DB_HOST/DB_PORT/... path
+// below stays the default for the local docker-compose Postgres, which has no
+// TLS and therefore keeps sslmode=disable.
+func appDSN() string {
+	if url := os.Getenv("DATABASE_URL"); url != "" {
+		return url
 	}
 
-	log.Println("Successfully connected to the database!")
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		getEnv("DB_HOST", "db"),
+		getEnv("DB_PORT", "5432"),
+		getEnv("DB_USER", "calciotto"),
+		os.Getenv("DB_PASSWORD"),
+		getEnv("DB_NAME", "calciotto"),
+	)
+}
 
-	// Auto-migration des modèles pour créer les tables
-	err = db.AutoMigrate(&models.Group{}, &models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{}, &models.GroupMembership{}, &models.PasswordResetToken{})
+// migrate applies the schema. When a separate direct URL is configured it opens
+// its own short-lived connection for the DDL and closes it again, so exactly one
+// pool — the app's — outlives startup; otherwise it reuses the pool it's given.
+func migrate(appDB *gorm.DB) error {
+	unpooled := os.Getenv("DATABASE_URL_UNPOOLED")
+	if unpooled == "" || unpooled == appDSN() {
+		return applySchema(appDB)
+	}
+
+	db, err := gorm.Open(postgres.Open(unpooled), &gorm.Config{})
 	if err != nil {
-		log.Fatal(err)
+		return err
+	}
+	defer func() {
+		if sqlDB, err := db.DB(); err == nil {
+			sqlDB.Close()
+		}
+	}()
+
+	return applySchema(db)
+}
+
+func applySchema(db *gorm.DB) error {
+	// Auto-migration des modèles pour créer les tables
+	if err := db.AutoMigrate(&models.Group{}, &models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{}, &models.GroupMembership{}, &models.PasswordResetToken{}); err != nil {
+		return err
 	}
 
 	log.Println("Tables created successfully!")
@@ -51,7 +75,7 @@ func InitDB() (*gorm.DB, error) {
 	// longer declared. A database created before this change keeps the old
 	// idx_players_name constraint forever unless it's dropped explicitly here.
 	if err := db.Exec(`DROP INDEX IF EXISTS idx_players_name`).Error; err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// GroupMembership.Role used to have "owner" as its privileged value, with
@@ -63,7 +87,18 @@ func InitDB() (*gorm.DB, error) {
 	// out of every admin-gated action (removing a member, changing a role,
 	// creating a match, editing scores) with no admin left able to grant it
 	// back. Idempotent: after the first run no 'owner' row is left to update.
-	if err := db.Exec(`UPDATE group_memberships SET role = 'admin' WHERE role = 'owner'`).Error; err != nil {
+	return db.Exec(`UPDATE group_memberships SET role = 'admin' WHERE role = 'owner'`).Error
+}
+
+func InitDB() (*gorm.DB, error) {
+	db, err := gorm.Open(postgres.Open(appDSN()), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+
+	log.Println("Successfully connected to the database!")
+
+	if err := migrate(db); err != nil {
 		log.Fatal(err)
 	}
 
