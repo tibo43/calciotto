@@ -73,6 +73,9 @@ func main() {
 	// here, and the handler only ever reports on the groups the JWT's own
 	// player belongs to (see StandingsHandler.GetPlayerProfile).
 	r.GET("/players/me/stats", authRequired, standingsHandler.GetPlayerProfile)
+	// Same reasoning as /players/me/stats: this only ever acts on the JWT's
+	// own player id, so no group-scoping middleware is needed.
+	r.PATCH("/players/me", authRequired, playerHandler.UpdateMyName)
 
 	// Groups
 	// POST /groups and POST /groups/join take authRequired but no

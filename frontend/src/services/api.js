@@ -276,6 +276,15 @@ export const getPlayerProfile = async (season) => {
   }
 };
 
+// Lets the authenticated player rename themselves. Same "no id needed" shape
+// as getPlayerProfile — the backend takes the player from the JWT — but this
+// one rejects with a 400 (surfaced via error.response.data.error) if another
+// player anywhere already holds the requested name.
+export const updateMyName = async (name) => {
+  const response = await api.patch('/players/me', { name });
+  return response.data;
+};
+
 // Groups
 // Only /groups/me is scoped to the caller — the plain GET /groups is public
 // and lists every group in the system, which is never what this app wants.
