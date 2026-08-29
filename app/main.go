@@ -2,7 +2,9 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
+	"strings"
 
 	"app/internal/handlers"
 	"app/internal/services"
@@ -25,7 +27,7 @@ func main() {
 
 	// Configuration CORS
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:4000", "http://127.0.0.1:4000"},
+		AllowOrigins:     allowedOrigins(),
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -146,6 +148,48 @@ func main() {
 	r.POST("/auth/reset-password", authHandler.ResetPassword)
 	// Add more routes as needed
 
-	// Start server
-	r.Run(":8080")
+	// Liveness probe for the platform's healthcheck. It deliberately does NOT
+	// touch the database: the host restarts an instance whose healthcheck
+	// fails, so reporting unhealthy on a transient database hiccup (Neon
+	// waking from scale-to-zero, a pooler blip) would turn a few seconds of
+	// slow queries into a restart loop. InitDB already fails fast at startup
+	// if the database is unreachable, which is the check that matters.
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// Start server. The host assigns the port through PORT (Koyeb does), so it
+	// can't be hardcoded; 8080 keeps docker-compose and `go run .` unchanged.
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	if err := r.Run(":" + port); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// allowedOrigins lists the browser origins allowed to call this API
+// cross-origin. In production the frontend is served from its own domain
+// (Vercel), so the list has to be configurable rather than hardcoded:
+// CORS_ALLOWED_ORIGINS holds it as a comma-separated list. An unset — or
+// entirely blank — value falls back to the local dev origins, so
+// `docker compose up` keeps working with no extra configuration. Note the
+// fallback rather than an empty slice: gin-contrib/cors with no allowed
+// origin and AllowAllOrigins false rejects every cross-origin request, which
+// would be a silent, hard-to-diagnose outage rather than a startup failure.
+func allowedOrigins() []string {
+	raw := os.Getenv("CORS_ALLOWED_ORIGINS")
+
+	origins := make([]string, 0, 2)
+	for _, origin := range strings.Split(raw, ",") {
+		if origin = strings.TrimSpace(origin); origin != "" {
+			origins = append(origins, origin)
+		}
+	}
+
+	if len(origins) == 0 {
+		return []string{"http://localhost:4000", "http://127.0.0.1:4000"}
+	}
+	return origins
 }
