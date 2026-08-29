@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +12,24 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+// schemaMigrationLockKey is an arbitrary, fixed Postgres advisory-lock key
+// used to serialize applySchema across every process that might run it
+// concurrently against the same database. Two cases hit this in practice:
+// several backend replicas each calling InitDB() on startup in production,
+// and `go test ./...` in CI, where each package (internal/services,
+// internal/handlers, ...) is its own test binary and runs concurrently by
+// default — testutil.OpenDB's sync.Once only dedupes InitDB calls *within*
+// one package's binary, not across them. Without serializing, two processes
+// can both see a table as "not yet created" and issue a concurrent
+// CREATE TABLE, which Postgres doesn't fully serialize on its own: one loses
+// a race on the implicit row type it registers in pg_type, surfacing as
+// "duplicate key value violates unique constraint pg_type_typname_nsp_index"
+// (SQLSTATE 23505) — not an app bug, just two DDL statements arriving at
+// once. The numeric value itself is arbitrary; it only needs to be stable
+// and unlikely to collide with an unrelated advisory lock in this database
+// (nothing else in this codebase takes one).
+const schemaMigrationLockKey = 726750310
 
 func getEnv(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
@@ -41,10 +60,12 @@ func appDSN() string {
 // migrate applies the schema. When a separate direct URL is configured it opens
 // its own short-lived connection for the DDL and closes it again, so exactly one
 // pool — the app's — outlives startup; otherwise it reuses the pool it's given.
+// Either way, applySchema itself only runs while withSchemaMigrationLock holds
+// the advisory lock — see schemaMigrationLockKey for why.
 func migrate(appDB *gorm.DB) error {
 	unpooled := os.Getenv("DATABASE_URL_UNPOOLED")
 	if unpooled == "" || unpooled == appDSN() {
-		return applySchema(appDB)
+		return withSchemaMigrationLock(appDB, applySchema)
 	}
 
 	db, err := gorm.Open(postgres.Open(unpooled), &gorm.Config{})
@@ -57,7 +78,48 @@ func migrate(appDB *gorm.DB) error {
 		}
 	}()
 
-	return applySchema(db)
+	return withSchemaMigrationLock(db, applySchema)
+}
+
+// withSchemaMigrationLock pins a single physical connection out of db's pool,
+// holds schemaMigrationLockKey on it for the duration of fn, and releases it
+// afterwards. A session-level advisory lock is tied to whichever connection
+// took it, so fn must keep running on that same connection throughout —
+// which is why fn receives a *gorm.DB backed by the pinned *sql.Conn
+// (gorm.io/driver/postgres.Config.Conn accepts one directly) rather than the
+// pool-backed db passed in, which could hand fn's own queries a different
+// physical connection than the one holding the lock. A concurrent caller
+// elsewhere — another process, another `go test` package — blocks inside
+// pg_advisory_lock until this one releases, so schema application across
+// every process sharing this database is fully serialized rather than merely
+// made less likely to race.
+func withSchemaMigrationLock(db *gorm.DB, fn func(*gorm.DB) error) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", schemaMigrationLockKey); err != nil {
+		return err
+	}
+	defer func() {
+		if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", schemaMigrationLockKey); err != nil {
+			log.Printf("warning: failed to release schema migration advisory lock: %v", err)
+		}
+	}()
+
+	connDB, err := gorm.Open(postgres.New(postgres.Config{Conn: conn}), &gorm.Config{})
+	if err != nil {
+		return err
+	}
+	return fn(connDB)
 }
 
 func applySchema(db *gorm.DB) error {
