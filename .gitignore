@@ -62,3 +62,4 @@ pnpm-debug.log*
 # Vercel CLI — `vercel link` / `vercel pull` write the linked project id
 # and the pulled production env here. Local state, never committed.
 .vercel
+.env*
