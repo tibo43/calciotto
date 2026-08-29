@@ -125,6 +125,11 @@ func main() {
 	r.GET("/matches/details", authRequired, requireGroupMember, matchHandler.GetMatchesDetails)
 	r.GET("/matches/:id/details", authRequired, requireGroupMember, matchHandler.GetMatchDetailsByID)
 	r.PUT("/matches/:id", authRequired, requireGroupAdmin, matchHandler.UpdateMatch)
+	// Deleting a match is admin-only too — group_id travels in the query
+	// string (a DELETE has no body), which requireGroupAdmin's
+	// resolveGroupIDForMembership already handles the same way resolveGroupID
+	// does in the handler itself.
+	r.DELETE("/matches/:id", authRequired, requireGroupAdmin, matchHandler.DeleteMatch)
 
 	// Standings
 	r.GET("/standings/points", authRequired, requireGroupMember, standingsHandler.GetPointsStandings)

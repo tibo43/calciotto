@@ -8,8 +8,8 @@
             <h1 class="page-title">Football Matches</h1>
             <p class="page-subtitle">Track live scores and match details</p>
           </div>
-          <!-- Create Match Button -->
-          <button class="btn-base btn-primary btn-large create-match-btn" @click="showCreateModal = true">
+          <!-- Create Match Button — admin-only, see resolveActiveGroup()'s role field -->
+          <button v-if="isAdmin" class="btn-base btn-primary btn-large create-match-btn" @click="showCreateModal = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
@@ -225,7 +225,7 @@
             </svg>
             <h3 class="empty-title">No matches available</h3>
             <p class="empty-description">Create your first match to get started</p>
-            <button class="btn-base btn-primary btn-large" @click="showCreateModal = true">
+            <button v-if="isAdmin" class="btn-base btn-primary btn-large" @click="showCreateModal = true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
@@ -241,7 +241,7 @@
 
 <script>
 import { getMatchesDetails, createMatch } from '@/services/api';
-import { resolveActiveGroupId } from '@/services/activeGroup';
+import { resolveActiveGroup } from '@/services/activeGroup';
 
 export default {
   name: 'MatchesAll',
@@ -251,6 +251,10 @@ export default {
       // Resolved once on load and reused for both listing and creating, so a
       // match always gets created in the same group the list is showing.
       activeGroupId: '',
+      // Whether the caller is an admin of the active group — gates the
+      // "Create Match" button, since POST /matches is admin-only on the
+      // backend (RequireGroupAdmin in main.go).
+      isAdmin: false,
       selectedMatch: null,
       isLoading: true,
       canScrollLeft: false,
@@ -268,7 +272,16 @@ export default {
     };
   },
   async created() {
-    this.activeGroupId = await resolveActiveGroupId();
+    try {
+      const { groups, activeGroupId } = await resolveActiveGroup();
+      this.activeGroupId = activeGroupId;
+      this.isAdmin = groups.find(g => g.id === activeGroupId)?.role === 'admin';
+    } catch (error) {
+      // Same degrade-instead-of-break contract as resolveActiveGroupId():
+      // fall through with no group_id (backend's own first-group fallback)
+      // and isAdmin left false, which just hides the admin-only controls.
+      console.error('Error resolving the active group:', error);
+    }
     await this.loadMatches();
   },
   mounted() {

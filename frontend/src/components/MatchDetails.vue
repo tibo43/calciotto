@@ -74,7 +74,7 @@
             </div>
 
             <div class="action-buttons">
-              <button @click="showModal" class="btn-base btn-secondary btn-small">
+              <button v-if="isAdmin" @click="showModal" class="btn-base btn-secondary btn-small">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="16" />
@@ -82,7 +82,7 @@
                 </svg>
                 Add Player
               </button>
-              <button @click="saveChanges" class="btn-base btn-primary btn-small" :disabled="isSaving">
+              <button v-if="isAdmin" @click="saveChanges" class="btn-base btn-primary btn-small" :disabled="isSaving">
                 <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                   <polyline points="17,21 17,13 7,13 7,21" />
@@ -90,6 +90,17 @@
                 </svg>
                 <div v-else class="loading-spinner-small"></div>
                 {{ isSaving ? 'Saving...' : 'Save Changes' }}
+              </button>
+              <!-- Clearly separated from Save Changes so a click can't be
+                   mistaken between the two destructive/non-destructive actions. -->
+              <button v-if="isAdmin" @click="confirmDeleteMatch" class="btn-base btn-danger btn-small delete-match-btn"
+                :disabled="isDeleting">
+                <svg v-if="!isDeleting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3,6 5,6 21,6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+                <div v-else class="loading-spinner-small"></div>
+                {{ isDeleting ? 'Deleting...' : 'Delete Match' }}
               </button>
             </div>
           </div>
@@ -106,7 +117,7 @@
                   <h4 class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</h4>
                   <span class="player-goals">Goals: {{ player.GoalNumber || 0 }}</span>
                 </div>
-                <button @click="removePlayer(playerIndex)" class="btn-danger-icon">
+                <button v-if="isAdmin" @click="removePlayer(playerIndex)" class="btn-danger-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
@@ -116,8 +127,8 @@
 
               <!-- Goal Management -->
               <div class="goal-management">
-                <button @click="updateGoals(playerIndex, -1)" :disabled="!player.GoalNumber || player.GoalNumber <= 0"
-                  class="goal-btn decrease">
+                <button v-if="isAdmin" @click="updateGoals(playerIndex, -1)"
+                  :disabled="!player.GoalNumber || player.GoalNumber <= 0" class="goal-btn decrease">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
@@ -125,7 +136,7 @@
 
                 <span class="goal-count">{{ player.GoalNumber || 0 }}</span>
 
-                <button @click="updateGoals(playerIndex, 1)" class="goal-btn increase">
+                <button v-if="isAdmin" @click="updateGoals(playerIndex, 1)" class="goal-btn increase">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="12" y1="5" x2="12" y2="19" />
                     <line x1="5" y1="12" x2="19" y2="12" />
@@ -365,8 +376,8 @@
 </template>
 
 <script>
-import { getMatchDetailsByID, updateMatch, getPlayers, createPlayer } from '@/services/api';
-import { resolveActiveGroupId } from '@/services/activeGroup';
+import { getMatchDetailsByID, updateMatch, deleteMatch, getPlayers, createPlayer } from '@/services/api';
+import { resolveActiveGroup } from '@/services/activeGroup';
 
 export default {
   name: 'MatchDetail',
@@ -379,6 +390,15 @@ export default {
       matchSnapshot: null,
       isLoading: true,
       isSaving: false,
+      isDeleting: false,
+      // Resolved once on load, reused when loading the match (scoped to the
+      // same group) and when deleting it.
+      activeGroupId: '',
+      // Whether the caller is an admin of the active group — gates every
+      // editing control (add/remove player, goals, save, delete). Editing and
+      // deleting a match are admin-only on the backend (RequireGroupAdmin in
+      // main.go); a non-admin can still view the match read-only.
+      isAdmin: false,
       activeTeam: 0,
       showAddPlayerModal: false,
       message: '',
@@ -395,6 +415,16 @@ export default {
     };
   },
   async created() {
+    try {
+      const { groups, activeGroupId } = await resolveActiveGroup();
+      this.activeGroupId = activeGroupId;
+      this.isAdmin = groups.find(g => g.id === activeGroupId)?.role === 'admin';
+    } catch (error) {
+      // Degrade instead of breaking the page: no group_id (backend's own
+      // first-group fallback) and isAdmin left false, which just hides the
+      // admin-only controls.
+      console.error('Error resolving the active group:', error);
+    }
     await this.loadMatch();
   },
   beforeRouteLeave(to, from, next) {
@@ -420,7 +450,7 @@ export default {
         // alone must not pull a match out of a group we aren't scoped to.
         // updateMatch needs no group of its own; it posts back this.match,
         // whose GroupID already comes from this response.
-        this.match = await getMatchDetailsByID(matchId, await resolveActiveGroupId());
+        this.match = await getMatchDetailsByID(matchId, this.activeGroupId);
 
         // Ensure each player has GoalNumber property
         if (this.match && this.match.Teams) {
@@ -774,6 +804,30 @@ export default {
       }
     },
 
+    // Same confirm-before-acting pattern as beforeRouteLeave's unsaved-changes
+    // guard above — a plain window.confirm rather than a custom modal, since
+    // that's the existing precedent in this file for a destructive/irreversible
+    // action the user could regret.
+    confirmDeleteMatch() {
+      if (this.isDeleting) return;
+      const confirmed = window.confirm('Delete this match? This cannot be undone.');
+      if (!confirmed) return;
+      this.deleteMatchNow();
+    },
+
+    async deleteMatchNow() {
+      this.isDeleting = true;
+      try {
+        await deleteMatch(this.match.ID, this.activeGroupId);
+        this.goBack();
+      } catch (error) {
+        console.error('Error deleting match:', error);
+        this.showMessage('Error deleting match. Please try again.', 'error');
+      } finally {
+        this.isDeleting = false;
+      }
+    },
+
     showMessage(text, type = 'success') {
       this.message = text;
       this.messageType = type;
@@ -1101,6 +1155,12 @@ export default {
   display: flex;
   gap: 1rem;
   align-items: center;
+}
+
+/* Pushed to the far end of the action bar and separated with extra margin so
+   a click can't land here by mistake while reaching for Save Changes. */
+.delete-match-btn {
+  margin-left: 1.5rem;
 }
 
 /* Players Grid */

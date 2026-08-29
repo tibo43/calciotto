@@ -295,6 +295,30 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 	return match, nil
 }
 
+// DeleteMatch removes the match with the given id, scoped to groupID the same
+// way GetMatchDetailsByID is — a match belonging to a different group (or not
+// existing at all) is reported as ErrMatchNotFound rather than being
+// reachable. MatchPlayer.MatchID has no ON DELETE CASCADE, so every
+// match_players row for this match is deleted first, inside the same
+// transaction as the match itself, or the match delete would fail with a
+// foreign-key violation instead of a clean application-level result.
+func (s *MatchService) DeleteMatch(matchID, groupID uuid.UUID) error {
+	var match models.Match
+	if err := s.DB.Where("id = ? AND group_id = ?", matchID, groupID).First(&match).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrMatchNotFound
+		}
+		return err
+	}
+
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchPlayer{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.Match{}, "id = ?", matchID).Error
+	})
+}
+
 func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 	return s.DB.Transaction(func(tx *gorm.DB) error {
 		var dbMatchPlayers []models.MatchPlayer

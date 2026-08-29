@@ -93,6 +93,36 @@ func (h *MatchHandler) GetMatchDetailsByID(c *gin.Context) {
 	c.JSON(http.StatusOK, matches)
 }
 
+// DeleteMatch is gated by requireGroupAdmin in main.go, which resolves its
+// group the same way this handler does (query param group_id, else the
+// caller's first group) — reusing that exact resolution, rather than a
+// different one, is what stops an admin of group A from deleting a match in
+// group B: the group the middleware authorized against must be the same one
+// the delete is scoped to.
+func (h *MatchHandler) DeleteMatch(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		return
+	}
+	groupID, ok := resolveGroupID(c, h.MembershipService)
+	if !ok {
+		return
+	}
+
+	if err := h.Service.DeleteMatch(id, groupID); err != nil {
+		switch {
+		case errors.Is(err, services.ErrMatchNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}
+
 func (h *MatchHandler) UpdateMatch(c *gin.Context) {
 	var match models.MatchWithDetails
 	if err := c.ShouldBindJSON(&match); err != nil {

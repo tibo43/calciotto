@@ -49,7 +49,9 @@ func newMatchAdminEnv(t *testing.T, tx *gorm.DB) *matchAdminEnv {
 	router := gin.New()
 	router.POST("/matches", authRequired, requireGroupAdmin, matchHandler.CreateMatch)
 	router.PUT("/matches/:id", authRequired, requireGroupAdmin, matchHandler.UpdateMatch)
+	router.DELETE("/matches/:id", authRequired, requireGroupAdmin, matchHandler.DeleteMatch)
 	router.GET("/matches/details", authRequired, requireGroupMember, matchHandler.GetMatchesDetails)
+	router.GET("/matches/:id/details", authRequired, requireGroupMember, matchHandler.GetMatchDetailsByID)
 
 	return &matchAdminEnv{
 		memberships: membershipService,
@@ -258,5 +260,67 @@ func TestCreateMatch_Integration_OutsiderStillForbidden(t *testing.T) {
 		map[string]string{"date": "2026-01-04", "group_id": groupID.String()})
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("outsider POST /matches returned status %d, want 403, body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestDeleteMatch_Integration_AdminOnly exercises the full authorization
+// matrix for DELETE /matches/:id: no token -> 401, a plain member of the
+// group -> 403, a match belonging to a different group even for an admin of
+// *some* group -> 404, and finally an admin of the right group -> 200,
+// followed by a GET .../details on the same id confirming the delete really
+// happened rather than just returning a happy status code.
+func TestDeleteMatch_Integration_AdminOnly(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newMatchAdminEnv(t, tx)
+
+	groupID, adminToken, memberToken := env.matchAdminGroup(t, tx,
+		"Zzz Match Delete", "match-delete-admin@example.com", "match-delete-member@example.com")
+
+	matchID, err := env.matches.CreateMatch(models.Date{}, groupID)
+	if err != nil {
+		t.Fatalf("failed to create match: %v", err)
+	}
+
+	// No token at all.
+	noAuthRec := env.do(http.MethodDelete, "/matches/"+matchID.String(), "", nil)
+	if noAuthRec.Code != http.StatusUnauthorized {
+		t.Errorf("unauthenticated DELETE /matches/:id returned status %d, want 401, body: %s", noAuthRec.Code, noAuthRec.Body.String())
+	}
+
+	// A plain member of the group cannot delete.
+	memberRec := env.do(http.MethodDelete, "/matches/"+matchID.String()+"?group_id="+groupID.String(), memberToken, nil)
+	if memberRec.Code != http.StatusForbidden {
+		t.Fatalf("plain member DELETE /matches/:id returned status %d, want 403, body: %s", memberRec.Code, memberRec.Body.String())
+	}
+
+	// An admin of a *different* group must not be able to reach this match:
+	// the match id is scoped to groupID, not the admin's own group, so this
+	// is a 404 rather than a 403 — mirroring GetMatchDetailsByID's behaviour.
+	otherGroupID, otherAdminToken, _ := env.matchAdminGroup(t, tx,
+		"Zzz Match Delete Other", "match-delete-other-admin@example.com", "match-delete-other-member@example.com")
+	wrongGroupRec := env.do(http.MethodDelete, "/matches/"+matchID.String()+"?group_id="+otherGroupID.String(), otherAdminToken, nil)
+	if wrongGroupRec.Code != http.StatusNotFound {
+		t.Fatalf("admin of a different group DELETE /matches/:id returned status %d, want 404, body: %s", wrongGroupRec.Code, wrongGroupRec.Body.String())
+	}
+
+	// The admin of the right group can delete it.
+	adminRec := env.do(http.MethodDelete, "/matches/"+matchID.String()+"?group_id="+groupID.String(), adminToken, nil)
+	if adminRec.Code != http.StatusOK {
+		t.Fatalf("admin DELETE /matches/:id returned status %d, want 200, body: %s", adminRec.Code, adminRec.Body.String())
+	}
+
+	var body map[string]bool
+	if err := json.Unmarshal(adminRec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to unmarshal delete response: %v", err)
+	}
+	if !body["deleted"] {
+		t.Errorf("delete response = %v, want {\"deleted\": true}", body)
+	}
+
+	// Proof the delete actually happened, not just that the endpoint returned 200.
+	getRec := env.do(http.MethodGet, "/matches/"+matchID.String()+"/details?group_id="+groupID.String(), adminToken, nil)
+	if getRec.Code != http.StatusNotFound {
+		t.Errorf("GET .../details after delete returned status %d, want 404, body: %s", getRec.Code, getRec.Body.String())
 	}
 }

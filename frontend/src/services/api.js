@@ -144,6 +144,22 @@ export const updateMatch = async (matchId, matchData) => {
   }
 };
 
+// Admin-only: permanently removes a match and its rosters. groupId travels as
+// a query param (a DELETE has no body), same as getMatchesDetails/
+// getMatchDetailsByID above.
+export const deleteMatch = async (matchId, groupId) => {
+  try {
+    const response = await api.delete(`/matches/${matchId}${query({ group_id: groupId })}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to delete match');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting match:', error);
+    throw error;
+  }
+};
+
 // Alternative: PATCH for partial updates (if your API supports it)
 export const updateMatchPartial = async (matchId, updates) => {
   try {
