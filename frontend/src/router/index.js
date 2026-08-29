@@ -21,10 +21,12 @@ const routes = [
     path: '/standings',
     redirect: '/'
   },
+  // Groups used to be its own page; group management (roster, roles, invite
+  // code, teams) is now part of Profile. Kept as a redirect so an old
+  // bookmark or link still lands on the merged page rather than a 404.
   {
     path: '/groups',
-    name: 'Groups',
-    component: () => import('@/components/Groups.vue')
+    redirect: '/profile'
   },
   {
     path: '/profile',

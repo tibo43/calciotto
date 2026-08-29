@@ -30,18 +30,16 @@
                 Matches
               </router-link>
               <router-link
-                to="/groups"
+                to="/profile"
                 @click="closeMenu"
-                :class="{ 'active': $route.name === 'Groups' }"
+                :class="{ 'active': $route.name === 'Profile' }"
                 class="nav-button"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                  <path d="M21 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
                 </svg>
-                Groups
+                Profile
               </router-link>
             </div>
 
@@ -58,19 +56,6 @@
                 :active-group-id="activeGroupId"
                 :is-dark-mode="isDarkMode"
               />
-
-              <router-link
-                v-if="isAuthenticatedRoute"
-                to="/profile"
-                class="icon-nav-button"
-                :class="{ 'active': $route.name === 'Profile' }"
-                :aria-label="$route.name === 'Profile' ? 'Profile (current page)' : 'Profile'"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
-                </svg>
-              </router-link>
 
               <button
                 v-if="isAuthenticatedRoute"
@@ -189,7 +174,7 @@ export default {
   computed: {
     isRouterRoute() {
       // Check if current route should be handled by router
-      return ['MatchesAndStandings', 'MatchDetails', 'Groups', 'Profile', 'Login', 'Signup', 'ForgotPassword', 'ResetPassword'].includes(this.$route.name);
+      return ['MatchesAndStandings', 'MatchDetails', 'Profile', 'Login', 'Signup', 'ForgotPassword', 'ResetPassword'].includes(this.$route.name);
     },
     // Gates the nav-menu links (Matches/Groups) and the Profile/Logout icons:
     // all three require a token, so showing them on a public route (where

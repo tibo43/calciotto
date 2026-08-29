@@ -597,7 +597,7 @@ export default {
         // client-side check against this.allPlayers can't catch, since that
         // check is global rather than scoped to this match's group) returns a
         // specific message worth showing verbatim, same pattern as
-        // ForgotPassword.vue/Groups.vue. Fall back to a generic message for
+        // ForgotPassword.vue/Profile.vue. Fall back to a generic message for
         // any other kind of failure.
         const backendMessage = error.response?.data?.error;
         this.showMessage(backendMessage || 'Error creating player. Please try again.', 'error');
