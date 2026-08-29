@@ -65,11 +65,15 @@
                   <!-- Teams aren't part of the group JSON either, so they are
                        fetched on demand the first time this is opened for a
                        given group — same fetch-on-demand pattern as the
-                       invite code above. There is no role-based hiding here:
-                       a non-admin can open this and try to save, and the
-                       backend's 403 is what actually stops them. -->
+                       invite code above. Label and edit controls both follow
+                       the caller's own role on this group: a non-admin gets a
+                       read-only "Team" view, matching the actual backend
+                       authorization (PATCH .../teams/:teamId is admin-only)
+                       instead of an editable form that only fails on save. -->
                   <button class="btn-base btn-cancel btn-small" @click="toggleManageTeams(group.id)">
-                    {{ expandedTeamsFor === group.id ? 'Hide teams' : 'Manage teams' }}
+                    {{ expandedTeamsFor === group.id
+                      ? (isGroupAdmin(group.id) ? 'Hide teams' : 'Hide team')
+                      : (isGroupAdmin(group.id) ? 'Manage teams' : 'Team') }}
                   </button>
 
                   <!-- The roster isn't part of the group JSON either — same
@@ -84,7 +88,7 @@
                 <div v-if="expandedTeamsFor === group.id" class="manage-teams-box">
                   <p v-if="teamsLoadingFor === group.id" class="loading-text">Loading teams...</p>
                   <p v-else-if="teamsErrors[group.id]" class="error-message">{{ teamsErrors[group.id] }}</p>
-                  <div v-else class="team-edit-list">
+                  <div v-else-if="isGroupAdmin(group.id)" class="team-edit-list">
                     <div v-for="team in teamsByGroup[group.id]" :key="team.id" class="team-edit-row">
                       <input v-model="team.name" class="form-input team-name-input" type="text"
                         placeholder="Team name" :disabled="teamSaving[team.id]">
@@ -98,6 +102,14 @@
                       <p v-if="teamSaveSuccess[team.id]" class="success-message">{{ teamSaveSuccess[team.id] }}</p>
                     </div>
                   </div>
+                  <!-- Non-admin: same data, read-only — no inputs that would
+                       only fail on save with a 403. -->
+                  <ul v-else class="team-view-list">
+                    <li v-for="team in teamsByGroup[group.id]" :key="team.id" class="team-view-row">
+                      <span class="team-view-swatch" :style="{ backgroundColor: toHexColour(team.colour) }"></span>
+                      <span class="team-view-name">{{ team.name }}</span>
+                    </li>
+                  </ul>
                 </div>
 
                 <!-- Members: visible to any member, role-change/remove
@@ -226,6 +238,9 @@ export default {
     await this.loadGroups();
   },
   methods: {
+    // Thin wrapper so the module-level toHexColour() is reachable from the
+    // template (used by the non-admin read-only team swatch below).
+    toHexColour,
     async loadGroups() {
       this.isLoading = true;
       this.loadFailed = false;
@@ -523,6 +538,34 @@ export default {
 .team-name-input {
   flex: 1;
   min-width: 10rem;
+}
+
+.team-view-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.team-view-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.team-view-swatch {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.team-view-name {
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .success-message {

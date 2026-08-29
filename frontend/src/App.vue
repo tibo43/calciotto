@@ -10,8 +10,11 @@
               <span class="brand-text">Calciotto</span>
             </div>
 
-            <!-- Desktop Menu -->
-            <div class="nav-menu" :class="{ 'active': isMenuOpen }">
+            <!-- Desktop Menu — hidden on public routes (Login/Signup/...):
+                 these links require a token, so showing them on an
+                 unauthenticated page misrepresents it as the logged-in app
+                 shell rather than a standalone login view. -->
+            <div v-if="isAuthenticatedRoute" class="nav-menu" :class="{ 'active': isMenuOpen }">
               <router-link 
                 to="/" 
                 @click="closeMenu"
@@ -56,6 +59,7 @@
               />
 
               <router-link
+                v-if="isAuthenticatedRoute"
                 to="/profile"
                 class="icon-nav-button"
                 :class="{ 'active': $route.name === 'Profile' }"
@@ -68,6 +72,7 @@
               </router-link>
 
               <button
+                v-if="isAuthenticatedRoute"
                 class="icon-nav-button logout-btn"
                 @click="logout"
                 aria-label="Log out"
@@ -95,9 +100,10 @@
                 </transition>
               </button>
 
-              <button 
-                class="mobile-menu-toggle" 
-                :class="{ 'active': isMenuOpen }" 
+              <button
+                v-if="isAuthenticatedRoute"
+                class="mobile-menu-toggle"
+                :class="{ 'active': isMenuOpen }"
                 @click="toggleMenu"
                 aria-label="Toggle navigation menu"
               >
@@ -183,6 +189,13 @@ export default {
     isRouterRoute() {
       // Check if current route should be handled by router
       return ['MatchesAndStandings', 'MatchDetails', 'Groups', 'Profile', 'Login', 'Signup', 'ForgotPassword', 'ResetPassword'].includes(this.$route.name);
+    },
+    // Gates the nav-menu links (Matches/Groups) and the Profile/Logout icons:
+    // all three require a token, so showing them on a public route (where
+    // there's no session to act on) makes a standalone login/signup page
+    // read as the logged-in app shell instead of its own view.
+    isAuthenticatedRoute() {
+      return !PUBLIC_ROUTE_NAMES.includes(this.$route.name);
     }
   },
   watch: {
