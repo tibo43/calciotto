@@ -1,14 +1,11 @@
 <template>
   <div class="profile-container">
-    <!-- Header Section -->
-    <section class="profile-header">
+    <!-- Plain heading, replacing the old gradient hero banner — that was
+         purely decorative and the "All seasons — Default" scope label next
+         to the player's name already says which group/season this is. -->
+    <section class="profile-heading">
       <div class="container">
-        <div class="header-content">
-          <div class="title-section">
-            <h1 class="page-title">My profile</h1>
-            <p class="page-subtitle">Your record across every group you belong to</p>
-          </div>
-        </div>
+        <h1 class="profile-title">My profile</h1>
       </div>
     </section>
 
@@ -555,10 +552,14 @@ export default {
   background-color: var(--bg-secondary);
 }
 
-.profile-header {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-  color: white;
-  padding: 1rem 0;
+.profile-heading {
+  padding: 1.5rem 0 0;
+}
+
+.profile-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .profile-section {
@@ -951,10 +952,6 @@ export default {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .profile-header {
-    padding: 2rem 0;
-  }
-
   .overall-stats {
     grid-template-columns: repeat(3, 1fr);
   }

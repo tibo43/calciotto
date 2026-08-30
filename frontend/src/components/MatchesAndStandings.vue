@@ -1,18 +1,9 @@
 <template>
   <div class="home-container">
-    <!-- Header Section -->
-    <section class="home-header">
-      <div class="container">
-        <div class="header-content">
-          <div class="title-section">
-            <h1 class="page-title">{{ activeTab.title }}</h1>
-            <p class="page-subtitle">{{ activeTab.subtitle }}</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Season selector + sub tabs, shared by the three sub-tabs below -->
+    <!-- Context bar (which group/season we're scoped to) and sub-tab
+         navigation, each on their own row — replaces the old gradient hero
+         banner, which was purely decorative (a title/subtitle that only
+         repeated what the active tab already shows). -->
     <section class="home-controls">
       <div class="container">
         <div v-if="isInitializing" class="loading-container">
@@ -20,29 +11,29 @@
           <p class="loading-text">Loading...</p>
         </div>
 
-        <div v-else class="controls-bar card-base">
+        <template v-else>
+          <div class="context-bar card-base">
+            <template v-if="groups.length > 0">
+              <label class="context-label" for="group-select">Group</label>
+              <select id="group-select" class="context-select" v-model="activeGroupId" @change="switchGroup">
+                <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
+              </select>
+            </template>
+            <span v-else class="no-group-hint">No group yet — join or create one from your Profile.</span>
+
+            <label class="context-label" for="season-select">Season</label>
+            <select id="season-select" class="context-select" v-model="selectedSeason" @change="loadStandings">
+              <option v-for="season in seasons" :key="season" :value="season">{{ season }}</option>
+            </select>
+          </div>
+
           <div class="sub-tabs-bar">
             <button v-for="tab in subTabs" :key="tab.key" @click="activeSubTab = tab.key"
               :class="['sub-tab-button', { active: activeSubTab === tab.key }]">
               {{ tab.label }}
             </button>
           </div>
-
-          <div class="season-bar">
-            <template v-if="groups.length > 0">
-              <label class="season-label" for="group-select">Group</label>
-              <select id="group-select" class="season-select" v-model="activeGroupId" @change="switchGroup">
-                <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
-              </select>
-            </template>
-            <span v-else class="no-group-hint">No group yet — join or create one from your Profile.</span>
-
-            <label class="season-label" for="season-select">Season</label>
-            <select id="season-select" class="season-select" v-model="selectedSeason" @change="loadStandings">
-              <option v-for="season in seasons" :key="season" :value="season">{{ season }}</option>
-            </select>
-          </div>
-        </div>
+        </template>
       </div>
     </section>
 
@@ -98,16 +89,11 @@ export default {
       topScorers: [],
       activeSubTab: 'matches',
       subTabs: [
-        { key: 'matches', label: 'Matches', title: 'Football Matches', subtitle: 'Track live scores and match details' },
-        { key: 'points', label: 'Points', title: 'Standings', subtitle: 'Player rankings across all matches' },
-        { key: 'scorers', label: 'Scorers', title: 'Top Scorers', subtitle: 'Goals scored across all matches' }
+        { key: 'matches', label: 'Matches' },
+        { key: 'points', label: 'Points' },
+        { key: 'scorers', label: 'Scorers' }
       ]
     };
-  },
-  computed: {
-    activeTab() {
-      return this.subTabs.find(tab => tab.key === this.activeSubTab) || this.subTabs[0];
-    }
   },
   async created() {
     try {
@@ -178,62 +164,25 @@ export default {
   background-color: var(--bg-secondary);
 }
 
-/* Header Section */
-.home-header {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-  color: white;
-  padding: 1rem 0;
-  position: relative;
-  overflow: hidden;
-}
-
-.home-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="2" fill="white" opacity="0.1"/></svg>') repeat;
-  animation: float 20s ease-in-out infinite;
-}
-
-.header-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  position: relative;
-  z-index: 1;
-}
-
-.title-section {
-  text-align: left;
-}
-
-/* Controls: the sub-tab content below brings its own top padding. */
+/* Controls: replaces the old gradient hero — a plain top padding is enough
+   since there's no banner to separate from below it. */
 .home-controls {
-  padding: 2rem 0 0;
+  padding: 1.5rem 0 0;
 }
 
-/* Sub-tabs and season selector, merged into a single bar: tabs on the
-   left, season picker on the right. */
-.controls-bar {
+/* Context bar: which group and season the page is scoped to. Its own row,
+   separate from the sub-tabs below, so it reads as a data-scoping control
+   rather than something bolted onto the tab navigation. */
+.context-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
 }
 
-/* Season selector */
-.season-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-shrink: 0;
-}
-
-.season-label {
+.context-label {
   color: var(--text-secondary);
   font-weight: 600;
   font-size: 0.8rem;
@@ -241,7 +190,7 @@ export default {
   letter-spacing: 0.03em;
 }
 
-.season-select {
+.context-select {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
@@ -253,8 +202,8 @@ export default {
   transition: border-color var(--transition-fast);
 }
 
-.season-select:hover,
-.season-select:focus {
+.context-select:hover,
+.context-select:focus {
   border-color: var(--primary-color);
   outline: none;
 }
@@ -264,12 +213,11 @@ export default {
   font-size: 0.875rem;
 }
 
-/* Sub tabs */
+/* Sub tabs: pure navigation, on its own row now that it no longer shares
+   space with the context bar. */
 .sub-tabs-bar {
   display: flex;
   gap: 0.5rem;
-  flex: 1;
-  min-width: 0;
 }
 
 .sub-tab-button {
@@ -303,31 +251,8 @@ export default {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .home-header {
-    padding: 2rem 0;
-  }
-
-  .header-content {
-    flex-direction: column;
-    gap: 1rem;
-    text-align: center;
-  }
-
-  .title-section {
-    text-align: center;
-  }
-
-  .controls-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .season-bar {
+  .context-bar {
     justify-content: space-between;
-  }
-
-  .sub-tabs-bar {
-    flex-direction: column;
   }
 }
 </style>
