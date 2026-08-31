@@ -48,7 +48,9 @@ func main() {
 	playerHandler := handlers.NewPlayerHandler(services.NewPlayerService(db), groupService, groupMembershipService)
 	groupHandler := handlers.NewGroupHandler(groupService, groupMembershipService, authService)
 	teamHandler := handlers.NewTeamHandler(services.NewTeamService(db))
-	matchHandler := handlers.NewMatchHandler(services.NewMatchService(db), groupMembershipService)
+	matchService := services.NewMatchService(db)
+	matchHandler := handlers.NewMatchHandler(matchService, groupMembershipService)
+	matchRegistrationHandler := handlers.NewMatchRegistrationHandler(services.NewMatchRegistrationService(db))
 	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(db, groupMembershipService), groupMembershipService)
 	authHandler := handlers.NewAuthHandler(authService)
 
@@ -58,6 +60,11 @@ func main() {
 	requireGroupMemberByPathID := handlers.RequireGroupMembershipByPathParam(groupMembershipService, "id")
 	requireGroupAdmin := handlers.RequireGroupAdmin(groupMembershipService)
 	requireGroupAdminByPathID := handlers.RequireGroupAdminByPathParam(groupMembershipService, "id")
+	// The /matches/:id/registrations routes name a *match*, not a group, so
+	// they need the pair that derives the group from the match rather than
+	// trusting a group id the caller supplies (see matchscope.go).
+	requireGroupMemberByMatchID := handlers.RequireGroupMembershipByMatchPathParam(matchService, groupMembershipService, "id")
+	requireGroupAdminByMatchID := handlers.RequireGroupAdminByMatchPathParam(matchService, groupMembershipService, "id")
 
 	// Setup routes
 	// Players — creating a player ("ghost" roster entry, e.g. from
@@ -136,6 +143,23 @@ func main() {
 	// resolveGroupIDForMembership already handles the same way resolveGroupID
 	// does in the handler itself.
 	r.DELETE("/matches/:id", authRequired, requireGroupAdmin, matchHandler.DeleteMatch)
+
+	// Sign-ups for a scheduled match. All five are gated by the match-scoped
+	// middlewares: the path carries a match id, so the group is derived from
+	// the match itself — a member of another group gets 404, not 403, so match
+	// ids stay unenumerable (see matchscope.go).
+	//
+	// Signing up, withdrawing and reading the list are open to any member: the
+	// player always comes from the JWT, so a member can only ever add or remove
+	// *themselves*. The DELETE has no /me suffix for that reason — there is no
+	// other sign-up it could target.
+	r.POST("/matches/:id/registrations", authRequired, requireGroupMemberByMatchID, matchRegistrationHandler.Register)
+	r.DELETE("/matches/:id/registrations", authRequired, requireGroupMemberByMatchID, matchRegistrationHandler.Unregister)
+	r.GET("/matches/:id/registrations", authRequired, requireGroupMemberByMatchID, matchRegistrationHandler.ListRegistrations)
+	// Freezing the roster (in order to compose the teams) and undoing a
+	// mis-clicked close are admin actions, like every other write on a match.
+	r.POST("/matches/:id/registrations/close", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.CloseRegistrations)
+	r.POST("/matches/:id/registrations/reopen", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.ReopenRegistrations)
 
 	// Standings
 	r.GET("/standings/points", authRequired, requireGroupMember, standingsHandler.GetPointsStandings)

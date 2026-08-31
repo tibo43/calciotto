@@ -119,6 +119,31 @@ func (s *MatchService) CreateMatch(spec MatchSpec, groupID uuid.UUID) (uuid.UUID
 	return match.ID, nil
 }
 
+// GetGroupIDByMatchID answers "which group does this match belong to", and
+// returns ErrMatchNotFound when the id names no match at all.
+//
+// It exists for the /matches/:id/... routes, whose path carries a *match* id
+// and no group id: the authorization middleware has to derive the group from
+// the match before it can check membership or admin rights (see
+// RequireGroupMembershipByMatchPathParam). Deriving it is the whole point —
+// letting the caller name the group instead, the way POST /matches does with
+// its body, would let a member of group A act on a match in group B simply by
+// supplying their own group id.
+//
+// It lives here rather than in the handler because touching the database is
+// the service layer's job, and it selects only group_id: nothing upstream
+// needs the rest of the row.
+func (s *MatchService) GetGroupIDByMatchID(matchID uuid.UUID) (uuid.UUID, error) {
+	var match models.Match
+	if err := s.DB.Select("group_id").Where("id = ?", matchID).First(&match).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return uuid.Nil, ErrMatchNotFound
+		}
+		return uuid.Nil, err
+	}
+	return match.GroupID, nil
+}
+
 // GetMatchesDetails returns every match of a group, optionally narrowed to a
 // single season. The season is applied in Go, via the same
 // FilterMatchesBySeason the standings already use, rather than as a SQL
