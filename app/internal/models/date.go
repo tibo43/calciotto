@@ -53,6 +53,17 @@ func (d Date) Before(other Date) bool {
 	return time.Time(d).Before(time.Time(other))
 }
 
+// DateOf returns the calendar day t falls on, in t's *own* location. That
+// last part is the whole point: MatchService.CreateMatch derives a scheduled
+// match's Date from its kick-off timestamp, and a 21:00 Paris kick-off must
+// stay on the day the client meant — normalizing to UTC first would move it
+// to the next day for any evening kick-off east of Greenwich. The result is
+// midnight UTC on that day, which is what the SQL `date` column stores
+// unambiguously (see Value).
+func DateOf(t time.Time) Date {
+	return Date(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC))
+}
+
 // SeasonOf returns the label of the season d belongs to, e.g. "2025-2026".
 // A season starts on September 1st: a date from September onwards belongs to
 // the season starting that same year, an earlier one to the season that

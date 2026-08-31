@@ -100,7 +100,7 @@ func main() {
 	log.Printf("group has %d teams", len(teams))
 
 	for _, date := range lastSundays(*matchCount) {
-		matchID, err := matchService.CreateMatch(date, group.ID)
+		matchID, err := matchService.CreateMatch(services.MatchSpec{Date: date}, group.ID)
 		if err != nil {
 			log.Fatalf("failed to create match: %v", err)
 		}

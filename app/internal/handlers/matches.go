@@ -48,7 +48,10 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 		groupID = group.ID
 	}
 
-	id, err := h.Service.CreateMatch(match.Date, groupID)
+	// Only the date is forwarded: the scheduling fields models.Match now
+	// carries are not wired to this endpoint yet, so a payload mentioning
+	// them still creates a plain, unscheduled match.
+	id, err := h.Service.CreateMatch(services.MatchSpec{Date: match.Date}, groupID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

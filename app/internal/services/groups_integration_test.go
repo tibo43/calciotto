@@ -227,7 +227,7 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 		t.Fatalf("failed to create player bob: %v", err)
 	}
 
-	matchAID, err := matchService.CreateMatch(models.Date(time.Now()), groupA.ID)
+	matchAID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now())}, groupA.ID)
 	if err != nil {
 		t.Fatalf("failed to create match in group A: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 		t.Fatalf("UpdateMatch (group A) returned error: %v", err)
 	}
 
-	matchBID, err := matchService.CreateMatch(models.Date(time.Now()), groupB.ID)
+	matchBID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now())}, groupB.ID)
 	if err != nil {
 		t.Fatalf("failed to create match in group B: %v", err)
 	}
@@ -492,7 +492,7 @@ func TestStandings_Integration_IsMemberAfterRemoval(t *testing.T) {
 		t.Fatalf("failed to add bob: %v", err)
 	}
 
-	matchID, err := matchService.CreateMatch(models.Date(time.Now()), group.ID)
+	matchID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now())}, group.ID)
 	if err != nil {
 		t.Fatalf("failed to create match: %v", err)
 	}

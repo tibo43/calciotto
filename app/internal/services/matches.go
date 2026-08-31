@@ -4,6 +4,7 @@ import (
 	"app/internal/models"
 	"errors"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -17,6 +18,67 @@ import (
 // distinct "forbidden" signal.
 var ErrMatchNotFound = errors.New("match not found")
 
+// The three sentinels below reject an incoherent *schedule* at creation time.
+// A match with no scheduling at all stays perfectly valid — see MatchSpec.
+var (
+	// ErrIncompleteSchedule guards the all-or-nothing rule: a scheduled match
+	// with no maximum number of players, or with no moment at which sign-ups
+	// open, has no defined behaviour at all (nobody could ever register, or
+	// nobody could ever land on the waiting list), so a half-filled schedule
+	// is refused rather than stored and interpreted later.
+	ErrIncompleteSchedule = errors.New("a scheduled match requires a kick-off time, a registration opening time and a maximum number of players")
+	// ErrRegistrationOpensAfterKickoff rejects a window that never opens
+	// before the match starts: kick-off is a hard backstop on registrations
+	// (see RegistrationWindowError), so opening sign-ups at or after it would
+	// create a match nobody can ever sign up for.
+	ErrRegistrationOpensAfterKickoff = errors.New("registrations must open strictly before kick-off")
+	// ErrInvalidMaxPlayers rejects a non-positive roster size, which would
+	// put every single sign-up on the waiting list.
+	ErrInvalidMaxPlayers = errors.New("maximum number of players must be greater than zero")
+)
+
+// MatchSpec is everything CreateMatch needs to know about the match being
+// created, as a struct rather than a growing positional parameter list — the
+// same call GroupService.CreateGroup makes with TeamSpec.
+//
+// The three scheduling fields are all-or-nothing: supply none of them for the
+// original behaviour (an admin recording a match, scored right away), or all
+// three to open the match to sign-ups. Date is only read in the unscheduled
+// case: when ScheduledAt is set, Date is *derived* from it so the calendar day
+// and the kick-off timestamp can never drift apart (see models.Match).
+type MatchSpec struct {
+	Date                models.Date
+	ScheduledAt         *time.Time
+	RegistrationOpensAt *time.Time
+	MaxPlayers          *int
+}
+
+// IsScheduled mirrors models.Match.IsScheduled: a spec asks for a scheduled
+// match iff it carries a kick-off time.
+func (spec MatchSpec) IsScheduled() bool {
+	return spec.ScheduledAt != nil
+}
+
+// validate enforces the schedule's internal coherence. Note what it
+// deliberately does *not* check: a ScheduledAt in the past is accepted, since
+// backfilling a match that already happened is legitimate and the unscheduled
+// flow has always accepted any date.
+func (spec MatchSpec) validate() error {
+	if spec.ScheduledAt == nil && spec.RegistrationOpensAt == nil && spec.MaxPlayers == nil {
+		return nil
+	}
+	if spec.ScheduledAt == nil || spec.RegistrationOpensAt == nil || spec.MaxPlayers == nil {
+		return ErrIncompleteSchedule
+	}
+	if !spec.RegistrationOpensAt.Before(*spec.ScheduledAt) {
+		return ErrRegistrationOpensAfterKickoff
+	}
+	if *spec.MaxPlayers <= 0 {
+		return ErrInvalidMaxPlayers
+	}
+	return nil
+}
+
 type MatchService struct {
 	DB *gorm.DB
 }
@@ -25,11 +87,31 @@ func NewMatchService(db *gorm.DB) *MatchService {
 	return &MatchService{DB: db}
 }
 
-func (s *MatchService) CreateMatch(date models.Date, groupID uuid.UUID) (uuid.UUID, error) {
-	match := &models.Match{
-		GroupID: groupID,
-		Date:    date,
+// CreateMatch creates a match in groupID, optionally scheduled for a future
+// kick-off with player sign-ups (see MatchSpec for the all-or-nothing rule).
+//
+// When the spec is scheduled, Date is derived from ScheduledAt's calendar day
+// rather than taken from the spec: Date remains the field seasons, ordering and
+// the existing JSON contract are built on, so it must stay a single write path
+// — a caller able to supply both could store a match dated one day and kicking
+// off on another. models.DateOf does that in the kick-off's own location, so an
+// evening kick-off keeps the day the client meant.
+func (s *MatchService) CreateMatch(spec MatchSpec, groupID uuid.UUID) (uuid.UUID, error) {
+	if err := spec.validate(); err != nil {
+		return uuid.Nil, err
 	}
+
+	match := &models.Match{
+		GroupID:             groupID,
+		Date:                spec.Date,
+		ScheduledAt:         spec.ScheduledAt,
+		RegistrationOpensAt: spec.RegistrationOpensAt,
+		MaxPlayers:          spec.MaxPlayers,
+	}
+	if spec.IsScheduled() {
+		match.Date = models.DateOf(*spec.ScheduledAt)
+	}
+
 	result := s.DB.Create(match)
 	if result.Error != nil {
 		return uuid.Nil, result.Error
@@ -320,6 +402,13 @@ func (s *MatchService) DeleteMatch(matchID, groupID uuid.UUID) error {
 
 	return s.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchPlayer{}).Error; err != nil {
+			return err
+		}
+		// Sign-ups go the same way. MatchRegistration declares no association
+		// on Match, so unlike match_players there is no FK forcing this — but
+		// leaving a deleted match's sign-up list behind would be dead rows
+		// nothing can ever read or clean up again.
+		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchRegistration{}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&models.Match{}, "id = ?", matchID).Error

@@ -65,7 +65,7 @@ func TestGetMatchDetailsByID_Integration_CrossGroupReturns404(t *testing.T) {
 		t.Fatalf("failed to create player alice: %v", err)
 	}
 
-	matchAID, err := matchService.CreateMatch(models.Date{}, groupA.ID)
+	matchAID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date{}}, groupA.ID)
 	if err != nil {
 		t.Fatalf("failed to create match in group A: %v", err)
 	}

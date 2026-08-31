@@ -1,6 +1,10 @@
 package models
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Player représente un joueur.
 type PlayerCustom struct {
@@ -37,6 +41,28 @@ type RowsMatchDetails struct {
 	PlayerID     uuid.UUID
 	PlayerName   string
 	GoalsScored  int
+}
+
+// MatchRegistrationEntry is one player's line in a scheduled match's sign-up
+// list, as returned by MatchRegistrationService.ListRegistrations.
+//
+// Position and IsWaiting are *derived*, not stored: the list is ordered by
+// RegisteredAt and the first Match.MaxPlayers entries are the confirmed
+// roster, everything past it is the waiting list (see
+// ComputeRegistrationPositions). Position is 1-based so it can be displayed
+// as-is, and IsWaiting is exposed rather than left for the frontend to
+// recompute from MaxPlayers — the rule of what counts as "waiting" belongs on
+// this side, and the client would need MaxPlayers threaded into every view to
+// derive it.
+//
+// RegisteredAt is the ordering key itself, kept in the payload so a client can
+// show when someone signed up without a second query.
+type MatchRegistrationEntry struct {
+	PlayerID     uuid.UUID `json:"PlayerID"`
+	Name         string    `json:"Name"`
+	Position     int       `json:"Position"`
+	IsWaiting    bool      `json:"IsWaiting"`
+	RegisteredAt time.Time `json:"RegisteredAt"`
 }
 
 // GroupWithRole is a Group tagged with the role the *requesting* player holds

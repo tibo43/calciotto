@@ -50,7 +50,7 @@ func TestStandings_Integration_ScopedPerSeason(t *testing.T) {
 	oldDate := models.Date(time.Date(2024, time.August, 25, 0, 0, 0, 0, time.UTC))
 	newDate := models.Date(time.Date(2024, time.September, 8, 0, 0, 0, 0, time.UTC))
 
-	oldMatchID, err := matchService.CreateMatch(oldDate, group.ID)
+	oldMatchID, err := matchService.CreateMatch(services.MatchSpec{Date: oldDate}, group.ID)
 	if err != nil {
 		t.Fatalf("failed to create the old-season match: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestStandings_Integration_ScopedPerSeason(t *testing.T) {
 		t.Fatalf("UpdateMatch (old season) returned error: %v", err)
 	}
 
-	newMatchID, err := matchService.CreateMatch(newDate, group.ID)
+	newMatchID, err := matchService.CreateMatch(services.MatchSpec{Date: newDate}, group.ID)
 	if err != nil {
 		t.Fatalf("failed to create the new-season match: %v", err)
 	}
