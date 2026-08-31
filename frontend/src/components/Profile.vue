@@ -168,8 +168,13 @@
                           </button>
 
                           <template v-if="isGroupAdmin(selectedGroupId) && member.id !== currentPlayerId">
-                            <button class="btn-base btn-cancel btn-small" :disabled="memberActionLoading[member.id]"
-                              @click="toggleMemberRole(member)">
+                            <!-- A ghost player (no email/account, see the
+                                 "No account yet" badge above) can't log in
+                                 to actually use admin privileges — offering
+                                 to promote one is a dead end until they've
+                                 claimed the account via Invite. -->
+                            <button v-if="member.email" class="btn-base btn-cancel btn-small"
+                              :disabled="memberActionLoading[member.id]" @click="toggleMemberRole(member)">
                               {{ member.role === 'admin' ? 'Demote' : 'Promote' }}
                             </button>
                             <button class="btn-base btn-danger btn-small" :disabled="memberActionLoading[member.id]"
