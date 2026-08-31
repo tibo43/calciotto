@@ -1,0 +1,447 @@
+import { mount, flushPromises } from '@vue/test-utils';
+import MatchDetails from '@/components/MatchDetails.vue';
+import {
+  getMatchDetailsByID,
+  getMatchRegistrations,
+  registerForMatch,
+  unregisterFromMatch,
+  closeMatchRegistrations,
+  reopenMatchRegistrations,
+  getToken
+} from '@/services/api';
+import { resolveActiveGroup } from '@/services/activeGroup';
+
+jest.mock('@/services/api', () => ({
+  getMatchDetailsByID: jest.fn(),
+  updateMatch: jest.fn(),
+  deleteMatch: jest.fn(),
+  getGroupMembers: jest.fn(),
+  createPlayer: jest.fn(),
+  getMatchRegistrations: jest.fn(),
+  registerForMatch: jest.fn(),
+  unregisterFromMatch: jest.fn(),
+  closeMatchRegistrations: jest.fn(),
+  reopenMatchRegistrations: jest.fn(),
+  getToken: jest.fn()
+}));
+
+jest.mock('@/services/activeGroup', () => ({
+  resolveActiveGroup: jest.fn()
+}));
+
+const ME = '11111111-1111-1111-1111-111111111111';
+const SOMEONE_ELSE = '22222222-2222-2222-2222-222222222222';
+
+// A JWT is only ever read here for its player_id claim, so an unsigned token
+// with a real base64url payload is enough — currentPlayerIdFromToken never
+// verifies anything.
+const tokenFor = (playerId) => {
+  const payload = Buffer.from(JSON.stringify({ player_id: playerId })).toString('base64');
+  return `header.${payload}.signature`;
+};
+
+const OPENS_AT = '2026-09-01T12:00:00+02:00';
+const KICKOFF = '2026-09-06T20:30:00+02:00';
+const DURING_SIGNUPS = Date.parse('2026-09-04T09:00:00+02:00');
+const BEFORE_SIGNUPS = Date.parse('2026-08-30T09:00:00+02:00');
+const AFTER_KICKOFF = Date.parse('2026-09-06T22:00:00+02:00');
+
+const teams = () => [
+  { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
+  { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+];
+
+const scheduledMatch = (overrides = {}) => ({
+  ID: 'match-uuid',
+  GroupID: 'group-uuid',
+  Date: '2026-09-06',
+  ScheduledAt: KICKOFF,
+  RegistrationOpensAt: OPENS_AT,
+  MaxPlayers: 3,
+  RegistrationCount: 0,
+  Teams: teams(),
+  ...overrides
+});
+
+const unscheduledMatch = () => ({
+  ID: 'match-uuid',
+  GroupID: 'group-uuid',
+  Date: '2026-09-06',
+  Teams: teams()
+});
+
+// A cap of 3 with 4 sign-ups: the server marks the 4th IsWaiting, and nothing on
+// the client is allowed to recompute that.
+const registrationList = () => [
+  { PlayerID: SOMEONE_ELSE, Name: 'marco', Position: 1, IsWaiting: false, RegisteredAt: OPENS_AT },
+  { PlayerID: 'p3', Name: 'luca', Position: 2, IsWaiting: false, RegisteredAt: OPENS_AT },
+  { PlayerID: 'p4', Name: 'gigi', Position: 3, IsWaiting: false, RegisteredAt: OPENS_AT },
+  { PlayerID: 'p5', Name: 'nico', Position: 4, IsWaiting: true, RegisteredAt: OPENS_AT }
+];
+
+let nowSpy;
+
+const mountDetails = async ({ match, registrations = [], isAdmin = false, now = DURING_SIGNUPS } = {}) => {
+  nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
+  getMatchDetailsByID.mockResolvedValue(match);
+  getMatchRegistrations.mockResolvedValue(registrations);
+  resolveActiveGroup.mockResolvedValue({
+    groups: [{ id: 'group-uuid', role: isAdmin ? 'admin' : 'member' }],
+    activeGroupId: 'group-uuid'
+  });
+
+  const wrapper = mount(MatchDetails, {
+    global: {
+      mocks: {
+        $route: { params: { id: 'match-uuid' } },
+        $router: { go: jest.fn(), push: jest.fn() }
+      }
+    }
+  });
+  await flushPromises();
+  return wrapper;
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  getToken.mockReturnValue(tokenFor(ME));
+  registerForMatch.mockResolvedValue({ PlayerID: ME, Name: 'me', Position: 1, IsWaiting: false });
+  unregisterFromMatch.mockResolvedValue({ unregistered: true });
+  closeMatchRegistrations.mockResolvedValue({ closed: true });
+  reopenMatchRegistrations.mockResolvedValue({ reopened: true });
+});
+
+afterEach(() => {
+  if (nowSpy) nowSpy.mockRestore();
+});
+
+describe('MatchDetails.vue sign-up panel visibility', () => {
+  it('shows no panel at all on an ordinary, unscheduled match', async () => {
+    const wrapper = await mountDetails({ match: unscheduledMatch() });
+
+    expect(wrapper.find('.signup-panel').exists()).toBe(false);
+    // And no sign-up list is requested for a match that has none.
+    expect(getMatchRegistrations).not.toHaveBeenCalled();
+  });
+
+  it('shows the panel with the kick-off date and time on a scheduled match', async () => {
+    const wrapper = await mountDetails({ match: scheduledMatch() });
+
+    expect(wrapper.find('.signup-panel').exists()).toBe(true);
+    const kickoff = wrapper.find('.signup-kickoff-value').text();
+    expect(kickoff).toContain('Sep 6, 2026');
+    expect(kickoff).toMatch(/\d:\d\d\s?(AM|PM)/);
+  });
+
+  it('loads the sign-up list for a scheduled match, without a group_id', async () => {
+    await mountDetails({ match: scheduledMatch(), registrations: registrationList() });
+
+    expect(getMatchRegistrations).toHaveBeenCalledWith('match-uuid');
+    expect(getMatchRegistrations).toHaveBeenCalledTimes(1);
+  });
+});
+
+// The requirement most easily got backwards: every other control on this page
+// is admin-gated, but signing yourself up is what an ordinary member comes here
+// to do.
+describe('MatchDetails.vue Participate/Withdraw for a NON-admin', () => {
+  it('offers Participate to a plain member who has not signed up', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: false
+    });
+
+    expect(wrapper.vm.isAdmin).toBe(false);
+    expect(wrapper.find('.participate-btn').exists()).toBe(true);
+    expect(wrapper.find('.withdraw-btn').exists()).toBe(false);
+  });
+
+  it('offers Withdraw, and not Participate, to a plain member already signed up', async () => {
+    const registrations = registrationList();
+    registrations[0] = { ...registrations[0], PlayerID: ME };
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations,
+      isAdmin: false
+    });
+
+    expect(wrapper.find('.withdraw-btn').exists()).toBe(true);
+    expect(wrapper.find('.participate-btn').exists()).toBe(false);
+  });
+
+  it('offers neither Close nor Reopen to a plain member', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: false
+    });
+
+    const labels = wrapper.findAll('.signup-actions button').map(button => button.text());
+    expect(labels.join(' ')).not.toMatch(/sign-ups/i);
+  });
+});
+
+describe('MatchDetails.vue sign-up window states', () => {
+  it('hides both buttons before sign-ups open, and says when they do', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: [],
+      now: BEFORE_SIGNUPS
+    });
+
+    expect(wrapper.vm.registrationState).toBe('not-open-yet');
+    expect(wrapper.find('.participate-btn').exists()).toBe(false);
+    expect(wrapper.find('.withdraw-btn').exists()).toBe(false);
+    expect(wrapper.find('.signup-state-detail').text()).toContain('Sep 1, 2026');
+  });
+
+  // Copy check with teeth: there is no notification anywhere in this feature,
+  // so the panel must not imply one.
+  it('never promises to notify anyone when sign-ups open', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: [],
+      now: BEFORE_SIGNUPS
+    });
+
+    const detail = wrapper.find('.signup-state-detail').text();
+    expect(detail).toMatch(/check back/i);
+    expect(detail).not.toMatch(/notify you when|we'll let you know|email/i);
+  });
+
+  // Withdrawing is gated on the same window as signing up, so the button has to
+  // disappear rather than fail on click once an admin closes the list.
+  it('hides Withdraw from a registered member once an admin has closed sign-ups', async () => {
+    const registrations = registrationList();
+    registrations[0] = { ...registrations[0], PlayerID: ME };
+    const wrapper = await mountDetails({
+      match: scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' }),
+      registrations
+    });
+
+    expect(wrapper.vm.registrationState).toBe('closed-by-admin');
+    expect(wrapper.vm.isRegistered).toBe(true);
+    expect(wrapper.find('.withdraw-btn').exists()).toBe(false);
+    expect(wrapper.find('.participate-btn').exists()).toBe(false);
+  });
+
+  it('hides both buttons once kick-off has passed, even with sign-ups never closed', async () => {
+    const registrations = registrationList();
+    registrations[0] = { ...registrations[0], PlayerID: ME };
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations,
+      now: AFTER_KICKOFF
+    });
+
+    expect(wrapper.vm.registrationState).toBe('closed-at-kickoff');
+    expect(wrapper.find('.withdraw-btn').exists()).toBe(false);
+    expect(wrapper.find('.participate-btn').exists()).toBe(false);
+    expect(wrapper.find('.signup-state-detail').text()).toMatch(/kick-off has passed/i);
+  });
+});
+
+describe('MatchDetails.vue admin close/reopen', () => {
+  it('offers Close, not Reopen, to an admin while sign-ups are open', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    const labels = wrapper.findAll('.signup-actions button').map(button => button.text());
+    expect(labels).toContain('Close sign-ups');
+    expect(labels).not.toContain('Reopen sign-ups');
+  });
+
+  it('offers Reopen, not Close, to an admin on a list they closed', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' }),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    const labels = wrapper.findAll('.signup-actions button').map(button => button.text());
+    expect(labels).toContain('Reopen sign-ups');
+    expect(labels).not.toContain('Close sign-ups');
+  });
+
+  it('offers neither once kick-off has passed — nobody can un-pass kick-off', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true,
+      now: AFTER_KICKOFF
+    });
+
+    expect(wrapper.vm.canCloseRegistrations).toBe(false);
+    expect(wrapper.vm.canReopenRegistrations).toBe(false);
+  });
+
+  it('flips the state locally on close without touching the match, so no unsaved-changes prompt appears', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    await wrapper.vm.closeRegistrations();
+
+    expect(closeMatchRegistrations).toHaveBeenCalledWith('match-uuid');
+    expect(wrapper.vm.registrationState).toBe('closed-by-admin');
+    expect(wrapper.vm.match.RegistrationsClosedAt).toBeUndefined();
+    expect(wrapper.vm.hasUnsavedChanges()).toBe(false);
+  });
+
+  it('clears the state again on reopen', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' }),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    await wrapper.vm.reopenRegistrations();
+
+    expect(reopenMatchRegistrations).toHaveBeenCalledWith('match-uuid');
+    expect(wrapper.vm.registrationState).toBe('open');
+  });
+});
+
+describe('MatchDetails.vue confirmed/waiting split', () => {
+  it('splits the list on the server-sent IsWaiting, keeping each entry position', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList()
+    });
+
+    const lists = wrapper.findAll('.signup-list');
+    expect(lists).toHaveLength(2);
+
+    const confirmed = lists[0].findAll('.signup-entry');
+    expect(confirmed).toHaveLength(3);
+    expect(confirmed[0].text()).toContain('1');
+    expect(confirmed[0].text()).toContain('Marco');
+    expect(confirmed[2].text()).toContain('Gigi');
+
+    const waiting = lists[1].findAll('.signup-entry');
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0].text()).toContain('4');
+    expect(waiting[0].text()).toContain('Nico');
+    expect(lists[1].find('.signup-list-title').text()).toContain('Waiting list');
+  });
+
+  // The cap the confirmed heading shows comes from MaxPlayers, but which rows
+  // are confirmed does not — a stale cap must never move a row between lists.
+  it('trusts IsWaiting even when it disagrees with MaxPlayers', async () => {
+    const registrations = [
+      { PlayerID: 'p1', Name: 'marco', Position: 1, IsWaiting: false, RegisteredAt: OPENS_AT },
+      { PlayerID: 'p2', Name: 'luca', Position: 2, IsWaiting: true, RegisteredAt: OPENS_AT }
+    ];
+    const wrapper = await mountDetails({
+      match: scheduledMatch({ MaxPlayers: 16 }),
+      registrations
+    });
+
+    expect(wrapper.vm.confirmedRegistrations).toHaveLength(1);
+    expect(wrapper.vm.waitingRegistrations).toHaveLength(1);
+  });
+
+  it('hides the waiting list entirely when nobody is on it', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList().slice(0, 2)
+    });
+
+    expect(wrapper.findAll('.signup-list')).toHaveLength(1);
+  });
+
+  it('shows an empty-state row when nobody has signed up', async () => {
+    const wrapper = await mountDetails({ match: scheduledMatch(), registrations: [] });
+
+    expect(wrapper.find('.signup-empty').text()).toMatch(/nobody has signed up/i);
+  });
+});
+
+describe('MatchDetails.vue signing up and withdrawing', () => {
+  it('re-fetches the list after signing up rather than patching it locally', async () => {
+    const wrapper = await mountDetails({ match: scheduledMatch(), registrations: [] });
+    getMatchRegistrations.mockResolvedValue(registrationList());
+
+    await wrapper.vm.participate();
+
+    expect(registerForMatch).toHaveBeenCalledWith('match-uuid');
+    // Once on load, once after the sign-up.
+    expect(getMatchRegistrations).toHaveBeenCalledTimes(2);
+    expect(wrapper.vm.registrations).toHaveLength(4);
+  });
+
+  it('says explicitly that the caller landed on the waiting list, with their number', async () => {
+    registerForMatch.mockResolvedValue({ PlayerID: ME, Name: 'me', Position: 17, IsWaiting: true });
+    const wrapper = await mountDetails({ match: scheduledMatch(), registrations: [] });
+
+    await wrapper.vm.participate();
+
+    expect(wrapper.vm.message).toContain('#17');
+    expect(wrapper.vm.message).toMatch(/waiting list/i);
+    expect(wrapper.vm.messageType).toBe('success');
+  });
+
+  it('does not claim a waiting-list place for a confirmed sign-up', async () => {
+    registerForMatch.mockResolvedValue({ PlayerID: ME, Name: 'me', Position: 5, IsWaiting: false });
+    const wrapper = await mountDetails({ match: scheduledMatch(), registrations: [] });
+
+    await wrapper.vm.participate();
+
+    expect(wrapper.vm.message).not.toMatch(/waiting list/i);
+    expect(wrapper.vm.message).toContain('#5');
+  });
+
+  it('surfaces the backend 409 message verbatim when a sign-up is refused', async () => {
+    registerForMatch.mockRejectedValue({
+      response: { data: { error: 'registrations for this match are closed' } }
+    });
+    const wrapper = await mountDetails({ match: scheduledMatch(), registrations: [] });
+
+    await wrapper.vm.participate();
+
+    expect(wrapper.vm.message).toBe('registrations for this match are closed');
+    expect(wrapper.vm.messageType).toBe('error');
+  });
+
+  it('confirms before withdrawing, and re-fetches the list so the promoted reserve shows', async () => {
+    const registrations = registrationList();
+    registrations[0] = { ...registrations[0], PlayerID: ME };
+    const wrapper = await mountDetails({ match: scheduledMatch(), registrations });
+
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    // The reserve is promoted server-side; the re-fetch is how it becomes visible.
+    getMatchRegistrations.mockResolvedValue([
+      { PlayerID: 'p3', Name: 'luca', Position: 1, IsWaiting: false, RegisteredAt: OPENS_AT },
+      { PlayerID: 'p4', Name: 'gigi', Position: 2, IsWaiting: false, RegisteredAt: OPENS_AT },
+      { PlayerID: 'p5', Name: 'nico', Position: 3, IsWaiting: false, RegisteredAt: OPENS_AT }
+    ]);
+
+    wrapper.vm.confirmWithdraw();
+    await flushPromises();
+
+    expect(unregisterFromMatch).toHaveBeenCalledWith('match-uuid');
+    expect(wrapper.vm.waitingRegistrations).toHaveLength(0);
+    expect(wrapper.vm.confirmedRegistrations).toHaveLength(3);
+    confirmSpy.mockRestore();
+  });
+
+  it('does nothing at all when the withdrawal confirm is dismissed', async () => {
+    const registrations = registrationList();
+    registrations[0] = { ...registrations[0], PlayerID: ME };
+    const wrapper = await mountDetails({ match: scheduledMatch(), registrations });
+
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(false);
+
+    wrapper.vm.confirmWithdraw();
+    await flushPromises();
+
+    expect(unregisterFromMatch).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+});

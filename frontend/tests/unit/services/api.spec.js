@@ -71,3 +71,58 @@ describe('the match API surface', () => {
     expect(api.updateMatchPartial).toBeUndefined();
   });
 });
+
+// None of the five sign-up calls takes a group_id: the backend resolves the
+// group from the match named in the path, which is what stops a caller naming a
+// match in one group while presenting a group they happen to belong to. A
+// query string creeping in here would be that hole reopening.
+describe('the match sign-up calls', () => {
+  beforeEach(() => {
+    mockInstance.get.mockReset();
+    mockInstance.post.mockReset();
+    mockInstance.delete.mockReset();
+    mockInstance.get.mockResolvedValue({ status: 200, data: [] });
+    mockInstance.post.mockResolvedValue({ status: 200, data: {} });
+    mockInstance.delete.mockResolvedValue({ status: 200, data: { unregistered: true } });
+  });
+
+  it('signs the caller up with no body and no group_id', async () => {
+    mockInstance.post.mockResolvedValue({
+      status: 200,
+      data: { PlayerID: 'p1', Name: 'me', Position: 17, IsWaiting: true }
+    });
+
+    const entry = await api.registerForMatch('match-uuid');
+
+    expect(mockInstance.post).toHaveBeenCalledWith('/matches/match-uuid/registrations');
+    // The entry is the only place "you are #17, on the bench" exists.
+    expect(entry).toEqual({ PlayerID: 'p1', Name: 'me', Position: 17, IsWaiting: true });
+  });
+
+  it('withdraws the caller with a bare DELETE', async () => {
+    await expect(api.unregisterFromMatch('match-uuid')).resolves.toEqual({ unregistered: true });
+
+    expect(mockInstance.delete).toHaveBeenCalledWith('/matches/match-uuid/registrations');
+  });
+
+  it('fetches the ordered list', async () => {
+    await api.getMatchRegistrations('match-uuid');
+
+    expect(mockInstance.get).toHaveBeenCalledWith('/matches/match-uuid/registrations');
+  });
+
+  it('closes and reopens sign-ups on their own sub-routes', async () => {
+    await api.closeMatchRegistrations('match-uuid');
+    expect(mockInstance.post).toHaveBeenCalledWith('/matches/match-uuid/registrations/close');
+
+    await api.reopenMatchRegistrations('match-uuid');
+    expect(mockInstance.post).toHaveBeenCalledWith('/matches/match-uuid/registrations/reopen');
+  });
+
+  it('rethrows so a 409 reaches the caller that has to explain it', async () => {
+    const conflict = { response: { status: 409, data: { error: 'already registered' } } };
+    mockInstance.post.mockRejectedValue(conflict);
+
+    await expect(api.registerForMatch('match-uuid')).rejects.toBe(conflict);
+  });
+});

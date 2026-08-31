@@ -182,6 +182,101 @@ export const deleteMatch = async (matchId, groupId) => {
   }
 };
 
+// Sign-ups on a scheduled match.
+//
+// None of these five takes a group_id, unlike every other match call above:
+// the backend resolves the group from the match named in the path and
+// authorizes against *that* (requireGroupMemberByMatchID /
+// requireGroupAdminByMatchID in main.go). Passing one would be the hole that
+// design closes — a caller could name a match in group A while presenting a
+// group B they happen to belong to.
+//
+// A non-member gets 404, not 403, so this API surface never confirms that a
+// match id exists to someone with no business knowing.
+
+// Signs the *caller* up — the player comes from the JWT, which is why there is
+// no body and no player argument.
+//
+// Reaching MaxPlayers is not an error: the surplus sign-up succeeds with
+// IsWaiting true. The resolved entry
+// ({ PlayerID, Name, Position, IsWaiting, RegisteredAt }) is therefore the
+// only place the caller learns "you are #17, on the waiting list", so callers
+// must read it rather than assume a flat success.
+export const registerForMatch = async (matchId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/registrations`);
+    if (response.status !== 200) {
+      throw new Error('Failed to sign up for the match');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error signing up for match:', error);
+    throw error;
+  }
+};
+
+// Withdraws the caller's own sign-up. Gated on the same window as signing up:
+// once an admin has closed the list (or kick-off has passed) this returns 409
+// too, which is why the UI hides the button rather than letting it fail.
+export const unregisterFromMatch = async (matchId) => {
+  try {
+    const response = await api.delete(`/matches/${matchId}/registrations`);
+    if (response.status !== 200) {
+      throw new Error('Failed to withdraw from the match');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error withdrawing from match:', error);
+    throw error;
+  }
+};
+
+// The ordered list, `[]` when empty. Position is 1-based and contiguous, and
+// IsWaiting is server-derived: the first MaxPlayers entries are the confirmed
+// roster. Never recompute that split from MaxPlayers on this side — the two
+// would disagree the moment an admin changes the cap.
+export const getMatchRegistrations = async (matchId) => {
+  try {
+    const response = await api.get(`/matches/${matchId}/registrations`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch match registrations');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching match registrations:', error);
+    throw error;
+  }
+};
+
+// Admin-only: freezes the roster so the teams can be composed.
+export const closeMatchRegistrations = async (matchId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/registrations/close`);
+    if (response.status !== 200) {
+      throw new Error('Failed to close sign-ups');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error closing match sign-ups:', error);
+    throw error;
+  }
+};
+
+// Admin-only: undoes a mis-clicked close. It only clears the closed flag — it
+// cannot bring back a list that kick-off has already closed.
+export const reopenMatchRegistrations = async (matchId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/registrations/reopen`);
+    if (response.status !== 200) {
+      throw new Error('Failed to reopen sign-ups');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error reopening match sign-ups:', error);
+    throw error;
+  }
+};
+
 // New function for updating a match
 export const createPlayer = async (playerData) => {
   try {

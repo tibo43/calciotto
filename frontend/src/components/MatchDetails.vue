@@ -55,6 +55,119 @@
           </div>
         </div>
 
+        <!-- Sign-up panel — scheduled matches only. An ordinary match carries
+             none of these fields, so the whole block is absent for it, exactly
+             as it was before this feature existed.
+
+             Note what is NOT admin-gated here: Participate and Withdraw. Every
+             other control on this page is (see v-if="isAdmin" throughout), but
+             signing yourself up is the one thing an ordinary member comes here
+             to do — gating it would ship a feature only admins could use. Only
+             Close/Reopen are admin actions. -->
+        <div v-if="isScheduled" class="signup-panel card-base">
+          <div class="signup-header">
+            <div class="signup-kickoff">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12,6 12,12 16,14" />
+              </svg>
+              <div class="signup-kickoff-text">
+                <span class="signup-label">Kick-off</span>
+                <span class="signup-kickoff-value">{{ kickoffLabel }}</span>
+              </div>
+            </div>
+            <div class="signup-state-badge" :class="registrationState">{{ registrationStateLabel }}</div>
+          </div>
+
+          <p class="signup-state-detail">{{ registrationStateDetail }}</p>
+
+          <div class="signup-actions">
+            <!-- Open to every member, admin or not. -->
+            <button v-if="canParticipate" @click="participate" :disabled="isUpdatingRegistration"
+              class="btn-base btn-primary btn-small participate-btn">
+              <svg v-if="!isUpdatingRegistration" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="8.5" cy="7" r="4" />
+                <line x1="20" y1="8" x2="20" y2="14" />
+                <line x1="23" y1="11" x2="17" y2="11" />
+              </svg>
+              <div v-else class="loading-spinner-small"></div>
+              {{ isUpdatingRegistration ? 'Signing up...' : 'Participate' }}
+            </button>
+
+            <!-- Disappears rather than failing when the list closes:
+                 DELETE /matches/:id/registrations is gated on the very same
+                 window as the POST, so a visible Withdraw button on a closed
+                 list would be a button that always 409s. -->
+            <button v-if="canWithdraw" @click="confirmWithdraw" :disabled="isUpdatingRegistration"
+              class="btn-base btn-cancel btn-small withdraw-btn">
+              <svg v-if="!isUpdatingRegistration" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="8.5" cy="7" r="4" />
+                <line x1="23" y1="11" x2="17" y2="11" />
+              </svg>
+              <div v-else class="loading-spinner-small"></div>
+              {{ isUpdatingRegistration ? 'Withdrawing...' : 'Withdraw' }}
+            </button>
+
+            <button v-if="canCloseRegistrations" @click="closeRegistrations" :disabled="isUpdatingRegistrationState"
+              class="btn-base btn-cancel btn-small">
+              <div v-if="isUpdatingRegistrationState" class="loading-spinner-small"></div>
+              {{ isUpdatingRegistrationState ? 'Closing...' : 'Close sign-ups' }}
+            </button>
+
+            <button v-if="canReopenRegistrations" @click="reopenRegistrations" :disabled="isUpdatingRegistrationState"
+              class="btn-base btn-cancel btn-small">
+              <div v-if="isUpdatingRegistrationState" class="loading-spinner-small"></div>
+              {{ isUpdatingRegistrationState ? 'Reopening...' : 'Reopen sign-ups' }}
+            </button>
+          </div>
+
+          <div v-if="isLoadingRegistrations" class="signup-loading">
+            <div class="loading-spinner-small"></div>
+            <span>Loading sign-ups...</span>
+          </div>
+
+          <!-- The confirmed/waiting split comes straight from each entry's
+               server-side IsWaiting, never from comparing Position against
+               MaxPlayers here: the two would disagree the moment an admin
+               changes the cap. -->
+          <div v-else class="signup-lists">
+            <div class="signup-list">
+              <h4 class="signup-list-title">
+                Confirmed
+                <span class="count-badge">{{ confirmedRegistrations.length }} / {{ match.MaxPlayers }}</span>
+              </h4>
+              <ul class="signup-entries">
+                <li v-for="entry in confirmedRegistrations" :key="entry.PlayerID" class="signup-entry"
+                  :class="{ 'is-me': entry.PlayerID === currentPlayerId }">
+                  <span class="signup-position">{{ entry.Position }}</span>
+                  <span class="signup-name">{{ formatPlayerNameForDisplay(entry.Name) }}</span>
+                  <span v-if="entry.PlayerID === currentPlayerId" class="signup-you">you</span>
+                </li>
+                <li v-if="confirmedRegistrations.length === 0" class="signup-empty">Nobody has signed up yet</li>
+              </ul>
+            </div>
+
+            <div v-if="waitingRegistrations.length > 0" class="signup-list signup-list-waiting">
+              <h4 class="signup-list-title">
+                Waiting list
+                <span class="count-badge">{{ waitingRegistrations.length }}</span>
+              </h4>
+              <ul class="signup-entries">
+                <li v-for="entry in waitingRegistrations" :key="entry.PlayerID" class="signup-entry"
+                  :class="{ 'is-me': entry.PlayerID === currentPlayerId }">
+                  <span class="signup-position">{{ entry.Position }}</span>
+                  <span class="signup-name">{{ formatPlayerNameForDisplay(entry.Name) }}</span>
+                  <span v-if="entry.PlayerID === currentPlayerId" class="signup-you">you</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
         <!-- Team Management Section -->
         <div v-if="match.Teams && match.Teams.length > 0" class="team-management card-base card-large">
           <div class="management-header">
@@ -363,8 +476,48 @@
 </template>
 
 <script>
-import { getMatchDetailsByID, updateMatch, deleteMatch, getGroupMembers, createPlayer } from '@/services/api';
+import {
+  getMatchDetailsByID,
+  updateMatch,
+  deleteMatch,
+  getGroupMembers,
+  createPlayer,
+  getMatchRegistrations,
+  registerForMatch,
+  unregisterFromMatch,
+  closeMatchRegistrations,
+  reopenMatchRegistrations,
+  getToken
+} from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
+import { formatDateTimeForDisplay } from '@/services/datetime';
+import {
+  isScheduledMatch,
+  deriveRegistrationState,
+  registrationsAreOpen,
+  REGISTRATION_NOT_OPEN_YET,
+  REGISTRATION_OPEN,
+  REGISTRATION_CLOSED_BY_ADMIN,
+  REGISTRATION_CLOSED_AT_KICKOFF
+} from '@/services/matchRegistration';
+
+// Same shape as Profile.vue's own helper — the app has no auth store, and the
+// player id is only ever needed to answer "which of these rows is me", so both
+// pages decode the JWT payload locally rather than a third place holding state.
+function currentPlayerIdFromToken() {
+  const token = getToken();
+  if (!token) {
+    return '';
+  }
+  try {
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return decoded.player_id || '';
+  } catch (error) {
+    console.error('Error decoding token:', error);
+    return '';
+  }
+}
 
 export default {
   name: 'MatchDetail',
@@ -396,9 +549,36 @@ export default {
       messageKey: 0,
       showCreatePlayerOption: false,
       isCreatingPlayer: false,
+      // --- Sign-ups (scheduled matches only) ---
+      // The ordered list from GET /matches/:id/registrations, exactly as the
+      // server sent it: never reordered or patched locally, since the whole
+      // waiting-list design is server-derived ordering.
+      registrations: [],
+      isLoadingRegistrations: false,
+      // Participate/Withdraw in flight vs. Close/Reopen in flight — separate
+      // flags so an admin closing the list doesn't grey out the member-facing
+      // buttons (and vice versa).
+      isUpdatingRegistration: false,
+      isUpdatingRegistrationState: false,
+      // Kept out of `match` on purpose. Close/Reopen change this flag
+      // server-side, and writing it back into `match` would make
+      // hasUnsavedChanges() see the match as dirty against matchSnapshot and
+      // pop the "leave without saving?" confirm — or, if the snapshot were
+      // refreshed too, silently swallow real unsaved goal edits. Seeded from
+      // the match on load, then owned here.
+      registrationsClosedAt: null,
+      // Sampled ONCE, in created(). There is deliberately no polling timer and
+      // no reactive clock: this app has no reactive store and re-reads its data
+      // on navigation, so a player who had this page open from before sign-ups
+      // opened sees the Participate button after a reload — which is also how
+      // they find out at all, since nothing notifies them.
+      nowMs: 0,
+      currentPlayerId: '',
     };
   },
   async created() {
+    this.nowMs = Date.now();
+    this.currentPlayerId = currentPlayerIdFromToken();
     try {
       const { groups, activeGroupId } = await resolveActiveGroup();
       this.activeGroupId = activeGroupId;
@@ -418,6 +598,95 @@ export default {
       return;
     }
     next();
+  },
+  computed: {
+    // A scheduled match is one that carries a kick-off; an ordinary match has
+    // none of the scheduling keys at all.
+    isScheduled() {
+      return isScheduledMatch(this.match);
+    },
+
+    // The closed flag comes from local state rather than from `match` (see the
+    // data comment on registrationsClosedAt); everything else is read straight
+    // off the match.
+    registrationState() {
+      if (!this.match) return '';
+      return deriveRegistrationState({
+        ScheduledAt: this.match.ScheduledAt,
+        RegistrationOpensAt: this.match.RegistrationOpensAt,
+        RegistrationsClosedAt: this.registrationsClosedAt
+      }, this.nowMs);
+    },
+
+    registrationsOpen() {
+      return registrationsAreOpen(this.registrationState);
+    },
+
+    kickoffLabel() {
+      return formatDateTimeForDisplay(this.match && this.match.ScheduledAt);
+    },
+
+    registrationStateLabel() {
+      switch (this.registrationState) {
+        case REGISTRATION_OPEN: return 'Sign-ups open';
+        case REGISTRATION_NOT_OPEN_YET: return 'Sign-ups not open yet';
+        case REGISTRATION_CLOSED_BY_ADMIN: return 'Sign-ups closed';
+        case REGISTRATION_CLOSED_AT_KICKOFF: return 'Sign-ups closed';
+        default: return '';
+      }
+    },
+
+    // Deliberately says nothing about being told when sign-ups open: there is
+    // no notification of any kind in this feature, so the copy must not imply
+    // one — players find out by opening the app.
+    registrationStateDetail() {
+      switch (this.registrationState) {
+        case REGISTRATION_OPEN:
+          return 'Sign-ups are open until an admin closes them. Going over the maximum is fine — extra players join the waiting list.';
+        case REGISTRATION_NOT_OPEN_YET:
+          return `Sign-ups open on ${formatDateTimeForDisplay(this.match.RegistrationOpensAt)}. Nothing will notify you, so check back here then.`;
+        case REGISTRATION_CLOSED_BY_ADMIN:
+          return 'An admin has closed sign-ups. You can no longer sign up or withdraw.';
+        case REGISTRATION_CLOSED_AT_KICKOFF:
+          return 'Kick-off has passed, so sign-ups are closed for good.';
+        default:
+          return '';
+      }
+    },
+
+    // Both of these hang off the same `registrationsOpen`, because the backend
+    // gates signing up and withdrawing on the identical window.
+    isRegistered() {
+      if (!this.currentPlayerId) return false;
+      return this.registrations.some(entry => entry.PlayerID === this.currentPlayerId);
+    },
+
+    canParticipate() {
+      return this.isScheduled && this.registrationsOpen && !this.isLoadingRegistrations && !this.isRegistered;
+    },
+
+    canWithdraw() {
+      return this.isScheduled && this.registrationsOpen && !this.isLoadingRegistrations && this.isRegistered;
+    },
+
+    // Admin-only, and only in the state each action can actually change: there
+    // is nothing to close on an already-closed list, and reopening one that
+    // kick-off closed would clear the flag without reopening anything.
+    canCloseRegistrations() {
+      return this.isScheduled && this.isAdmin && this.registrationState === REGISTRATION_OPEN;
+    },
+
+    canReopenRegistrations() {
+      return this.isScheduled && this.isAdmin && this.registrationState === REGISTRATION_CLOSED_BY_ADMIN;
+    },
+
+    confirmedRegistrations() {
+      return this.registrations.filter(entry => !entry.IsWaiting);
+    },
+
+    waitingRegistrations() {
+      return this.registrations.filter(entry => entry.IsWaiting);
+    }
   },
   methods: {
     hasUnsavedChanges() {
@@ -450,12 +719,130 @@ export default {
         }
 
         this.matchSnapshot = JSON.stringify(this.match);
+
+        // Snapshot the closed flag out of the match and into local state, so
+        // Close/Reopen never touch `match` (and so never make it look dirty).
+        this.registrationsClosedAt = (this.match && this.match.RegistrationsClosedAt) || null;
       } catch (error) {
         console.error('Error fetching match:', error);
         this.showMessage('Error loading match details', 'error');
       } finally {
         this.isLoading = false;
       }
+
+      // After isLoading flips, so the panel renders its own spinner rather than
+      // holding the whole page back on a list that no unscheduled match has.
+      if (this.isScheduled) {
+        await this.loadRegistrations();
+      }
+    },
+
+    // --- Sign-ups -----------------------------------------------------------
+    // Always a full re-fetch, never a local patch: position and IsWaiting are
+    // derived server-side from the stored order, and the promotion of the first
+    // reserve when someone withdraws is exactly the thing the list is meant to
+    // show happening. Patching locally is how the display drifts from reality.
+    async loadRegistrations() {
+      this.isLoadingRegistrations = true;
+      try {
+        const entries = await getMatchRegistrations(this.match.ID);
+        this.registrations = Array.isArray(entries) ? entries : [];
+      } catch (error) {
+        console.error('Error loading registrations:', error);
+        this.showMessage('Error loading the sign-up list', 'error');
+        this.registrations = [];
+      } finally {
+        this.isLoadingRegistrations = false;
+      }
+    },
+
+    async participate() {
+      if (this.isUpdatingRegistration) return;
+      this.isUpdatingRegistration = true;
+      try {
+        // Landing past the maximum is a success, not an error — the entry that
+        // comes back is the only place the caller learns it, so say so
+        // explicitly instead of a bare "signed up".
+        const entry = await registerForMatch(this.match.ID);
+        await this.loadRegistrations();
+        if (entry && entry.IsWaiting) {
+          this.showMessage(`Signed up — you are #${entry.Position}, on the waiting list.`, 'success');
+        } else {
+          const position = entry && entry.Position ? ` You are #${entry.Position}.` : '';
+          this.showMessage(`You're in for this match.${position}`, 'success');
+        }
+      } catch (error) {
+        console.error('Error signing up for match:', error);
+        // A 409 says precisely why (not open yet, closed, already registered) —
+        // worth showing verbatim rather than flattening, same pattern as
+        // createNewPlayer above. Reload either way: a rejection usually means
+        // this page's view of the list is stale.
+        this.showMessage(this.registrationErrorMessage(error, 'Error signing up for this match.'), 'error');
+        await this.loadRegistrations();
+      } finally {
+        this.isUpdatingRegistration = false;
+      }
+    },
+
+    // Same window as signing up, so the button this confirms is only ever
+    // rendered while the list is open — see canWithdraw.
+    confirmWithdraw() {
+      if (this.isUpdatingRegistration) return;
+      const confirmed = window.confirm('Withdraw from this match? Your place goes to the first player on the waiting list.');
+      if (!confirmed) return;
+      this.withdraw();
+    },
+
+    async withdraw() {
+      this.isUpdatingRegistration = true;
+      try {
+        await unregisterFromMatch(this.match.ID);
+        await this.loadRegistrations();
+        this.showMessage('You have withdrawn from this match.', 'success');
+      } catch (error) {
+        console.error('Error withdrawing from match:', error);
+        this.showMessage(this.registrationErrorMessage(error, 'Error withdrawing from this match.'), 'error');
+        await this.loadRegistrations();
+      } finally {
+        this.isUpdatingRegistration = false;
+      }
+    },
+
+    async closeRegistrations() {
+      if (this.isUpdatingRegistrationState) return;
+      this.isUpdatingRegistrationState = true;
+      try {
+        await closeMatchRegistrations(this.match.ID);
+        // The backend stamps its own timestamp; only the fact that one exists
+        // matters to the state derivation, so a local instant is enough until
+        // the next load reads the real one back.
+        this.registrationsClosedAt = new Date().toISOString();
+        this.showMessage('Sign-ups closed.', 'success');
+      } catch (error) {
+        console.error('Error closing sign-ups:', error);
+        this.showMessage(this.registrationErrorMessage(error, 'Error closing sign-ups.'), 'error');
+      } finally {
+        this.isUpdatingRegistrationState = false;
+      }
+    },
+
+    async reopenRegistrations() {
+      if (this.isUpdatingRegistrationState) return;
+      this.isUpdatingRegistrationState = true;
+      try {
+        await reopenMatchRegistrations(this.match.ID);
+        this.registrationsClosedAt = null;
+        this.showMessage('Sign-ups reopened.', 'success');
+      } catch (error) {
+        console.error('Error reopening sign-ups:', error);
+        this.showMessage(this.registrationErrorMessage(error, 'Error reopening sign-ups.'), 'error');
+      } finally {
+        this.isUpdatingRegistrationState = false;
+      }
+    },
+
+    registrationErrorMessage(error, fallback) {
+      return error?.response?.data?.error || fallback;
     },
 
     // Load all players when modal opens
@@ -1111,6 +1498,185 @@ export default {
   font-size: 0.7rem;
   flex-shrink: 0;
   box-shadow: var(--shadow-lg);
+}
+
+/* Sign-up panel (scheduled matches only) */
+.signup-panel {
+  margin-bottom: 2rem;
+}
+
+.signup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.signup-kickoff {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.signup-kickoff svg {
+  width: 22px;
+  height: 22px;
+  color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.signup-kickoff-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.signup-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.signup-kickoff-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Same pill shape as .match-status-badge above, so the two badges on this page
+   read as the same kind of thing. */
+.signup-state-badge {
+  padding: 0.3rem 0.65rem;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.signup-state-badge.open {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.signup-state-badge.not-open-yet {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.signup-state-badge.closed-by-admin,
+.signup-state-badge.closed-at-kickoff {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.signup-state-detail {
+  margin: 1rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.signup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.signup-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.signup-lists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.signup-list-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.signup-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  /* A 30-strong waiting list must not push the team management section off
+     the bottom of the page. */
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.signup-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius);
+  font-size: 0.875rem;
+}
+
+.signup-entry.is-me {
+  border: 1px solid var(--primary-color);
+}
+
+.signup-position {
+  min-width: 1.5rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.signup-name {
+  flex: 1;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.signup-you {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--primary-color);
+}
+
+/* The waiting list is deliberately muted: it is real information, but the
+   confirmed roster is what a player scans for first. */
+.signup-list-waiting .signup-entry {
+  opacity: 0.8;
+}
+
+.signup-empty {
+  padding: 0.5rem 0.65rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-style: italic;
+}
+
+@media (max-width: 768px) {
+  .signup-lists {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Team Management */

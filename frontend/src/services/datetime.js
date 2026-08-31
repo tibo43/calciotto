@@ -65,3 +65,57 @@ export const dateTimeLocalToRFC3339 = (value) => {
   const [day, time] = value.split('T');
   return toLocalRFC3339(day, time);
 };
+
+// ---------------------------------------------------------------------------
+// Display formatting for the timestamps the backend hands back.
+//
+// The mirror image of the two functions above: those turn what the user typed
+// into an RFC3339 string for the backend, these turn an RFC3339 string from the
+// backend into something readable. Both directions live here so there is one
+// date path in the app rather than a hand-rolled `toLocaleString` call in each
+// component that happens to need one.
+//
+// Rendering is deliberately in the *browser's* zone (no `timeZone` option), not
+// in the zone the timestamp was created in: a kick-off is a single instant, and
+// a player travelling or living elsewhere wants to know when it happens for
+// them. That is also why nothing here re-reads the offset the string carries —
+// `Date` has already resolved it to an instant by then.
+
+// Accepts an RFC3339 string, a Date, or anything Date can parse; returns null
+// for empty/unparseable input so the callers below can degrade to '' instead of
+// rendering "Invalid Date" at the user.
+const toDate = (value) => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+// Full kick-off / sign-ups-open line, e.g. "Sun, Sep 6, 2026, 8:30 PM".
+// Weekday included on purpose: a calciotto is a recurring weekly fixture, so
+// "which day of the week" is the first thing a player checks.
+export const formatDateTimeForDisplay = (value) => {
+  const date = toDate(value);
+  if (!date) return '';
+  return date.toLocaleString('en-US', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+// The compact variant for a match card in the carousel, e.g.
+// "Sep 6, 2026, 8:30 PM" — no weekday, since the card has room for one line.
+export const formatDateTimeShort = (value) => {
+  const date = toDate(value);
+  if (!date) return '';
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};

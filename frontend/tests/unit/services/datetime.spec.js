@@ -1,4 +1,10 @@
-import { formatUTCOffset, toLocalRFC3339, dateTimeLocalToRFC3339 } from '@/services/datetime';
+import {
+  formatUTCOffset,
+  toLocalRFC3339,
+  dateTimeLocalToRFC3339,
+  formatDateTimeForDisplay,
+  formatDateTimeShort
+} from '@/services/datetime';
 
 // The machine's own zone must never decide whether these pass — a test that
 // only holds in Europe/Paris is worse than no test at all here.
@@ -114,5 +120,61 @@ describe('dateTimeLocalToRFC3339', () => {
       expect(dateTimeLocalToRFC3339('')).toBe('');
       expect(dateTimeLocalToRFC3339('2026-09-01')).toBe('');
     });
+  });
+});
+
+// The display formatters render in the *browser's* zone, so a test must not
+// hand them a fixed absolute instant and assert a fixed wall clock — that only
+// holds in one zone. Every case below either builds the Date from local
+// components (so the local getters give those components back, whatever the
+// zone) or round-trips through toLocalRFC3339, which stamps the machine's own
+// offset. Assertions are on substrings rather than the whole string because the
+// exact separator between date and time ("," vs " at ") depends on the ICU
+// version bundled with Node, not on anything this code controls.
+describe('formatDateTimeForDisplay', () => {
+  it('renders the local weekday, date and time of a Date built from local components', () => {
+    const result = formatDateTimeForDisplay(new Date(2026, 8, 6, 20, 30));
+
+    expect(result).toContain('Sun');
+    expect(result).toContain('Sep 6, 2026');
+    expect(result).toContain('8:30 PM');
+  });
+
+  it('parses an RFC3339 string carrying the local offset to the same instant', () => {
+    // toLocalRFC3339 is the producer side of this pair, so the round trip is
+    // the real contract: what the create modal sent must come back reading the
+    // same way.
+    const rfc3339 = toLocalRFC3339('2026-09-06', '20:30');
+
+    expect(formatDateTimeForDisplay(rfc3339)).toBe(formatDateTimeForDisplay(new Date(2026, 8, 6, 20, 30)));
+  });
+
+  it('renders a midnight kick-off as 12:00 AM on its own day, not the day before', () => {
+    const result = formatDateTimeForDisplay(new Date(2026, 8, 6, 0, 30));
+
+    expect(result).toContain('Sep 6, 2026');
+    expect(result).toContain('12:30 AM');
+  });
+
+  it('returns an empty string rather than "Invalid Date" for unusable input', () => {
+    expect(formatDateTimeForDisplay('')).toBe('');
+    expect(formatDateTimeForDisplay(null)).toBe('');
+    expect(formatDateTimeForDisplay(undefined)).toBe('');
+    expect(formatDateTimeForDisplay('not a date at all')).toBe('');
+  });
+});
+
+describe('formatDateTimeShort', () => {
+  it('drops the weekday but keeps the date and time, for a compact match card', () => {
+    const result = formatDateTimeShort(new Date(2026, 8, 6, 20, 30));
+
+    expect(result).toContain('Sep 6, 2026');
+    expect(result).toContain('8:30 PM');
+    expect(result).not.toContain('Sun');
+  });
+
+  it('returns an empty string for unusable input', () => {
+    expect(formatDateTimeShort('')).toBe('');
+    expect(formatDateTimeShort('nonsense')).toBe('');
   });
 });

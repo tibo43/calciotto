@@ -218,3 +218,84 @@ describe('MatchesPanel.vue create-match modal', () => {
     expect(wrapper.vm.scheduleError).toBe('');
   });
 });
+
+// The card side of the sign-up feature. Everything about the list itself lives
+// on the match page — the card only has to be recognisably a scheduled match,
+// show its kick-off and show how full it is.
+describe('MatchesPanel.vue scheduled match cards', () => {
+  const scheduled = {
+    ID: 'scheduled-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-09-06',
+    ScheduledAt: '2026-09-06T20:30:00+02:00',
+    RegistrationOpensAt: '2026-09-01T12:00:00+02:00',
+    MaxPlayers: 16,
+    RegistrationCount: 7,
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+    ]
+  };
+
+  const played = {
+    ID: 'played-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-08-30',
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 3, Players: [] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 2, Players: [] }
+    ]
+  };
+
+  it('marks a scheduled card, and shows its kick-off date and time', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled]);
+    const wrapper = await mountPanel();
+
+    const cards = wrapper.findAll('.match-card-horizontal:not(.add-match-card)');
+    expect(cards).toHaveLength(1);
+    expect(cards[0].classes()).toContain('scheduled');
+    const dateLine = cards[0].find('.match-date-horizontal').text();
+    expect(dateLine).toContain('Sep 6, 2026');
+    expect(dateLine).toMatch(/\d:\d\d\s?(AM|PM)/);
+  });
+
+  it('shows how full the roster is, from the server-sent count', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-count').text()).toBe('7 / 16 signed up');
+    expect(wrapper.find('.scheduled-pill').exists()).toBe(true);
+  });
+
+  // RegistrationCount is a *int with omitempty on the Go side precisely so that
+  // "scheduled, nobody signed up" (0, key present) stays distinguishable from
+  // "not a scheduled match" (key absent) — "0 / 16" is a real state to render.
+  it('renders a zero sign-up count rather than treating it as missing', async () => {
+    getMatchesDetails.mockResolvedValue([{ ...scheduled, RegistrationCount: 0 }]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-count').text()).toBe('0 / 16 signed up');
+  });
+
+  it('leaves an ordinary card exactly as it was: no badge, no count, plain date', async () => {
+    getMatchesDetails.mockResolvedValue([played]);
+    const wrapper = await mountPanel();
+
+    const card = wrapper.find('.match-card-horizontal:not(.add-match-card)');
+    expect(card.classes()).not.toContain('scheduled');
+    expect(wrapper.find('.scheduled-pill').exists()).toBe(false);
+    expect(wrapper.find('.signup-count').exists()).toBe(false);
+    expect(card.find('.match-date-horizontal').text()).toBe('Aug 30, 2026');
+  });
+
+  // loadMatches() discards the *entire* list if any match fails its shape check,
+  // so requiring the new scheduling keys there would blank the whole page as
+  // soon as one unscheduled match showed up. This pins that it doesn't.
+  it('keeps both kinds of match in one list, the new fields being purely additive', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled, played]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.vm.matches).toHaveLength(2);
+    expect(wrapper.findAll('.match-card-horizontal:not(.add-match-card)')).toHaveLength(2);
+  });
+});

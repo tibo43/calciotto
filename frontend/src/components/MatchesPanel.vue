@@ -140,8 +140,12 @@
               </button>
 
               <div v-for="match in matches" :key="match.ID" class="match-card-horizontal"
-                :class="{ 'active': selectedMatch?.ID === match.ID }" @click="selectMatch(match)">
-                <!-- Match Date -->
+                :class="{ 'active': selectedMatch?.ID === match.ID, 'scheduled': isScheduledMatch(match) }"
+                @click="selectMatch(match)">
+                <!-- Match Date — a scheduled match shows its kick-off instead
+                     (same calendar day, plus the time), so the card says when
+                     the match actually starts rather than just which day it
+                     is filed under. -->
                 <div class="match-date-horizontal">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -149,7 +153,16 @@
                     <line x1="8" y1="2" x2="8" y2="6" />
                     <line x1="3" y1="10" x2="21" y2="10" />
                   </svg>
-                  <span>{{ formatDateShort(match.Date) }}</span>
+                  <span>{{ isScheduledMatch(match) ? formatKickoff(match) : formatDateShort(match.Date) }}</span>
+                </div>
+
+                <!-- Sign-ups line — one compact row (badge + count), not a
+                     panel: these cards are ~200px wide in a horizontal
+                     carousel. Everything about the sign-up list itself lives
+                     on the match page. -->
+                <div v-if="isScheduledMatch(match)" class="match-signups-horizontal">
+                  <span class="scheduled-pill">Scheduled</span>
+                  <span class="signup-count">{{ signupCountLabel(match) }}</span>
                 </div>
 
                 <!-- Teams and Scores -->
@@ -266,7 +279,8 @@
 
 <script>
 import { getMatchesDetails, createMatch } from '@/services/api';
-import { toLocalRFC3339, dateTimeLocalToRFC3339 } from '@/services/datetime';
+import { toLocalRFC3339, dateTimeLocalToRFC3339, formatDateTimeShort } from '@/services/datetime';
+import { isScheduledMatch } from '@/services/matchRegistration';
 
 // The Matches sub-tab of MatchesAndStandings.vue: the match carousel, the
 // selected match's preview, and the admin-only create-match modal. Everything
@@ -657,6 +671,27 @@ export default {
       }
     },
 
+    // Exposed as a method rather than imported into the template directly:
+    // this component has no setup()/computed path for a bare helper, and every
+    // other formatter here is a method too.
+    isScheduledMatch(match) {
+      return isScheduledMatch(match);
+    },
+
+    formatKickoff(match) {
+      return formatDateTimeShort(match.ScheduledAt);
+    },
+
+    // RegistrationCount is present-but-zero on a scheduled match nobody has
+    // signed up for yet (it is a *int with omitempty on the Go side precisely
+    // so 0 and "not scheduled" stay distinguishable), so `?? 0` rather than
+    // `|| 0` — not that it matters for 0, but it keeps the intent explicit
+    // that only a genuinely absent count falls back.
+    signupCountLabel(match) {
+      const count = match.RegistrationCount ?? 0;
+      return `${count} / ${match.MaxPlayers} signed up`;
+    },
+
     formatDateShort(dateString) {
       try {
         const date = new Date(dateString);
@@ -1032,6 +1067,47 @@ export default {
   font-weight: 500;
   margin-bottom: 0.75rem;
   font-size: 0.875rem;
+}
+
+/* A scheduled match reads differently at a glance: a coloured left edge, so
+   it is distinguishable from a played match even before the badge below is
+   read (and for anyone who can't tell the badge's colour apart). The border
+   is only the left one, so .active's full 2px accent border still wins
+   visually on the selected card. */
+.match-card-horizontal.scheduled {
+  border-left-color: var(--primary-color);
+}
+
+/* The kick-off string is longer than a bare date, so the date row is allowed
+   to wrap on a scheduled card rather than overflowing the 220px card. */
+.match-card-horizontal.scheduled .match-date-horizontal {
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.match-signups-horizontal {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.scheduled-pill {
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background-color: var(--primary-color);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.signup-count {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
 .match-date-horizontal svg {
