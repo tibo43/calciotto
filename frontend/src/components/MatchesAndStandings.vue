@@ -263,10 +263,29 @@ export default {
 /* Responsive */
 @media (max-width: 768px) {
   .context-bar {
-    /* On mobile, group/season wrap onto their own line each — centering a
-       single item on its line would just indent it for no reason, so this
-       goes back to flush-left instead of the desktop centering. */
+    /* Group and season sit on one row here too, not stacked: dropping the
+       "Group"/"Season" labels below frees up enough width for both
+       selects to fit side by side instead of each wrapping onto its own
+       line. */
     justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 0.75rem;
+  }
+
+  /* Visually hidden rather than display:none, so the <select> — still
+     associated via its for/id pair — keeps an accessible name for screen
+     readers even though sighted mobile users no longer see the label
+     text. */
+  .context-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 }
 </style>
