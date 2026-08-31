@@ -58,6 +58,43 @@
                 Selected: {{ formatSelectedDate(selectedDate) }}
               </div>
             </div>
+
+            <!-- Optional scheduling. Unchecked (the default) the modal creates
+                 an ordinary match exactly as it always has — no scheduling
+                 field is sent at all. Checked, all three become required: the
+                 backend treats them as all-or-nothing and 400s on a partial
+                 set. -->
+            <div class="form-group schedule-group">
+              <label class="schedule-toggle">
+                <input type="checkbox" class="schedule-checkbox" v-model="isScheduled" :disabled="isCreating" />
+                <span>Schedule this match and open sign-ups</span>
+              </label>
+
+              <div v-if="isScheduled" class="schedule-fields">
+                <div class="schedule-field">
+                  <label for="schedule-kickoff-time">Kick-off time</label>
+                  <input id="schedule-kickoff-time" class="form-input schedule-input" type="time" v-model="kickoffTime"
+                    :disabled="isCreating" />
+                  <p class="schedule-hint">On the day selected above.</p>
+                </div>
+
+                <div class="schedule-field">
+                  <label for="schedule-registration-opens">Sign-ups open</label>
+                  <input id="schedule-registration-opens" class="form-input schedule-input" type="datetime-local"
+                    v-model="registrationOpensAt" :disabled="isCreating" />
+                  <p class="schedule-hint">Must be strictly before kick-off.</p>
+                </div>
+
+                <div class="schedule-field">
+                  <label for="schedule-max-players">Maximum players</label>
+                  <input id="schedule-max-players" class="form-input schedule-input" type="number" min="1" step="1"
+                    v-model="maxPlayers" :disabled="isCreating" />
+                  <p class="schedule-hint">A calciotto is 8v8, so 16 by default.</p>
+                </div>
+              </div>
+
+              <p v-if="scheduleError" class="error-message schedule-error">{{ scheduleError }}</p>
+            </div>
           </div>
 
           <div class="modal-footer">
@@ -229,12 +266,16 @@
 
 <script>
 import { getMatchesDetails, createMatch } from '@/services/api';
+import { toLocalRFC3339, dateTimeLocalToRFC3339 } from '@/services/datetime';
 
 // The Matches sub-tab of MatchesAndStandings.vue: the match carousel, the
 // selected match's preview, and the admin-only create-match modal. Everything
 // it is scoped by — the active group, the caller's admin role, the selected
 // season — is resolved once by the page and passed down, so this component
 // only ever loads matches.
+// A calciotto is 8v8, so 16 is the roster size worth defaulting to.
+const DEFAULT_MAX_PLAYERS = 16;
+
 export default {
   name: 'MatchesPanel',
   props: {
@@ -271,6 +312,13 @@ export default {
       isCreating: false,
       dateError: '',
       match: {},
+      // Optional scheduling (opt-in). All four are reset by closeModal(), so
+      // reopening the modal always starts from the unscheduled default.
+      isScheduled: false,
+      kickoffTime: '',
+      registrationOpensAt: '',
+      maxPlayers: DEFAULT_MAX_PLAYERS,
+      scheduleError: '',
       // Custom Date Picker
       currentMonth: new Date().getMonth(),
       currentYear: new Date().getFullYear(),
@@ -382,13 +430,27 @@ export default {
         return;
       }
 
+      // Mirrors the backend's own rules so the reason shows up next to the
+      // field instead of coming back as an opaque 400. The backend stays the
+      // authority — see the catch below, which surfaces its message verbatim.
+      let scheduling = null;
+      if (this.isScheduled) {
+        scheduling = this.buildScheduling();
+        if (!scheduling) {
+          return;
+        }
+      }
+      this.scheduleError = '';
+
       this.isCreating = true;
       this.dateError = '';
 
       this.match.Date = this.selectedDate;
       try {
-        // Call your createMatch API function
-        const response = await createMatch(this.match, this.activeGroupId);
+        // Call your createMatch API function. scheduling is null for an
+        // ordinary match, which makes the request body identical to what it
+        // was before scheduling existed.
+        const response = await createMatch(this.match, this.activeGroupId, scheduling);
 
         if (response) {
           // Close modal
@@ -401,10 +463,53 @@ export default {
         }
       } catch (error) {
         console.error('Error creating match:', error);
-        this.dateError = 'Failed to create match. Please try again.';
+        // A rejected schedule (the backend re-checks everything validated
+        // above, plus whatever this client doesn't know about) says why —
+        // don't flatten it into the generic message.
+        const backendMessage = error.response && error.response.data && error.response.data.error;
+        this.dateError = backendMessage || 'Failed to create match. Please try again.';
       } finally {
         this.isCreating = false;
       }
+    },
+
+    // Returns the { scheduledAt, registrationOpensAt, maxPlayers } payload
+    // createMatch expects, or null after setting scheduleError.
+    //
+    // Both timestamps carry the browser's local UTC offset (see
+    // services/datetime.js): the backend derives the match's date — and hence
+    // its season — from scheduled_at's calendar day in the offset it was sent
+    // in, so a UTC 'Z' string would move a late kick-off to the day before.
+    buildScheduling() {
+      if (!this.kickoffTime) {
+        this.scheduleError = 'Please set a kick-off time';
+        return null;
+      }
+      if (!this.registrationOpensAt) {
+        this.scheduleError = 'Please set when sign-ups open';
+        return null;
+      }
+
+      const maxPlayers = Number(this.maxPlayers);
+      if (!Number.isInteger(maxPlayers) || maxPlayers < 1) {
+        this.scheduleError = 'Maximum players must be a whole number, at least 1';
+        return null;
+      }
+
+      const scheduledAt = toLocalRFC3339(this.selectedDate, this.kickoffTime);
+      const registrationOpensAt = dateTimeLocalToRFC3339(this.registrationOpensAt);
+      if (!scheduledAt || !registrationOpensAt) {
+        this.scheduleError = 'Please check the kick-off and sign-up times';
+        return null;
+      }
+
+      if (Date.parse(registrationOpensAt) >= Date.parse(scheduledAt)) {
+        this.scheduleError = 'Sign-ups must open before kick-off';
+        return null;
+      }
+
+      this.scheduleError = '';
+      return { scheduledAt, registrationOpensAt, maxPlayers };
     },
 
     closeModal() {
@@ -413,6 +518,11 @@ export default {
       this.dateError = '';
       this.isCreating = false;
       this.match = {};
+      this.isScheduled = false;
+      this.kickoffTime = '';
+      this.registrationOpensAt = '';
+      this.maxPlayers = DEFAULT_MAX_PLAYERS;
+      this.scheduleError = '';
     },
 
     formatSelectedDate(dateStr) {
@@ -653,6 +763,55 @@ export default {
 .selected-date-display svg {
   width: 16px;
   height: 16px;
+}
+
+/* Optional Scheduling */
+.schedule-group {
+  margin-bottom: 0;
+}
+
+.schedule-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0;
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.schedule-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+  margin: 0;
+}
+
+.schedule-fields {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.schedule-field label {
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.schedule-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.schedule-error {
+  margin-top: 0.75rem;
 }
 
 .date-picker-header {

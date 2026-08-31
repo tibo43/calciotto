@@ -116,9 +116,29 @@ export const getMatchDetailsByID = async (matchId, groupId) => {
 // tag is `json:"group_id"`, and Go's case-insensitive fallback does not see
 // past the underscore — a `GroupID` key would silently bind to nothing and
 // the match would land in the player's first group instead.
-export const createMatch = async (matchData, groupId) => {
+//
+// `scheduling` is optional and, when given, must be complete: the backend
+// treats scheduled_at/registration_opens_at/max_players as all-or-nothing and
+// 400s on one or two of the three. Omitting it entirely creates an ordinary
+// match, exactly as before — the payload is then byte-identical to the
+// unscheduled one, since nothing is spread in.
+//
+// The two timestamps must be RFC3339 carrying the browser's own UTC offset
+// (see services/datetime.js): the backend derives the match's `date` from
+// scheduled_at's calendar day in the offset it was sent in, so a `Z`-suffixed
+// value would file a late-evening kick-off under the wrong day. `date` is only
+// read for an unscheduled match.
+export const createMatch = async (matchData, groupId, scheduling) => {
   try {
-    const payload = groupId ? { ...matchData, group_id: groupId } : matchData;
+    let payload = groupId ? { ...matchData, group_id: groupId } : matchData;
+    if (scheduling) {
+      payload = {
+        ...payload,
+        scheduled_at: scheduling.scheduledAt,
+        registration_opens_at: scheduling.registrationOpensAt,
+        max_players: scheduling.maxPlayers,
+      };
+    }
     const response = await api.post(`/matches`, payload);
     if (response.status !== 200) {
       throw new Error('Failed to create match');
@@ -158,21 +178,6 @@ export const deleteMatch = async (matchId, groupId) => {
     return response.data;
   } catch (error) {
     console.error('Error deleting match:', error);
-    throw error;
-  }
-};
-
-// Alternative: PATCH for partial updates (if your API supports it)
-export const updateMatchPartial = async (matchId, updates) => {
-  try {
-    const response = await api.patch(`/matches/${matchId}`, updates);
-    if (response.status !== 200) {
-      throw new Error('Failed to update match');
-    }
-
-    return response.data;
-  } catch (error) {
-    console.error('Error updating match:', error);
     throw error;
   }
 };
