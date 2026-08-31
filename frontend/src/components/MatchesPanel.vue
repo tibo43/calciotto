@@ -177,40 +177,33 @@
               </div>
 
               <div class="players-section">
-                <div class="players-table-container">
-                  <table class="players-table">
-                    <thead>
-                      <tr>
-                        <th class="goal-number-col">Goal #</th>
-                        <th v-for="team in selectedMatch.Teams" :key="team.ID" class="team-col">
-                          <div class="team-header">
-                            <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-                            {{ team.Name }}
+                <!-- Each team lists its own scorers — a grid column per team
+                     (stacked on mobile, see below) rather than a shared table
+                     with one row per player-index. The old table forced both
+                     team columns onto one row (200px min-width each), which
+                     on a narrow phone meant scrolling right just to see the
+                     other team; it also visually paired team A's Nth player
+                     with team B's Nth player, two players with no actual
+                     relationship to each other. -->
+                <div class="teams-columns">
+                  <div v-for="team in selectedMatch.Teams" :key="team.ID" class="team-column">
+                    <div class="team-column-header">
+                      <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
+                      <span class="team-column-name">{{ team.Name }}</span>
+                    </div>
+                    <ul class="team-players-list">
+                      <li v-for="player in team.Players" :key="player.ID || player.Name" class="team-player-row">
+                        <div class="player-info">
+                          <div class="player-avatar-small">
+                            {{ getPlayerInitials(player.Name) }}
                           </div>
-                        </th>
-                        <th class="goal-number-col">Goal #</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="rowIndex in getMaxPlayers(selectedMatch.Teams)" :key="rowIndex" class="player-row">
-                        <td class="goal-cell">
-                          {{ selectedMatch.Teams[0].Players[rowIndex - 1]?.GoalNumber || '-' }}
-                        </td>
-                        <td v-for="team in selectedMatch.Teams" :key="team.ID" class="player-cell">
-                          <div v-if="team.Players[rowIndex - 1]" class="player-info">
-                            <div class="player-avatar-small">
-                              {{ getPlayerInitials(team.Players[rowIndex - 1].Name) }}
-                            </div>
-                            <span class="player-name">{{ formatPlayerNameForDisplay(team.Players[rowIndex - 1].Name) }}</span>
-                          </div>
-                          <span v-else class="empty-slot">-</span>
-                        </td>
-                        <td class="goal-cell">
-                          {{ selectedMatch.Teams[1]?.Players[rowIndex - 1]?.GoalNumber || '-' }}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                          <span class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</span>
+                        </div>
+                        <span class="goal-badge">{{ player.GoalNumber || 0 }}</span>
+                      </li>
+                      <li v-if="!team.Players.length" class="empty-slot">No players yet</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </div>
@@ -594,10 +587,6 @@ export default {
       };
 
       return colorMap[colour.toLowerCase()] || '#6b7280';
-    },
-
-    getMaxPlayers(teams) {
-      return Math.max(...teams.map(team => team.Players.length));
     },
 
     getPlayerInitials(name) {
@@ -1091,77 +1080,94 @@ export default {
   color: white !important;
 }
 
-/* Players Table */
+/* Players by team — one column per team, each an independent list of its
+   own scorers. Side by side on desktop; stacked on mobile (see the 768px
+   media query) so seeing the second team never requires scrolling. */
 .players-section {
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-.players-table-container {
-  overflow: auto;
+.teams-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
 }
 
-.players-table {
-  width: 100%;
-  border-collapse: collapse;
+.team-column {
   background-color: var(--bg-primary);
   border-radius: var(--border-radius);
-  overflow: hidden;
   box-shadow: var(--shadow-sm);
-  height: fit-content;
+  overflow: hidden;
+  min-width: 0;
 }
 
-.players-table th {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-  font-weight: 600;
-  padding: 0.75rem;
-  text-align: center;
-  border-bottom: 2px solid var(--border-color);
-  position: sticky;
-  top: 0;
-  z-index: 5;
-}
-
-.team-header {
+.team-column-header {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 0.5rem;
+  padding: 0.75rem;
+  background-color: var(--bg-tertiary);
+  border-bottom: 2px solid var(--border-color);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.goal-number-col {
-  width: 80px;
-  background-color: var(--primary-color);
-  color: white;
+.team-column-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.team-col {
-  min-width: 200px;
-}
-
-.players-table td {
+.team-players-list {
+  list-style: none;
+  margin: 0;
   padding: 0.5rem;
-  text-align: center;
-  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
-.player-row:hover {
+.team-player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--border-radius);
+  transition: background-color var(--transition-fast);
+}
+
+.team-player-row:hover {
   background-color: var(--bg-secondary);
 }
 
-.player-cell .player-info {
-  justify-content: center;
+.team-player-row .player-info {
+  min-width: 0;
 }
 
-.goal-cell {
+.team-player-row .player-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-badge {
+  flex-shrink: 0;
   background-color: var(--bg-tertiary);
-  font-weight: 600;
   color: var(--primary-color);
+  font-weight: 700;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  min-width: 1.75rem;
+  text-align: center;
 }
 
-.empty-slot {
+.team-players-list .empty-slot {
+  padding: 0.5rem;
+  text-align: center;
   color: var(--text-light);
   font-style: italic;
 }
@@ -1276,13 +1282,12 @@ export default {
     justify-content: center;
   }
 
-  .players-table {
-    font-size: 0.875rem;
-  }
-
-  .players-table th,
-  .players-table td {
-    padding: 0.4rem;
+  /* Stack the two teams instead of side by side — this is the actual fix
+     for "scrolling right to see the other team's scorers": each team's
+     full-width column is now simply below the other, nothing to scroll. */
+  .teams-columns {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
   }
 
   /* Touch scrolling already works natively on the horizontal match list —
