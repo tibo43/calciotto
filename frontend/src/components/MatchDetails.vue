@@ -1252,6 +1252,13 @@ export default {
 }
 
 .player-info .player-name {
+  /* It's an <h4>, which carries its own default vertical margin (unlike
+     the <span> used for a player name elsewhere in this file) — that
+     margin box, not the visible text, is what .player-card's
+     align-items:center actually centers, so the text reads as sitting
+     above the avatar's true center. Stripping it makes the name's box
+     match its visible text exactly. */
+  margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1770,6 +1777,16 @@ export default {
      compact avatar/goal controls either side of it on a narrow screen. */
   .player-info .player-name {
     font-size: 0.85rem;
+  }
+
+  /* The 32px avatar (global .player-avatar-small size) reads as oversized
+     next to the now-smaller name on a narrow screen — shrunk here only,
+     scoped to the roster row rather than every .player-avatar-small use
+     in this file (the add-player modal's columns are unaffected). */
+  .player-card .player-avatar-small {
+    width: 26px;
+    height: 26px;
+    font-size: 0.65rem;
   }
 
   .enhanced-multi-player-modal {
