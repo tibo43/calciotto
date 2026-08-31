@@ -1,17 +1,18 @@
 <template>
   <div class="match-detail-container">
-    <!-- Header Section -->
-    <section class="match-header">
-      <div class="container">
-        <div class="header-content">
-          <button @click="goBack" class="back-button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="15,18 9,12 15,6" />
-            </svg>
-            Back to Matches
-          </button>
-          <h1 class="page-title">Match Details</h1>
-          <p class="page-subtitle">{{ formatDate(match?.Date) }}</p>
+    <!-- Plain heading, replacing the old gradient hero — same treatment as
+         MatchesAndStandings.vue/Profile.vue. -->
+    <section class="match-heading">
+      <div class="container match-heading-row">
+        <button @click="goBack" class="btn-base btn-cancel btn-small">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15,18 9,12 15,6" />
+          </svg>
+          Back to Matches
+        </button>
+        <div class="match-heading-text">
+          <h1 class="match-heading-title">Match Details</h1>
+          <span class="match-heading-date">{{ formatDate(match?.Date) }}</span>
         </div>
       </div>
     </section>
@@ -967,43 +968,34 @@ export default {
   background-color: var(--bg-secondary);
 }
 
-/* Header Section */
-.match-header {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-  color: white;
-  padding: 1rem 0;
-  position: relative;
+/* Heading */
+.match-heading {
+  padding: 1.5rem 0 0;
 }
 
-.header-content {
-  text-align: center;
-  position: relative;
-}
-
-.back-button {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
+.match-heading-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.match-heading-text {
+  display: flex;
+  align-items: baseline;
   gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: white;
-  padding: 0.5rem 1rem;
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  transition: all var(--transition-fast);
 }
 
-.back-button:hover {
-  background: rgba(255, 255, 255, 0.3);
+.match-heading-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
 }
 
-.back-button svg {
-  width: 18px;
-  height: 18px;
+.match-heading-date {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
 /* Match Content */
@@ -1645,16 +1637,6 @@ export default {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .header-content {
-    padding: 0 3rem;
-  }
-
-  .back-button {
-    position: relative;
-    margin-bottom: 1rem;
-    transform: none;
-  }
-
   .teams-score {
     grid-template-columns: 1fr;
     gap: 1rem;

@@ -13,18 +13,22 @@
 
         <template v-else>
           <div class="context-bar card-base">
-            <template v-if="groups.length > 0">
-              <label class="context-label" for="group-select">Group</label>
-              <select id="group-select" class="context-select" v-model="activeGroupId" @change="switchGroup">
-                <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
-              </select>
-            </template>
-            <span v-else class="no-group-hint">No group yet — join or create one from your Profile.</span>
+            <div class="context-field">
+              <template v-if="groups.length > 0">
+                <label class="context-label" for="group-select">Group</label>
+                <select id="group-select" class="context-select" v-model="activeGroupId" @change="switchGroup">
+                  <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
+                </select>
+              </template>
+              <span v-else class="no-group-hint">No group yet — join or create one from your Profile.</span>
+            </div>
 
-            <label class="context-label" for="season-select">Season</label>
-            <select id="season-select" class="context-select" v-model="selectedSeason" @change="loadStandings">
-              <option v-for="season in seasons" :key="season" :value="season">{{ season }}</option>
-            </select>
+            <div class="context-field">
+              <label class="context-label" for="season-select">Season</label>
+              <select id="season-select" class="context-select" v-model="selectedSeason" @change="loadStandings">
+                <option v-for="season in seasons" :key="season" :value="season">{{ season }}</option>
+              </select>
+            </div>
           </div>
 
           <div class="sub-tabs-bar">
@@ -176,10 +180,17 @@ export default {
 .context-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.75rem 1.5rem;
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
+}
+
+.context-field {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .context-label {

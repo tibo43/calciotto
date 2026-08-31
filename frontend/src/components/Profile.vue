@@ -1,14 +1,5 @@
 <template>
   <div class="profile-container">
-    <!-- Plain heading, replacing the old gradient hero banner — that was
-         purely decorative and the "All seasons — Default" scope label next
-         to the player's name already says which group/season this is. -->
-    <section class="profile-heading">
-      <div class="container">
-        <h1 class="profile-title">My profile</h1>
-      </div>
-    </section>
-
     <section class="profile-section">
       <div class="container">
         <!-- Loading State -->
@@ -550,16 +541,6 @@ export default {
    the two ranking pages read as one screen family. */
 .profile-container {
   background-color: var(--bg-secondary);
-}
-
-.profile-heading {
-  padding: 1.5rem 0 0;
-}
-
-.profile-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
 }
 
 .profile-section {
