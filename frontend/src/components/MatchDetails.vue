@@ -1703,7 +1703,7 @@ export default {
   }
 
   .team-name {
-    font-size: 1.15rem;
+    font-size: 0.9rem;
   }
 
   .team-info .team-color {
