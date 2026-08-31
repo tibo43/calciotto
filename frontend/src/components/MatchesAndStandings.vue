@@ -180,16 +180,11 @@ export default {
 .context-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   flex-wrap: wrap;
-  gap: 0.75rem 2.5rem;
+  gap: 0.75rem 3rem;
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
-  /* Shrink to hug its two fields instead of stretching across the whole
-     page — group and season still sit on opposite sides of this box, but
-     the box itself is only as wide as it needs to be, so the two ends up
-     close together instead of stretched edge-to-edge on a wide screen. */
-  width: fit-content;
 }
 
 .context-field {
@@ -268,10 +263,10 @@ export default {
 /* Responsive */
 @media (max-width: 768px) {
   .context-bar {
-    /* Full width again on mobile: fields wrap onto their own line each, so
-       a hugged-content box would otherwise render narrower than the rest
-       of the page's cards for no benefit. */
-    width: 100%;
+    /* On mobile, group/season wrap onto their own line each — centering a
+       single item on its line would just indent it for no reason, so this
+       goes back to flush-left instead of the desktop centering. */
+    justify-content: flex-start;
   }
 }
 </style>

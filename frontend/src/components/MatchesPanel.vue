@@ -303,12 +303,13 @@ export default {
     }
   },
   mounted() {
-    this.$nextTick(() => {
-      this.updateScrollButtons();
-      if (this.$refs.matchesBar) {
-        this.$refs.matchesBar.addEventListener('scroll', this.updateScrollButtons);
-      }
-    });
+    // loadMatches() (started in created()) is still pending at this point —
+    // matchesBar doesn't exist yet since matches.length is still 0, so this
+    // alone can't compute canScrollLeft/canScrollRight or attach the scroll
+    // listener. attachScrollListener() runs again once loadMatches()
+    // actually populates matches (see there) — this call only covers the
+    // rare case where matches was already loaded by the time this mounts.
+    this.attachScrollListener();
   },
   beforeUnmount() {
     if (this.$refs.matchesBar) {
@@ -381,6 +382,12 @@ export default {
       } finally {
         this.isLoading = false;
       }
+      // matchesBar only exists in the DOM once matches.length > 0 (see the
+      // v-else-if in the template) — (re)attaching here, after the list
+      // actually renders, is what makes the scroll buttons work at all on
+      // first load, and keeps canScrollLeft/canScrollRight correct after a
+      // season change reloads a shorter or longer list.
+      this.attachScrollListener();
     },
 
     // Create Match Methods
@@ -525,6 +532,20 @@ export default {
         this.canScrollLeft = element.scrollLeft > 0;
         this.canScrollRight = element.scrollLeft < (element.scrollWidth - element.clientWidth);
       }
+    },
+
+    // Native "scroll" listeners don't stack for the same function reference
+    // on the same element, so calling this more than once (mounted(), then
+    // every loadMatches()) is safe — it just re-runs updateScrollButtons()
+    // against whatever matchesBar looks like now, which is exactly what's
+    // needed after the list's length changes.
+    attachScrollListener() {
+      this.$nextTick(() => {
+        this.updateScrollButtons();
+        if (this.$refs.matchesBar) {
+          this.$refs.matchesBar.addEventListener('scroll', this.updateScrollButtons);
+        }
+      });
     },
 
     formatDate(dateString) {
@@ -856,7 +877,11 @@ export default {
 }
 
 /* Trailing "+" card — replaces the old standalone "Create Match" toolbar,
-   living at the end of the match list instead. */
+   living at the end of the match list instead. Sticky rather than a plain
+   flex item: with enough matches to need scrolling, a purely trailing card
+   would only be reachable by scrolling all the way right, so it stays
+   pinned to the right edge of the scrollable area instead — the same
+   "sticky last column" technique used for scrollable tables. */
 .add-match-card {
   flex: 0 0 80px;
   display: flex;
@@ -864,6 +889,11 @@ export default {
   justify-content: center;
   border: 2px dashed var(--border-color);
   color: var(--primary-color);
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background-color: var(--bg-tertiary);
+  box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.15);
 }
 
 .add-match-card:hover {
@@ -1231,6 +1261,13 @@ export default {
   .match-card-horizontal {
     flex: 0 0 200px;
     padding: 0.5rem;
+  }
+
+  /* .match-card-horizontal's flex shorthand above would otherwise widen
+     this to 200px too — it also carries that class — undoing the 64px
+     .add-match-card already set at the 768px breakpoint. */
+  .add-match-card {
+    flex: 0 0 64px;
   }
 
   .match-details-container {
