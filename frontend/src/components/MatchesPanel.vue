@@ -1202,7 +1202,16 @@ export default {
 /* Responsive Design */
 @media (max-width: 768px) {
   .matches-section {
-    padding: 2rem 0;
+    padding: 1rem 0;
+  }
+
+  .matches-layout {
+    gap: 1rem;
+  }
+
+  .matches-bar {
+    padding: 0.75rem;
+    gap: 0.75rem;
   }
 
   .match-card-horizontal {
@@ -1216,6 +1225,45 @@ export default {
 
   .match-details-container {
     padding: 1rem;
+  }
+
+  /* Create Match modal's calendar — smaller header/grid/cells so the
+     whole picker takes less of the screen on a small phone. */
+  .modal-body-large {
+    padding: 1rem;
+  }
+
+  .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .date-picker-header {
+    padding: 0.75rem;
+  }
+
+  .month-year {
+    font-size: 1rem;
+  }
+
+  .date-picker-grid {
+    padding: 0.75rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .day-header {
+    padding: 0.35rem;
+    font-size: 0.75rem;
+  }
+
+  .day-button {
+    min-height: 34px;
+    font-size: 0.8rem;
+  }
+
+  .selected-date-display {
+    padding: 0.5rem 0.75rem;
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
   }
 
   .details-title-section {

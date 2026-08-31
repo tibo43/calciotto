@@ -1638,9 +1638,29 @@ export default {
 
 /* Responsive Design */
 @media (max-width: 768px) {
+  .match-content {
+    padding: 1rem 0;
+  }
+
+  /* Score overview: card-base/card-large's own padding is sized for
+     desktop — override it directly here rather than fighting it. */
+  .score-overview {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .match-title {
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .match-title h2 {
+    font-size: 1.25rem;
+  }
+
   .teams-score {
     grid-template-columns: 1fr;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .vs-divider {
@@ -1655,27 +1675,98 @@ export default {
     order: 3;
   }
 
+  .team-score {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .team-name {
+    font-size: 1.05rem;
+  }
+
+  .score {
+    font-size: 1.75rem;
+  }
+
+  .vs-circle {
+    width: 36px;
+    height: 36px;
+    font-size: 0.8rem;
+  }
+
+  .team-management {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+
   .management-header {
     flex-direction: column;
     align-items: stretch;
-    gap: 1rem;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
   }
 
   .tabs-buttons {
     justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .tab-button {
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
   }
 
   .action-buttons {
     justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  /* Wrapping (above) already separates it from Save Changes visually, so
+     the extra desktop-only margin meant to prevent a misclick would just
+     indent it lopsidedly here. */
+  .delete-match-btn {
+    margin-left: 0;
   }
 
   .players-grid {
     grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .player-card {
+    padding: 1rem;
+  }
+
+  .player-header {
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .player-header .player-name {
+    font-size: 1.05rem;
+  }
+
+  .goal-management {
+    gap: 0.75rem;
   }
 
   .enhanced-multi-player-modal {
     max-width: 95%;
     max-height: 95vh;
+  }
+
+  .search-section {
+    padding: 1rem;
+  }
+
+  .column-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .column-content {
+    padding: 0.75rem;
   }
 
   .players-columns {
@@ -1690,7 +1781,8 @@ export default {
   .enhanced-footer {
     flex-direction: column;
     align-items: stretch;
-    gap: 1rem;
+    gap: 0.75rem;
+    padding: 1rem;
   }
 
   .footer-buttons {
@@ -1700,12 +1792,12 @@ export default {
 
 @media (max-width: 480px) {
   .match-content {
-    padding: 1rem 0;
+    padding: 0.75rem 0;
   }
 
   .tab-button {
-    padding: 0.75rem 1rem;
-    font-size: 0.875rem;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.85rem;
   }
 
   .team-color-small {
@@ -1714,7 +1806,7 @@ export default {
   }
 
   .player-card {
-    padding: 1rem;
+    padding: 0.85rem;
   }
 
   .goal-btn {
@@ -1723,7 +1815,8 @@ export default {
   }
 
   .goal-count {
-    font-size: 1.25rem;
+    font-size: 1.15rem;
+    min-width: 32px;
   }
 }
 </style>

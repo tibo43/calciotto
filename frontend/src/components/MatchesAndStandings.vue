@@ -262,6 +262,10 @@ export default {
 
 /* Responsive */
 @media (max-width: 768px) {
+  .home-controls {
+    padding: 1rem 0 0;
+  }
+
   .context-bar {
     /* Group and season sit on one row here too, not stacked: dropping the
        "Group"/"Season" labels below frees up enough width for both
@@ -270,6 +274,7 @@ export default {
     justify-content: center;
     flex-wrap: nowrap;
     gap: 0.75rem;
+    margin-bottom: 0.75rem;
   }
 
   /* Visually hidden rather than display:none, so the <select> — still
