@@ -153,10 +153,15 @@ func (s *MatchService) GetGroupIDByMatchID(matchID uuid.UUID) (uuid.UUID, error)
 // their own FilterMatchesBySeason pass on the result.
 func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]models.MatchWithDetails, error) {
 	var rowsMatches []models.RowsMatchDetails
+	var err error
 
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
         SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
+               matches.scheduled_at as match_scheduled_at,
+               matches.registration_opens_at as match_registration_opens_at,
+               matches.registrations_closed_at as match_registrations_closed_at,
+               matches.max_players as match_max_players,
                teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored
@@ -172,6 +177,25 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 		return nil, result.Error
 	}
 
+	// Sign-up counts come from their own query, never from the join above — see
+	// RowsMatchDetails for why joining match_registrations there would corrupt
+	// every score it also produces.
+	//
+	// Skipped entirely for a group with no scheduled match, which is every group
+	// that predates this feature — and this function is also what the four
+	// StandingsService calls go through, so an unconditional second round-trip
+	// would be charged to every standings request for nothing.
+	var registrationCounts map[uuid.UUID]int
+	for _, rowMatches := range rowsMatches {
+		if rowMatches.MatchScheduledAt != nil {
+			registrationCounts, err = s.registrationCountsByGroup(groupID)
+			if err != nil {
+				return nil, err
+			}
+			break
+		}
+	}
+
 	// Map the flat results into the hierarchical structure
 	matchesMap := make(map[uuid.UUID]*models.MatchWithDetails)
 
@@ -180,10 +204,24 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 		match, exists := matchesMap[rowMatches.MatchID]
 		if !exists {
 			match = &models.MatchWithDetails{
-				ID:      rowMatches.MatchID,
-				GroupID: rowMatches.MatchGroupID,
-				Date:    rowMatches.MatchDate,
-				Teams:   []models.TeamWithPlayers{},
+				ID:                    rowMatches.MatchID,
+				GroupID:               rowMatches.MatchGroupID,
+				Date:                  rowMatches.MatchDate,
+				ScheduledAt:           rowMatches.MatchScheduledAt,
+				RegistrationOpensAt:   rowMatches.MatchRegistrationOpensAt,
+				RegistrationsClosedAt: rowMatches.MatchRegistrationsClosedAt,
+				MaxPlayers:            rowMatches.MatchMaxPlayers,
+				Teams:                 []models.TeamWithPlayers{},
+			}
+			// Present iff the match is scheduled — a nil count means "there is
+			// nothing to sign up for here", which is not the same as zero
+			// sign-ups. This is the only place a match is built in this
+			// function, including for a match with no match_players rows at all
+			// (the LEFT JOIN still yields one row for it, with a NULL team),
+			// which is precisely the normal state of a scheduled match.
+			if match.IsScheduled() {
+				count := registrationCounts[rowMatches.MatchID]
+				match.RegistrationCount = &count
 			}
 			matchesMap[rowMatches.MatchID] = match
 		}
@@ -297,6 +335,10 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
         SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
+               matches.scheduled_at as match_scheduled_at,
+               matches.registration_opens_at as match_registration_opens_at,
+               matches.registrations_closed_at as match_registrations_closed_at,
+               matches.max_players as match_max_players,
                teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored
@@ -315,12 +357,30 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 		return nil, ErrMatchNotFound
 	}
 
-	// Initialisez l'objet match
+	// Initialisez l'objet match. The Match* columns repeat identically on every
+	// row of the join, so row 0 is as good as any — including when it is the
+	// single all-NULL-team row of a match with no roster yet, which is the
+	// normal state of a scheduled match nobody has been assigned to.
 	match := &models.MatchWithDetails{
-		ID:      id,
-		GroupID: rowsMatch[0].MatchGroupID,
-		Date:    rowsMatch[0].MatchDate,
-		Teams:   []models.TeamWithPlayers{},
+		ID:                    id,
+		GroupID:               rowsMatch[0].MatchGroupID,
+		Date:                  rowsMatch[0].MatchDate,
+		ScheduledAt:           rowsMatch[0].MatchScheduledAt,
+		RegistrationOpensAt:   rowsMatch[0].MatchRegistrationOpensAt,
+		RegistrationsClosedAt: rowsMatch[0].MatchRegistrationsClosedAt,
+		MaxPlayers:            rowsMatch[0].MatchMaxPlayers,
+		Teams:                 []models.TeamWithPlayers{},
+	}
+
+	// A separate count rather than another join, for the reason spelled out on
+	// RowsMatchDetails; present iff the match is scheduled, as in
+	// GetMatchesDetails.
+	if match.IsScheduled() {
+		count, err := s.registrationCount(id)
+		if err != nil {
+			return nil, err
+		}
+		match.RegistrationCount = &count
 	}
 
 	for _, rowMatch := range rowsMatch {
@@ -407,6 +467,55 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 	}
 
 	return match, nil
+}
+
+// registrationCountsByGroup returns how many players have signed up per match,
+// for every match of groupID that has at least one sign-up. Matches with none
+// are simply absent from the map, so a plain lookup yields the zero value.
+//
+// This exists as its own query rather than as a fifth LEFT JOIN in
+// GetMatchesDetails because match_registrations is a *second* one-to-many on
+// matches: joined alongside match_players it would multiply the rows (one per
+// registration × one per assigned player), and every score and goal total in
+// this file is derived by summing those rows. One extra round-trip is the price
+// of not silently corrupting all of them.
+//
+// It stays on the query builder — the group scope is a subquery on matches, not
+// a join whose columns are needed, so there is nothing here that raw SQL would
+// express better.
+func (s *MatchService) registrationCountsByGroup(groupID uuid.UUID) (map[uuid.UUID]int, error) {
+	var rows []struct {
+		MatchID uuid.UUID
+		Total   int
+	}
+	if err := s.DB.Model(&models.MatchRegistration{}).
+		Select("match_id, COUNT(*) AS total").
+		Where("match_id IN (?)", s.DB.Model(&models.Match{}).
+			Select("id").Where("group_id = ?", groupID)).
+		Group("match_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	counts := make(map[uuid.UUID]int, len(rows))
+	for _, row := range rows {
+		counts[row.MatchID] = row.Total
+	}
+	return counts, nil
+}
+
+// registrationCount is registrationCountsByGroup for a single match. The match
+// id is already known to belong to the authorized group by the time this runs
+// (GetMatchDetailsByID scopes its own lookup on group_id), so there is nothing
+// left to scope here.
+func (s *MatchService) registrationCount(matchID uuid.UUID) (int, error) {
+	var total int64
+	if err := s.DB.Model(&models.MatchRegistration{}).
+		Where("match_id = ?", matchID).
+		Count(&total).Error; err != nil {
+		return 0, err
+	}
+	return int(total), nil
 }
 
 // DeleteMatch removes the match with the given id, scoped to groupID the same

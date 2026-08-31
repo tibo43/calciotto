@@ -181,6 +181,16 @@ func FilterMatchesBySeason(matches []models.MatchWithDetails, season string) []m
 // ComputeSeasons returns the sorted, deduplicated season labels covered by an
 // already-loaded set of matches. Like the Compute* functions below, it is a
 // pure function of its input: which matches to consider is the caller's call.
+//
+// It counts *every* match, including a scheduled one nobody has played yet — so
+// scheduling a match into a future season makes that season appear in
+// GET /standings/seasons before a ball has been kicked. That is a decision, not
+// an oversight, and there is a test pinning it: GET /matches/details is filtered
+// by whichever season the frontend has selected, so dropping a future season
+// from this list would make the upcoming match unreachable in the UI, which is
+// strictly worse than one extra dropdown entry. The known cost — the frontend
+// preselects the most recent season, so scheduling into a new season shifts the
+// default view — is accepted for now and tracked as a separate improvement.
 func ComputeSeasons(matches []models.MatchWithDetails) []string {
 	seen := make(map[string]bool, len(matches))
 	seasons := make([]string, 0, len(matches))
