@@ -91,6 +91,17 @@
           <!-- Horizontal Matches Bar -->
           <div class="matches-bar-container card-base">
             <div class="matches-bar hide-scrollbar" ref="matchesBar">
+              <!-- Create Match — admin-only, integrated into the match list
+                   itself (as a leading "+" card) rather than a separate
+                   toolbar above it. -->
+              <button v-if="isAdmin" class="match-card-horizontal add-match-card" @click="showCreateModal = true"
+                aria-label="Create match">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+
               <div v-for="match in matches" :key="match.ID" class="match-card-horizontal"
                 :class="{ 'active': selectedMatch?.ID === match.ID }" @click="selectMatch(match)">
                 <!-- Match Date -->
@@ -115,23 +126,7 @@
                     <div v-if="index < match.Teams.length - 1" class="vs-separator">vs</div>
                   </div>
                 </div>
-
-                <!-- Match Status -->
-                <div class="match-status-horizontal">
-                  <div class="status-indicator-horizontal" :class="getMatchStatus(match)"></div>
-                </div>
               </div>
-
-              <!-- Create Match — admin-only, integrated into the match list
-                   itself (as a trailing "+" card) rather than a separate
-                   toolbar above it. -->
-              <button v-if="isAdmin" class="match-card-horizontal add-match-card" @click="showCreateModal = true"
-                aria-label="Create match">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
             </div>
 
             <!-- Scroll indicators -->
@@ -177,40 +172,30 @@
               </div>
 
               <div class="players-section">
-                <div class="players-table-container">
-                  <table class="players-table">
-                    <thead>
-                      <tr>
-                        <th class="goal-number-col">Goal #</th>
-                        <th v-for="team in selectedMatch.Teams" :key="team.ID" class="team-col">
-                          <div class="team-header">
-                            <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-                            {{ team.Name }}
-                          </div>
-                        </th>
-                        <th class="goal-number-col">Goal #</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="rowIndex in getMaxPlayers(selectedMatch.Teams)" :key="rowIndex" class="player-row">
-                        <td class="goal-cell">
-                          {{ selectedMatch.Teams[0].Players[rowIndex - 1]?.GoalNumber || '-' }}
-                        </td>
-                        <td v-for="team in selectedMatch.Teams" :key="team.ID" class="player-cell">
-                          <div v-if="team.Players[rowIndex - 1]" class="player-info">
-                            <div class="player-avatar-small">
-                              {{ getPlayerInitials(team.Players[rowIndex - 1].Name) }}
-                            </div>
-                            <span class="player-name">{{ formatPlayerNameForDisplay(team.Players[rowIndex - 1].Name) }}</span>
-                          </div>
-                          <span v-else class="empty-slot">-</span>
-                        </td>
-                        <td class="goal-cell">
-                          {{ selectedMatch.Teams[1]?.Players[rowIndex - 1]?.GoalNumber || '-' }}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                <!-- Each team lists its own scorers — a grid column per team
+                     (stacked on mobile, see below) rather than a shared table
+                     with one row per player-index. The old table forced both
+                     team columns onto one row (200px min-width each), which
+                     on a narrow phone meant scrolling right just to see the
+                     other team; it also visually paired team A's Nth player
+                     with team B's Nth player, two players with no actual
+                     relationship to each other. -->
+                <div class="teams-columns">
+                  <div v-for="team in selectedMatch.Teams" :key="team.ID" class="team-column">
+                    <div class="team-column-header">
+                      <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
+                      <span class="team-column-name">{{ team.Name }}</span>
+                    </div>
+                    <ul class="team-players-list">
+                      <li v-for="player in team.Players" :key="player.ID || player.Name" class="team-player-row">
+                        <div class="player-info">
+                          <span class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</span>
+                        </div>
+                        <span class="goal-badge">{{ player.GoalNumber || 0 }}</span>
+                      </li>
+                      <li v-if="!team.Players.length" class="empty-slot">No players yet</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </div>
@@ -303,12 +288,13 @@ export default {
     }
   },
   mounted() {
-    this.$nextTick(() => {
-      this.updateScrollButtons();
-      if (this.$refs.matchesBar) {
-        this.$refs.matchesBar.addEventListener('scroll', this.updateScrollButtons);
-      }
-    });
+    // loadMatches() (started in created()) is still pending at this point —
+    // matchesBar doesn't exist yet since matches.length is still 0, so this
+    // alone can't compute canScrollLeft/canScrollRight or attach the scroll
+    // listener. attachScrollListener() runs again once loadMatches()
+    // actually populates matches (see there) — this call only covers the
+    // rare case where matches was already loaded by the time this mounts.
+    this.attachScrollListener();
   },
   beforeUnmount() {
     if (this.$refs.matchesBar) {
@@ -381,6 +367,12 @@ export default {
       } finally {
         this.isLoading = false;
       }
+      // matchesBar only exists in the DOM once matches.length > 0 (see the
+      // v-else-if in the template) — (re)attaching here, after the list
+      // actually renders, is what makes the scroll buttons work at all on
+      // first load, and keeps canScrollLeft/canScrollRight correct after a
+      // season change reloads a shorter or longer list.
+      this.attachScrollListener();
     },
 
     // Create Match Methods
@@ -527,6 +519,20 @@ export default {
       }
     },
 
+    // Native "scroll" listeners don't stack for the same function reference
+    // on the same element, so calling this more than once (mounted(), then
+    // every loadMatches()) is safe — it just re-runs updateScrollButtons()
+    // against whatever matchesBar looks like now, which is exactly what's
+    // needed after the list's length changes.
+    attachScrollListener() {
+      this.$nextTick(() => {
+        this.updateScrollButtons();
+        if (this.$refs.matchesBar) {
+          this.$refs.matchesBar.addEventListener('scroll', this.updateScrollButtons);
+        }
+      });
+    },
+
     formatDate(dateString) {
       try {
         const date = new Date(dateString);
@@ -575,17 +581,6 @@ export default {
       return colorMap[colour.toLowerCase()] || '#6b7280';
     },
 
-    getMaxPlayers(teams) {
-      return Math.max(...teams.map(team => team.Players.length));
-    },
-
-    getPlayerInitials(name) {
-      return name.split(' ')
-        .map(word => word.charAt(0).toUpperCase())
-        .join('')
-        .slice(0, 2);
-    },
-
     formatPlayerNameForDisplay(name) {
       // Convert to title case for display (capitalize first letter of each word)
       return name.split(' ')
@@ -593,27 +588,8 @@ export default {
         .join(' ');
     },
 
-    getTotalGoals(match) {
-      return match.Teams.reduce((total, team) => total + (team.Score || 0), 0);
-    },
-
     getTotalPlayers(match) {
       return match.Teams.reduce((total, team) => total + team.Players.length, 0);
-    },
-
-    getMatchStatus(match) {
-      const totalGoals = this.getTotalGoals(match);
-      if (totalGoals === 0) return 'upcoming';
-      return 'completed';
-    },
-
-    getMatchStatusText(match) {
-      const status = this.getMatchStatus(match);
-      switch (status) {
-        case 'upcoming': return 'Scheduled';
-        case 'completed': return 'Completed';
-        default: return 'Unknown';
-      }
     }
   }
 };
@@ -816,28 +792,32 @@ export default {
 .matches-layout {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 /* Horizontal Matches Bar */
+/* Overrides card-base's own 1.5rem padding — .matches-bar below already
+   adds its own, so the default would stack two layers of padding around
+   the match list for no reason. */
 .matches-bar-container {
   position: relative;
   overflow: hidden;
+  padding: 0.5rem;
 }
 
 .matches-bar {
   display: flex;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 0.75rem;
+  padding: 0.5rem;
   overflow-x: auto;
   scroll-behavior: smooth;
 }
 
 .match-card-horizontal {
-  flex: 0 0 280px;
+  flex: 0 0 220px;
   background-color: var(--bg-tertiary);
   border-radius: var(--border-radius);
-  padding: 1rem;
+  padding: 0.65rem;
   cursor: pointer;
   transition: all var(--transition-smooth);
   border: 2px solid transparent;
@@ -855,8 +835,12 @@ export default {
   box-shadow: var(--shadow-lg);
 }
 
-/* Trailing "+" card — replaces the old standalone "Create Match" toolbar,
-   living at the end of the match list instead. */
+/* Leading "+" card — replaces the old standalone "Create Match" toolbar,
+   living at the start of the match list instead. Sticky rather than a
+   plain flex item: with enough matches to need scrolling, a purely leading
+   card would scroll out of view along with the rest of the list, so it
+   stays pinned to the left edge of the scrollable area instead — the same
+   "sticky first column" technique used for scrollable tables. */
 .add-match-card {
   flex: 0 0 80px;
   display: flex;
@@ -864,6 +848,11 @@ export default {
   justify-content: center;
   border: 2px dashed var(--border-color);
   color: var(--primary-color);
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background-color: var(--bg-tertiary);
+  box-shadow: 8px 0 8px -8px rgba(0, 0, 0, 0.15);
 }
 
 .add-match-card:hover {
@@ -891,11 +880,14 @@ export default {
   height: 14px;
 }
 
+/* No margin-bottom: with the status dot removed below, this is now the
+   card's last child — the card's own padding already provides the
+   trailing space, an extra margin here would just add dead room under
+   it. */
 .teams-horizontal {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
 }
 
 .team-horizontal {
@@ -945,35 +937,6 @@ export default {
   font-size: 0.75rem;
   color: var(--text-light);
   font-weight: 500;
-}
-
-.match-status-horizontal {
-  display: flex;
-  justify-content: center;
-}
-
-.status-indicator-horizontal {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  animation: pulse-status 2s infinite;
-}
-
-.status-indicator-horizontal.upcoming {
-  background-color: #f59e0b;
-}
-
-.status-indicator-horizontal.completed {
-  background-color: var(--primary-color);
-}
-
-@keyframes pulse-status {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
 }
 
 /* Scroll Buttons */
@@ -1061,77 +1024,106 @@ export default {
   color: white !important;
 }
 
-/* Players Table */
+/* Players by team — one column per team, each an independent list of its
+   own scorers. Side by side on desktop; stacked on mobile (see the 768px
+   media query) so seeing the second team never requires scrolling. */
 .players-section {
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-.players-table-container {
-  overflow: auto;
+.teams-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
 }
 
-.players-table {
-  width: 100%;
-  border-collapse: collapse;
+.team-column {
   background-color: var(--bg-primary);
   border-radius: var(--border-radius);
-  overflow: hidden;
   box-shadow: var(--shadow-sm);
-  height: fit-content;
+  overflow: hidden;
+  min-width: 0;
 }
 
-.players-table th {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-  font-weight: 600;
-  padding: 0.75rem;
-  text-align: center;
-  border-bottom: 2px solid var(--border-color);
-  position: sticky;
-  top: 0;
-  z-index: 5;
-}
-
-.team-header {
+.team-column-header {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 0.5rem;
+  padding: 0.75rem;
+  background-color: var(--bg-tertiary);
+  border-bottom: 2px solid var(--border-color);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.goal-number-col {
-  width: 80px;
-  background-color: var(--primary-color);
-  color: white;
+.team-column-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.team-col {
-  min-width: 200px;
-}
-
-.players-table td {
+/* Bounded to whatever's actually left below the match carousel and the
+   "Edit Match" button above it, with its own scrollbar — a team with
+   many players then scrolls inside its own column instead of growing the
+   whole page and pushing everything above (season selector, match
+   carousel, Edit Match) out of easy reach. The 620px offset is an
+   estimate of that chrome's height (nav + context bar + tabs + carousel
+   card + details header, all above this point); max() keeps a handful of
+   rows visible even if that chrome runs taller than estimated on a given
+   screen. The header row above the list stays put regardless, since it's
+   a sibling outside this scroll region, not inside it. */
+.team-players-list {
+  list-style: none;
+  margin: 0;
   padding: 0.5rem;
-  text-align: center;
-  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: max(9rem, calc(100vh - 660px));
+  overflow-y: auto;
 }
 
-.player-row:hover {
+.team-player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--border-radius);
+  transition: background-color var(--transition-fast);
+}
+
+.team-player-row:hover {
   background-color: var(--bg-secondary);
 }
 
-.player-cell .player-info {
-  justify-content: center;
+.team-player-row .player-info {
+  min-width: 0;
 }
 
-.goal-cell {
+.team-player-row .player-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-badge {
+  flex-shrink: 0;
   background-color: var(--bg-tertiary);
-  font-weight: 600;
   color: var(--primary-color);
+  font-weight: 700;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  min-width: 1.75rem;
+  text-align: center;
 }
 
-.empty-slot {
+.team-players-list .empty-slot {
+  padding: 0.5rem;
+  text-align: center;
   color: var(--text-light);
   font-style: italic;
 }
@@ -1172,12 +1164,25 @@ export default {
 /* Responsive Design */
 @media (max-width: 768px) {
   .matches-section {
-    padding: 2rem 0;
+    padding: 1rem 0;
+  }
+
+  .matches-layout {
+    gap: 0.75rem;
+  }
+
+  .matches-bar-container {
+    padding: 0.35rem;
+  }
+
+  .matches-bar {
+    padding: 0.35rem;
+    gap: 0.5rem;
   }
 
   .match-card-horizontal {
-    flex: 0 0 240px;
-    padding: 0.75rem;
+    flex: 0 0 200px;
+    padding: 0.5rem;
   }
 
   .add-match-card {
@@ -1188,33 +1193,104 @@ export default {
     padding: 1rem;
   }
 
+  /* Create Match modal's calendar — smaller header/grid/cells so the
+     whole picker takes less of the screen on a small phone. */
+  .modal-body-large {
+    padding: 1rem;
+  }
+
+  .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .date-picker-header {
+    padding: 0.75rem;
+  }
+
+  .month-year {
+    font-size: 1rem;
+  }
+
+  .date-picker-grid {
+    padding: 0.75rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .day-header {
+    padding: 0.35rem;
+    font-size: 0.75rem;
+  }
+
+  .day-button {
+    min-height: 34px;
+    font-size: 0.8rem;
+  }
+
+  .selected-date-display {
+    padding: 0.5rem 0.75rem;
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+  }
+
   .details-title-section {
     flex-direction: column;
     gap: 1rem;
     align-items: stretch;
   }
 
+  /* "Sunday, August 23, 2026 - Match Details" at the desktop 1.5rem size
+     wraps to two or three lines on a narrow screen. */
+  .details-header h3 {
+    font-size: 1.1rem;
+  }
+
   .edit-match-btn {
     justify-content: center;
   }
 
-  .players-table {
-    font-size: 0.875rem;
+  /* Keep both teams side by side even on mobile — stacking them (an
+     earlier attempt) fixed the horizontal scroll but traded it for a lot
+     of vertical scrolling instead. Everything inside a column is shrunk
+     to fit two ~150px-wide columns without overflowing. */
+  .teams-columns {
+    gap: 0.5rem;
   }
 
-  .players-table th,
-  .players-table td {
-    padding: 0.4rem;
+  .team-column-header {
+    padding: 0.5rem;
+    gap: 0.4rem;
+    font-size: 0.8rem;
   }
 
+  .team-players-list {
+    padding: 0.35rem;
+    gap: 0.25rem;
+  }
+
+  .team-player-row {
+    padding: 0.3rem 0.35rem;
+    gap: 0.35rem;
+  }
+
+  .team-player-row .player-info {
+    gap: 0.35rem;
+  }
+
+  .team-player-row .player-name {
+    font-size: 0.85rem;
+  }
+
+  .goal-badge {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    min-width: 1.4rem;
+  }
+
+  /* Touch scrolling already works natively on the horizontal match list —
+     these arrows just take up space without doing anything a swipe
+     doesn't already do on a touch screen. */
   .scroll-btn {
-    width: 36px;
-    height: 36px;
-  }
-
-  .scroll-btn svg {
-    width: 18px;
-    height: 18px;
+    display: none;
   }
 
   .modal-container {
@@ -1229,20 +1305,19 @@ export default {
 
 @media (max-width: 480px) {
   .match-card-horizontal {
-    flex: 0 0 200px;
+    flex: 0 0 170px;
     padding: 0.5rem;
+  }
+
+  /* .match-card-horizontal's flex shorthand above would otherwise widen
+     this to 200px too — it also carries that class — undoing the 64px
+     .add-match-card already set at the 768px breakpoint. */
+  .add-match-card {
+    flex: 0 0 64px;
   }
 
   .match-details-container {
     padding: 0.75rem;
-  }
-
-  .scroll-left {
-    left: 5px;
-  }
-
-  .scroll-right {
-    right: 5px;
   }
 }
 </style>

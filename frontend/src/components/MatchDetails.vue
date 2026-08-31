@@ -1,21 +1,5 @@
 <template>
   <div class="match-detail-container">
-    <!-- Header Section -->
-    <section class="match-header">
-      <div class="container">
-        <div class="header-content">
-          <button @click="goBack" class="back-button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="15,18 9,12 15,6" />
-            </svg>
-            Back to Matches
-          </button>
-          <h1 class="page-title">Match Details</h1>
-          <p class="page-subtitle">{{ formatDate(match?.Date) }}</p>
-        </div>
-      </div>
-    </section>
-
     <!-- Loading State -->
     <div v-if="isLoading" class="loading-container">
       <div class="loading-spinner"></div>
@@ -28,9 +12,18 @@
         <!-- Match Score Overview -->
         <div class="score-overview card-base">
           <div class="match-title">
-            <h2>Match Score</h2>
-            <div class="match-status-badge" :class="getMatchStatus()">
-              {{ getMatchStatusText() }}
+            <div class="match-title-left">
+              <button @click="goBack" class="match-back-btn" aria-label="Back to Matches">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="15,18 9,12 15,6" />
+                </svg>
+              </button>
+            </div>
+            <div class="match-title-right">
+              <span class="match-date">{{ formatDate(match?.Date) }}</span>
+              <div class="match-status-badge" :class="getMatchStatus()">
+                {{ getMatchStatusText() }}
+              </div>
             </div>
           </div>
 
@@ -65,23 +58,10 @@
         <!-- Team Management Section -->
         <div v-if="match.Teams && match.Teams.length > 0" class="team-management card-base card-large">
           <div class="management-header">
-            <div class="tabs-buttons">
-              <button v-for="(team, index) in match.Teams" :key="team.ID" @click="activeTeam = index"
-                :class="['tab-button', { active: activeTeam === index }]">
-                <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-                {{ team.Name }} ({{ team.Players ? team.Players.length : 0 }})
-              </button>
-            </div>
-
+            <!-- Global actions — they apply to the whole match, not to
+                 whichever team tab happens to be selected, so they come
+                 before the team switcher rather than being grouped with it. -->
             <div class="action-buttons">
-              <button v-if="isAdmin" @click="showModal" class="btn-base btn-secondary btn-small">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="16" />
-                  <line x1="8" y1="12" x2="16" y2="12" />
-                </svg>
-                Add Player
-              </button>
               <button v-if="isAdmin" @click="saveChanges" class="btn-base btn-primary btn-small" :disabled="isSaving">
                 <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -103,29 +83,35 @@
                 {{ isDeleting ? 'Deleting...' : 'Delete Match' }}
               </button>
             </div>
+
+            <!-- Team switcher + "Add player to this team" right next to it —
+                 Add Player acts on whichever tab is active, so it lives here
+                 rather than among the global actions above. -->
+            <div class="tabs-buttons">
+              <button v-for="(team, index) in match.Teams" :key="team.ID" @click="activeTeam = index"
+                :class="['tab-button', { active: activeTeam === index }]">
+                <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
+                {{ team.Name }} ({{ team.Players ? team.Players.length : 0 }})
+              </button>
+              <button v-if="isAdmin" @click="showModal" class="add-player-icon-btn" aria-label="Add player">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+            </div>
           </div>
 
-          <!-- Players List -->
+          <!-- Players List — one compact row per player (avatar, name, goal
+               counter, remove) instead of a header row plus a separate goal
+               row, so the list needs far less scrolling. -->
           <div v-if="match.Teams[activeTeam] && match.Teams[activeTeam].Players" class="players-grid">
             <div v-for="(player, playerIndex) in match.Teams[activeTeam].Players" :key="playerIndex"
               class="player-card">
-              <div class="player-header">
-                <div class="player-avatar">
-                  {{ getPlayerInitials(player.Name) }}
-                </div>
-                <div class="player-info">
-                  <h4 class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</h4>
-                  <span class="player-goals">Goals: {{ player.GoalNumber || 0 }}</span>
-                </div>
-                <button v-if="isAdmin" @click="removePlayer(playerIndex)" class="btn-danger-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
+              <div class="player-info">
+                <h4 class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</h4>
               </div>
 
-              <!-- Goal Management -->
               <div class="goal-management">
                 <button v-if="isAdmin" @click="updateGoals(playerIndex, -1)"
                   :disabled="!player.GoalNumber || player.GoalNumber <= 0" class="goal-btn decrease">
@@ -143,6 +129,13 @@
                   </svg>
                 </button>
               </div>
+
+              <button v-if="isAdmin" @click="removePlayer(playerIndex)" class="btn-danger-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -248,9 +241,6 @@
                   <div v-for="(player, index) in selectedPlayers" :key="`selected-${player.ID || player.Name}`"
                     class="selected-player-item">
                     <div class="player-info">
-                      <div class="player-avatar-small">
-                        {{ getPlayerInitials(player.Name) }}
-                      </div>
                       <span class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</span>
                     </div>
                     <button @click="removeSelectedPlayer(index)" class="remove-selected-btn">
@@ -296,9 +286,6 @@
                     @click="addPlayerToSelection(player)" class="available-player-item"
                     :disabled="isPlayerSelected(player) || isPlayerInAnyTeam(player.Name)">
                     <div class="player-info">
-                      <div class="player-avatar-small">
-                        {{ getPlayerInitials(player.Name) }}
-                      </div>
                       <span class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</span>
                     </div>
                     <div class="player-status">
@@ -809,8 +796,13 @@ export default {
       this.isSaving = true;
       try {
         await updateMatch(this.match.ID, this.match);
+        // Update the snapshot before navigating away: beforeRouteLeave's
+        // hasUnsavedChanges() check runs as part of this same navigation,
+        // and would otherwise see the just-saved match as still "dirty"
+        // against the pre-save snapshot and pop the "leave without
+        // saving?" confirm right after a successful save.
         this.matchSnapshot = JSON.stringify(this.match);
-        this.showMessage('Match updated successfully!', 'success');
+        this.goBack();
       } catch (error) {
         console.error('Error saving match:', error);
         this.showMessage('Error saving changes', 'error');
@@ -906,13 +898,6 @@ export default {
       return colorMap[colour.toLowerCase()] || '#6b7280';
     },
 
-    getPlayerInitials(name) {
-      return name.split(' ')
-        .map(word => word.charAt(0).toUpperCase())
-        .join('')
-        .slice(0, 2);
-    },
-
     formatPlayerNameForDisplay(name) {
       // Convert to title case for display (capitalize first letter of each word)
       return name.split(' ')
@@ -967,45 +952,6 @@ export default {
   background-color: var(--bg-secondary);
 }
 
-/* Header Section */
-.match-header {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-  color: white;
-  padding: 1rem 0;
-  position: relative;
-}
-
-.header-content {
-  text-align: center;
-  position: relative;
-}
-
-.back-button {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: white;
-  padding: 0.5rem 1rem;
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.back-button:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.back-button svg {
-  width: 18px;
-  height: 18px;
-}
-
 /* Match Content */
 .match-content {
   padding: 2rem 0;
@@ -1020,22 +966,53 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border-color);
 }
 
-.match-title h2 {
-  font-size: 1.5rem;
-  font-weight: 700;
+.match-title-left,
+.match-title-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.match-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.match-back-btn:hover {
+  background-color: var(--bg-tertiary);
   color: var(--text-primary);
-  margin: 0;
+}
+
+.match-back-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.match-date {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
 .match-status-badge {
-  padding: 0.5rem 1rem;
+  padding: 0.3rem 0.65rem;
   border-radius: 20px;
-  font-size: 0.875rem;
+  font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1058,12 +1035,16 @@ export default {
   gap: 1.5rem;
 }
 
+/* One row per team — name/colour and score side by side — at every
+   breakpoint, rather than a large stacked block on desktop and a
+   separately-tuned compact row on mobile. */
 .team-score {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.1rem;
   background-color: var(--bg-secondary);
   border-radius: var(--border-radius);
   border: 1px solid var(--border-color);
@@ -1077,26 +1058,38 @@ export default {
 
 .team-info {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 0.5rem;
-  text-align: center;
+  gap: 0.6rem;
+  text-align: left;
+  min-width: 0;
+}
+
+.team-info .team-color {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+  flex-shrink: 0;
 }
 
 .team-name {
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--text-primary);
   text-transform: capitalize;
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .score {
-  font-size: 2.5rem;
+  font-size: 1.75rem;
   font-weight: 900;
   color: var(--primary-color);
   text-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .vs-divider {
@@ -1106,8 +1099,8 @@ export default {
 }
 
 .vs-circle {
-  width: 50px;
-  height: 50px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
   display: flex;
@@ -1115,7 +1108,8 @@ export default {
   justify-content: center;
   color: white;
   font-weight: 800;
-  font-size: 1rem;
+  font-size: 0.7rem;
+  flex-shrink: 0;
   box-shadow: var(--shadow-lg);
 }
 
@@ -1138,7 +1132,37 @@ export default {
 
 .tabs-buttons {
   display: flex;
+  align-items: center;
   gap: 1rem;
+}
+
+/* "Add player to this team" — sits right next to the team switcher it acts
+   on, rather than among the global Save/Delete actions. Dashed border
+   echoes the "+" add-match card used in the matches list, for a consistent
+   "+" affordance across the app. */
+.add-player-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--border-radius);
+  background: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.add-player-icon-btn:hover {
+  border-color: var(--primary-color);
+  background-color: var(--bg-tertiary);
+}
+
+.add-player-icon-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .tab-button {
@@ -1178,62 +1202,54 @@ export default {
   margin-left: 1.5rem;
 }
 
-/* Players Grid */
+/* Players list — one compact row per player instead of a taller card with
+   a header row and a separate goal row, so the list needs far less
+   scrolling to see everyone on a team. Bounded to whatever's left below
+   the score card and the Save/Delete/tabs header above it, with its own
+   scrollbar — a roster with many players then scrolls inside this list
+   instead of growing the whole page and pushing Save Changes/Delete
+   Match out of easy reach (same pattern as MatchesPanel.vue's own
+   two-column team list). The 560px offset estimates that chrome's
+   height; max() keeps a handful of rows visible either way. */
 .players-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: max(9rem, calc(100vh - 560px));
+  overflow-y: auto;
 }
 
 .player-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   background-color: var(--bg-tertiary);
   border-radius: var(--border-radius);
-  padding: 1.5rem;
+  padding: 0.6rem 0.85rem;
   border: 1px solid var(--border-color);
   transition: all var(--transition-fast);
 }
 
 .player-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.player-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .player-info {
-  flex: 1;
-}
-
-/* In the roster card header, stack name above goals instead of the
-   global .player-info row layout — and give it a real flex-basis so
-   overflow doesn't get shoved entirely onto the avatar/delete circles. */
-.player-header .player-info {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 0.125rem;
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.player-header .player-name {
-  font-size: 1.25rem;
-  line-height: 1.2;
-}
-
-.player-goals {
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-}
-
-.player-avatar {
-  flex-shrink: 0;
+.player-info .player-name {
+  /* It's an <h4>, which carries its own default vertical margin (unlike
+     the <span> used for a player name elsewhere in this file) — left in
+     place, that margin box (not the visible text) is what .player-card's
+     align-items:center actually centers, throwing off the row's height
+     and vertical alignment for no visual benefit. */
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .btn-danger-icon {
@@ -1265,12 +1281,13 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .goal-btn {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2px solid var(--primary-color);
   background-color: var(--bg-primary);
@@ -1280,6 +1297,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .goal-btn:hover:not(:disabled) {
@@ -1293,15 +1311,15 @@ export default {
 }
 
 .goal-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
 }
 
 .goal-count {
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--primary-color);
-  min-width: 40px;
+  min-width: 24px;
   text-align: center;
 }
 
@@ -1645,54 +1663,131 @@ export default {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .header-content {
-    padding: 0 3rem;
+  .match-content {
+    padding: 1rem 0;
   }
 
-  .back-button {
-    position: relative;
+  /* Score overview: card-base/card-large's own padding is sized for
+     desktop — override it directly here rather than fighting it. */
+  .score-overview {
+    padding: 1rem;
     margin-bottom: 1rem;
-    transform: none;
   }
 
+  /* No more "Match" heading taking up half the row (see .match-title-left
+     in the template) — the back button, date and status badge now fit on
+     one row even on a narrow screen, so the wrap the base rule allows for
+     is no longer needed. */
+  .match-title {
+    flex-wrap: nowrap;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+  }
+
+  /* The full "Sunday, August 23, 2026" format (see formatDate()) is long
+     next to the back button and status badge sharing this row on a narrow
+     screen — shrink it rather than truncate or reflow the row. */
+  .match-date {
+    font-size: 0.75rem;
+  }
+
+  /* Both teams already sit on one row at every breakpoint (see .team-score
+     above) — mobile just gets a bit tighter to fit the narrower width. */
   .teams-score {
-    grid-template-columns: 1fr;
-    gap: 1rem;
+    gap: 0.5rem;
   }
 
-  .vs-divider {
-    order: 2;
+  .team-score {
+    padding: 0.6rem 0.75rem;
+    gap: 0.5rem;
   }
 
-  .team-score:first-child {
-    order: 1;
+  .team-name {
+    font-size: 0.9rem;
   }
 
-  .team-score:last-child {
-    order: 3;
+  .team-info .team-color {
+    width: 20px;
+    height: 20px;
+  }
+
+  .score {
+    font-size: 1.65rem;
+  }
+
+  .vs-circle {
+    width: 32px;
+    height: 32px;
+    font-size: 0.7rem;
+  }
+
+  .team-management {
+    padding: 1rem;
+    margin-bottom: 1rem;
   }
 
   .management-header {
     flex-direction: column;
     align-items: stretch;
-    gap: 1rem;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
   }
 
   .tabs-buttons {
     justify-content: center;
+    gap: 0.5rem;
   }
 
+  .tab-button {
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  /* Side by side on one row instead of stacked full-width — each button
+     shares the row equally. */
   .action-buttons {
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+
+  .action-buttons .btn-base {
+    flex: 1;
     justify-content: center;
   }
 
-  .players-grid {
-    grid-template-columns: 1fr;
+  /* They're already visually separated by sharing the row 50/50 with a
+     gap, so the extra desktop-only margin meant to prevent a misclick
+     would just throw the 50/50 split off here. */
+  .delete-match-btn {
+    margin-left: 0;
+  }
+
+  /* Roster row: player name rendered as an <h4> with no font-size of its
+     own (see .player-name in global-styles.css), so it falls back to the
+     browser's default ~1rem heading size. 0.85rem (an earlier pass) read
+     as too small next to the rest of the row — 1rem is the actual target,
+     just without the <h4>'s own oversized default margin (stripped in the
+     base rule above, not this override). */
+  .player-info .player-name {
+    font-size: 1rem;
   }
 
   .enhanced-multi-player-modal {
     max-width: 95%;
     max-height: 95vh;
+  }
+
+  .search-section {
+    padding: 1rem;
+  }
+
+  .column-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .column-content {
+    padding: 0.75rem;
   }
 
   .players-columns {
@@ -1707,7 +1802,8 @@ export default {
   .enhanced-footer {
     flex-direction: column;
     align-items: stretch;
-    gap: 1rem;
+    gap: 0.75rem;
+    padding: 1rem;
   }
 
   .footer-buttons {
@@ -1717,30 +1813,17 @@ export default {
 
 @media (max-width: 480px) {
   .match-content {
-    padding: 1rem 0;
+    padding: 0.75rem 0;
   }
 
   .tab-button {
-    padding: 0.75rem 1rem;
-    font-size: 0.875rem;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.85rem;
   }
 
   .team-color-small {
     width: 12px;
     height: 12px;
-  }
-
-  .player-card {
-    padding: 1rem;
-  }
-
-  .goal-btn {
-    width: 32px;
-    height: 32px;
-  }
-
-  .goal-count {
-    font-size: 1.25rem;
   }
 }
 </style>

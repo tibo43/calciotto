@@ -14,12 +14,12 @@
                  these links require a token, so showing them on an
                  unauthenticated page misrepresents it as the logged-in app
                  shell rather than a standalone login view. -->
-            <div v-if="isAuthenticatedRoute" class="nav-menu" :class="{ 'active': isMenuOpen }">
-              <router-link 
-                to="/" 
-                @click="closeMenu"
+            <div v-if="isAuthenticatedRoute" class="nav-menu">
+              <router-link
+                to="/"
                 :class="{ 'active': $route.name === 'MatchesAndStandings' }"
                 class="nav-button"
+                aria-label="Matches"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
@@ -27,19 +27,19 @@
                   <line x1="8" y1="2" x2="8" y2="6"/>
                   <line x1="3" y1="10" x2="21" y2="10"/>
                 </svg>
-                Matches
+                <span class="nav-button-label">Matches</span>
               </router-link>
               <router-link
                 to="/profile"
-                @click="closeMenu"
                 :class="{ 'active': $route.name === 'Profile' }"
                 class="nav-button"
+                aria-label="Profile"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
                   <circle cx="12" cy="7" r="4"/>
                 </svg>
-                Profile
+                <span class="nav-button-label">Profile</span>
               </router-link>
             </div>
 
@@ -72,18 +72,6 @@
                     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
                   </svg>
                 </transition>
-              </button>
-
-              <button
-                v-if="isAuthenticatedRoute"
-                class="mobile-menu-toggle"
-                :class="{ 'active': isMenuOpen }"
-                @click="toggleMenu"
-                aria-label="Toggle navigation menu"
-              >
-                <span></span>
-                <span></span>
-                <span></span>
               </button>
             </div>
           </div>
@@ -120,11 +108,6 @@
             </div>
           </transition>
         </main>
-
-        <!-- Mobile Menu Overlay -->
-        <transition name="overlay">
-          <div v-if="isMenuOpen" class="mobile-overlay" @click="closeMenu"></div>
-        </transition>
     </div>
   </div>
 </template>
@@ -141,7 +124,6 @@ export default {
   data() {
     return {
       activeTab: 'matches',
-      isMenuOpen: false,
       isScrolled: false,
       isDarkMode: false
     };
@@ -165,7 +147,6 @@ export default {
       if (to.name === 'MatchesAndStandings') {
         this.activeTab = 'matches';
       }
-      this.closeMenu();
     }
   },
   mounted() {
@@ -187,14 +168,6 @@ export default {
     goHome() {
       this.$router.push('/');
       this.activeTab = 'matches';
-    },
-    toggleMenu() {
-      this.isMenuOpen = !this.isMenuOpen;
-      document.body.style.overflow = this.isMenuOpen ? 'hidden' : '';
-    },
-    closeMenu() {
-      this.isMenuOpen = false;
-      document.body.style.overflow = '';
     },
     handleScroll() {
       this.isScrolled = window.scrollY > 20;
@@ -382,36 +355,6 @@ export default {
   height: 20px;
 }
 
-.mobile-menu-toggle {
-  display: none;
-  flex-direction: column;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.5rem;
-  gap: 0.25rem;
-}
-
-.mobile-menu-toggle span {
-  width: 1.5rem;
-  height: 2px;
-  background-color: var(--text-primary);
-  transition: all var(--transition-fast);
-  border-radius: 1px;
-}
-
-.mobile-menu-toggle.active span:nth-child(1) {
-  transform: rotate(45deg) translate(0.375rem, 0.375rem);
-}
-
-.mobile-menu-toggle.active span:nth-child(2) {
-  opacity: 0;
-}
-
-.mobile-menu-toggle.active span:nth-child(3) {
-  transform: rotate(-45deg) translate(0.375rem, -0.375rem);
-}
-
 /* Main Content */
 .app-container {
   background-color: var(--bg-secondary);
@@ -435,17 +378,6 @@ export default {
 
 .tab-content .empty-state svg {
   color: var(--primary-color);
-}
-
-/* Mobile Overlay */
-.mobile-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 999;
 }
 
 /* Transitions */
@@ -494,54 +426,36 @@ export default {
   transform: rotate(90deg) scale(0.8);
 }
 
-.overlay-enter-active,
-.overlay-leave-active {
-  transition: opacity var(--transition-smooth);
-}
-
-.overlay-enter-from,
-.overlay-leave-to {
-  opacity: 0;
-}
-
-/* Mobile Responsive */
+/* Mobile Responsive: everything (brand, Matches/Profile, logout, theme
+   toggle) stays on one row instead of opening a separate dropdown menu —
+   the nav links just drop their text label and become icon-only, matching
+   the existing icon-only actions, rather than being hidden off-screen
+   behind a hamburger toggle. */
 @media (max-width: 768px) {
-  .mobile-menu-toggle {
-    display: flex;
-  }
-
-  .nav-menu {
-    position: fixed;
-    top: var(--navbar-height);
-    left: 0;
-    right: 0;
-    background-color: var(--bg-primary);
-    flex-direction: column;
-    padding: 2rem 1rem;
-    gap: 1rem;
-    transform: translateY(-100%);
-    transition: transform var(--transition-smooth);
-    box-shadow: var(--shadow-lg);
-    max-height: calc(100vh - var(--navbar-height));
-    overflow-y: auto;
-  }
-
-  .nav-menu.active {
-    transform: translateY(0);
-  }
-
-  .nav-button {
-    width: 100%;
-    justify-content: center;
-    padding: 1rem;
-    font-size: 1.1rem;
-  }
-
   .nav-container {
     padding: 0 1rem;
   }
+
+  .nav-button-label {
+    display: none;
+  }
+
+  .nav-button {
+    padding: 0.5rem;
+  }
+
+  .nav-menu {
+    gap: 0.25rem;
+  }
+
+  .nav-actions {
+    gap: 0.25rem;
+  }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 400px) {
+  .brand-text {
+    font-size: 1.15rem;
+  }
 }
 </style>

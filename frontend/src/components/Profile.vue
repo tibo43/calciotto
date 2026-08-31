@@ -1,17 +1,5 @@
 <template>
   <div class="profile-container">
-    <!-- Header Section -->
-    <section class="profile-header">
-      <div class="container">
-        <div class="header-content">
-          <div class="title-section">
-            <h1 class="page-title">My profile</h1>
-            <p class="page-subtitle">Your record across every group you belong to</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <section class="profile-section">
       <div class="container">
         <!-- Loading State -->
@@ -33,7 +21,6 @@
           <!-- Overall stats, all groups combined -->
           <div class="overall-card card-base card-large">
             <div class="overall-identity">
-              <div class="player-avatar-small">{{ getPlayerInitials(overall.Name) }}</div>
               <div class="overall-name-block">
                 <div v-if="!isEditingName" class="overall-name-row">
                   <h2 class="overall-name">{{ formatPlayerNameForDisplay(overall.Name) }}</h2>
@@ -169,9 +156,14 @@
                     <li v-for="member in members" :key="member.id" class="member-row">
                       <div class="member-row-main">
                         <div class="member-identity">
-                          <span class="member-name">{{ member.name }}</span>
-                          <span v-if="member.role === 'admin'" class="admin-badge">Admin</span>
-                          <span v-if="!member.email" class="ghost-badge">No account yet</span>
+                          <!-- Badges replaced with styling on the name itself:
+                               a ghost (no account yet) reads as italic/muted,
+                               an admin's name is coloured — one less thing
+                               competing for space in the row. -->
+                          <span class="member-name"
+                            :class="{ 'member-name-ghost': !member.email, 'member-name-admin': member.role === 'admin' }">
+                            {{ member.name }}
+                          </span>
                         </div>
 
                         <div class="member-actions">
@@ -181,9 +173,14 @@
                           </button>
 
                           <template v-if="isGroupAdmin(selectedGroupId) && member.id !== currentPlayerId">
-                            <button class="btn-base btn-cancel btn-small" :disabled="memberActionLoading[member.id]"
-                              @click="toggleMemberRole(member)">
-                              {{ member.role === 'admin' ? 'Make member' : 'Make admin' }}
+                            <!-- A ghost player (no email/account, see the
+                                 "No account yet" badge above) can't log in
+                                 to actually use admin privileges — offering
+                                 to promote one is a dead end until they've
+                                 claimed the account via Invite. -->
+                            <button v-if="member.email" class="btn-base btn-cancel btn-small"
+                              :disabled="memberActionLoading[member.id]" @click="toggleMemberRole(member)">
+                              {{ member.role === 'admin' ? 'Demote' : 'Promote' }}
                             </button>
                             <button class="btn-base btn-danger btn-small" :disabled="memberActionLoading[member.id]"
                               @click="confirmRemoveMember(member)">
@@ -531,13 +528,6 @@ export default {
     backendMessage(error, fallback) {
       return error.response?.data?.error || fallback;
     },
-    getPlayerInitials(name) {
-      return (name || '')
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase())
-        .join('')
-        .slice(0, 2);
-    },
     formatPlayerNameForDisplay(name) {
       return (name || '')
         .split(' ')
@@ -553,12 +543,6 @@ export default {
    the two ranking pages read as one screen family. */
 .profile-container {
   background-color: var(--bg-secondary);
-}
-
-.profile-header {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-  color: white;
-  padding: 1rem 0;
 }
 
 .profile-section {
@@ -706,12 +690,17 @@ export default {
   position: relative;
 }
 
+/* overflow-x: auto here makes the browser compute overflow-y as auto too
+   (per the CSS overflow spec, an axis left "visible" next to a
+   scrolling one is treated as auto) — without vertical padding to give
+   it room, that clips the active/hover card's box-shadow and border at
+   the container's own top edge, reading as a broken/cut-off outline. */
 .groups-bar {
   display: flex;
   gap: 1rem;
   overflow-x: auto;
   scroll-behavior: smooth;
-  padding-bottom: 0.25rem;
+  padding: 0.5rem 0.25rem 0.25rem;
 }
 
 .group-card-horizontal {
@@ -725,10 +714,18 @@ export default {
   transition: all var(--transition-smooth);
 }
 
-.group-card-horizontal:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  background-color: var(--bg-primary);
+/* Scoped to devices that actually support hover. Touch browsers apply
+   :hover on tap and only clear it on the *next* tap elsewhere on the
+   page — tapping the same card again to close it never fires that, so
+   without this guard the card stays visually in its hover look (same
+   background/shadow as .active below) even after .active is removed,
+   reading as "closing does nothing". */
+@media (hover: hover) {
+  .group-card-horizontal:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    background-color: var(--bg-primary);
+  }
 }
 
 .group-card-horizontal.active {
@@ -896,6 +893,20 @@ export default {
   color: var(--text-primary);
 }
 
+/* Ghost (no account yet) and admin used to be separate pill badges next to
+   the name — folded into the name's own styling instead, one less element
+   competing for space in an already tight row. Admin is checked second so
+   it wins color on the (very unlikely) row that is somehow both. */
+.member-name-ghost {
+  font-style: italic;
+  color: var(--text-light);
+}
+
+.member-name-admin {
+  color: var(--primary-color);
+  font-weight: 700;
+}
+
 .admin-badge {
   padding: 0.125rem 0.5rem;
   border-radius: 999px;
@@ -908,21 +919,17 @@ export default {
   flex-shrink: 0;
 }
 
-.ghost-badge {
-  padding: 0.125rem 0.5rem;
-  border-radius: 999px;
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
 .member-actions {
   display: flex;
   gap: 0.5rem;
+}
+
+/* Tighter than .btn-small on its own: three of these can sit in one row on
+   a narrow roster card, so a bit more compact than the default small
+   button size fits better here specifically. */
+.member-actions .btn-base {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
 }
 
 .invite-form {
@@ -951,16 +958,48 @@ export default {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .profile-header {
-    padding: 2rem 0;
+  .overall-card {
+    padding: 1rem;
   }
 
+  /* All 6 stats on one row instead of wrapping to two — shrunk enough
+     (padding, font, letter-spacing) that "PLAYED"/"DRAWN" still fit
+     without wrapping inside their own cell. */
   .overall-stats {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.3rem;
+  }
+
+  .overall-stat {
+    padding: 0.4rem 0.1rem;
+    gap: 0.1rem;
+  }
+
+  .overall-stat-value {
+    font-size: 1rem;
+  }
+
+  .overall-stat-label {
+    font-size: 0.5rem;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
   }
 
   .group-card-horizontal {
     flex-basis: 170px;
+  }
+
+  /* Bounded to what's actually left below everything above it (overall
+     card, groups header, groups carousel, roster title) instead of a
+     fixed 22rem, so the roster's own scrollbar — not the page's — is what
+     handles a long member list; the groups carousel above already
+     scrolls horizontally on its own (.groups-bar, all breakpoints), this
+     mirrors that same "scroll the specific list, not the page" contract
+     for the vertical member list. The 690px offset estimates that
+     chrome's height on a narrow screen; max() keeps a handful of rows
+     visible either way. */
+  .member-list {
+    max-height: max(8rem, calc(100vh - 690px));
   }
 }
 </style>

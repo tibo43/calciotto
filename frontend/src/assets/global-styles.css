@@ -469,33 +469,6 @@ body {
    COMMON PLAYER COMPONENTS
    =========================== */
 
-/* Player Avatar */
-.player-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background-color: var(--primary-color);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 1.1rem;
-}
-
-.player-avatar-small {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background-color: var(--primary-color);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 0.75rem;
-}
-
 /* Player Info */
 .player-info {
   display: flex;
@@ -658,14 +631,6 @@ body {
   }
 }
 
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
 
 @keyframes slideInFromRight {
   from {

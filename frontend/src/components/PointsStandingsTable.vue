@@ -28,7 +28,6 @@
           <td class="rank-col">{{ index + 1 }}</td>
           <td class="player-col">
             <div class="player-info">
-              <div class="player-avatar-small">{{ getPlayerInitials(row.Name) }}</div>
               <span class="player-name">{{ formatPlayerNameForDisplay(row.Name) }}</span>
               <span v-if="row.IsMember === false" class="left-group-tag">(left the group)</span>
             </div>
@@ -63,12 +62,6 @@ export default {
     }
   },
   methods: {
-    getPlayerInitials(name) {
-      return name.split(' ')
-        .map(word => word.charAt(0).toUpperCase())
-        .join('')
-        .slice(0, 2);
-    },
     formatPlayerNameForDisplay(name) {
       return name.split(' ')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
@@ -79,8 +72,15 @@ export default {
 </script>
 
 <style scoped>
+/* Capped to whatever's left below the nav/context-bar/tabs above it, with
+   its own scrollbar — a long roster then scrolls inside this card instead
+   of growing the whole page, so the tabs/season selector above never
+   scroll out of reach. The offset is an estimate of that chrome's height;
+   it doesn't need to be exact, just enough that the container's bottom
+   edge lands near the viewport's rather than past it. */
 .standings-table-container {
-  overflow-x: auto;
+  max-height: calc(100vh - 260px);
+  overflow: auto;
 }
 
 .standings-table {
@@ -89,6 +89,9 @@ export default {
 }
 
 .standings-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background-color: var(--bg-tertiary);
   color: var(--text-secondary);
   font-weight: 600;
@@ -124,6 +127,12 @@ export default {
 
 .player-col .player-info {
   justify-content: flex-start;
+  min-width: 0;
+}
+
+.player-info .player-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Subtle marker for a row whose player is no longer a group member — their
@@ -141,12 +150,35 @@ export default {
   background-color: var(--bg-tertiary);
 }
 
-/* Responsive */
+/* Responsive — shrunk enough (no avatar, tighter padding, a capped name
+   width) that the whole table fits without any horizontal scroll, on top
+   of .standings-table-container's own overflow-x:auto safety net for an
+   unusually long name. */
 @media (max-width: 768px) {
   .standings-table th,
   .standings-table td {
-    padding: 0.5rem;
-    font-size: 0.875rem;
+    padding: 0.4rem 0.3rem;
+    font-size: 0.75rem;
+  }
+
+  .rank-col {
+    width: 20px;
+  }
+
+  .player-col {
+    min-width: 0;
+  }
+
+  .player-info .player-name {
+    display: inline-block;
+    max-width: 5.5rem;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+
+  .left-group-tag {
+    display: block;
+    font-size: 0.65rem;
   }
 }
 </style>
