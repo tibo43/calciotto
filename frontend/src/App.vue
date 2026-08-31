@@ -79,34 +79,7 @@
 
         <!-- Main Content -->
         <main class="main-content">
-          <!-- Router View for Match Routes -->
-          <router-view v-if="isRouterRoute" />
-          
-          <!-- Tab Content for non-router routes -->
-          <transition v-else name="tab-content" mode="out-in">
-            <div v-if="activeTab === 'teams'" key="teams" class="tab-content">
-              <div class="empty-state">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="empty-icon">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
-                <h2>Teams</h2>
-                <p>Coming soon...</p>
-              </div>
-            </div>
-            <div v-else-if="activeTab === 'players'" key="players" class="tab-content">
-              <div class="empty-state">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="empty-icon">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
-                </svg>
-                <h2>Players</h2>
-                <p>Coming soon...</p>
-              </div>
-            </div>
-          </transition>
+          <router-view />
         </main>
     </div>
   </div>
@@ -123,30 +96,17 @@ export default {
   name: 'App',
   data() {
     return {
-      activeTab: 'matches',
       isScrolled: false,
       isDarkMode: false
     };
   },
   computed: {
-    isRouterRoute() {
-      // Check if current route should be handled by router
-      return ['MatchesAndStandings', 'MatchDetails', 'Profile', 'Login', 'Signup', 'ForgotPassword', 'ResetPassword'].includes(this.$route.name);
-    },
     // Gates the nav-menu links (Matches/Groups) and the Profile/Logout icons:
     // all three require a token, so showing them on a public route (where
     // there's no session to act on) makes a standalone login/signup page
     // read as the logged-in app shell instead of its own view.
     isAuthenticatedRoute() {
       return !PUBLIC_ROUTE_NAMES.includes(this.$route.name);
-    }
-  },
-  watch: {
-    '$route'(to) {
-      // Update activeTab when route changes
-      if (to.name === 'MatchesAndStandings') {
-        this.activeTab = 'matches';
-      }
     }
   },
   mounted() {
@@ -167,7 +127,6 @@ export default {
   methods: {
     goHome() {
       this.$router.push('/');
-      this.activeTab = 'matches';
     },
     handleScroll() {
       this.isScrolled = window.scrollY > 20;
@@ -365,21 +324,6 @@ export default {
   min-height: calc(100vh - var(--navbar-height));
 }
 
-/* Tab Content */
-.tab-content {
-  padding: 2rem;
-}
-
-.tab-content .empty-state h2 {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
-  color: var(--text-primary);
-}
-
-.tab-content .empty-state svg {
-  color: var(--primary-color);
-}
-
 /* Transitions */
 .app-container-enter-active,
 .app-container-leave-active {
@@ -394,21 +338,6 @@ export default {
 .app-container-leave-to {
   opacity: 0;
   transform: translateY(-20px);
-}
-
-.tab-content-enter-active,
-.tab-content-leave-active {
-  transition: all var(--transition-smooth);
-}
-
-.tab-content-enter-from {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-.tab-content-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
 }
 
 .theme-icon-enter-active,
