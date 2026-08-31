@@ -1278,6 +1278,12 @@ export default {
     align-items: stretch;
   }
 
+  /* "Sunday, August 23, 2026 - Match Details" at the desktop 1.5rem size
+     wraps to two or three lines on a narrow screen. */
+  .details-header h3 {
+    font-size: 1.1rem;
+  }
+
   .edit-match-btn {
     justify-content: center;
   }
@@ -1318,7 +1324,7 @@ export default {
   }
 
   .team-player-row .player-name {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
   }
 
   .goal-badge {

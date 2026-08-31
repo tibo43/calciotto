@@ -18,7 +18,6 @@
                   <polyline points="15,18 9,12 15,6" />
                 </svg>
               </button>
-              <h2>Match</h2>
             </div>
             <div class="match-title-right">
               <span class="match-date">{{ formatDate(match?.Date) }}</span>
@@ -992,13 +991,6 @@ export default {
   gap: 0.75rem;
 }
 
-.match-title h2 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-}
-
 .match-back-btn {
   display: flex;
   align-items: center;
@@ -1690,13 +1682,14 @@ export default {
     margin-bottom: 1rem;
   }
 
+  /* No more "Match" heading taking up half the row (see .match-title-left
+     in the template) — the back button, date and status badge now fit on
+     one row even on a narrow screen, so the wrap the base rule allows for
+     is no longer needed. */
   .match-title {
+    flex-wrap: nowrap;
     margin-bottom: 1rem;
     padding-bottom: 0.75rem;
-  }
-
-  .match-title h2 {
-    font-size: 1.25rem;
   }
 
   /* The full "Sunday, August 23, 2026" format (see formatDate()) is long
