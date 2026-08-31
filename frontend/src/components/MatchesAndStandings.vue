@@ -266,8 +266,8 @@ export default {
     /* Group and season sit on one row here too, not stacked: dropping the
        "Group"/"Season" labels below frees up enough width for both
        selects to fit side by side instead of each wrapping onto its own
-       line. */
-    justify-content: flex-start;
+       line. Centered, same as desktop. */
+    justify-content: center;
     flex-wrap: nowrap;
     gap: 0.75rem;
   }

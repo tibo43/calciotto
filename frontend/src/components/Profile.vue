@@ -171,7 +171,7 @@
                           <template v-if="isGroupAdmin(selectedGroupId) && member.id !== currentPlayerId">
                             <button class="btn-base btn-cancel btn-small" :disabled="memberActionLoading[member.id]"
                               @click="toggleMemberRole(member)">
-                              {{ member.role === 'admin' ? 'Make member' : 'Make admin' }}
+                              {{ member.role === 'admin' ? 'Demote' : 'Promote' }}
                             </button>
                             <button class="btn-base btn-danger btn-small" :disabled="memberActionLoading[member.id]"
                               @click="confirmRemoveMember(member)">
@@ -905,6 +905,14 @@ export default {
 .member-actions {
   display: flex;
   gap: 0.5rem;
+}
+
+/* Tighter than .btn-small on its own: three of these can sit in one row on
+   a narrow roster card, so a bit more compact than the default small
+   button size fits better here specifically. */
+.member-actions .btn-base {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
 }
 
 .invite-form {
