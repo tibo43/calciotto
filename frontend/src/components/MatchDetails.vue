@@ -805,8 +805,13 @@ export default {
       this.isSaving = true;
       try {
         await updateMatch(this.match.ID, this.match);
+        // Update the snapshot before navigating away: beforeRouteLeave's
+        // hasUnsavedChanges() check runs as part of this same navigation,
+        // and would otherwise see the just-saved match as still "dirty"
+        // against the pre-save snapshot and pop the "leave without
+        // saving?" confirm right after a successful save.
         this.matchSnapshot = JSON.stringify(this.match);
-        this.showMessage('Match updated successfully!', 'success');
+        this.goBack();
       } catch (error) {
         console.error('Error saving match:', error);
         this.showMessage('Error saving changes', 'error');
