@@ -690,12 +690,17 @@ export default {
   position: relative;
 }
 
+/* overflow-x: auto here makes the browser compute overflow-y as auto too
+   (per the CSS overflow spec, an axis left "visible" next to a
+   scrolling one is treated as auto) — without vertical padding to give
+   it room, that clips the active/hover card's box-shadow and border at
+   the container's own top edge, reading as a broken/cut-off outline. */
 .groups-bar {
   display: flex;
   gap: 1rem;
   overflow-x: auto;
   scroll-behavior: smooth;
-  padding-bottom: 0.25rem;
+  padding: 0.5rem 0.25rem 0.25rem;
 }
 
 .group-card-horizontal {
@@ -709,10 +714,18 @@ export default {
   transition: all var(--transition-smooth);
 }
 
-.group-card-horizontal:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  background-color: var(--bg-primary);
+/* Scoped to devices that actually support hover. Touch browsers apply
+   :hover on tap and only clear it on the *next* tap elsewhere on the
+   page — tapping the same card again to close it never fires that, so
+   without this guard the card stays visually in its hover look (same
+   background/shadow as .active below) even after .active is removed,
+   reading as "closing does nothing". */
+@media (hover: hover) {
+  .group-card-horizontal:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    background-color: var(--bg-primary);
+  }
 }
 
 .group-card-horizontal.active {
