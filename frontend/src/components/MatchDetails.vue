@@ -1699,6 +1699,13 @@ export default {
     font-size: 1.25rem;
   }
 
+  /* The full "Sunday, August 23, 2026" format (see formatDate()) is long
+     next to the back button and status badge sharing this row on a narrow
+     screen — shrink it rather than truncate or reflow the row. */
+  .match-date {
+    font-size: 0.75rem;
+  }
+
   /* Both teams already sit on one row at every breakpoint (see .team-score
      above) — mobile just gets a bit tighter to fit the narrower width. */
   .teams-score {
@@ -1773,10 +1780,12 @@ export default {
 
   /* Roster row: player name rendered as an <h4> with no font-size of its
      own (see .player-name in global-styles.css), so it falls back to the
-     browser's default ~1rem heading size — a bit large next to the
-     compact avatar/goal controls either side of it on a narrow screen. */
+     browser's default ~1rem heading size. 0.85rem (an earlier pass) read
+     as too small next to the rest of the row — 1rem is the actual target,
+     just without the <h4>'s own oversized default margin (stripped in the
+     base rule above, not this override). */
   .player-info .player-name {
-    font-size: 0.85rem;
+    font-size: 1rem;
   }
 
   /* The 32px avatar (global .player-avatar-small size) reads as oversized
