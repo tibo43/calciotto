@@ -156,9 +156,14 @@
                     <li v-for="member in members" :key="member.id" class="member-row">
                       <div class="member-row-main">
                         <div class="member-identity">
-                          <span class="member-name">{{ member.name }}</span>
-                          <span v-if="member.role === 'admin'" class="admin-badge">Admin</span>
-                          <span v-if="!member.email" class="ghost-badge">No account yet</span>
+                          <!-- Badges replaced with styling on the name itself:
+                               a ghost (no account yet) reads as italic/muted,
+                               an admin's name is coloured — one less thing
+                               competing for space in the row. -->
+                          <span class="member-name"
+                            :class="{ 'member-name-ghost': !member.email, 'member-name-admin': member.role === 'admin' }">
+                            {{ member.name }}
+                          </span>
                         </div>
 
                         <div class="member-actions">
@@ -875,6 +880,20 @@ export default {
   color: var(--text-primary);
 }
 
+/* Ghost (no account yet) and admin used to be separate pill badges next to
+   the name — folded into the name's own styling instead, one less element
+   competing for space in an already tight row. Admin is checked second so
+   it wins color on the (very unlikely) row that is somehow both. */
+.member-name-ghost {
+  font-style: italic;
+  color: var(--text-light);
+}
+
+.member-name-admin {
+  color: var(--primary-color);
+  font-weight: 700;
+}
+
 .admin-badge {
   padding: 0.125rem 0.5rem;
   border-radius: 999px;
@@ -885,18 +904,6 @@ export default {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   flex-shrink: 0;
-}
-
-.ghost-badge {
-  padding: 0.125rem 0.5rem;
-  border-radius: 999px;
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .member-actions {
@@ -938,12 +945,48 @@ export default {
 
 /* Responsive */
 @media (max-width: 768px) {
+  .overall-card {
+    padding: 1rem;
+  }
+
+  /* All 6 stats on one row instead of wrapping to two — shrunk enough
+     (padding, font, letter-spacing) that "PLAYED"/"DRAWN" still fit
+     without wrapping inside their own cell. */
   .overall-stats {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.3rem;
+  }
+
+  .overall-stat {
+    padding: 0.4rem 0.1rem;
+    gap: 0.1rem;
+  }
+
+  .overall-stat-value {
+    font-size: 1rem;
+  }
+
+  .overall-stat-label {
+    font-size: 0.5rem;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
   }
 
   .group-card-horizontal {
     flex-basis: 170px;
+  }
+
+  /* Bounded to what's actually left below everything above it (overall
+     card, groups header, groups carousel, roster title) instead of a
+     fixed 22rem, so the roster's own scrollbar — not the page's — is what
+     handles a long member list; the groups carousel above already
+     scrolls horizontally on its own (.groups-bar, all breakpoints), this
+     mirrors that same "scroll the specific list, not the page" contract
+     for the vertical member list. The 690px offset estimates that
+     chrome's height on a narrow screen; max() keeps a handful of rows
+     visible either way. */
+  .member-list {
+    max-height: max(8rem, calc(100vh - 690px));
   }
 }
 </style>
