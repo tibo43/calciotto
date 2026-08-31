@@ -1704,17 +1704,22 @@ export default {
   }
 
   .team-name {
-    font-size: 0.95rem;
+    font-size: 1.15rem;
+  }
+
+  .team-info .team-color {
+    width: 20px;
+    height: 20px;
   }
 
   .score {
-    font-size: 1.4rem;
+    font-size: 1.65rem;
   }
 
   .vs-circle {
-    width: 30px;
-    height: 30px;
-    font-size: 0.65rem;
+    width: 32px;
+    height: 32px;
+    font-size: 0.7rem;
   }
 
   .team-management {
@@ -1757,6 +1762,14 @@ export default {
      would just throw the 50/50 split off here. */
   .delete-match-btn {
     margin-left: 0;
+  }
+
+  /* Roster row: player name rendered as an <h4> with no font-size of its
+     own (see .player-name in global-styles.css), so it falls back to the
+     browser's default ~1rem heading size — a bit large next to the
+     compact avatar/goal controls either side of it on a narrow screen. */
+  .player-info .player-name {
+    font-size: 0.85rem;
   }
 
   .enhanced-multi-player-modal {

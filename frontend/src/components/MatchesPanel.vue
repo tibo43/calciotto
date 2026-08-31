@@ -1282,12 +1282,49 @@ export default {
     justify-content: center;
   }
 
-  /* Stack the two teams instead of side by side — this is the actual fix
-     for "scrolling right to see the other team's scorers": each team's
-     full-width column is now simply below the other, nothing to scroll. */
+  /* Keep both teams side by side even on mobile — stacking them (an
+     earlier attempt) fixed the horizontal scroll but traded it for a lot
+     of vertical scrolling instead. Everything inside a column is shrunk
+     to fit two ~150px-wide columns without overflowing. */
   .teams-columns {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .team-column-header {
+    padding: 0.5rem;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+  }
+
+  .team-players-list {
+    padding: 0.35rem;
+    gap: 0.25rem;
+  }
+
+  .team-player-row {
+    padding: 0.3rem 0.35rem;
+    gap: 0.35rem;
+  }
+
+  .team-player-row .player-info {
+    gap: 0.35rem;
+  }
+
+  .team-player-row .player-avatar-small {
+    width: 20px;
+    height: 20px;
+    font-size: 0.6rem;
+    flex-shrink: 0;
+  }
+
+  .team-player-row .player-name {
+    font-size: 0.75rem;
+  }
+
+  .goal-badge {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    min-width: 1.4rem;
   }
 
   /* Touch scrolling already works natively on the horizontal match list —
