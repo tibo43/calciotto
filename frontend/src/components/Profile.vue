@@ -21,7 +21,6 @@
           <!-- Overall stats, all groups combined -->
           <div class="overall-card card-base card-large">
             <div class="overall-identity">
-              <div class="player-avatar-small">{{ getPlayerInitials(overall.Name) }}</div>
               <div class="overall-name-block">
                 <div v-if="!isEditingName" class="overall-name-row">
                   <h2 class="overall-name">{{ formatPlayerNameForDisplay(overall.Name) }}</h2>
@@ -518,13 +517,6 @@ export default {
     },
     backendMessage(error, fallback) {
       return error.response?.data?.error || fallback;
-    },
-    getPlayerInitials(name) {
-      return (name || '')
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase())
-        .join('')
-        .slice(0, 2);
     },
     formatPlayerNameForDisplay(name) {
       return (name || '')

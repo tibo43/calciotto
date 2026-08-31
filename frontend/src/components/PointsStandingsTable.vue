@@ -72,8 +72,15 @@ export default {
 </script>
 
 <style scoped>
+/* Capped to whatever's left below the nav/context-bar/tabs above it, with
+   its own scrollbar — a long roster then scrolls inside this card instead
+   of growing the whole page, so the tabs/season selector above never
+   scroll out of reach. The offset is an estimate of that chrome's height;
+   it doesn't need to be exact, just enough that the container's bottom
+   edge lands near the viewport's rather than past it. */
 .standings-table-container {
-  overflow-x: auto;
+  max-height: calc(100vh - 260px);
+  overflow: auto;
 }
 
 .standings-table {
@@ -82,6 +89,9 @@ export default {
 }
 
 .standings-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background-color: var(--bg-tertiary);
   color: var(--text-secondary);
   font-weight: 600;

@@ -194,9 +194,6 @@
                     <ul class="team-players-list">
                       <li v-for="player in team.Players" :key="player.ID || player.Name" class="team-player-row">
                         <div class="player-info">
-                          <div class="player-avatar-small">
-                            {{ getPlayerInitials(player.Name) }}
-                          </div>
                           <span class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</span>
                         </div>
                         <span class="goal-badge">{{ player.GoalNumber || 0 }}</span>
@@ -587,13 +584,6 @@ export default {
       };
 
       return colorMap[colour.toLowerCase()] || '#6b7280';
-    },
-
-    getPlayerInitials(name) {
-      return name.split(' ')
-        .map(word => word.charAt(0).toUpperCase())
-        .join('')
-        .slice(0, 2);
     },
 
     formatPlayerNameForDisplay(name) {
@@ -1121,6 +1111,16 @@ export default {
   white-space: nowrap;
 }
 
+/* Bounded to whatever's actually left below the match carousel and the
+   "Edit Match" button above it, with its own scrollbar — a team with
+   many players then scrolls inside its own column instead of growing the
+   whole page and pushing everything above (season selector, match
+   carousel, Edit Match) out of easy reach. The 620px offset is an
+   estimate of that chrome's height (nav + context bar + tabs + carousel
+   card + details header, all above this point); max() keeps a handful of
+   rows visible even if that chrome runs taller than estimated on a given
+   screen. The header row above the list stays put regardless, since it's
+   a sibling outside this scroll region, not inside it. */
 .team-players-list {
   list-style: none;
   margin: 0;
@@ -1128,6 +1128,8 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  max-height: max(9rem, calc(100vh - 660px));
+  overflow-y: auto;
 }
 
 .team-player-row {
@@ -1314,13 +1316,6 @@ export default {
 
   .team-player-row .player-info {
     gap: 0.35rem;
-  }
-
-  .team-player-row .player-avatar-small {
-    width: 20px;
-    height: 20px;
-    font-size: 0.6rem;
-    flex-shrink: 0;
   }
 
   .team-player-row .player-name {
