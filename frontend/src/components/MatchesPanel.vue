@@ -1285,14 +1285,11 @@ export default {
     padding: 0.4rem;
   }
 
+  /* Touch scrolling already works natively on the horizontal match list —
+     these arrows just take up space without doing anything a swipe
+     doesn't already do on a touch screen. */
   .scroll-btn {
-    width: 36px;
-    height: 36px;
-  }
-
-  .scroll-btn svg {
-    width: 18px;
-    height: 18px;
+    display: none;
   }
 
   .modal-container {
@@ -1320,14 +1317,6 @@ export default {
 
   .match-details-container {
     padding: 0.75rem;
-  }
-
-  .scroll-left {
-    left: 5px;
-  }
-
-  .scroll-right {
-    right: 5px;
   }
 }
 </style>

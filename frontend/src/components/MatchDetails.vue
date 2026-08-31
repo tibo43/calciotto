@@ -1029,9 +1029,9 @@ export default {
 }
 
 .match-status-badge {
-  padding: 0.5rem 1rem;
+  padding: 0.3rem 0.65rem;
   border-radius: 20px;
-  font-size: 0.875rem;
+  font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1054,12 +1054,16 @@ export default {
   gap: 1.5rem;
 }
 
+/* One row per team — name/colour and score side by side — at every
+   breakpoint, rather than a large stacked block on desktop and a
+   separately-tuned compact row on mobile. */
 .team-score {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.1rem;
   background-color: var(--bg-secondary);
   border-radius: var(--border-radius);
   border: 1px solid var(--border-color);
@@ -1073,26 +1077,38 @@ export default {
 
 .team-info {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 0.5rem;
-  text-align: center;
+  gap: 0.6rem;
+  text-align: left;
+  min-width: 0;
+}
+
+.team-info .team-color {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+  flex-shrink: 0;
 }
 
 .team-name {
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--text-primary);
   text-transform: capitalize;
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .score {
-  font-size: 2.5rem;
+  font-size: 1.75rem;
   font-weight: 900;
   color: var(--primary-color);
   text-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .vs-divider {
@@ -1102,8 +1118,8 @@ export default {
 }
 
 .vs-circle {
-  width: 50px;
-  height: 50px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
   display: flex;
@@ -1111,7 +1127,8 @@ export default {
   justify-content: center;
   color: white;
   font-weight: 800;
-  font-size: 1rem;
+  font-size: 0.7rem;
+  flex-shrink: 0;
   box-shadow: var(--shadow-lg);
 }
 
@@ -1675,44 +1692,29 @@ export default {
     font-size: 1.25rem;
   }
 
-  /* Both teams stay on one row instead of stacking into three blocks —
-     shrunk down to the same scale as the compact match cards in the
-     Matches list, for a consistent size across the app. */
+  /* Both teams already sit on one row at every breakpoint (see .team-score
+     above) — mobile just gets a bit tighter to fit the narrower width. */
   .teams-score {
-    grid-template-columns: 1fr auto 1fr;
-    gap: 0.4rem;
+    gap: 0.5rem;
   }
 
   .team-score {
-    flex-direction: row;
-    justify-content: space-between;
-    padding: 0.5rem 0.6rem;
-    gap: 0.4rem;
-  }
-
-  .team-info {
-    flex-direction: row;
-    gap: 0.4rem;
-  }
-
-  .team-color {
-    width: 10px;
-    height: 10px;
-    border-width: 1px;
+    padding: 0.6rem 0.75rem;
+    gap: 0.5rem;
   }
 
   .team-name {
-    font-size: 0.8rem;
+    font-size: 0.95rem;
   }
 
   .score {
-    font-size: 1.1rem;
+    font-size: 1.4rem;
   }
 
   .vs-circle {
-    width: 24px;
-    height: 24px;
-    font-size: 0.55rem;
+    width: 30px;
+    height: 30px;
+    font-size: 0.65rem;
   }
 
   .team-management {
@@ -1738,15 +1740,21 @@ export default {
     font-size: 0.9rem;
   }
 
+  /* Side by side on one row instead of stacked full-width — each button
+     shares the row equally. */
   .action-buttons {
-    justify-content: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.5rem;
   }
 
-  /* Wrapping (above) already separates it from Save Changes visually, so
-     the extra desktop-only margin meant to prevent a misclick would just
-     indent it lopsidedly here. */
+  .action-buttons .btn-base {
+    flex: 1;
+    justify-content: center;
+  }
+
+  /* They're already visually separated by sharing the row 50/50 with a
+     gap, so the extra desktop-only margin meant to prevent a misclick
+     would just throw the 50/50 split off here. */
   .delete-match-btn {
     margin-left: 0;
   }
