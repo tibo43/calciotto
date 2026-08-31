@@ -59,23 +59,10 @@
         <!-- Team Management Section -->
         <div v-if="match.Teams && match.Teams.length > 0" class="team-management card-base card-large">
           <div class="management-header">
-            <div class="tabs-buttons">
-              <button v-for="(team, index) in match.Teams" :key="team.ID" @click="activeTeam = index"
-                :class="['tab-button', { active: activeTeam === index }]">
-                <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-                {{ team.Name }} ({{ team.Players ? team.Players.length : 0 }})
-              </button>
-            </div>
-
+            <!-- Global actions — they apply to the whole match, not to
+                 whichever team tab happens to be selected, so they come
+                 before the team switcher rather than being grouped with it. -->
             <div class="action-buttons">
-              <button v-if="isAdmin" @click="showModal" class="btn-base btn-secondary btn-small">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="16" />
-                  <line x1="8" y1="12" x2="16" y2="12" />
-                </svg>
-                Add Player
-              </button>
               <button v-if="isAdmin" @click="saveChanges" class="btn-base btn-primary btn-small" :disabled="isSaving">
                 <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -97,29 +84,38 @@
                 {{ isDeleting ? 'Deleting...' : 'Delete Match' }}
               </button>
             </div>
+
+            <!-- Team switcher + "Add player to this team" right next to it —
+                 Add Player acts on whichever tab is active, so it lives here
+                 rather than among the global actions above. -->
+            <div class="tabs-buttons">
+              <button v-for="(team, index) in match.Teams" :key="team.ID" @click="activeTeam = index"
+                :class="['tab-button', { active: activeTeam === index }]">
+                <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
+                {{ team.Name }} ({{ team.Players ? team.Players.length : 0 }})
+              </button>
+              <button v-if="isAdmin" @click="showModal" class="add-player-icon-btn" aria-label="Add player">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+            </div>
           </div>
 
-          <!-- Players List -->
+          <!-- Players List — one compact row per player (avatar, name, goal
+               counter, remove) instead of a header row plus a separate goal
+               row, so the list needs far less scrolling. -->
           <div v-if="match.Teams[activeTeam] && match.Teams[activeTeam].Players" class="players-grid">
             <div v-for="(player, playerIndex) in match.Teams[activeTeam].Players" :key="playerIndex"
               class="player-card">
-              <div class="player-header">
-                <div class="player-avatar">
-                  {{ getPlayerInitials(player.Name) }}
-                </div>
-                <div class="player-info">
-                  <h4 class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</h4>
-                  <span class="player-goals">Goals: {{ player.GoalNumber || 0 }}</span>
-                </div>
-                <button v-if="isAdmin" @click="removePlayer(playerIndex)" class="btn-danger-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
+              <div class="player-avatar-small">
+                {{ getPlayerInitials(player.Name) }}
+              </div>
+              <div class="player-info">
+                <h4 class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</h4>
               </div>
 
-              <!-- Goal Management -->
               <div class="goal-management">
                 <button v-if="isAdmin" @click="updateGoals(playerIndex, -1)"
                   :disabled="!player.GoalNumber || player.GoalNumber <= 0" class="goal-btn decrease">
@@ -137,6 +133,13 @@
                   </svg>
                 </button>
               </div>
+
+              <button v-if="isAdmin" @click="removePlayer(playerIndex)" class="btn-danger-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -1131,7 +1134,37 @@ export default {
 
 .tabs-buttons {
   display: flex;
+  align-items: center;
   gap: 1rem;
+}
+
+/* "Add player to this team" — sits right next to the team switcher it acts
+   on, rather than among the global Save/Delete actions. Dashed border
+   echoes the "+" add-match card used in the matches list, for a consistent
+   "+" affordance across the app. */
+.add-player-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--border-radius);
+  background: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.add-player-icon-btn:hover {
+  border-color: var(--primary-color);
+  background-color: var(--bg-tertiary);
+}
+
+.add-player-icon-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .tab-button {
@@ -1171,61 +1204,43 @@ export default {
   margin-left: 1.5rem;
 }
 
-/* Players Grid */
+/* Players list — one compact row per player instead of a taller card with
+   a header row and a separate goal row, so the list needs far less
+   scrolling to see everyone on a team. */
 .players-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .player-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   background-color: var(--bg-tertiary);
   border-radius: var(--border-radius);
-  padding: 1.5rem;
+  padding: 0.6rem 0.85rem;
   border: 1px solid var(--border-color);
   transition: all var(--transition-fast);
 }
 
 .player-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.player-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .player-info {
-  flex: 1;
-}
-
-/* In the roster card header, stack name above goals instead of the
-   global .player-info row layout — and give it a real flex-basis so
-   overflow doesn't get shoved entirely onto the avatar/delete circles. */
-.player-header .player-info {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 0.125rem;
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.player-header .player-name {
-  font-size: 1.25rem;
-  line-height: 1.2;
+.player-info .player-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.player-goals {
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-}
-
-.player-avatar {
+.player-avatar-small {
   flex-shrink: 0;
 }
 
@@ -1258,12 +1273,13 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .goal-btn {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2px solid var(--primary-color);
   background-color: var(--bg-primary);
@@ -1273,6 +1289,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .goal-btn:hover:not(:disabled) {
@@ -1286,15 +1303,15 @@ export default {
 }
 
 .goal-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
 }
 
 .goal-count {
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--primary-color);
-  min-width: 40px;
+  min-width: 24px;
   text-align: center;
 }
 
@@ -1658,40 +1675,44 @@ export default {
     font-size: 1.25rem;
   }
 
+  /* Both teams stay on one row instead of stacking into three blocks —
+     shrunk down to the same scale as the compact match cards in the
+     Matches list, for a consistent size across the app. */
   .teams-score {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
-  }
-
-  .vs-divider {
-    order: 2;
-  }
-
-  .team-score:first-child {
-    order: 1;
-  }
-
-  .team-score:last-child {
-    order: 3;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 0.4rem;
   }
 
   .team-score {
-    padding: 0.75rem;
-    gap: 0.5rem;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 0.5rem 0.6rem;
+    gap: 0.4rem;
+  }
+
+  .team-info {
+    flex-direction: row;
+    gap: 0.4rem;
+  }
+
+  .team-color {
+    width: 10px;
+    height: 10px;
+    border-width: 1px;
   }
 
   .team-name {
-    font-size: 1.05rem;
+    font-size: 0.8rem;
   }
 
   .score {
-    font-size: 1.75rem;
+    font-size: 1.1rem;
   }
 
   .vs-circle {
-    width: 36px;
-    height: 36px;
-    font-size: 0.8rem;
+    width: 24px;
+    height: 24px;
+    font-size: 0.55rem;
   }
 
   .team-management {
@@ -1728,28 +1749,6 @@ export default {
      indent it lopsidedly here. */
   .delete-match-btn {
     margin-left: 0;
-  }
-
-  .players-grid {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
-
-  .player-card {
-    padding: 1rem;
-  }
-
-  .player-header {
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .player-header .player-name {
-    font-size: 1.05rem;
-  }
-
-  .goal-management {
-    gap: 0.75rem;
   }
 
   .enhanced-multi-player-modal {
@@ -1803,20 +1802,6 @@ export default {
   .team-color-small {
     width: 12px;
     height: 12px;
-  }
-
-  .player-card {
-    padding: 0.85rem;
-  }
-
-  .goal-btn {
-    width: 32px;
-    height: 32px;
-  }
-
-  .goal-count {
-    font-size: 1.15rem;
-    min-width: 32px;
   }
 }
 </style>
