@@ -126,11 +126,6 @@
                     <div v-if="index < match.Teams.length - 1" class="vs-separator">vs</div>
                   </div>
                 </div>
-
-                <!-- Match Status -->
-                <div class="match-status-horizontal">
-                  <div class="status-indicator-horizontal" :class="getMatchStatus(match)"></div>
-                </div>
               </div>
             </div>
 
@@ -593,27 +588,8 @@ export default {
         .join(' ');
     },
 
-    getTotalGoals(match) {
-      return match.Teams.reduce((total, team) => total + (team.Score || 0), 0);
-    },
-
     getTotalPlayers(match) {
       return match.Teams.reduce((total, team) => total + team.Players.length, 0);
-    },
-
-    getMatchStatus(match) {
-      const totalGoals = this.getTotalGoals(match);
-      if (totalGoals === 0) return 'upcoming';
-      return 'completed';
-    },
-
-    getMatchStatusText(match) {
-      const status = this.getMatchStatus(match);
-      switch (status) {
-        case 'upcoming': return 'Scheduled';
-        case 'completed': return 'Completed';
-        default: return 'Unknown';
-      }
     }
   }
 };
@@ -816,19 +792,23 @@ export default {
 .matches-layout {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 /* Horizontal Matches Bar */
+/* Overrides card-base's own 1.5rem padding — .matches-bar below already
+   adds its own, so the default would stack two layers of padding around
+   the match list for no reason. */
 .matches-bar-container {
   position: relative;
   overflow: hidden;
+  padding: 0.5rem;
 }
 
 .matches-bar {
   display: flex;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 0.75rem;
+  padding: 0.5rem;
   overflow-x: auto;
   scroll-behavior: smooth;
 }
@@ -837,7 +817,7 @@ export default {
   flex: 0 0 220px;
   background-color: var(--bg-tertiary);
   border-radius: var(--border-radius);
-  padding: 0.85rem;
+  padding: 0.65rem;
   cursor: pointer;
   transition: all var(--transition-smooth);
   border: 2px solid transparent;
@@ -900,11 +880,14 @@ export default {
   height: 14px;
 }
 
+/* No margin-bottom: with the status dot removed below, this is now the
+   card's last child — the card's own padding already provides the
+   trailing space, an extra margin here would just add dead room under
+   it. */
 .teams-horizontal {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
 }
 
 .team-horizontal {
@@ -954,35 +937,6 @@ export default {
   font-size: 0.75rem;
   color: var(--text-light);
   font-weight: 500;
-}
-
-.match-status-horizontal {
-  display: flex;
-  justify-content: center;
-}
-
-.status-indicator-horizontal {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  animation: pulse-status 2s infinite;
-}
-
-.status-indicator-horizontal.upcoming {
-  background-color: #f59e0b;
-}
-
-.status-indicator-horizontal.completed {
-  background-color: var(--primary-color);
-}
-
-@keyframes pulse-status {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
 }
 
 /* Scroll Buttons */
@@ -1214,17 +1168,21 @@ export default {
   }
 
   .matches-layout {
-    gap: 1rem;
+    gap: 0.75rem;
+  }
+
+  .matches-bar-container {
+    padding: 0.35rem;
   }
 
   .matches-bar {
-    padding: 0.75rem;
-    gap: 0.75rem;
+    padding: 0.35rem;
+    gap: 0.5rem;
   }
 
   .match-card-horizontal {
     flex: 0 0 200px;
-    padding: 0.75rem;
+    padding: 0.5rem;
   }
 
   .add-match-card {
