@@ -182,7 +182,7 @@ export default {
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 0.75rem 3rem;
+  gap: 0.75rem 6rem;
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
 }

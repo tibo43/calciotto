@@ -91,6 +91,17 @@
           <!-- Horizontal Matches Bar -->
           <div class="matches-bar-container card-base">
             <div class="matches-bar hide-scrollbar" ref="matchesBar">
+              <!-- Create Match — admin-only, integrated into the match list
+                   itself (as a leading "+" card) rather than a separate
+                   toolbar above it. -->
+              <button v-if="isAdmin" class="match-card-horizontal add-match-card" @click="showCreateModal = true"
+                aria-label="Create match">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+
               <div v-for="match in matches" :key="match.ID" class="match-card-horizontal"
                 :class="{ 'active': selectedMatch?.ID === match.ID }" @click="selectMatch(match)">
                 <!-- Match Date -->
@@ -121,17 +132,6 @@
                   <div class="status-indicator-horizontal" :class="getMatchStatus(match)"></div>
                 </div>
               </div>
-
-              <!-- Create Match — admin-only, integrated into the match list
-                   itself (as a trailing "+" card) rather than a separate
-                   toolbar above it. -->
-              <button v-if="isAdmin" class="match-card-horizontal add-match-card" @click="showCreateModal = true"
-                aria-label="Create match">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
             </div>
 
             <!-- Scroll indicators -->
@@ -855,10 +855,10 @@ export default {
 }
 
 .match-card-horizontal {
-  flex: 0 0 280px;
+  flex: 0 0 220px;
   background-color: var(--bg-tertiary);
   border-radius: var(--border-radius);
-  padding: 1rem;
+  padding: 0.85rem;
   cursor: pointer;
   transition: all var(--transition-smooth);
   border: 2px solid transparent;
@@ -876,12 +876,12 @@ export default {
   box-shadow: var(--shadow-lg);
 }
 
-/* Trailing "+" card — replaces the old standalone "Create Match" toolbar,
-   living at the end of the match list instead. Sticky rather than a plain
-   flex item: with enough matches to need scrolling, a purely trailing card
-   would only be reachable by scrolling all the way right, so it stays
-   pinned to the right edge of the scrollable area instead — the same
-   "sticky last column" technique used for scrollable tables. */
+/* Leading "+" card — replaces the old standalone "Create Match" toolbar,
+   living at the start of the match list instead. Sticky rather than a
+   plain flex item: with enough matches to need scrolling, a purely leading
+   card would scroll out of view along with the rest of the list, so it
+   stays pinned to the left edge of the scrollable area instead — the same
+   "sticky first column" technique used for scrollable tables. */
 .add-match-card {
   flex: 0 0 80px;
   display: flex;
@@ -890,10 +890,10 @@ export default {
   border: 2px dashed var(--border-color);
   color: var(--primary-color);
   position: sticky;
-  right: 0;
+  left: 0;
   z-index: 2;
   background-color: var(--bg-tertiary);
-  box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.15);
+  box-shadow: 8px 0 8px -8px rgba(0, 0, 0, 0.15);
 }
 
 .add-match-card:hover {
@@ -1206,7 +1206,7 @@ export default {
   }
 
   .match-card-horizontal {
-    flex: 0 0 240px;
+    flex: 0 0 200px;
     padding: 0.75rem;
   }
 
@@ -1259,7 +1259,7 @@ export default {
 
 @media (max-width: 480px) {
   .match-card-horizontal {
-    flex: 0 0 200px;
+    flex: 0 0 170px;
     padding: 0.5rem;
   }
 
