@@ -1204,11 +1204,19 @@ export default {
 
 /* Players list — one compact row per player instead of a taller card with
    a header row and a separate goal row, so the list needs far less
-   scrolling to see everyone on a team. */
+   scrolling to see everyone on a team. Bounded to whatever's left below
+   the score card and the Save/Delete/tabs header above it, with its own
+   scrollbar — a roster with many players then scrolls inside this list
+   instead of growing the whole page and pushing Save Changes/Delete
+   Match out of easy reach (same pattern as MatchesPanel.vue's own
+   two-column team list). The 560px offset estimates that chrome's
+   height; max() keeps a handful of rows visible either way. */
 .players-grid {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  max-height: max(9rem, calc(100vh - 560px));
+  overflow-y: auto;
 }
 
 .player-card {
