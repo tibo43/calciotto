@@ -180,9 +180,8 @@ export default {
 .context-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 0.75rem 1.5rem;
+  gap: 0.75rem 2.5rem;
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
 }

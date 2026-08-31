@@ -1,22 +1,5 @@
 <template>
   <div class="match-detail-container">
-    <!-- Plain heading, replacing the old gradient hero — same treatment as
-         MatchesAndStandings.vue/Profile.vue. -->
-    <section class="match-heading">
-      <div class="container match-heading-row">
-        <button @click="goBack" class="btn-base btn-cancel btn-small">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15,18 9,12 15,6" />
-          </svg>
-          Back to Matches
-        </button>
-        <div class="match-heading-text">
-          <h1 class="match-heading-title">Match Details</h1>
-          <span class="match-heading-date">{{ formatDate(match?.Date) }}</span>
-        </div>
-      </div>
-    </section>
-
     <!-- Loading State -->
     <div v-if="isLoading" class="loading-container">
       <div class="loading-spinner"></div>
@@ -29,9 +12,19 @@
         <!-- Match Score Overview -->
         <div class="score-overview card-base">
           <div class="match-title">
-            <h2>Match Score</h2>
-            <div class="match-status-badge" :class="getMatchStatus()">
-              {{ getMatchStatusText() }}
+            <div class="match-title-left">
+              <button @click="goBack" class="match-back-btn" aria-label="Back to Matches">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="15,18 9,12 15,6" />
+                </svg>
+              </button>
+              <h2>Match</h2>
+            </div>
+            <div class="match-title-right">
+              <span class="match-date">{{ formatDate(match?.Date) }}</span>
+              <div class="match-status-badge" :class="getMatchStatus()">
+                {{ getMatchStatusText() }}
+              </div>
             </div>
           </div>
 
@@ -968,36 +961,6 @@ export default {
   background-color: var(--bg-secondary);
 }
 
-/* Heading */
-.match-heading {
-  padding: 1.5rem 0 0;
-}
-
-.match-heading-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.75rem 1rem;
-}
-
-.match-heading-text {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-}
-
-.match-heading-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.match-heading-date {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-}
-
 /* Match Content */
 .match-content {
   padding: 2rem 0;
@@ -1012,9 +975,18 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border-color);
+}
+
+.match-title-left,
+.match-title-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .match-title h2 {
@@ -1022,6 +994,35 @@ export default {
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
+}
+
+.match-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.match-back-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.match-back-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.match-date {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
 .match-status-badge {
