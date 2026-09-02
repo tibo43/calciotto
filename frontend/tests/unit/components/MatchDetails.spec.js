@@ -651,3 +651,47 @@ describe('MatchDetails.vue Save Changes and empty teams', () => {
     expect(updateMatch).toHaveBeenCalled();
   });
 });
+
+// The score header and the whole roster/team-management block (tabs, Add
+// Player, the player list) hide until a scheduled match's teams are actually
+// composed — an empty "0 vs 0" / two "No players yet" columns is noise for
+// the whole sign-up window, not something worth rendering. Save Changes and
+// Delete Match are deliberately left out of this gate (see the template):
+// they stay reachable regardless, since cancelling a still-empty scheduled
+// match is a legitimate action.
+describe('MatchDetails.vue team roster visibility on a scheduled match', () => {
+  it('hides the score header and the roster while both teams are still empty', async () => {
+    const wrapper = await mountDetails({ match: scheduledMatch(), isAdmin: true });
+
+    expect(wrapper.find('.teams-score').exists()).toBe(false);
+    expect(wrapper.find('.tabs-buttons').exists()).toBe(false);
+    expect(wrapper.find('.players-grid').exists()).toBe(false);
+    expect(wrapper.find('.no-roster-hint').exists()).toBe(true);
+  });
+
+  it('shows the roster once at least one team has a player', async () => {
+    const match = scheduledMatch();
+    match.Teams[0].Players = [{ ID: SOMEONE_ELSE, Name: 'marco', GoalNumber: 0 }];
+    const wrapper = await mountDetails({ match, isAdmin: true });
+
+    expect(wrapper.find('.teams-score').exists()).toBe(true);
+    expect(wrapper.find('.tabs-buttons').exists()).toBe(true);
+    expect(wrapper.find('.players-grid').exists()).toBe(true);
+    expect(wrapper.find('.no-roster-hint').exists()).toBe(false);
+  });
+
+  it('still offers Save Changes and Delete Match to an admin while the roster is hidden', async () => {
+    const wrapper = await mountDetails({ match: scheduledMatch(), isAdmin: true });
+
+    expect(wrapper.html()).toContain('Save Changes');
+    expect(wrapper.html()).toContain('Delete Match');
+  });
+
+  it('leaves an unscheduled match exactly as it was, roster and all', async () => {
+    const wrapper = await mountDetails({ match: unscheduledMatch(), isAdmin: true });
+
+    expect(wrapper.find('.teams-score').exists()).toBe(true);
+    expect(wrapper.find('.tabs-buttons').exists()).toBe(true);
+    expect(wrapper.find('.no-roster-hint').exists()).toBe(false);
+  });
+});

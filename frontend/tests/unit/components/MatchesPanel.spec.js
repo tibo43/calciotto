@@ -517,3 +517,63 @@ describe('MatchesPanel.vue inline sign-up panel', () => {
     expect(wrapper.find('.signup-inline-actions button').text()).toContain('Participate');
   });
 });
+
+// Same hidden-until-composed rule as MatchDetails.vue, applied to the card's
+// own team/score row and the "Selected Match Details" preview's team columns —
+// an empty "0 vs 0" and two "No players yet" columns are noise for the whole
+// sign-up window, where the badge/count and the inline sign-up panel are what
+// actually matter.
+describe('MatchesPanel.vue team roster visibility on a scheduled match', () => {
+  const scheduled = (overrides = {}) => ({
+    ID: 'scheduled-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-09-06',
+    ScheduledAt: '2026-09-06T20:30:00+02:00',
+    RegistrationOpensAt: '2026-09-01T12:00:00+02:00',
+    MaxPlayers: 16,
+    RegistrationCount: 7,
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+    ],
+    ...overrides
+  });
+
+  it('hides the card\'s team/score row and the preview\'s team columns while both teams are empty', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled()]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.match-card-horizontal.scheduled .teams-horizontal').exists()).toBe(false);
+    expect(wrapper.find('.players-section').exists()).toBe(false);
+    expect(wrapper.find('.no-roster-hint').exists()).toBe(true);
+  });
+
+  it('shows both once at least one team has a player', async () => {
+    const withPlayer = scheduled();
+    withPlayer.Teams[0].Players = [{ ID: 'p1', Name: 'marco', GoalNumber: 0 }];
+    getMatchesDetails.mockResolvedValue([withPlayer]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.match-card-horizontal.scheduled .teams-horizontal').exists()).toBe(true);
+    expect(wrapper.find('.players-section').exists()).toBe(true);
+    expect(wrapper.find('.no-roster-hint').exists()).toBe(false);
+  });
+
+  it('leaves an ordinary, unscheduled match exactly as it was', async () => {
+    const played = {
+      ID: 'played-uuid',
+      GroupID: 'group-uuid',
+      Date: '2026-08-30',
+      Teams: [
+        { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 3, Players: [] },
+        { ID: 'team-b', Name: 'White', Colour: 'white', Score: 2, Players: [] }
+      ]
+    };
+    getMatchesDetails.mockResolvedValue([played]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.teams-horizontal').exists()).toBe(true);
+    expect(wrapper.find('.players-section').exists()).toBe(true);
+    expect(wrapper.find('.no-roster-hint').exists()).toBe(false);
+  });
+});

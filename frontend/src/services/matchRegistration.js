@@ -177,3 +177,26 @@ export const fillTeamsFromRegistrations = (registrations, currentRosters) => {
 
   return { rosters, addedCount: placed.length, skippedCount, placed };
 };
+
+// --- Hiding an empty roster until it's actually a roster -------------------
+//
+// A scheduled match is created with both teams empty and stays that way
+// through the whole sign-up window — that's its normal state, not a broken
+// one (see models.Match's own comment on the Go side). Rendering "Black 0 vs
+// White 0" and two "No players yet" placeholders for the days a match spends
+// only collecting sign-ups is pure noise: the sign-up panel is what's actually
+// relevant then, and the roster views (the match card, the Matches tab's
+// inline preview, and MatchDetails' own header/roster) should stay out of the
+// way until an admin has actually put someone on a team — whether by hand or
+// via "Fill teams from sign-ups".
+//
+// An unscheduled match has always had this be true from the moment it's
+// created (the pre-scheduling flow required populating rosters before
+// anything else), so callers gate this on `!isScheduledMatch(match) ||
+// teamsAreComposed(match)` — this predicate alone says nothing about
+// scheduling, only about whether there's a roster worth showing.
+export const teamsAreComposed = (match) => Boolean(
+  match
+  && Array.isArray(match.Teams)
+  && match.Teams.some(team => Array.isArray(team.Players) && team.Players.length > 0)
+);

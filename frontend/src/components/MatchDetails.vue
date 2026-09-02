@@ -27,7 +27,7 @@
             </div>
           </div>
 
-          <div class="teams-score">
+          <div v-if="showTeamRoster" class="teams-score">
             <!-- Team 1 -->
             <div class="team-score">
               <div class="team-info">
@@ -224,7 +224,7 @@
             <!-- Team switcher + "Add player to this team" right next to it —
                  Add Player acts on whichever tab is active, so it lives here
                  rather than among the global actions above. -->
-            <div class="tabs-buttons">
+            <div v-if="showTeamRoster" class="tabs-buttons">
               <button v-for="(team, index) in match.Teams" :key="team.ID" @click="activeTeam = index"
                 :class="['tab-button', { active: activeTeam === index }]">
                 <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
@@ -237,12 +237,18 @@
                 </svg>
               </button>
             </div>
+            <!-- The roster itself only shows up once there's one to show —
+                 see showTeamRoster. Composing it is "Fill teams from
+                 sign-ups", in the sign-up panel above, once sign-ups close. -->
+            <p v-else class="no-roster-hint">
+              Teams will appear here once sign-ups close and are composed.
+            </p>
           </div>
 
           <!-- Players List — one compact row per player (avatar, name, goal
                counter, remove) instead of a header row plus a separate goal
                row, so the list needs far less scrolling. -->
-          <div v-if="match.Teams[activeTeam] && match.Teams[activeTeam].Players" class="players-grid">
+          <div v-if="showTeamRoster && match.Teams[activeTeam] && match.Teams[activeTeam].Players" class="players-grid">
             <div v-for="(player, playerIndex) in match.Teams[activeTeam].Players" :key="playerIndex"
               class="player-card">
               <div class="player-info">
@@ -520,6 +526,7 @@ import {
   deriveRegistrationState,
   registrationsAreOpen,
   fillTeamsFromRegistrations,
+  teamsAreComposed,
   REGISTRATION_NOT_OPEN_YET,
   REGISTRATION_OPEN,
   REGISTRATION_CLOSED_BY_ADMIN,
@@ -629,6 +636,20 @@ export default {
     // none of the scheduling keys at all.
     isScheduled() {
       return isScheduledMatch(this.match);
+    },
+
+    // Gates the score header and the whole roster/team-management block
+    // below it (tabs, Add Player, the player list): an unscheduled match has
+    // always had a populated roster from the moment it's created, so this is
+    // always true for one and changes nothing. A scheduled match starts (and
+    // stays, through the whole sign-up window) with both teams empty — that's
+    // its normal state, not a placeholder worth rendering — so those stay
+    // hidden until an admin has actually put someone on a team, whether by
+    // hand or via "Fill teams from sign-ups". Save Changes/Delete Match are
+    // deliberately NOT behind this gate (see the template): an admin needs to
+    // be able to cancel a still-empty scheduled match regardless.
+    showTeamRoster() {
+      return !this.isScheduled || teamsAreComposed(this.match);
     },
 
     // The closed flag comes from local state rather than from `match` (see the
@@ -1791,6 +1812,13 @@ export default {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.no-roster-hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 /* "Add player to this team" — sits right next to the team switcher it acts

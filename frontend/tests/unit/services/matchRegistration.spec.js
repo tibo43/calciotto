@@ -3,6 +3,7 @@ import {
   deriveRegistrationState,
   registrationsAreOpen,
   fillTeamsFromRegistrations,
+  teamsAreComposed,
   REGISTRATION_UNSCHEDULED,
   REGISTRATION_NOT_OPEN_YET,
   REGISTRATION_OPEN,
@@ -246,5 +247,38 @@ describe('fillTeamsFromRegistrations', () => {
   it('tolerates a null list and null rosters rather than throwing', () => {
     expect(fillTeamsFromRegistrations(null, null).addedCount).toBe(0);
     expect(fillTeamsFromRegistrations(undefined, empty()).addedCount).toBe(0);
+  });
+});
+
+describe('teamsAreComposed', () => {
+  const teams = (playersA, playersB) => [
+    { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: playersA },
+    { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: playersB }
+  ];
+
+  it('is false when both teams are empty — a scheduled match\'s normal state', () => {
+    expect(teamsAreComposed({ Teams: teams([], []) })).toBe(false);
+  });
+
+  it('is true as soon as either team has at least one player', () => {
+    expect(teamsAreComposed({ Teams: teams([{ ID: 'p1', Name: 'marco', GoalNumber: 0 }], []) })).toBe(true);
+    expect(teamsAreComposed({ Teams: teams([], [{ ID: 'p1', Name: 'marco', GoalNumber: 0 }]) })).toBe(true);
+  });
+
+  it('is true once both teams have players, the ordinary composed state', () => {
+    expect(teamsAreComposed({
+      Teams: teams([{ ID: 'p1', Name: 'marco', GoalNumber: 0 }], [{ ID: 'p2', Name: 'luca', GoalNumber: 0 }])
+    })).toBe(true);
+  });
+
+  it('is false for a null/undefined match, or one with no Teams array, rather than throwing', () => {
+    expect(teamsAreComposed(null)).toBe(false);
+    expect(teamsAreComposed(undefined)).toBe(false);
+    expect(teamsAreComposed({ ID: 'm' })).toBe(false);
+    expect(teamsAreComposed({ ID: 'm', Teams: null })).toBe(false);
+  });
+
+  it('tolerates a team with no Players array rather than throwing', () => {
+    expect(teamsAreComposed({ Teams: [{ ID: 'a' }, { ID: 'b', Players: [] }] })).toBe(false);
   });
 });

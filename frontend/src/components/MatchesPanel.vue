@@ -165,8 +165,11 @@
                   <span class="signup-count">{{ signupCountLabel(match) }}</span>
                 </div>
 
-                <!-- Teams and Scores -->
-                <div class="teams-horizontal">
+                <!-- Teams and Scores — hidden until composed for a scheduled
+                     match (see showTeamRoster): "0 vs 0" is noise for the
+                     whole sign-up window, where the badge/count above is what
+                     actually matters. -->
+                <div v-if="showTeamRoster(match)" class="teams-horizontal">
                   <div v-for="(team, index) in match.Teams" :key="team.ID" class="team-horizontal">
                     <div class="team-info-horizontal">
                       <div class="team-color-horizontal" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
@@ -245,7 +248,7 @@
                 <p v-if="signupMessage" class="signup-inline-message" :class="signupMessageType">{{ signupMessage }}</p>
               </div>
 
-              <div class="players-section">
+              <div v-if="showTeamRoster(selectedMatch)" class="players-section">
                 <!-- Each team lists its own scorers — a grid column per team
                      (stacked on mobile, see below) rather than a shared table
                      with one row per player-index. The old table forced both
@@ -272,6 +275,12 @@
                   </div>
                 </div>
               </div>
+              <!-- Same hidden-until-composed rule as the card above, spelled
+                   out here since this preview otherwise has nothing else to
+                   explain the gap where the roster would be. -->
+              <p v-else-if="isScheduledMatch(selectedMatch)" class="no-roster-hint">
+                Teams will appear here once sign-ups close and are composed.
+              </p>
             </div>
           </transition>
         </div>
@@ -315,6 +324,7 @@ import {
   isScheduledMatch,
   deriveRegistrationState,
   registrationsAreOpen,
+  teamsAreComposed,
   REGISTRATION_OPEN,
   REGISTRATION_NOT_OPEN_YET,
   REGISTRATION_CLOSED_BY_ADMIN,
@@ -881,6 +891,15 @@ export default {
     // other formatter here is a method too.
     isScheduledMatch(match) {
       return isScheduledMatch(match);
+    },
+
+    // Gates the card's own team/score row and the "Selected Match Details"
+    // preview's team columns — see teamsAreComposed's own comment. Unscheduled
+    // matches have always had a populated roster, so this stays true for them;
+    // a scheduled match hides both until an admin has actually assigned
+    // someone to a team.
+    showTeamRoster(match) {
+      return !isScheduledMatch(match) || teamsAreComposed(match);
     },
 
     formatKickoff(match) {
@@ -1539,6 +1558,13 @@ export default {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.no-roster-hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 .teams-columns {
