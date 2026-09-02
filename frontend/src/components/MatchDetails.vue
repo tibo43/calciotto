@@ -76,42 +76,50 @@
                 <span class="signup-kickoff-value">{{ kickoffLabel }}</span>
               </div>
             </div>
-            <div class="signup-state-badge" :class="registrationState">{{ registrationStateLabel }}</div>
+
+            <!-- Badge, count and Participate/Withdraw all on one line: the
+                 badge alone used to read as a status display with nothing to
+                 act on right next to it. Close/Reopen/Fill-teams stay below in
+                 .signup-actions — those are admin-only occasional actions, not
+                 the one a member comes here to take. -->
+            <div class="signup-status-group">
+              <div class="signup-state-badge" :class="registrationState">{{ registrationStateLabel }}</div>
+              <span class="signup-count-inline">{{ signupCountLabel }}</span>
+              <!-- Open to every member, admin or not. -->
+              <button v-if="canParticipate" @click="participate" :disabled="isUpdatingRegistration"
+                class="btn-base btn-primary btn-small participate-btn">
+                <svg v-if="!isUpdatingRegistration" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="8.5" cy="7" r="4" />
+                  <line x1="20" y1="8" x2="20" y2="14" />
+                  <line x1="23" y1="11" x2="17" y2="11" />
+                </svg>
+                <div v-else class="loading-spinner-small"></div>
+                {{ isUpdatingRegistration ? 'Signing up...' : 'Participate' }}
+              </button>
+
+              <!-- Disappears rather than failing when the list closes:
+                   DELETE /matches/:id/registrations is gated on the very same
+                   window as the POST, so a visible Withdraw button on a closed
+                   list would be a button that always 409s. -->
+              <button v-if="canWithdraw" @click="confirmWithdraw" :disabled="isUpdatingRegistration"
+                class="btn-base btn-cancel btn-small withdraw-btn">
+                <svg v-if="!isUpdatingRegistration" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="8.5" cy="7" r="4" />
+                  <line x1="23" y1="11" x2="17" y2="11" />
+                </svg>
+                <div v-else class="loading-spinner-small"></div>
+                {{ isUpdatingRegistration ? 'Withdrawing...' : 'Withdraw' }}
+              </button>
+            </div>
           </div>
 
           <p class="signup-state-detail">{{ registrationStateDetail }}</p>
 
           <div class="signup-actions">
-            <!-- Open to every member, admin or not. -->
-            <button v-if="canParticipate" @click="participate" :disabled="isUpdatingRegistration"
-              class="btn-base btn-primary btn-small participate-btn">
-              <svg v-if="!isUpdatingRegistration" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="8.5" cy="7" r="4" />
-                <line x1="20" y1="8" x2="20" y2="14" />
-                <line x1="23" y1="11" x2="17" y2="11" />
-              </svg>
-              <div v-else class="loading-spinner-small"></div>
-              {{ isUpdatingRegistration ? 'Signing up...' : 'Participate' }}
-            </button>
-
-            <!-- Disappears rather than failing when the list closes:
-                 DELETE /matches/:id/registrations is gated on the very same
-                 window as the POST, so a visible Withdraw button on a closed
-                 list would be a button that always 409s. -->
-            <button v-if="canWithdraw" @click="confirmWithdraw" :disabled="isUpdatingRegistration"
-              class="btn-base btn-cancel btn-small withdraw-btn">
-              <svg v-if="!isUpdatingRegistration" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                stroke-width="2">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="8.5" cy="7" r="4" />
-                <line x1="23" y1="11" x2="17" y2="11" />
-              </svg>
-              <div v-else class="loading-spinner-small"></div>
-              {{ isUpdatingRegistration ? 'Withdrawing...' : 'Withdraw' }}
-            </button>
-
             <button v-if="canCloseRegistrations" @click="closeRegistrations" :disabled="isUpdatingRegistrationState"
               class="btn-base btn-cancel btn-small">
               <div v-if="isUpdatingRegistrationState" class="loading-spinner-small"></div>
@@ -525,6 +533,7 @@ import {
   isScheduledMatch,
   deriveRegistrationState,
   registrationsAreOpen,
+  registrationStateLabel,
   fillTeamsFromRegistrations,
   teamsAreComposed,
   REGISTRATION_NOT_OPEN_YET,
@@ -673,13 +682,15 @@ export default {
     },
 
     registrationStateLabel() {
-      switch (this.registrationState) {
-        case REGISTRATION_OPEN: return 'Sign-ups open';
-        case REGISTRATION_NOT_OPEN_YET: return 'Sign-ups not open yet';
-        case REGISTRATION_CLOSED_BY_ADMIN: return 'Sign-ups closed';
-        case REGISTRATION_CLOSED_AT_KICKOFF: return 'Sign-ups closed';
-        default: return '';
-      }
+      return registrationStateLabel(this.registrationState);
+    },
+
+    // Mirrors MatchesPanel.vue's own signupCountLabel wording ("X / 16 signed
+    // up") so the two views never disagree — but reads count from the live
+    // `registrations` list this page already loads, rather than
+    // match.RegistrationCount, which nothing here ever refreshes locally.
+    signupCountLabel() {
+      return `${this.registrations.length} / ${this.match.MaxPlayers} signed up`;
     },
 
     // Deliberately says nothing about being told when sign-ups open: there is
@@ -1638,6 +1649,18 @@ export default {
   font-size: 1rem;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.signup-status-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.signup-count-inline {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
 /* Same pill shape as .match-status-badge above, so the two badges on this page

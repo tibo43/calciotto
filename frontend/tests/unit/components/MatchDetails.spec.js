@@ -134,6 +134,20 @@ describe('MatchDetails.vue sign-up panel visibility', () => {
     expect(kickoff).toMatch(/\d:\d\d\s?(AM|PM)/);
   });
 
+  // The state badge, the count and Participate/Withdraw sit on one line
+  // (.signup-status-group) rather than the count living only in the
+  // "Confirmed X/Y" heading further down — a member glancing at the panel
+  // sees state, room left, and the one button they might click, together.
+  it('puts the state badge, the sign-up count and Participate on the same row', async () => {
+    const wrapper = await mountDetails({ match: scheduledMatch(), registrations: registrationList() });
+
+    const group = wrapper.find('.signup-status-group');
+    expect(group.find('.signup-state-badge').text()).toBe('Sign-ups open');
+    // registrationList() has 4 entries against MaxPlayers: 3.
+    expect(group.find('.signup-count-inline').text()).toBe('4 / 3 signed up');
+    expect(group.find('.participate-btn, .withdraw-btn').exists()).toBe(true);
+  });
+
   it('loads the sign-up list for a scheduled match, without a group_id', async () => {
     await mountDetails({ match: scheduledMatch(), registrations: registrationList() });
 

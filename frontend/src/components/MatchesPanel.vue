@@ -156,12 +156,17 @@
                   <span>{{ isScheduledMatch(match) ? formatKickoff(match) : formatDateShort(match.Date) }}</span>
                 </div>
 
-                <!-- Sign-ups line — one compact row (badge + count), not a
-                     panel: these cards are ~200px wide in a horizontal
-                     carousel. Everything about the sign-up list itself lives
-                     on the match page. -->
+                <!-- Sign-ups line — one compact row (state badge + count),
+                     not a panel: these cards are ~200px wide in a horizontal
+                     carousel. The badge shows the actual registration state
+                     (open/not-open-yet/closed), not just "this is a scheduled
+                     match" — that part is already implied by the row existing
+                     at all, so it would tell a browsing member nothing they
+                     couldn't already see. Everything about the sign-up list
+                     itself (names, Participate/Withdraw) still lives below,
+                     once this card is selected, or on the match page. -->
                 <div v-if="isScheduledMatch(match)" class="match-signups-horizontal">
-                  <span class="scheduled-pill">Scheduled</span>
+                  <span class="signup-state-badge" :class="cardRegistrationState(match)">{{ cardRegistrationLabel(match) }}</span>
                   <span class="signup-count">{{ signupCountLabel(match) }}</span>
                 </div>
 
@@ -230,21 +235,25 @@
                    (see MatchDetails.vue), reached via "Edit Match"/"View
                    Match" above. -->
               <div v-if="isScheduledMatch(selectedMatch)" class="signup-inline">
+                <!-- Badge, count and the action button all on one row — moved
+                     here from a separate row below after the badge/count
+                     alone read as a status display with nothing to act on
+                     right next to it. -->
                 <div class="signup-inline-top">
                   <span class="signup-state-badge" :class="registrationState">{{ registrationStateLabel }}</span>
                   <span class="signup-count-inline">{{ signupCountLabel(selectedMatch) }}</span>
+                  <div class="signup-inline-actions">
+                    <button v-if="canParticipate" @click="participate" :disabled="isUpdatingRegistration"
+                      class="btn-base btn-primary btn-small">
+                      {{ isUpdatingRegistration ? 'Signing up...' : 'Participate' }}
+                    </button>
+                    <button v-if="canWithdraw" @click="confirmWithdraw" :disabled="isUpdatingRegistration"
+                      class="btn-base btn-cancel btn-small">
+                      {{ isUpdatingRegistration ? 'Withdrawing...' : 'Withdraw' }}
+                    </button>
+                  </div>
                 </div>
                 <p v-if="registrationStateDetail" class="signup-inline-detail">{{ registrationStateDetail }}</p>
-                <div class="signup-inline-actions">
-                  <button v-if="canParticipate" @click="participate" :disabled="isUpdatingRegistration"
-                    class="btn-base btn-primary btn-small">
-                    {{ isUpdatingRegistration ? 'Signing up...' : 'Participate' }}
-                  </button>
-                  <button v-if="canWithdraw" @click="confirmWithdraw" :disabled="isUpdatingRegistration"
-                    class="btn-base btn-cancel btn-small">
-                    {{ isUpdatingRegistration ? 'Withdrawing...' : 'Withdraw' }}
-                  </button>
-                </div>
                 <p v-if="signupMessage" class="signup-inline-message" :class="signupMessageType">{{ signupMessage }}</p>
               </div>
 
@@ -324,8 +333,8 @@ import {
   isScheduledMatch,
   deriveRegistrationState,
   registrationsAreOpen,
+  registrationStateLabel,
   teamsAreComposed,
-  REGISTRATION_OPEN,
   REGISTRATION_NOT_OPEN_YET,
   REGISTRATION_CLOSED_BY_ADMIN,
   REGISTRATION_CLOSED_AT_KICKOFF
@@ -492,13 +501,7 @@ export default {
     },
 
     registrationStateLabel() {
-      switch (this.registrationState) {
-        case REGISTRATION_OPEN: return 'Sign-ups open';
-        case REGISTRATION_NOT_OPEN_YET: return 'Sign-ups not open yet';
-        case REGISTRATION_CLOSED_BY_ADMIN: return 'Sign-ups closed';
-        case REGISTRATION_CLOSED_AT_KICKOFF: return 'Sign-ups closed';
-        default: return '';
-      }
+      return registrationStateLabel(this.registrationState);
     },
 
     registrationStateDetail() {
@@ -900,6 +903,21 @@ export default {
     // someone to a team.
     showTeamRoster(match) {
       return !isScheduledMatch(match) || teamsAreComposed(match);
+    },
+
+    // Per-card equivalent of the `registrationState`/`registrationStateLabel`
+    // computed pair above, which are scoped to `selectedMatch` alone and
+    // can't answer "what state is *this* card's match in" for the rest of the
+    // carousel. `deriveRegistrationState` only ever needs a match's own
+    // scheduling fields — already on every entry `matches` holds — so this
+    // costs no extra request, unlike `isRegistered` which needs the sign-up
+    // list itself and stays scoped to whichever match is selected.
+    cardRegistrationState(match) {
+      return deriveRegistrationState(match, this.nowMs);
+    },
+
+    cardRegistrationLabel(match) {
+      return registrationStateLabel(this.cardRegistrationState(match));
     },
 
     formatKickoff(match) {
@@ -1308,17 +1326,6 @@ export default {
   margin-bottom: 0.6rem;
 }
 
-.scheduled-pill {
-  padding: 0.1rem 0.4rem;
-  border-radius: 999px;
-  background-color: var(--primary-color);
-  color: #fff;
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
 .signup-count {
   font-size: 0.75rem;
   color: var(--text-secondary);
@@ -1535,7 +1542,6 @@ export default {
 .signup-inline-actions {
   display: flex;
   gap: 0.6rem;
-  margin-top: 0.75rem;
 }
 
 .signup-inline-message {

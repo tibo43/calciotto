@@ -2,6 +2,7 @@ import {
   isScheduledMatch,
   deriveRegistrationState,
   registrationsAreOpen,
+  registrationStateLabel,
   fillTeamsFromRegistrations,
   teamsAreComposed,
   REGISTRATION_UNSCHEDULED,
@@ -280,5 +281,20 @@ describe('teamsAreComposed', () => {
 
   it('tolerates a team with no Players array rather than throwing', () => {
     expect(teamsAreComposed({ Teams: [{ ID: 'a' }, { ID: 'b', Players: [] }] })).toBe(false);
+  });
+});
+
+describe('registrationStateLabel', () => {
+  it('gives each state its own label, except the two closed ones which share one', () => {
+    expect(registrationStateLabel(REGISTRATION_OPEN)).toBe('Sign-ups open');
+    expect(registrationStateLabel(REGISTRATION_NOT_OPEN_YET)).toBe('Sign-ups not open yet');
+    expect(registrationStateLabel(REGISTRATION_CLOSED_BY_ADMIN)).toBe('Sign-ups closed');
+    expect(registrationStateLabel(REGISTRATION_CLOSED_AT_KICKOFF)).toBe('Sign-ups closed');
+  });
+
+  it('is empty for an unscheduled match or any unrecognised state', () => {
+    expect(registrationStateLabel(REGISTRATION_UNSCHEDULED)).toBe('');
+    expect(registrationStateLabel('')).toBe('');
+    expect(registrationStateLabel(undefined)).toBe('');
   });
 });

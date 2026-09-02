@@ -296,7 +296,12 @@ describe('MatchesPanel.vue scheduled match cards', () => {
     const wrapper = await mountPanel();
 
     expect(wrapper.find('.signup-count').text()).toBe('7 / 16 signed up');
-    expect(wrapper.find('.scheduled-pill').exists()).toBe(true);
+    // Existence only, not the label's text: which state it derives to depends
+    // on the real clock at test time (this fixture's window spans real dates),
+    // and the point here is just that a scheduled card always carries a state
+    // badge, not what it says right now — see the dedicated describe block
+    // below for the label content itself, pinned against a frozen clock.
+    expect(wrapper.find('.signup-state-badge').exists()).toBe(true);
   });
 
   // RegistrationCount is a *int with omitempty on the Go side precisely so that
@@ -315,7 +320,7 @@ describe('MatchesPanel.vue scheduled match cards', () => {
 
     const card = wrapper.find('.match-card-horizontal:not(.add-match-card)');
     expect(card.classes()).not.toContain('scheduled');
-    expect(wrapper.find('.scheduled-pill').exists()).toBe(false);
+    expect(wrapper.find('.signup-state-badge').exists()).toBe(false);
     expect(wrapper.find('.signup-count').exists()).toBe(false);
     expect(card.find('.match-date-horizontal').text()).toBe('Aug 30, 2026');
   });
@@ -575,5 +580,63 @@ describe('MatchesPanel.vue team roster visibility on a scheduled match', () => {
     expect(wrapper.find('.teams-horizontal').exists()).toBe(true);
     expect(wrapper.find('.players-section').exists()).toBe(true);
     expect(wrapper.find('.no-roster-hint').exists()).toBe(false);
+  });
+});
+
+// The card's own registration-state badge — a per-card equivalent of the
+// inline preview's badge above, computed straight from each match's own
+// scheduling fields (no extra request, unlike isRegistered). Needs a frozen
+// clock since the label depends on where "now" falls in the window.
+describe("MatchesPanel.vue card's registration state badge", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const scheduled = (overrides = {}) => ({
+    ID: 'scheduled-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-09-06',
+    ScheduledAt: '2026-09-06T20:30:00+02:00',
+    RegistrationOpensAt: '2026-09-01T12:00:00+02:00',
+    MaxPlayers: 16,
+    RegistrationCount: 7,
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+    ],
+    ...overrides
+  });
+
+  it('labels it "Sign-ups open" during the window', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-03T09:00:00+02:00'));
+    getMatchesDetails.mockResolvedValue([scheduled()]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-state-badge').text()).toBe('Sign-ups open');
+    expect(wrapper.find('.signup-state-badge').classes()).toContain('open');
+  });
+
+  it('labels it "Sign-ups not open yet" before the opening instant', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-30T09:00:00+02:00'));
+    getMatchesDetails.mockResolvedValue([scheduled()]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-state-badge').text()).toBe('Sign-ups not open yet');
+  });
+
+  it('labels it "Sign-ups closed" once an admin has closed the list', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-03T09:00:00+02:00'));
+    getMatchesDetails.mockResolvedValue([scheduled({ RegistrationsClosedAt: '2026-09-02T18:00:00+02:00' })]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-state-badge').text()).toBe('Sign-ups closed');
+  });
+
+  it('labels it "Sign-ups closed" once kick-off has passed, with no admin close at all', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T09:00:00+02:00'));
+    getMatchesDetails.mockResolvedValue([scheduled()]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-state-badge').text()).toBe('Sign-ups closed');
   });
 });

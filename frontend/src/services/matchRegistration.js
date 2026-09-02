@@ -68,6 +68,23 @@ export const deriveRegistrationState = (match, nowMs) => {
 // backend gates both on the same window.
 export const registrationsAreOpen = (state) => state === REGISTRATION_OPEN;
 
+// The short label shown wherever a registration state is surfaced: the match
+// card in MatchesPanel.vue's carousel, its "Selected Match Details" preview,
+// and MatchDetails.vue's own panel header. All three used to carry their own
+// copy of this exact switch — pulled out once a third copy was about to
+// appear, so the wording can't drift between them. The two closed states
+// share one label on purpose: which one it is only matters for whether
+// Reopen is offered, not for what a plain member is told.
+export const registrationStateLabel = (state) => {
+  switch (state) {
+    case REGISTRATION_OPEN: return 'Sign-ups open';
+    case REGISTRATION_NOT_OPEN_YET: return 'Sign-ups not open yet';
+    case REGISTRATION_CLOSED_BY_ADMIN:
+    case REGISTRATION_CLOSED_AT_KICKOFF: return 'Sign-ups closed';
+    default: return '';
+  }
+};
+
 // --- Composing the teams from the sign-up list --------------------------------
 //
 // The admin flow the product asked for is: close sign-ups, *then* compose the
