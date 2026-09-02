@@ -279,7 +279,7 @@
 
 <script>
 import { getMatchesDetails, createMatch } from '@/services/api';
-import { toLocalRFC3339, dateTimeLocalToRFC3339, formatDateTimeShort } from '@/services/datetime';
+import { toLocalRFC3339, dateTimeLocalToRFC3339, formatDateTimeShort, formatCalendarDay, formatCalendarDayShort } from '@/services/datetime';
 import { isScheduledMatch } from '@/services/matchRegistration';
 
 // The Matches sub-tab of MatchesAndStandings.vue: the match carousel, the
@@ -540,13 +540,7 @@ export default {
     },
 
     formatSelectedDate(dateStr) {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
+      return formatCalendarDay(dateStr);
     },
 
     getCurrentMonthYear() {
@@ -658,17 +652,7 @@ export default {
     },
 
     formatDate(dateString) {
-      try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-          weekday: 'short',
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        });
-      } catch (error) {
-        return dateString;
-      }
+      return formatCalendarDay(dateString);
     },
 
     // Exposed as a method rather than imported into the template directly:
@@ -693,16 +677,7 @@ export default {
     },
 
     formatDateShort(dateString) {
-      try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        });
-      } catch (error) {
-        return dateString;
-      }
+      return formatCalendarDayShort(dateString);
     },
 
     getTeamColor(colour) {

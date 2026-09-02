@@ -514,7 +514,7 @@ import {
   getToken
 } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
-import { formatDateTimeForDisplay } from '@/services/datetime';
+import { formatDateTimeForDisplay, formatCalendarDayLong } from '@/services/datetime';
 import {
   isScheduledMatch,
   deriveRegistrationState,
@@ -1332,17 +1332,7 @@ export default {
     },
 
     formatDate(dateString) {
-      try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
-      } catch (error) {
-        return dateString;
-      }
+      return formatCalendarDayLong(dateString);
     },
 
     getTeamColor(colour) {
@@ -1395,18 +1385,6 @@ export default {
         case 'upcoming': return 'Upcoming';
         case 'completed': return 'Completed';
         default: return 'Unknown';
-      }
-    },
-
-    formatDateShort(dateString) {
-      try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric'
-        });
-      } catch (error) {
-        return dateString;
       }
     }
   }

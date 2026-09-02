@@ -119,3 +119,78 @@ export const formatDateTimeShort = (value) => {
     minute: '2-digit',
   });
 };
+
+// ---------------------------------------------------------------------------
+// Calendar days (`Match.Date`, the `YYYY-MM-DD` the Go `Date` type marshals to)
+// — a different kind of value from the timestamps above, with a trap of its own.
+//
+// `new Date('2026-09-06')` is specified to parse a date-*only* string as UTC
+// midnight, so formatting the result in the browser's zone renders the
+// *previous* day for anyone west of Greenwich: a match played on Sep 6 shows up
+// as Sep 5 in New York. (A date-*time* string with no offset parses as local
+// instead — the inconsistency is in the language, not in the caller.)
+//
+// The reason the fix is "parse it locally" rather than "render it in UTC" is
+// that a calendar day is not an instant. `Match.Date` is the day the group
+// played, the same day for every viewer, which is the exact opposite of
+// ScheduledAt above: that one is a single instant deliberately shown in each
+// viewer's own zone, this one is a label that must not move at all.
+
+// Returns a Date at local midnight on the day `value` names, or null if it
+// names none. A full timestamp is handed to Date unchanged — those forms carry
+// a time and already parse as local, so the trap above doesn't apply to them.
+export const parseCalendarDay = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value !== 'string') return null;
+
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (parts) {
+    const [, year, month, day] = parts.map(Number);
+    const date = new Date(year, month - 1, day);
+    // Rejected rather than accepted: Date rolls an out-of-range day over (Feb
+    // 31st becomes Mar 3rd), which would display a day the API never sent.
+    if (date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+    return date;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+// Unparseable input echoes the original string instead of returning '' the way
+// the timestamp formatters above do. That is deliberate and the difference is
+// the field, not an oversight: a kick-off line can be dropped from a card
+// harmlessly, whereas a match's date is the card's identity — showing the raw
+// value at least stays diagnosable where a blank would just look broken.
+const formatCalendarDayWith = (value, options) => {
+  const date = parseCalendarDay(value);
+  if (!date) return typeof value === 'string' ? value : '';
+  return date.toLocaleDateString('en-US', options);
+};
+
+// "Sun, Sep 6, 2026" — the default: weekday first, since a calciotto is a
+// recurring weekly fixture.
+export const formatCalendarDay = (value) => formatCalendarDayWith(value, {
+  weekday: 'short',
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+});
+
+// "Sunday, September 6, 2026" — for the one place with room for it, the match
+// detail page's header.
+export const formatCalendarDayLong = (value) => formatCalendarDayWith(value, {
+  weekday: 'long',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+
+// "Sep 6, 2026" — no weekday, for a match card in the carousel, matching
+// formatDateTimeShort's role for a scheduled one.
+export const formatCalendarDayShort = (value) => formatCalendarDayWith(value, {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+});

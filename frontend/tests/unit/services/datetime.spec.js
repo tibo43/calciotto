@@ -3,7 +3,11 @@ import {
   toLocalRFC3339,
   dateTimeLocalToRFC3339,
   formatDateTimeForDisplay,
-  formatDateTimeShort
+  formatDateTimeShort,
+  parseCalendarDay,
+  formatCalendarDay,
+  formatCalendarDayLong,
+  formatCalendarDayShort
 } from '@/services/datetime';
 
 // The machine's own zone must never decide whether these pass — a test that
@@ -176,5 +180,88 @@ describe('formatDateTimeShort', () => {
   it('returns an empty string for unusable input', () => {
     expect(formatDateTimeShort('')).toBe('');
     expect(formatDateTimeShort('nonsense')).toBe('');
+  });
+});
+
+// The whole point of these: `new Date('2026-09-06')` parses as UTC midnight, so
+// the old hand-rolled formatters rendered Sep 5 for anyone west of Greenwich.
+// Every assertion below is written to hold in any zone — comparing against a
+// locally-constructed Date rather than a hardcoded string wherever the zone
+// could otherwise decide the outcome.
+describe('parseCalendarDay', () => {
+  it('reads YYYY-MM-DD as local midnight, not UTC midnight', () => {
+    const date = parseCalendarDay('2026-09-06');
+    // Local getters: these are 2026/8/6 in every zone only if the parse was
+    // local. A UTC parse gives Sep 5 west of Greenwich.
+    expect(date.getFullYear()).toBe(2026);
+    expect(date.getMonth()).toBe(8);
+    expect(date.getDate()).toBe(6);
+    expect(date.getHours()).toBe(0);
+  });
+
+  it('tolerates surrounding whitespace', () => {
+    expect(parseCalendarDay('  2026-09-06 ').getDate()).toBe(6);
+  });
+
+  it('passes a Date through and rejects an invalid one', () => {
+    const date = new Date(2026, 8, 6);
+    expect(parseCalendarDay(date)).toBe(date);
+    expect(parseCalendarDay(new Date('nope'))).toBeNull();
+  });
+
+  it('leaves a full timestamp to Date, which already parses it as local', () => {
+    const parsed = parseCalendarDay('2026-09-06T21:00:00+02:00');
+    expect(parsed.getTime()).toBe(Date.parse('2026-09-06T21:00:00+02:00'));
+  });
+
+  it('rejects a day that does not exist instead of rolling it over', () => {
+    // Date would turn this into March 3rd and display a day the API never sent.
+    expect(parseCalendarDay('2026-02-31')).toBeNull();
+    expect(parseCalendarDay('2026-13-01')).toBeNull();
+  });
+
+  it('returns null for empty, malformed and non-string input', () => {
+    expect(parseCalendarDay('')).toBeNull();
+    expect(parseCalendarDay(null)).toBeNull();
+    expect(parseCalendarDay(undefined)).toBeNull();
+    expect(parseCalendarDay('not a date')).toBeNull();
+    expect(parseCalendarDay(20260906)).toBeNull();
+  });
+});
+
+describe('the calendar-day formatters', () => {
+  // Built from local components, so the expectation carries the same zone the
+  // formatter will use — the comparison is about the *day*, not the zone.
+  const sameDayLocally = (options) =>
+    new Date(2026, 8, 6).toLocaleDateString('en-US', options);
+
+  it('formats the day the string names, in any zone', () => {
+    expect(formatCalendarDay('2026-09-06')).toBe(sameDayLocally({
+      weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
+    }));
+    expect(formatCalendarDayLong('2026-09-06')).toBe(sameDayLocally({
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    }));
+    expect(formatCalendarDayShort('2026-09-06')).toBe(sameDayLocally({
+      year: 'numeric', month: 'short', day: 'numeric'
+    }));
+  });
+
+  it('renders the expected shapes', () => {
+    // Zone-independent: Sep 6 2026 is a Sunday everywhere, and the parse is
+    // local, so no formatter can land on a neighbouring day.
+    expect(formatCalendarDay('2026-09-06')).toBe('Sun, Sep 6, 2026');
+    expect(formatCalendarDayLong('2026-09-06')).toBe('Sunday, September 6, 2026');
+    expect(formatCalendarDayShort('2026-09-06')).toBe('Sep 6, 2026');
+  });
+
+  it('echoes an unusable string rather than blanking a match card', () => {
+    expect(formatCalendarDay('not a date')).toBe('not a date');
+    expect(formatCalendarDayShort('2026-02-31')).toBe('2026-02-31');
+  });
+
+  it('returns an empty string for non-string input', () => {
+    expect(formatCalendarDay(null)).toBe('');
+    expect(formatCalendarDayShort(undefined)).toBe('');
   });
 });
