@@ -122,10 +122,17 @@ jobs:
         working-directory: frontend
         run: npx playwright test
 
-      # The report carries the expected/actual/diff triptych for each failure,
-      # which is the only practical way to judge a visual diff from a log.
+      # Uploaded on every run, not just on failure: the HTML reporter writes
+      # frontend/playwright-report/ either way, and on a passing run it's the
+      # only place to actually look at the current baselines (each test embeds
+      # its screenshot) without checking the PNGs out locally. On a failing run
+      # it carries the expected/actual/diff triptych, the only practical way to
+      # judge a visual diff from a log. `always()` rather than the default
+      # (which skips a step after an earlier failure) — playwright test itself
+      # already exited non-zero by the time this runs, so success() would never
+      # even be evaluated without it.
       - name: Upload report
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
