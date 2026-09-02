@@ -4,6 +4,22 @@ on:
   push:
   pull_request:
 
+# A push to a branch with an open PR fires both `push` and `pull_request`
+# (synchronize) for the same commit, which without this runs CI — and the
+# Docker/Vercel builds inside it — twice for nothing. `head_ref` is only set on
+# a pull_request event (the PR's source branch) and `ref_name` is the *short*
+# branch name push events carry (unlike `ref`, which is the full
+# `refs/heads/...`); for the same branch the two resolve to the same string, so
+# both events land in one group and the newer run cancels the older.
+#
+# `cancel-in-progress` is false on master specifically: `push` there is what
+# gates deploy-backend/deploy-frontend (see their own `if:` below), and cutting
+# one off mid-run could leave a Docker push or a Vercel deploy half-done. A
+# feature branch has no such job, so cancelling freely there is safe.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 jobs:
   backend:
     name: Backend (Go)
