@@ -1,14 +1,36 @@
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import MatchesPanel from '@/components/MatchesPanel.vue';
-import { getMatchesDetails, createMatch } from '@/services/api';
+import {
+  getMatchesDetails,
+  createMatch,
+  getMatchRegistrations,
+  registerForMatch,
+  unregisterFromMatch,
+  getToken
+} from '@/services/api';
 
 jest.mock('@/services/api', () => ({
   getMatchesDetails: jest.fn(),
-  createMatch: jest.fn()
+  createMatch: jest.fn(),
+  getMatchRegistrations: jest.fn(),
+  registerForMatch: jest.fn(),
+  unregisterFromMatch: jest.fn(),
+  getToken: jest.fn()
 }));
 
 // Europe/Paris in September, regardless of the machine running the suite.
 const OFFSET_MINUTES = -120;
+
+const ME = '11111111-1111-1111-1111-111111111111';
+const SOMEONE_ELSE = '22222222-2222-2222-2222-222222222222';
+
+// Same shape as MatchDetails.spec.js's own helper — an unsigned token with a
+// real base64url payload is enough, since currentPlayerIdFromToken never
+// verifies anything.
+const tokenFor = (playerId) => {
+  const payload = Buffer.from(JSON.stringify({ player_id: playerId })).toString('base64');
+  return `header.${payload}.signature`;
+};
 
 let offsetSpy;
 let push;
@@ -21,9 +43,11 @@ const mountPanel = async () => {
       mocks: { $router: { push } }
     }
   });
-  // created() kicks off loadMatches(); let it settle before touching state.
-  await wrapper.vm.$nextTick();
-  await wrapper.vm.$nextTick();
+  // created() kicks off loadMatches(), which now also awaits
+  // loadSelectedRegistrations() for whichever match got auto-selected —
+  // flushPromises is what reliably drains both, where a fixed number of
+  // nextTick()s would be guessing at the chain's depth.
+  await flushPromises();
   return wrapper;
 };
 
@@ -38,6 +62,14 @@ beforeEach(() => {
   getMatchesDetails.mockResolvedValue([]);
   createMatch.mockReset();
   createMatch.mockResolvedValue('new-match-uuid');
+  getMatchRegistrations.mockReset();
+  getMatchRegistrations.mockResolvedValue([]);
+  registerForMatch.mockReset();
+  registerForMatch.mockResolvedValue({ PlayerID: ME, Name: 'me', Position: 1, IsWaiting: false });
+  unregisterFromMatch.mockReset();
+  unregisterFromMatch.mockResolvedValue({ unregistered: true });
+  getToken.mockReset();
+  getToken.mockReturnValue(tokenFor(ME));
   push = jest.fn();
   offsetSpy = jest
     .spyOn(Date.prototype, 'getTimezoneOffset')
@@ -297,5 +329,191 @@ describe('MatchesPanel.vue scheduled match cards', () => {
 
     expect(wrapper.vm.matches).toHaveLength(2);
     expect(wrapper.findAll('.match-card-horizontal:not(.add-match-card)')).toHaveLength(2);
+  });
+});
+
+// The inline sign-up affordance in the "Selected Match Details" preview —
+// added so a member can sign up without leaving the Matches tab. Deliberately
+// light (state badge, count, Participate/Withdraw only); the full
+// confirmed/waiting roster with names stays on the match page, which is why
+// these tests never assert on a roster list here.
+describe('MatchesPanel.vue inline sign-up panel', () => {
+  // Factories, not shared consts: participate()/withdraw() mutate
+  // selectedMatch.RegistrationCount in place (see the component), and a
+  // shared object literal would carry that mutation from one test into the
+  // next — matching MatchDetails.spec.js's own scheduledMatch()/teams()
+  // pattern for exactly this reason.
+  const scheduled = (overrides = {}) => ({
+    ID: 'scheduled-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-09-06',
+    ScheduledAt: '2026-09-06T20:30:00+02:00',
+    RegistrationOpensAt: '2026-09-01T12:00:00+02:00',
+    MaxPlayers: 16,
+    RegistrationCount: 7,
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+    ],
+    ...overrides
+  });
+
+  const played = () => ({
+    ID: 'played-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-08-30',
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 3, Players: [] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 2, Players: [] }
+    ]
+  });
+
+  it('shows no sign-up section at all for an ordinary, unscheduled match', async () => {
+    getMatchesDetails.mockResolvedValue([played()]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-inline').exists()).toBe(false);
+    expect(getMatchRegistrations).not.toHaveBeenCalled();
+  });
+
+  it('loads the sign-up list for the selected scheduled match alone, not on every card', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled(), played()]);
+    await mountPanel();
+
+    // scheduled is matches[0] — the one auto-selected — so this is the only
+    // registrations call, never one for `played`.
+    expect(getMatchRegistrations).toHaveBeenCalledWith('scheduled-uuid');
+    expect(getMatchRegistrations).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-fetches the sign-up list when a different scheduled match is selected', async () => {
+    const otherScheduled = { ...scheduled(), ID: 'other-scheduled-uuid' };
+    getMatchesDetails.mockResolvedValue([scheduled(), otherScheduled]);
+    const wrapper = await mountPanel();
+    getMatchRegistrations.mockClear();
+
+    await wrapper.vm.selectMatch(otherScheduled);
+    await flushPromises();
+
+    expect(getMatchRegistrations).toHaveBeenCalledWith('other-scheduled-uuid');
+  });
+
+  it('offers Participate to a member who has not signed up, alongside the live count', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled()]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-state-badge').text()).toBe('Sign-ups open');
+    expect(wrapper.find('.signup-count-inline').text()).toBe('7 / 16 signed up');
+    expect(wrapper.find('.signup-inline-actions button').text()).toContain('Participate');
+  });
+
+  it('signs the caller up, bumps the count immediately, and switches to Withdraw', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled()]);
+    registerForMatch.mockResolvedValue({ PlayerID: ME, Name: 'me', Position: 8, IsWaiting: false });
+    const wrapper = await mountPanel();
+    // The re-fetch loadSelectedRegistrations() runs right after a successful
+    // register() must see the caller's own new row — a real backend would;
+    // the default empty-list mock from beforeEach otherwise makes isRegistered
+    // stay false and the button never flips.
+    getMatchRegistrations.mockResolvedValue([
+      { PlayerID: ME, Name: 'me', Position: 8, IsWaiting: false, RegisteredAt: '2026-09-02T10:00:00+02:00' }
+    ]);
+
+    await wrapper.find('.signup-inline-actions button').trigger('click');
+    await flushPromises();
+
+    expect(registerForMatch).toHaveBeenCalledWith('scheduled-uuid');
+    // Bumped locally, not from a full matches reload — the point of the fix.
+    expect(wrapper.find('.signup-count-inline').text()).toBe('8 / 16 signed up');
+    // signupCountLabel reads the same match object the card renders from, so
+    // the card's own badge reflects it too — "the list updates as we go".
+    expect(wrapper.find('.match-card-horizontal.scheduled .signup-count').text()).toBe('8 / 16 signed up');
+    expect(wrapper.find('.signup-inline-message').text()).toMatch(/you are #8/i);
+    expect(wrapper.find('.signup-inline-actions button').text()).toContain('Withdraw');
+  });
+
+  it('says explicitly when the sign-up lands on the waiting list', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled()]);
+    registerForMatch.mockResolvedValue({ PlayerID: ME, Name: 'me', Position: 17, IsWaiting: true });
+    const wrapper = await mountPanel();
+
+    await wrapper.find('.signup-inline-actions button').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.signup-inline-message').text()).toMatch(/waiting list/i);
+  });
+
+  it('withdraws, decrements the count, and switches back to Participate — after confirming', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled()]);
+    // Once for the initial load (I'm registered, hence "Withdraw" showing
+    // already), then empty for the re-fetch loadSelectedRegistrations() runs
+    // right after a successful unregister() — a real backend would no longer
+    // list my row either.
+    getMatchRegistrations.mockResolvedValueOnce([
+      { PlayerID: ME, Name: 'me', Position: 3, IsWaiting: false, RegisteredAt: '2026-09-01T12:00:00+02:00' }
+    ]).mockResolvedValue([]);
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-inline-actions button').text()).toContain('Withdraw');
+
+    await wrapper.find('.signup-inline-actions button').trigger('click');
+    await flushPromises();
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(unregisterFromMatch).toHaveBeenCalledWith('scheduled-uuid');
+    expect(wrapper.find('.signup-count-inline').text()).toBe('6 / 16 signed up');
+    expect(wrapper.find('.signup-inline-actions button').text()).toContain('Participate');
+    confirmSpy.mockRestore();
+  });
+
+  it('does nothing when the withdrawal confirm is dismissed', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled()]);
+    getMatchRegistrations.mockResolvedValue([
+      { PlayerID: ME, Name: 'me', Position: 3, IsWaiting: false, RegisteredAt: '2026-09-01T12:00:00+02:00' }
+    ]);
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(false);
+    const wrapper = await mountPanel();
+
+    await wrapper.find('.signup-inline-actions button').trigger('click');
+    await flushPromises();
+
+    expect(unregisterFromMatch).not.toHaveBeenCalled();
+    expect(wrapper.find('.signup-inline-actions button').text()).toContain('Withdraw');
+    confirmSpy.mockRestore();
+  });
+
+  it('surfaces the backend 409 message verbatim and reloads the list', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled()]);
+    registerForMatch.mockRejectedValue({ response: { data: { error: 'registrations for this match are closed' } } });
+    const wrapper = await mountPanel();
+    getMatchRegistrations.mockClear();
+
+    await wrapper.find('.signup-inline-actions button').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.signup-inline-message').text()).toBe('registrations for this match are closed');
+    expect(wrapper.find('.signup-inline-message').classes()).toContain('error');
+    // The count is left untouched on failure — only a successful call bumps it.
+    expect(wrapper.find('.signup-count-inline').text()).toBe('7 / 16 signed up');
+    expect(getMatchRegistrations).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides both actions once sign-ups are closed', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled({ RegistrationsClosedAt: '2026-09-02T09:00:00+02:00' })]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-state-badge').text()).toBe('Sign-ups closed');
+    expect(wrapper.find('.signup-inline-actions button').exists()).toBe(false);
+  });
+
+  it("says who is already registered as 'me', not a stranger's entry", async () => {
+    getMatchesDetails.mockResolvedValue([scheduled()]);
+    getMatchRegistrations.mockResolvedValue([
+      { PlayerID: SOMEONE_ELSE, Name: 'someone else', Position: 1, IsWaiting: false, RegisteredAt: '2026-09-01T12:00:00+02:00' }
+    ]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-inline-actions button').text()).toContain('Participate');
   });
 });

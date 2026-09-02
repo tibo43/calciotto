@@ -221,6 +221,30 @@
                 <div class="details-divider"></div>
               </div>
 
+              <!-- Sign-ups, without leaving this page. Deliberately light —
+                   state, count, and Participate/Withdraw only; the full
+                   confirmed/waiting roster with names stays on the match page
+                   (see MatchDetails.vue), reached via "Edit Match"/"View
+                   Match" above. -->
+              <div v-if="isScheduledMatch(selectedMatch)" class="signup-inline">
+                <div class="signup-inline-top">
+                  <span class="signup-state-badge" :class="registrationState">{{ registrationStateLabel }}</span>
+                  <span class="signup-count-inline">{{ signupCountLabel(selectedMatch) }}</span>
+                </div>
+                <p v-if="registrationStateDetail" class="signup-inline-detail">{{ registrationStateDetail }}</p>
+                <div class="signup-inline-actions">
+                  <button v-if="canParticipate" @click="participate" :disabled="isUpdatingRegistration"
+                    class="btn-base btn-primary btn-small">
+                    {{ isUpdatingRegistration ? 'Signing up...' : 'Participate' }}
+                  </button>
+                  <button v-if="canWithdraw" @click="confirmWithdraw" :disabled="isUpdatingRegistration"
+                    class="btn-base btn-cancel btn-small">
+                    {{ isUpdatingRegistration ? 'Withdrawing...' : 'Withdraw' }}
+                  </button>
+                </div>
+                <p v-if="signupMessage" class="signup-inline-message" :class="signupMessageType">{{ signupMessage }}</p>
+              </div>
+
               <div class="players-section">
                 <!-- Each team lists its own scorers — a grid column per team
                      (stacked on mobile, see below) rather than a shared table
@@ -278,9 +302,43 @@
 </template>
 
 <script>
-import { getMatchesDetails, createMatch } from '@/services/api';
+import {
+  getMatchesDetails,
+  createMatch,
+  getMatchRegistrations,
+  registerForMatch,
+  unregisterFromMatch,
+  getToken
+} from '@/services/api';
 import { toLocalRFC3339, dateTimeLocalToRFC3339, formatDateTimeShort, formatCalendarDay, formatCalendarDayShort } from '@/services/datetime';
-import { isScheduledMatch } from '@/services/matchRegistration';
+import {
+  isScheduledMatch,
+  deriveRegistrationState,
+  registrationsAreOpen,
+  REGISTRATION_OPEN,
+  REGISTRATION_NOT_OPEN_YET,
+  REGISTRATION_CLOSED_BY_ADMIN,
+  REGISTRATION_CLOSED_AT_KICKOFF
+} from '@/services/matchRegistration';
+
+// Same shape as MatchDetails.vue's and Profile.vue's own helper — the app has
+// no auth store, and the player id is only ever needed to answer "which
+// registration row is mine", so each page decodes the JWT payload locally
+// rather than a third place holding state.
+function currentPlayerIdFromToken() {
+  const token = getToken();
+  if (!token) {
+    return '';
+  }
+  try {
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return decoded.player_id || '';
+  } catch (error) {
+    console.error('Error decoding token:', error);
+    return '';
+  }
+}
 
 // The Matches sub-tab of MatchesAndStandings.vue: the match carousel, the
 // selected match's preview, and the admin-only create-match modal. Everything
@@ -336,10 +394,26 @@ export default {
       // Custom Date Picker
       currentMonth: new Date().getMonth(),
       currentYear: new Date().getFullYear(),
-      dayHeaders: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+      dayHeaders: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+      // --- Sign-ups, for whichever match is selected below the carousel ---
+      // Sampled once, in created(), the same "no polling, re-read on
+      // navigation" contract MatchDetails.vue uses for the same field.
+      nowMs: 0,
+      currentPlayerId: '',
+      // The sign-up list of `selectedMatch` alone — never all matches at
+      // once, which is why it's reloaded on every selection change rather
+      // than kept per-match. Only used to answer "am I registered", not
+      // rendered as a roster (that stays on the match page).
+      registrations: [],
+      isLoadingRegistrations: false,
+      isUpdatingRegistration: false,
+      signupMessage: '',
+      signupMessageType: 'success'
     };
   },
   async created() {
+    this.nowMs = Date.now();
+    this.currentPlayerId = currentPlayerIdFromToken();
     await this.loadMatches();
   },
   watch: {
@@ -389,6 +463,58 @@ export default {
       }
 
       return days;
+    },
+
+    // The state and copy below mirror MatchDetails.vue's own
+    // registrationState/registrationStateLabel/registrationStateDetail
+    // exactly — same feature, same words, whichever page a player reaches it
+    // from. Unlike that page, there is no separate "registrationsClosedAt"
+    // local field to keep in sync with `match`: this panel has no editable
+    // state of its own to protect from a false-dirty flag, so
+    // RegistrationsClosedAt is read straight off `selectedMatch`.
+    registrationState() {
+      if (!this.selectedMatch) return '';
+      return deriveRegistrationState(this.selectedMatch, this.nowMs);
+    },
+
+    registrationsOpen() {
+      return registrationsAreOpen(this.registrationState);
+    },
+
+    registrationStateLabel() {
+      switch (this.registrationState) {
+        case REGISTRATION_OPEN: return 'Sign-ups open';
+        case REGISTRATION_NOT_OPEN_YET: return 'Sign-ups not open yet';
+        case REGISTRATION_CLOSED_BY_ADMIN: return 'Sign-ups closed';
+        case REGISTRATION_CLOSED_AT_KICKOFF: return 'Sign-ups closed';
+        default: return '';
+      }
+    },
+
+    registrationStateDetail() {
+      switch (this.registrationState) {
+        case REGISTRATION_NOT_OPEN_YET:
+          return `Sign-ups open on ${formatDateTimeShort(this.selectedMatch.RegistrationOpensAt)}.`;
+        case REGISTRATION_CLOSED_BY_ADMIN:
+          return 'An admin has closed sign-ups for this match.';
+        case REGISTRATION_CLOSED_AT_KICKOFF:
+          return 'Kick-off has passed, so sign-ups are closed.';
+        default:
+          return '';
+      }
+    },
+
+    isRegistered() {
+      if (!this.currentPlayerId) return false;
+      return this.registrations.some(entry => entry.PlayerID === this.currentPlayerId);
+    },
+
+    canParticipate() {
+      return this.registrationsOpen && !this.isLoadingRegistrations && !this.isUpdatingRegistration && !this.isRegistered;
+    },
+
+    canWithdraw() {
+      return this.registrationsOpen && !this.isLoadingRegistrations && !this.isUpdatingRegistration && this.isRegistered;
     }
   },
   methods: {
@@ -421,6 +547,7 @@ export default {
         if (this.matches.length > 0) {
           this.selectedMatch = this.matches[0];
         }
+        await this.loadSelectedRegistrations();
       } catch (error) {
         console.error('Error fetching matches:', error);
         // Don't leave the previous season's list on screen after a failed
@@ -615,6 +742,100 @@ export default {
     },
     selectMatch(match) {
       this.selectedMatch = match;
+      this.signupMessage = '';
+      this.loadSelectedRegistrations();
+    },
+
+    // Loads the sign-up list of `selectedMatch` alone, the same one-request-
+    // per-open-match cost MatchDetails.vue already pays — the list endpoint
+    // deliberately carries no "am I registered" flag (see CLAUDE.md), so this
+    // is the only way to answer it. A no-op for an unscheduled match, or when
+    // nothing is selected (an empty list).
+    async loadSelectedRegistrations() {
+      if (!this.selectedMatch || !isScheduledMatch(this.selectedMatch)) {
+        this.registrations = [];
+        return;
+      }
+      this.isLoadingRegistrations = true;
+      try {
+        const entries = await getMatchRegistrations(this.selectedMatch.ID);
+        this.registrations = Array.isArray(entries) ? entries : [];
+      } catch (error) {
+        console.error('Error loading registrations:', error);
+        this.registrations = [];
+      } finally {
+        this.isLoadingRegistrations = false;
+      }
+    },
+
+    // Signs the caller up for `selectedMatch`. The count on both this panel
+    // and the match's own card (signupCountLabel reads the same
+    // RegistrationCount) is bumped locally rather than waiting on a full
+    // loadMatches() reload — safe to do without re-deriving anything
+    // server-side, since a successful call always adds exactly one
+    // registration, confirmed or waiting. Position/waiting status themselves
+    // are never guessed client-side, which is why loadSelectedRegistrations()
+    // still runs afterward — see MatchDetails.vue's own participate() for the
+    // same split.
+    async participate() {
+      if (this.isUpdatingRegistration) return;
+      this.isUpdatingRegistration = true;
+      try {
+        const entry = await registerForMatch(this.selectedMatch.ID);
+        this.selectedMatch.RegistrationCount = (this.selectedMatch.RegistrationCount || 0) + 1;
+        await this.loadSelectedRegistrations();
+        if (entry && entry.IsWaiting) {
+          this.showSignupMessage(`Signed up — you are #${entry.Position}, on the waiting list.`, 'success');
+        } else {
+          const position = entry && entry.Position ? ` You are #${entry.Position}.` : '';
+          this.showSignupMessage(`You're in for this match.${position}`, 'success');
+        }
+      } catch (error) {
+        console.error('Error signing up for match:', error);
+        // A 409 says precisely why (not open yet, closed, already
+        // registered) — worth showing verbatim, same pattern as
+        // MatchDetails.vue. Reload either way: a rejection usually means this
+        // panel's view of the list is stale.
+        this.showSignupMessage(this.registrationErrorMessage(error, 'Error signing up for this match.'), 'error');
+        await this.loadSelectedRegistrations();
+      } finally {
+        this.isUpdatingRegistration = false;
+      }
+    },
+
+    // Same confirm-before-acting pattern as MatchDetails.vue's own
+    // confirmWithdraw — withdrawing hands your place to the first player on
+    // the waiting list, which is worth a heads-up before it happens.
+    confirmWithdraw() {
+      if (this.isUpdatingRegistration) return;
+      const confirmed = window.confirm('Withdraw from this match? Your place goes to the first player on the waiting list.');
+      if (!confirmed) return;
+      this.withdraw();
+    },
+
+    async withdraw() {
+      this.isUpdatingRegistration = true;
+      try {
+        await unregisterFromMatch(this.selectedMatch.ID);
+        this.selectedMatch.RegistrationCount = Math.max(0, (this.selectedMatch.RegistrationCount || 1) - 1);
+        await this.loadSelectedRegistrations();
+        this.showSignupMessage('You have withdrawn from this match.', 'success');
+      } catch (error) {
+        console.error('Error withdrawing from match:', error);
+        this.showSignupMessage(this.registrationErrorMessage(error, 'Error withdrawing from this match.'), 'error');
+        await this.loadSelectedRegistrations();
+      } finally {
+        this.isUpdatingRegistration = false;
+      }
+    },
+
+    registrationErrorMessage(error, fallback) {
+      return error?.response?.data?.error || fallback;
+    },
+
+    showSignupMessage(text, type) {
+      this.signupMessage = text;
+      this.signupMessageType = type;
     },
 
     scrollLeft() {
@@ -1232,6 +1453,83 @@ export default {
 .edit-match-btn:hover {
   text-decoration: none !important;
   color: white !important;
+}
+
+/* Sign-ups inline in the Matches tab preview — same visual language as
+   MatchDetails.vue's own .signup-panel (state badge colours included), just
+   condensed to one row plus a detail line, since this panel has no room for
+   (and no need for) the full roster. */
+.signup-inline {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.signup-inline-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.signup-count-inline {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Same pill shape and colours as MatchDetails.vue's .signup-state-badge —
+   duplicated rather than shared, the same way getTeamColor() is duplicated
+   between the two files. */
+.signup-state-badge {
+  padding: 0.3rem 0.65rem;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.signup-state-badge.open {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.signup-state-badge.not-open-yet {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.signup-state-badge.closed-by-admin,
+.signup-state-badge.closed-at-kickoff {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.signup-inline-detail {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.signup-inline-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.signup-inline-message {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+}
+
+.signup-inline-message.success {
+  color: #065f46;
+}
+
+.signup-inline-message.error {
+  color: var(--danger-color);
 }
 
 /* Players by team — one column per team, each an independent list of its

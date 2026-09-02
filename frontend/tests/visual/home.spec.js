@@ -53,6 +53,20 @@ test.describe('home page', () => {
     expectEverythingStubbed(unstubbed);
   });
 
+  // The inline sign-up panel added to the "Selected Match Details" preview —
+  // reported missing from real testing, since the only way to sign up used to
+  // be leaving this tab for the match's own page. Selecting the scheduled
+  // fixture match is what makes the panel render at all (isScheduledMatch),
+  // so this is its own baseline rather than folded into "matches tab" above,
+  // whose default selection is the unscheduled olderPlayedMatch.
+  test('matches tab, scheduled match selected, inline sign-up panel', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/');
+    await page.locator('.match-card-horizontal.scheduled').first().click();
+    await expect(page.locator('.signup-inline')).toBeVisible();
+    await expect(page).toHaveScreenshot('matches-tab-signup-inline.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
   // A member (not an admin) must not be offered the create-match affordance.
   // The backend refuses it anyway (requireGroupAdmin), so this pins the UI half
   // of that: what a non-admin is shown.
