@@ -62,7 +62,19 @@ module.exports = defineConfig({
     locale: 'en-US',
     timezoneId: 'Europe/Paris',
     colorScheme: 'light',
-    trace: 'retain-on-failure',
+    // 'on' rather than 'retain-on-failure' for both: on a passing run the HTML
+    // report otherwise shows only a bare list of step titles, with no way to
+    // see what the page actually looked like — `toHaveScreenshot` itself only
+    // attaches its expected/actual/diff triptych when the comparison fails, so
+    // a green run leaves nothing to inspect either. Trace gives a full
+    // timeline (DOM snapshot, console, network at every action) and video
+    // gives a literal recording — together, "what did this test actually do"
+    // is answerable from the artifact alone, not only from a diff. The suite
+    // is 12 short tests (a few seconds total), so the extra recording
+    // overhead and artifact size are negligible; this would be worth revisiting
+    // to 'retain-on-failure' if the suite grows enough for that to change.
+    trace: 'on',
+    video: 'on',
   },
 
   projects: [
