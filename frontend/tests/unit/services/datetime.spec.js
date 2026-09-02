@@ -7,7 +7,8 @@ import {
   parseCalendarDay,
   formatCalendarDay,
   formatCalendarDayLong,
-  formatCalendarDayShort
+  formatCalendarDayShort,
+  seasonOf
 } from '@/services/datetime';
 
 // The machine's own zone must never decide whether these pass — a test that
@@ -263,5 +264,17 @@ describe('the calendar-day formatters', () => {
   it('returns an empty string for non-string input', () => {
     expect(formatCalendarDay(null)).toBe('');
     expect(formatCalendarDayShort(undefined)).toBe('');
+  });
+});
+
+describe('seasonOf', () => {
+  it('mirrors the backend: September onwards belongs to the season starting that year', () => {
+    expect(seasonOf(new Date(2026, 8, 1))).toBe('2026-2027'); // Sep 1
+    expect(seasonOf(new Date(2026, 11, 25))).toBe('2026-2027'); // Dec 25
+  });
+
+  it('an earlier month belongs to the season that started the previous year', () => {
+    expect(seasonOf(new Date(2027, 0, 1))).toBe('2026-2027'); // Jan 1
+    expect(seasonOf(new Date(2027, 7, 31))).toBe('2026-2027'); // Aug 31 — the last day of the season
   });
 });

@@ -194,3 +194,26 @@ export const formatCalendarDayShort = (value) => formatCalendarDayWith(value, {
   month: 'short',
   day: 'numeric',
 });
+
+// ---------------------------------------------------------------------------
+// Seasons. Mirrors models.SeasonOf (app/internal/models/date.go) exactly —
+// a season runs September 1st → August 31st, so a date from September onwards
+// belongs to the season starting that same year, an earlier one to the season
+// that started the previous year.
+//
+// This exists on the frontend for exactly one purpose: choosing which season
+// to default the selector to. `MatchesAndStandings.vue` used to default to
+// whichever season was *last* in the list `GET /standings/seasons` returned —
+// which is normally "the current one", but ComputeSeasons deliberately counts
+// scheduled matches too (see CLAUDE.md's "Seasons" section), so scheduling a
+// match far enough out introduces a season later than today's own and silently
+// shifts the default view onto it, away from the history actually in progress.
+// `seasonOf(new Date())` answers "what season are we actually in, right now"
+// independently of what matches happen to exist — a future scheduled match
+// changes the *list* of seasons, but must not change what "today" defaults to.
+export const seasonOf = (date) => {
+  const year = date.getFullYear();
+  // getMonth() is 0-indexed (0 = January), so September is 8.
+  const start = date.getMonth() < 8 ? year - 1 : year;
+  return `${start}-${start + 1}`;
+};
