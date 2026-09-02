@@ -613,3 +613,41 @@ describe('MatchDetails.vue "Fill teams from sign-ups" behaviour', () => {
     expect(wrapper.vm.hasUnsavedChanges()).toBe(false);
   });
 });
+
+// This guard predates scheduled matches: it was written for the old
+// always-populated-immediately match flow, where an empty team really was a
+// mistake worth catching before saving a game record. A scheduled match's
+// normal state is exactly the opposite — both teams start empty and stay that
+// way through the whole sign-up window — so the same guard applied there made
+// it impossible to ever save one.
+describe('MatchDetails.vue Save Changes and empty teams', () => {
+  it('blocks saving an unscheduled match with an empty team, unchanged from before', async () => {
+    const wrapper = await mountDetails({ match: unscheduledMatch(), isAdmin: true });
+
+    await wrapper.vm.saveChanges();
+
+    expect(updateMatch).not.toHaveBeenCalled();
+    expect(wrapper.vm.messageType).toBe('error');
+    expect(wrapper.vm.message).toMatch(/each team requires at least 1 player/i);
+  });
+
+  it('allows saving a scheduled match with both teams still empty', async () => {
+    updateMatch.mockResolvedValue({});
+    const wrapper = await mountDetails({ match: scheduledMatch(), isAdmin: true });
+
+    await wrapper.vm.saveChanges();
+
+    expect(updateMatch).toHaveBeenCalledWith('match-uuid', expect.objectContaining({ ID: 'match-uuid' }));
+  });
+
+  it('allows saving a scheduled match with only one team filled', async () => {
+    updateMatch.mockResolvedValue({});
+    const match = scheduledMatch();
+    match.Teams[0].Players = [{ ID: SOMEONE_ELSE, Name: 'marco', GoalNumber: 0 }];
+    const wrapper = await mountDetails({ match, isAdmin: true });
+
+    await wrapper.vm.saveChanges();
+
+    expect(updateMatch).toHaveBeenCalled();
+  });
+});

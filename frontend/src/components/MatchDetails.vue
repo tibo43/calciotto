@@ -1257,7 +1257,20 @@ export default {
     },
 
     async saveChanges() {
-      if (this.hasEmptyTeam()) {
+      // This guard predates scheduled matches, back when a match's only
+      // lifecycle was "an admin records a game that already happened" — an
+      // empty team there really was a mistake worth catching. For a scheduled
+      // match, an empty (or lopsided) team is the *normal* state right up
+      // until sign-ups close and someone composes the roster: right after
+      // creation both teams are empty by construction, and even a single
+      // confirmed sign-up leaves one team empty until a second player joins
+      // it. Blocking Save there would make it impossible to ever persist a
+      // scheduled match's own schedule fields, or to save a partial manual
+      // pick, without an unrelated roster requirement in the way. The backend
+      // enforces no such minimum either — MatchService.UpdateMatch's diff
+      // persists whatever teams/players it's given, including empty ones — so
+      // this was purely a frontend-only restriction to lift.
+      if (!this.isScheduled && this.hasEmptyTeam()) {
         this.showMessage('Each team requires at least 1 player', 'error');
         return;
       }
