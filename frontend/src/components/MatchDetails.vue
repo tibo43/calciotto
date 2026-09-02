@@ -123,7 +123,31 @@
               <div v-if="isUpdatingRegistrationState" class="loading-spinner-small"></div>
               {{ isUpdatingRegistrationState ? 'Reopening...' : 'Reopen sign-ups' }}
             </button>
+
+            <!-- Admin-only, and only once the list is closed: the product flow
+                 is "close sign-ups in order to compose the teams", and offering
+                 this mid-registration would invite an admin to build teams from
+                 a roster still changing under them. -->
+            <button v-if="canFillTeamsFromSignups" @click="fillTeamsFromSignups"
+              class="btn-base btn-cancel btn-small fill-teams-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <polyline points="16,11 18,13 22,9" />
+              </svg>
+              Fill teams from sign-ups
+            </button>
           </div>
+
+          <!-- The single most important sentence in this panel: this action
+               only fills the two team tabs below, and an admin who walks away
+               without pressing Save Changes loses the lot. -->
+          <p v-if="canFillTeamsFromSignups" class="fill-teams-hint">
+            Splits the {{ confirmedRegistrations.length }} confirmed
+            player{{ confirmedRegistrations.length === 1 ? '' : 's' }} across the two teams in sign-up order.
+            Anyone already in a team stays where they are. <strong>Nothing is saved</strong> — review the teams
+            below, then press "Save Changes".
+          </p>
 
           <div v-if="isLoadingRegistrations" class="signup-loading">
             <div class="loading-spinner-small"></div>
@@ -495,6 +519,7 @@ import {
   isScheduledMatch,
   deriveRegistrationState,
   registrationsAreOpen,
+  fillTeamsFromRegistrations,
   REGISTRATION_NOT_OPEN_YET,
   REGISTRATION_OPEN,
   REGISTRATION_CLOSED_BY_ADMIN,
@@ -680,6 +705,19 @@ export default {
       return this.isScheduled && this.isAdmin && this.registrationState === REGISTRATION_CLOSED_BY_ADMIN;
     },
 
+    // "Fill teams from sign-ups" is offered to an admin only once the list is
+    // closed — either by them (closed-by-admin) or by kick-off passing
+    // (closed-at-kickoff), the two states registrationsAreOpen() rejects. The
+    // roster is composed when it is final, which is the flow the product
+    // described: an admin closes sign-ups *in order to* pick the teams.
+    canFillTeamsFromSignups() {
+      return this.isScheduled
+        && this.isAdmin
+        && !this.isLoadingRegistrations
+        && (this.registrationState === REGISTRATION_CLOSED_BY_ADMIN
+          || this.registrationState === REGISTRATION_CLOSED_AT_KICKOFF);
+    },
+
     confirmedRegistrations() {
       return this.registrations.filter(entry => !entry.IsWaiting);
     },
@@ -843,6 +881,49 @@ export default {
 
     registrationErrorMessage(error, fallback) {
       return error?.response?.data?.error || fallback;
+    },
+
+    // Populates the two team rosters from the confirmed sign-up list and stops
+    // there. It writes nothing to the server on purpose: mutating `match` marks
+    // it dirty, so the existing "Save Changes" button persists it through the
+    // PUT /matches/:id diff (which already creates/updates/deletes match_players
+    // rows), and the existing beforeRouteLeave guard catches an admin who walks
+    // away. That also means the split can be corrected by hand before anything
+    // is written — the whole point, since this is a mechanical split and not a
+    // balanced one.
+    fillTeamsFromSignups() {
+      if (!this.canFillTeamsFromSignups) return;
+      if (!this.match || !this.match.Teams || this.match.Teams.length < 2) return;
+
+      const { rosters, addedCount, skippedCount } = fillTeamsFromRegistrations(
+        this.registrations,
+        this.match.Teams.map(team => team.Players || [])
+      );
+
+      if (addedCount === 0) {
+        this.showMessage(
+          skippedCount > 0
+            ? 'Everyone on the confirmed sign-up list is already in a team.'
+            : 'Nobody is on the confirmed sign-up list, so there is nothing to fill the teams with.',
+          'error'
+        );
+        return;
+      }
+
+      this.match.Teams.forEach((team, index) => {
+        team.Players = rosters[index];
+      });
+      // Scores are deliberately left alone: every player added here starts at 0
+      // goals, so each team's sum is unchanged, and recomputing would risk
+      // overwriting a score an admin has already edited on this page.
+
+      const skipped = skippedCount > 0
+        ? ` ${skippedCount} already in a team ${skippedCount === 1 ? 'was' : 'were'} left where they are.`
+        : '';
+      this.showMessage(
+        `Added ${addedCount} player${addedCount === 1 ? '' : 's'} to the teams.${skipped} Nothing is saved yet — press "Save Changes".`,
+        'success'
+      );
     },
 
     // Load all players when modal opens
@@ -1587,6 +1668,25 @@ export default {
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1rem;
+}
+
+/* Marked out from Close/Reopen next to it: this is the one button in the panel
+   that changes the page's own unsaved state rather than the server's. */
+.fill-teams-btn {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.fill-teams-hint {
+  margin: 0.75rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* The "nothing is saved" half of the sentence has to survive being skim-read. */
+.fill-teams-hint strong {
+  color: var(--text-primary);
 }
 
 .signup-loading {

@@ -2,6 +2,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import MatchDetails from '@/components/MatchDetails.vue';
 import {
   getMatchDetailsByID,
+  updateMatch,
   getMatchRegistrations,
   registerForMatch,
   unregisterFromMatch,
@@ -443,5 +444,172 @@ describe('MatchDetails.vue signing up and withdrawing', () => {
 
     expect(unregisterFromMatch).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
+  });
+});
+
+// The gating is the whole risk here: the action edits the two team rosters, so
+// it must never be reachable by a plain member, and it must not be offered while
+// the sign-up list is still moving.
+describe('MatchDetails.vue "Fill teams from sign-ups" gating', () => {
+  const CLOSED = '2026-09-05T18:00:00+02:00';
+
+  it('offers it to an admin once sign-ups are closed', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch({ RegistrationsClosedAt: CLOSED }),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    expect(wrapper.vm.registrationState).toBe('closed-by-admin');
+    expect(wrapper.find('.fill-teams-btn').exists()).toBe(true);
+  });
+
+  it('offers it to an admin once kick-off has closed the list on its own', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true,
+      now: AFTER_KICKOFF
+    });
+
+    expect(wrapper.vm.registrationState).toBe('closed-at-kickoff');
+    expect(wrapper.find('.fill-teams-btn').exists()).toBe(true);
+  });
+
+  it('does not offer it to a plain member, closed list or not', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch({ RegistrationsClosedAt: CLOSED }),
+      registrations: registrationList(),
+      isAdmin: false
+    });
+
+    expect(wrapper.vm.canFillTeamsFromSignups).toBe(false);
+    expect(wrapper.find('.fill-teams-btn').exists()).toBe(false);
+  });
+
+  it('does not offer it to an admin while sign-ups are still open', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    expect(wrapper.vm.registrationState).toBe('open');
+    expect(wrapper.find('.fill-teams-btn').exists()).toBe(false);
+  });
+
+  it('does not offer it before sign-ups have opened either', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: [],
+      isAdmin: true,
+      now: BEFORE_SIGNUPS
+    });
+
+    expect(wrapper.vm.registrationState).toBe('not-open-yet');
+    expect(wrapper.find('.fill-teams-btn').exists()).toBe(false);
+  });
+
+  it('does not offer it on an ordinary, unscheduled match', async () => {
+    const wrapper = await mountDetails({ match: unscheduledMatch(), isAdmin: true });
+
+    expect(wrapper.find('.fill-teams-btn').exists()).toBe(false);
+  });
+});
+
+describe('MatchDetails.vue "Fill teams from sign-ups" behaviour', () => {
+  const CLOSED = '2026-09-05T18:00:00+02:00';
+
+  const mountClosedAsAdmin = (registrations, matchOverrides = {}) => mountDetails({
+    match: scheduledMatch({ RegistrationsClosedAt: CLOSED, ...matchOverrides }),
+    registrations,
+    isAdmin: true
+  });
+
+  it('alternates the confirmed roster across the two teams and ignores the waiting list', async () => {
+    const wrapper = await mountClosedAsAdmin(registrationList());
+
+    await wrapper.find('.fill-teams-btn').trigger('click');
+
+    const [teamA, teamB] = wrapper.vm.match.Teams;
+    expect(teamA.Players.map(p => p.Name)).toEqual(['marco', 'gigi']);
+    expect(teamB.Players.map(p => p.Name)).toEqual(['luca']);
+    // 'nico' is on the waiting list and must not be placed.
+    expect(JSON.stringify(wrapper.vm.match.Teams)).not.toContain('nico');
+  });
+
+  it('saves nothing — it only marks the match dirty for the existing Save Changes', async () => {
+    const wrapper = await mountClosedAsAdmin(registrationList());
+
+    expect(wrapper.vm.hasUnsavedChanges()).toBe(false);
+    await wrapper.find('.fill-teams-btn').trigger('click');
+
+    expect(updateMatch).not.toHaveBeenCalled();
+    expect(wrapper.vm.hasUnsavedChanges()).toBe(true);
+  });
+
+  it('says in the confirmation that nothing is saved yet', async () => {
+    const wrapper = await mountClosedAsAdmin(registrationList());
+
+    await wrapper.find('.fill-teams-btn').trigger('click');
+
+    expect(wrapper.vm.messageType).toBe('success');
+    expect(wrapper.vm.message).toMatch(/nothing is saved yet/i);
+    expect(wrapper.vm.message).toMatch(/save changes/i);
+  });
+
+  // The copy has to be visible before the admin clicks, not only afterwards:
+  // the failure mode is an admin who fills the teams and walks away.
+  it('warns in the panel, before the click, that the split is not saved', async () => {
+    const wrapper = await mountClosedAsAdmin(registrationList());
+
+    const hint = wrapper.find('.fill-teams-hint');
+    expect(hint.exists()).toBe(true);
+    expect(hint.text()).toMatch(/nothing is saved/i);
+    // And it states the already-in-a-team policy, since that is the choice a
+    // reader cannot otherwise guess.
+    expect(hint.text()).toMatch(/already in a team/i);
+  });
+
+  it('leaves a player already in a team alone rather than duplicating them', async () => {
+    const match = scheduledMatch({ RegistrationsClosedAt: CLOSED });
+    match.Teams[1].Players = [{ ID: SOMEONE_ELSE, Name: 'marco', GoalNumber: 2 }];
+    const wrapper = await mountDetails({ match, registrations: registrationList(), isAdmin: true });
+
+    await wrapper.find('.fill-teams-btn').trigger('click');
+
+    const [teamA, teamB] = wrapper.vm.match.Teams;
+    const everyone = [...teamA.Players, ...teamB.Players].map(p => p.Name);
+    expect(everyone.filter(name => name === 'marco')).toHaveLength(1);
+    // Their goals survive, and the message accounts for them.
+    expect(teamB.Players[0].GoalNumber).toBe(2);
+    expect(wrapper.vm.message).toMatch(/1 already in a team was left where they are/i);
+  });
+
+  it('refuses with an error when nobody is on the confirmed list', async () => {
+    const wrapper = await mountClosedAsAdmin([
+      { PlayerID: 'p5', Name: 'nico', Position: 1, IsWaiting: true, RegisteredAt: OPENS_AT }
+    ]);
+
+    await wrapper.find('.fill-teams-btn').trigger('click');
+
+    expect(wrapper.vm.messageType).toBe('error');
+    expect(wrapper.vm.message).toMatch(/nothing to fill the teams with/i);
+    expect(wrapper.vm.hasUnsavedChanges()).toBe(false);
+  });
+
+  it('does nothing when called on a state that does not allow it, even directly', async () => {
+    // The button is hidden while sign-ups are open; the method must not be the
+    // weaker of the two checks.
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    wrapper.vm.fillTeamsFromSignups();
+
+    expect(wrapper.vm.match.Teams[0].Players).toHaveLength(0);
+    expect(wrapper.vm.hasUnsavedChanges()).toBe(false);
   });
 });
