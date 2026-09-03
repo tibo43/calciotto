@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"app/internal/handlers"
 	"app/internal/services"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/time/rate"
 )
 
 func main() {
@@ -166,13 +168,24 @@ func main() {
 	r.GET("/standings/scorers", authRequired, requireGroupMember, standingsHandler.GetScorers)
 	r.GET("/standings/seasons", authRequired, requireGroupMember, standingsHandler.GetSeasons)
 
-	// Auth
-	r.POST("/auth/signup", authHandler.Signup)
-	r.POST("/auth/login", authHandler.Login)
+	// Auth — all four are unauthenticated by necessity (a caller signing up or
+	// resetting a lost password has no token yet), which also makes them the
+	// only routes in this app an anonymous script can hit repeatedly for free.
+	// Each gets its own per-IP rate limiter (see ratelimit.go): bcrypt already
+	// slows down one guess against Login, but not a script making thousands: a
+	// generous burst absorbs a legitimate user mistyping their password a few
+	// times in a row, then throttles hard.
+	loginRateLimit := handlers.RateLimit(rate.Every(6*time.Second), 10)          // ~10/min, burst 10
+	signupRateLimit := handlers.RateLimit(rate.Every(12*time.Minute), 5)         // ~5/hour, burst 5
+	forgotPasswordRateLimit := handlers.RateLimit(rate.Every(12*time.Minute), 5) // ~5/hour, burst 5 — also caps Brevo email spend, see CLAUDE.md
+	resetPasswordRateLimit := handlers.RateLimit(rate.Every(3*time.Minute), 20)  // ~20/hour, burst 20 — tokens are unguessable 32-byte values, this is a courtesy cap, not the real defense
+
+	r.POST("/auth/signup", signupRateLimit, authHandler.Signup)
+	r.POST("/auth/login", loginRateLimit, authHandler.Login)
 	// Public like signup/login above: someone who forgot their password has by
 	// definition no token to authenticate the request with.
-	r.POST("/auth/forgot-password", authHandler.ForgotPassword)
-	r.POST("/auth/reset-password", authHandler.ResetPassword)
+	r.POST("/auth/forgot-password", forgotPasswordRateLimit, authHandler.ForgotPassword)
+	r.POST("/auth/reset-password", resetPasswordRateLimit, authHandler.ResetPassword)
 	// Add more routes as needed
 
 	// Liveness probe for the platform's healthcheck. It deliberately does NOT
