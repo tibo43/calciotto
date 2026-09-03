@@ -158,6 +158,20 @@ export default {
 /* App-specific styles that can't be moved to global */
 #app {
   position: relative;
+  /* `.dark-mode` toggles here, not on <body> — global-styles.css's `body {
+     color: var(--text-primary) }` resolves against :root's (light) value
+     since body is an ANCESTOR of #app and never sees the .dark-mode class,
+     then that already-resolved light colour is what plain CSS inheritance
+     hands down to every descendant. Most components never notice, because
+     they redeclare `color: var(--text-primary)` themselves — which
+     re-resolves the variable against the nearer #app.dark-mode scope and
+     picks up the dark value correctly. But anything that relies on plain
+     inheritance instead of setting its own `color` (e.g. MatchDetails.vue's
+     .signup-list-title) stays stuck showing light-mode text on a dark
+     background. Restating the same declaration here breaks the inherited
+     chain at the one point that actually sees the theme class, so every
+     un-styled descendant inherits the *correct* value from here instead. */
+  color: var(--text-primary);
 }
 
 /* Navigation Styles - Component-specific */
