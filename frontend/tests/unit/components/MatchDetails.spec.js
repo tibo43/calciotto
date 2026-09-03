@@ -324,6 +324,65 @@ describe('MatchDetails.vue admin close/reopen', () => {
   });
 });
 
+describe('MatchDetails.vue "Share on WhatsApp"', () => {
+  it('offers it to an admin while sign-ups are open', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    const link = wrapper.find('.whatsapp-share-btn');
+    expect(link.exists()).toBe(true);
+    expect(link.attributes('href')).toContain('https://wa.me/?text=');
+    expect(link.attributes('target')).toBe('_blank');
+  });
+
+  it('hides it from a non-admin', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: false
+    });
+
+    expect(wrapper.find('.whatsapp-share-btn').exists()).toBe(false);
+  });
+
+  it('hides it once sign-ups are closed — nothing left to invite people to', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' }),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    expect(wrapper.find('.whatsapp-share-btn').exists()).toBe(false);
+  });
+
+  it('hides it before sign-ups have opened yet', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: [],
+      isAdmin: true,
+      now: BEFORE_SIGNUPS
+    });
+
+    expect(wrapper.find('.whatsapp-share-btn').exists()).toBe(false);
+  });
+
+  it('includes the kick-off and the sign-up count in the shared message', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    const href = wrapper.find('.whatsapp-share-btn').attributes('href');
+    const text = decodeURIComponent(href.replace('https://wa.me/?text=', ''));
+    expect(text).toContain(wrapper.vm.kickoffLabel);
+    expect(text).toContain(wrapper.vm.signupCountLabel);
+  });
+});
+
 describe('MatchDetails.vue confirmed/waiting split', () => {
   it('splits the list on the server-sent IsWaiting, keeping each entry position', async () => {
     const wrapper = await mountDetails({
