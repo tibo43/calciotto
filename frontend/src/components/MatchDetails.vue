@@ -136,7 +136,7 @@
                  is "close sign-ups in order to compose the teams", and offering
                  this mid-registration would invite an admin to build teams from
                  a roster still changing under them. -->
-            <button v-if="canFillTeamsFromSignups" @click="fillTeamsFromSignups"
+            <button v-if="canFillTeamsFromSignups" @click="openComposeChoice"
               class="btn-base btn-cancel btn-small fill-teams-btn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -146,16 +146,6 @@
               Fill teams from sign-ups
             </button>
           </div>
-
-          <!-- The single most important sentence in this panel: this action
-               only fills the two team tabs below, and an admin who walks away
-               without pressing Save Changes loses the lot. -->
-          <p v-if="canFillTeamsFromSignups" class="fill-teams-hint">
-            Splits the {{ confirmedRegistrations.length }} confirmed
-            player{{ confirmedRegistrations.length === 1 ? '' : 's' }} across the two teams in sign-up order.
-            Anyone already in a team stays where they are. <strong>Nothing is saved</strong> — review the teams
-            below, then press "Save Changes".
-          </p>
 
           <div v-if="isLoadingRegistrations" class="signup-loading">
             <div class="loading-spinner-small"></div>
@@ -312,6 +302,61 @@
       </div>
     </div>
 
+    <!-- Compose-choice modal — "Fill teams from sign-ups" opens this rather
+         than acting immediately: there are now two ways to build the roster
+         from the sign-up list, and this is where an admin picks one. -->
+    <div v-if="showComposeChoiceModal" class="modal-overlay" @click="closeComposeChoiceModal">
+      <div class="modal-container compose-choice-modal" @click.stop>
+        <div class="modal-header">
+          <h3>Compose the teams</h3>
+          <button @click="closeComposeChoiceModal" class="modal-close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body compose-choice-body">
+          <!-- Hidden, not disabled, once nothing is left to auto-place —
+               see allConfirmedAlreadyPlaced. -->
+          <button v-if="!allConfirmedAlreadyPlaced" @click="chooseAutoFill" class="compose-choice-option compose-choice-auto">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="compose-choice-icon">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <polyline points="16,11 18,13 22,9" />
+            </svg>
+            <span class="compose-choice-text">
+              <strong>Auto-split</strong>
+              <!-- The single most important sentence in this option: it only
+                   fills the two team tabs below, and an admin who walks away
+                   without pressing Save Changes loses the lot. -->
+              <span>
+                Splits the {{ confirmedRegistrations.length }} confirmed
+                player{{ confirmedRegistrations.length === 1 ? '' : 's' }} across the two teams in sign-up order.
+                Anyone already in a team stays where they are. Nothing is saved — review the teams below, then press
+                "Save Changes".
+              </span>
+            </span>
+          </button>
+
+          <button @click="chooseManual" class="compose-choice-option compose-choice-manual">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="compose-choice-icon">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M16 12l-4-4-4 4" />
+              <path d="M16 16l-4-4-4 4" />
+            </svg>
+            <span class="compose-choice-text">
+              <strong>Build manually</strong>
+              <span>
+                Pick players yourself. Sign-ups appear first — confirmed before waiting — the rest of the group is
+                still one search away.
+              </span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Enhanced Multi-Player Modal -->
     <div v-if="showAddPlayerModal" class="modal-overlay" @click="closeModal">
       <div class="enhanced-multi-player-modal" @click.stop>
@@ -438,6 +483,12 @@
                     :disabled="isPlayerSelected(player) || isPlayerInAnyTeam(player.Name)">
                     <div class="player-info">
                       <span class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</span>
+                      <!-- Only present for a scheduled match with no search
+                           term active — see tierCandidatesBySignup. -->
+                      <span v-if="player.registrationBadge" class="registration-badge"
+                        :class="{ waiting: player.registrationBadge.waiting }">
+                        #{{ player.registrationBadge.position }}{{ player.registrationBadge.waiting ? ' waiting' : '' }}
+                      </span>
                     </div>
                     <div class="player-status">
                       <span v-if="isPlayerSelected(player)" class="status-selected">
@@ -579,6 +630,9 @@ export default {
       isAdmin: false,
       activeTeam: 0,
       showAddPlayerModal: false,
+      // "Fill teams from sign-ups" opens this chooser rather than acting
+      // immediately — see canFillTeamsFromSignups/allConfirmedAlreadyPlaced.
+      showComposeChoiceModal: false,
       message: '',
       messageType: 'success',
       // New properties for player dropdown
@@ -742,27 +796,32 @@ export default {
     // (closed-at-kickoff), the two states registrationsAreOpen() rejects. The
     // roster is composed when it is final, which is the flow the product
     // described: an admin closes sign-ups *in order to* pick the teams.
+    // Gates the button that opens the compose-choice modal (Auto-split vs
+    // Build manually), not either action itself — the button stays offered
+    // even once every confirmed sign-up already has a team, because "build
+    // manually" (add a late substitute, reassign someone from the waiting
+    // list, etc.) is still meaningful then. allConfirmedAlreadyPlaced instead
+    // gates only the Auto-split *option* inside the modal — see there.
     canFillTeamsFromSignups() {
       return this.isScheduled
         && this.isAdmin
         && !this.isLoadingRegistrations
         && (this.registrationState === REGISTRATION_CLOSED_BY_ADMIN
-          || this.registrationState === REGISTRATION_CLOSED_AT_KICKOFF)
-        && !this.allConfirmedAlreadyPlaced;
+          || this.registrationState === REGISTRATION_CLOSED_AT_KICKOFF);
     },
 
-    // True once every confirmed sign-up already has a team — offering "Fill
-    // teams from sign-ups" again at that point would promise composition work
-    // there's none left to do (clicking it would be a same-state no-op).
-    // Reuses fillTeamsFromRegistrations itself — the exact function the
-    // button's own click handler calls — rather than re-deriving "already
-    // placed" a second way that could quietly drift from it.
+    // True once every confirmed sign-up already has a team — offering
+    // Auto-split at that point would promise composition work there's none
+    // left to do (running it would be a same-state no-op). Reuses
+    // fillTeamsFromRegistrations itself — the exact function Auto-split
+    // calls — rather than re-deriving "already placed" a second way that
+    // could quietly drift from it.
     //
     // Deliberately narrower than "nothing to fill": an empty confirmed list
-    // returns false here on purpose, leaving the button reachable and
+    // returns false here on purpose, leaving Auto-split offered and
     // fillTeamsFromSignups()'s own "nothing to fill the teams with" error
     // message intact — an admin who closed sign-ups on an empty list should
-    // find out why clicking does nothing, not have the button vanish with no
+    // find out why clicking does nothing, not have the option vanish with no
     // explanation.
     allConfirmedAlreadyPlaced() {
       if (this.confirmedRegistrations.length === 0) return false;
@@ -944,6 +1003,37 @@ export default {
     // away. That also means the split can be corrected by hand before anything
     // is written — the whole point, since this is a mechanical split and not a
     // balanced one.
+    // The "Fill teams from sign-ups" button's own click target: offers a
+    // choice rather than acting immediately, since there are now two ways to
+    // compose the roster from the sign-up list — see the modal below.
+    openComposeChoice() {
+      if (!this.canFillTeamsFromSignups) return;
+      this.showComposeChoiceModal = true;
+    },
+
+    closeComposeChoiceModal() {
+      this.showComposeChoiceModal = false;
+    },
+
+    chooseAutoFill() {
+      this.showComposeChoiceModal = false;
+      this.fillTeamsFromSignups();
+    },
+
+    // Opens the existing Add Player modal — the same one the per-team "+"
+    // icon opens once a roster exists — which is what makes this the bridge
+    // across the one gap that icon can't reach on its own: before any player
+    // has been placed, .team-management (and its "+" icon) stays hidden by
+    // showTeamRoster, but this button lives in .signup-actions, a sibling
+    // that's never behind that gate. filterAvailablePlayers() is what makes
+    // the modal itself worth opening here rather than at the icon alone: for
+    // a scheduled match it always tiers sign-ups first, regardless of which
+    // of the two entry points opened it.
+    async chooseManual() {
+      this.showComposeChoiceModal = false;
+      await this.showModal();
+    },
+
     fillTeamsFromSignups() {
       if (!this.canFillTeamsFromSignups) return;
       if (!this.match || !this.match.Teams || this.match.Teams.length < 2) return;
@@ -1011,18 +1101,59 @@ export default {
       const currentTeamPlayers = this.match.Teams[this.activeTeam].Players || [];
       const currentTeamPlayerNames = currentTeamPlayers.map(p => p.Name.toLowerCase());
 
-      let availablePlayers = this.allPlayers.filter(player =>
+      const candidates = this.allPlayers.filter(player =>
         player && player.Name && !currentTeamPlayerNames.includes(player.Name.toLowerCase())
       );
 
-      if (this.playerSearchTerm && this.playerSearchTerm.trim()) {
-        availablePlayers = availablePlayers.filter(player =>
-          player.Name.toLowerCase().includes(this.playerSearchTerm.toLowerCase().trim())
+      const searchTerm = this.playerSearchTerm && this.playerSearchTerm.trim().toLowerCase();
+
+      // Once there's something to search for, it searches the whole group —
+      // sign-up or not. Tiering only shapes the *default*, empty-search view.
+      if (searchTerm) {
+        this.filteredAvailablePlayers = candidates.filter(player =>
+          player.Name.toLowerCase().includes(searchTerm)
         );
+        this.checkCreatePlayerOption();
+        return;
       }
 
-      this.filteredAvailablePlayers = availablePlayers;
+      this.filteredAvailablePlayers = this.isScheduled
+        ? this.tierCandidatesBySignup(candidates)
+        : candidates;
       this.checkCreatePlayerOption();
+    },
+
+    // For a scheduled match, with no search term: confirmed sign-ups first
+    // (in Position order), then the waiting list, and the rest of the group
+    // left out of this default view entirely — reachable the moment a search
+    // term narrows the list above. The people most likely to actually play
+    // are what an admin composing by hand wants in front of them; a group
+    // that outgrew its regular sign-ups would otherwise bury them in a list
+    // of everyone who's ever joined.
+    //
+    // registrationBadge carries just enough for the template to render a
+    // marker (`#<position>`, muted when waiting) without it re-deriving
+    // anything position-related itself — that stays server-derived, same
+    // rule as everywhere else this feature touches Position/IsWaiting.
+    tierCandidatesBySignup(candidates) {
+      const byId = new Map(candidates.map(player => [player.ID, player]));
+      const tiered = [];
+      const placed = new Set();
+
+      const addTier = (entries, waiting) => {
+        entries.forEach(entry => {
+          const player = byId.get(entry.PlayerID);
+          if (player && !placed.has(player.ID)) {
+            tiered.push({ ...player, registrationBadge: { position: entry.Position, waiting } });
+            placed.add(player.ID);
+          }
+        });
+      };
+
+      addTier(this.confirmedRegistrations, false);
+      addTier(this.waitingRegistrations, true);
+
+      return tiered;
     },
 
     // Check if we should show the create player option
@@ -2066,6 +2197,59 @@ export default {
   text-align: center;
 }
 
+/* Compose-choice modal — .modal-overlay/.modal-container/.modal-header/
+   .modal-close all come from global-styles.css; only the two option cards
+   are specific to this modal. */
+.compose-choice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.compose-choice-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1rem;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-fast);
+  width: 100%;
+}
+
+.compose-choice-option:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--primary-color);
+}
+
+.compose-choice-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: var(--primary-color);
+  margin-top: 0.15rem;
+}
+
+.compose-choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.compose-choice-text strong {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.compose-choice-text span {
+  color: var(--text-secondary);
+  font-size: 0.825rem;
+  line-height: 1.5;
+}
+
 /* Enhanced Multi-Player Modal */
 .enhanced-multi-player-modal {
   background-color: var(--bg-primary);
@@ -2333,6 +2517,26 @@ export default {
 
 .status-selected {
   color: var(--primary-color);
+}
+
+/* Same pill language as .count-badge/.signup-position elsewhere in this
+   file — confirmed reads as the "normal" state (primary colour), waiting
+   stays deliberately muted, same reasoning as .signup-list-waiting. */
+.registration-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background-color: var(--primary-color);
+  color: white;
+  vertical-align: middle;
+}
+
+.registration-badge.waiting {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
 .status-in-match {

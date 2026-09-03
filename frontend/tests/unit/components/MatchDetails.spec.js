@@ -8,6 +8,7 @@ import {
   unregisterFromMatch,
   closeMatchRegistrations,
   reopenMatchRegistrations,
+  getGroupMembers,
   getToken
 } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
@@ -530,9 +531,15 @@ describe('MatchDetails.vue "Fill teams from sign-ups" gating', () => {
     expect(wrapper.find('.fill-teams-btn').exists()).toBe(false);
   });
 
+  // "Fill teams from sign-ups" opens a chooser (Auto-split vs Build
+  // manually) rather than acting immediately — see the describe block below.
+  // The button itself stays offered regardless of composition state, since
+  // "build manually" is meaningful even once everyone confirmed is already
+  // placed; what changes is which option the chooser offers.
+  //
   // registrationList()'s 3 confirmed entries are marco (SOMEONE_ELSE), luca
   // (p3) and gigi (p4) — see the fixture above.
-  it('hides it once every confirmed sign-up already has a team', async () => {
+  it('hides only the Auto-split option once every confirmed sign-up already has a team', async () => {
     const match = scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' });
     match.Teams[0].Players = [
       { ID: SOMEONE_ELSE, Name: 'marco', GoalNumber: 0 },
@@ -541,33 +548,39 @@ describe('MatchDetails.vue "Fill teams from sign-ups" gating', () => {
     match.Teams[1].Players = [{ ID: 'p4', Name: 'gigi', GoalNumber: 0 }];
     const wrapper = await mountDetails({ match, registrations: registrationList(), isAdmin: true });
 
-    expect(wrapper.find('.fill-teams-btn').exists()).toBe(false);
-    expect(wrapper.find('.fill-teams-hint').exists()).toBe(false);
+    expect(wrapper.find('.fill-teams-btn').exists()).toBe(true);
+    await wrapper.find('.fill-teams-btn').trigger('click');
+
+    expect(wrapper.find('.compose-choice-auto').exists()).toBe(false);
+    expect(wrapper.find('.compose-choice-manual').exists()).toBe(true);
   });
 
-  it('still offers it while at least one confirmed sign-up has no team yet', async () => {
+  it('offers both options while at least one confirmed sign-up has no team yet', async () => {
     const match = scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' });
     // Only marco placed — luca and gigi are still unplaced.
     match.Teams[0].Players = [{ ID: SOMEONE_ELSE, Name: 'marco', GoalNumber: 0 }];
     const wrapper = await mountDetails({ match, registrations: registrationList(), isAdmin: true });
+    await wrapper.find('.fill-teams-btn').trigger('click');
 
-    expect(wrapper.find('.fill-teams-btn').exists()).toBe(true);
+    expect(wrapper.find('.compose-choice-auto').exists()).toBe(true);
+    expect(wrapper.find('.compose-choice-manual').exists()).toBe(true);
   });
 
-  // The empty-confirmed-list case is deliberately left alone: hiding the
-  // button there too would leave an admin who closed an empty sign-up list
-  // with no explanation for why nothing happens. See the "refuses with an
-  // error when nobody is on the confirmed list" case below, which still
-  // exercises the button being clickable in that state.
-  it('still offers it when the confirmed list is empty, unlike the all-placed case', async () => {
+  // The empty-confirmed-list case is deliberately left alone: hiding
+  // Auto-split there too would leave an admin who closed an empty sign-up
+  // list with no explanation for why choosing it does nothing. See "refuses
+  // with an error when nobody is on the confirmed list" below, which still
+  // exercises Auto-split being chosen in that state.
+  it('still offers Auto-split when the confirmed list is empty, unlike the all-placed case', async () => {
     const match = scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' });
     const wrapper = await mountDetails({
       match,
       registrations: [{ PlayerID: 'p5', Name: 'nico', Position: 1, IsWaiting: true, RegisteredAt: OPENS_AT }],
       isAdmin: true
     });
+    await wrapper.find('.fill-teams-btn').trigger('click');
 
-    expect(wrapper.find('.fill-teams-btn').exists()).toBe(true);
+    expect(wrapper.find('.compose-choice-auto').exists()).toBe(true);
   });
 });
 
@@ -580,10 +593,18 @@ describe('MatchDetails.vue "Fill teams from sign-ups" behaviour', () => {
     isAdmin: true
   });
 
+  // "Fill teams from sign-ups" now opens the compose-choice modal rather than
+  // acting immediately — this is the two-click path every case below drives
+  // through to reach the same auto-split behaviour the old single click did.
+  const clickAutoFill = async (wrapper) => {
+    await wrapper.find('.fill-teams-btn').trigger('click');
+    await wrapper.find('.compose-choice-auto').trigger('click');
+  };
+
   it('alternates the confirmed roster across the two teams and ignores the waiting list', async () => {
     const wrapper = await mountClosedAsAdmin(registrationList());
 
-    await wrapper.find('.fill-teams-btn').trigger('click');
+    await clickAutoFill(wrapper);
 
     const [teamA, teamB] = wrapper.vm.match.Teams;
     expect(teamA.Players.map(p => p.Name)).toEqual(['marco', 'gigi']);
@@ -596,7 +617,7 @@ describe('MatchDetails.vue "Fill teams from sign-ups" behaviour', () => {
     const wrapper = await mountClosedAsAdmin(registrationList());
 
     expect(wrapper.vm.hasUnsavedChanges()).toBe(false);
-    await wrapper.find('.fill-teams-btn').trigger('click');
+    await clickAutoFill(wrapper);
 
     expect(updateMatch).not.toHaveBeenCalled();
     expect(wrapper.vm.hasUnsavedChanges()).toBe(true);
@@ -605,24 +626,25 @@ describe('MatchDetails.vue "Fill teams from sign-ups" behaviour', () => {
   it('says in the confirmation that nothing is saved yet', async () => {
     const wrapper = await mountClosedAsAdmin(registrationList());
 
-    await wrapper.find('.fill-teams-btn').trigger('click');
+    await clickAutoFill(wrapper);
 
     expect(wrapper.vm.messageType).toBe('success');
     expect(wrapper.vm.message).toMatch(/nothing is saved yet/i);
     expect(wrapper.vm.message).toMatch(/save changes/i);
   });
 
-  // The copy has to be visible before the admin clicks, not only afterwards:
+  // The copy has to be visible before the admin commits, not only afterwards:
   // the failure mode is an admin who fills the teams and walks away.
-  it('warns in the panel, before the click, that the split is not saved', async () => {
+  it('warns in the Auto-split option, before it is chosen, that the split is not saved', async () => {
     const wrapper = await mountClosedAsAdmin(registrationList());
+    await wrapper.find('.fill-teams-btn').trigger('click');
 
-    const hint = wrapper.find('.fill-teams-hint');
-    expect(hint.exists()).toBe(true);
-    expect(hint.text()).toMatch(/nothing is saved/i);
+    const option = wrapper.find('.compose-choice-auto');
+    expect(option.exists()).toBe(true);
+    expect(option.text()).toMatch(/nothing is saved/i);
     // And it states the already-in-a-team policy, since that is the choice a
     // reader cannot otherwise guess.
-    expect(hint.text()).toMatch(/already in a team/i);
+    expect(option.text()).toMatch(/already in a team/i);
   });
 
   it('leaves a player already in a team alone rather than duplicating them', async () => {
@@ -630,7 +652,7 @@ describe('MatchDetails.vue "Fill teams from sign-ups" behaviour', () => {
     match.Teams[1].Players = [{ ID: SOMEONE_ELSE, Name: 'marco', GoalNumber: 2 }];
     const wrapper = await mountDetails({ match, registrations: registrationList(), isAdmin: true });
 
-    await wrapper.find('.fill-teams-btn').trigger('click');
+    await clickAutoFill(wrapper);
 
     const [teamA, teamB] = wrapper.vm.match.Teams;
     const everyone = [...teamA.Players, ...teamB.Players].map(p => p.Name);
@@ -645,7 +667,7 @@ describe('MatchDetails.vue "Fill teams from sign-ups" behaviour', () => {
       { PlayerID: 'p5', Name: 'nico', Position: 1, IsWaiting: true, RegisteredAt: OPENS_AT }
     ]);
 
-    await wrapper.find('.fill-teams-btn').trigger('click');
+    await clickAutoFill(wrapper);
 
     expect(wrapper.vm.messageType).toBe('error');
     expect(wrapper.vm.message).toMatch(/nothing to fill the teams with/i);
@@ -794,5 +816,142 @@ describe('MatchDetails.vue match-status badge', () => {
     const wrapper2 = await mountDetails({ match: noGoals });
 
     expect(wrapper2.find('.match-status-badge').classes()).toContain('upcoming');
+  });
+});
+
+// "Fill teams from sign-ups" opens a choice between two ways to compose the
+// roster from the sign-up list, rather than acting immediately.
+describe('MatchDetails.vue compose-choice modal', () => {
+  it('opens on click, with both options offered by default', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' }),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    expect(wrapper.find('.compose-choice-modal').exists()).toBe(false);
+    await wrapper.find('.fill-teams-btn').trigger('click');
+
+    expect(wrapper.find('.compose-choice-modal').exists()).toBe(true);
+    expect(wrapper.find('.compose-choice-auto').exists()).toBe(true);
+    expect(wrapper.find('.compose-choice-manual').exists()).toBe(true);
+  });
+
+  it('closes without choosing anything via the close button', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' }),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+    await wrapper.find('.fill-teams-btn').trigger('click');
+
+    await wrapper.find('.compose-choice-modal .modal-close').trigger('click');
+
+    expect(wrapper.find('.compose-choice-modal').exists()).toBe(false);
+    expect(wrapper.vm.match.Teams[0].Players).toHaveLength(0);
+  });
+
+  it('"Build manually" closes the chooser and opens the Add Player modal', async () => {
+    getGroupMembers.mockResolvedValue([
+      { id: SOMEONE_ELSE, name: 'marco', role: 'member' }
+    ]);
+    const wrapper = await mountDetails({
+      match: scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' }),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+    await wrapper.find('.fill-teams-btn').trigger('click');
+
+    await wrapper.find('.compose-choice-manual').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.compose-choice-modal').exists()).toBe(false);
+    expect(wrapper.find('.enhanced-multi-player-modal').exists()).toBe(true);
+    expect(getGroupMembers).toHaveBeenCalledWith('group-uuid');
+  });
+});
+
+// The gap "Build manually" bridges: before this feature, Add Player (and the
+// tabs it lives next to) stayed hidden by showTeamRoster until composition
+// had already started somehow — there was no way to reach the very first
+// player by hand on a freshly scheduled match. This describe block also
+// covers the pre-existing "+" icon once a roster exists, since
+// filterAvailablePlayers() drives both the same way.
+describe('MatchDetails.vue Add Player list tiers sign-ups first', () => {
+  // marco/luca/gigi confirmed (Position 1-3), nico waiting (Position 4) —
+  // see registrationList(). 'unrelated' is a group member who never signed
+  // up for this match at all.
+  const groupMembers = () => [
+    { id: SOMEONE_ELSE, name: 'marco', role: 'member' },
+    { id: 'p3', name: 'luca', role: 'member' },
+    { id: 'p4', name: 'gigi', role: 'member' },
+    { id: 'p5', name: 'nico', role: 'member' },
+    { id: 'p6', name: 'unrelated', role: 'member' }
+  ];
+
+  const openManually = async (match, registrations = registrationList()) => {
+    getGroupMembers.mockResolvedValue(groupMembers());
+    const wrapper = await mountDetails({ match, registrations, isAdmin: true });
+    await wrapper.find('.fill-teams-btn').trigger('click');
+    await wrapper.find('.compose-choice-manual').trigger('click');
+    await flushPromises();
+    return wrapper;
+  };
+
+  it('lists confirmed sign-ups first, in Position order, before the waiting list', async () => {
+    const wrapper = await openManually(scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' }));
+
+    // formatPlayerNameForDisplay title-cases every name shown here.
+    const names = wrapper.findAll('.available-player-item .player-name').map(n => n.text());
+    expect(names).toEqual(['Marco', 'Luca', 'Gigi', 'Nico']);
+  });
+
+  it('leaves the rest of the group out of the default view entirely', async () => {
+    const wrapper = await openManually(scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' }));
+
+    const names = wrapper.findAll('.available-player-item .player-name').map(n => n.text());
+    expect(names).not.toContain('unrelated');
+  });
+
+  it('badges confirmed and waiting differently, with their sign-up position', async () => {
+    const wrapper = await openManually(scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' }));
+
+    const items = wrapper.findAll('.available-player-item');
+    const marco = items.find(item => item.text().includes('Marco'));
+    const nico = items.find(item => item.text().includes('Nico'));
+
+    expect(marco.find('.registration-badge').text()).toBe('#1');
+    expect(marco.find('.registration-badge').classes()).not.toContain('waiting');
+    expect(nico.find('.registration-badge').text()).toBe('#4 waiting');
+    expect(nico.find('.registration-badge').classes()).toContain('waiting');
+  });
+
+  // onPlayerSearch debounces filterAvailablePlayers by 300ms (a real
+  // setTimeout) — calling the filter directly is what the debounce is
+  // shorthand for, once the input's own value has actually changed.
+  it('reaches an unregistered group member the moment a search term matches them', async () => {
+    const wrapper = await openManually(scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' }));
+
+    await wrapper.find('#playerSearch').setValue('unrel');
+    wrapper.vm.filterAvailablePlayers();
+    await wrapper.vm.$nextTick();
+
+    const names = wrapper.findAll('.available-player-item .player-name').map(n => n.text());
+    expect(names).toEqual(['Unrelated']);
+  });
+
+  it('leaves an unscheduled match on the plain, untiered group list', async () => {
+    // Fill teams from sign-ups (and its chooser) only exist for a scheduled
+    // match — the pre-existing "+" icon is the only trigger here, matching
+    // how an ordinary match has always reached this modal.
+    getGroupMembers.mockResolvedValue(groupMembers());
+    const wrapper = await mountDetails({ match: unscheduledMatch(), registrations: [], isAdmin: true });
+    await wrapper.find('.add-player-icon-btn').trigger('click');
+    await flushPromises();
+
+    const names = wrapper.findAll('.available-player-item .player-name').map(n => n.text());
+    // allPlayers' own order, not sign-up order — and no badges anywhere.
+    expect(names).toEqual(['Marco', 'Luca', 'Gigi', 'Nico', 'Unrelated']);
+    expect(wrapper.find('.registration-badge').exists()).toBe(false);
   });
 });
