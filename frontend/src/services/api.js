@@ -116,9 +116,29 @@ export const getMatchDetailsByID = async (matchId, groupId) => {
 // tag is `json:"group_id"`, and Go's case-insensitive fallback does not see
 // past the underscore — a `GroupID` key would silently bind to nothing and
 // the match would land in the player's first group instead.
-export const createMatch = async (matchData, groupId) => {
+//
+// `scheduling` is optional and, when given, must be complete: the backend
+// treats scheduled_at/registration_opens_at/max_players as all-or-nothing and
+// 400s on one or two of the three. Omitting it entirely creates an ordinary
+// match, exactly as before — the payload is then byte-identical to the
+// unscheduled one, since nothing is spread in.
+//
+// The two timestamps must be RFC3339 carrying the browser's own UTC offset
+// (see services/datetime.js): the backend derives the match's `date` from
+// scheduled_at's calendar day in the offset it was sent in, so a `Z`-suffixed
+// value would file a late-evening kick-off under the wrong day. `date` is only
+// read for an unscheduled match.
+export const createMatch = async (matchData, groupId, scheduling) => {
   try {
-    const payload = groupId ? { ...matchData, group_id: groupId } : matchData;
+    let payload = groupId ? { ...matchData, group_id: groupId } : matchData;
+    if (scheduling) {
+      payload = {
+        ...payload,
+        scheduled_at: scheduling.scheduledAt,
+        registration_opens_at: scheduling.registrationOpensAt,
+        max_players: scheduling.maxPlayers,
+      };
+    }
     const response = await api.post(`/matches`, payload);
     if (response.status !== 200) {
       throw new Error('Failed to create match');
@@ -162,17 +182,97 @@ export const deleteMatch = async (matchId, groupId) => {
   }
 };
 
-// Alternative: PATCH for partial updates (if your API supports it)
-export const updateMatchPartial = async (matchId, updates) => {
-  try {
-    const response = await api.patch(`/matches/${matchId}`, updates);
-    if (response.status !== 200) {
-      throw new Error('Failed to update match');
-    }
+// Sign-ups on a scheduled match.
+//
+// None of these five takes a group_id, unlike every other match call above:
+// the backend resolves the group from the match named in the path and
+// authorizes against *that* (requireGroupMemberByMatchID /
+// requireGroupAdminByMatchID in main.go). Passing one would be the hole that
+// design closes — a caller could name a match in group A while presenting a
+// group B they happen to belong to.
+//
+// A non-member gets 404, not 403, so this API surface never confirms that a
+// match id exists to someone with no business knowing.
 
+// Signs the *caller* up — the player comes from the JWT, which is why there is
+// no body and no player argument.
+//
+// Reaching MaxPlayers is not an error: the surplus sign-up succeeds with
+// IsWaiting true. The resolved entry
+// ({ PlayerID, Name, Position, IsWaiting, RegisteredAt }) is therefore the
+// only place the caller learns "you are #17, on the waiting list", so callers
+// must read it rather than assume a flat success.
+export const registerForMatch = async (matchId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/registrations`);
+    if (response.status !== 200) {
+      throw new Error('Failed to sign up for the match');
+    }
     return response.data;
   } catch (error) {
-    console.error('Error updating match:', error);
+    console.error('Error signing up for match:', error);
+    throw error;
+  }
+};
+
+// Withdraws the caller's own sign-up. Gated on the same window as signing up:
+// once an admin has closed the list (or kick-off has passed) this returns 409
+// too, which is why the UI hides the button rather than letting it fail.
+export const unregisterFromMatch = async (matchId) => {
+  try {
+    const response = await api.delete(`/matches/${matchId}/registrations`);
+    if (response.status !== 200) {
+      throw new Error('Failed to withdraw from the match');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error withdrawing from match:', error);
+    throw error;
+  }
+};
+
+// The ordered list, `[]` when empty. Position is 1-based and contiguous, and
+// IsWaiting is server-derived: the first MaxPlayers entries are the confirmed
+// roster. Never recompute that split from MaxPlayers on this side — the two
+// would disagree the moment an admin changes the cap.
+export const getMatchRegistrations = async (matchId) => {
+  try {
+    const response = await api.get(`/matches/${matchId}/registrations`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch match registrations');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching match registrations:', error);
+    throw error;
+  }
+};
+
+// Admin-only: freezes the roster so the teams can be composed.
+export const closeMatchRegistrations = async (matchId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/registrations/close`);
+    if (response.status !== 200) {
+      throw new Error('Failed to close sign-ups');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error closing match sign-ups:', error);
+    throw error;
+  }
+};
+
+// Admin-only: undoes a mis-clicked close. It only clears the closed flag — it
+// cannot bring back a list that kick-off has already closed.
+export const reopenMatchRegistrations = async (matchId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/registrations/reopen`);
+    if (response.status !== 200) {
+      throw new Error('Failed to reopen sign-ups');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error reopening match sign-ups:', error);
     throw error;
   }
 };
@@ -191,33 +291,6 @@ export const createPlayer = async (playerData) => {
     throw error;
   }
 };
-
-// Existing function (referenced in PlayersAll.vue)
-export const getPlayers = async () => {
-  try {
-    const response = await api.get(`/players`);
-    if (response.status !== 200) {
-      throw new Error('Failed to fetch players');
-    }
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching players:', error);
-    throw error;
-  }
-};
-
-export async function searchPlayerByName(playerName) {
-  try {
-    const response = await api.get(`/players/search?name=${encodeURIComponent(playerName)}`);
-    if (response.status !== 200) {
-      throw new Error('Player search failed');
-    }
-    return response.data;
-  } catch (error) {
-    console.error('Error searching for player:', error);
-    throw error;
-  }
-}
 
 // Standings
 export const getPointsStandings = async (season, groupId) => {

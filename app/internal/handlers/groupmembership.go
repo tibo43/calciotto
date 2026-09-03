@@ -81,6 +81,24 @@ func playerIDFromContext(c *gin.Context) (uuid.UUID, bool) {
 	return id, ok
 }
 
+// authorizedGroupIDFromContext reads back the group a match-scoped middleware
+// already authorized the caller against (see matchscope.go for why they
+// publish it). A handler on such a route must use *this* group and never
+// resolve one of its own: resolving independently is how an admin of group A
+// ends up acting on a match in group B.
+//
+// ok=false means the route was wired without one of those middlewares, which
+// is a programming error rather than a client one — hence the 500 its callers
+// answer with.
+func authorizedGroupIDFromContext(c *gin.Context) (uuid.UUID, bool) {
+	val, exists := c.Get(authorizedGroupIDKey)
+	if !exists {
+		return uuid.Nil, false
+	}
+	id, ok := val.(uuid.UUID)
+	return id, ok
+}
+
 // resolveGroupIDForMembership mirrors resolveGroupID's query-param-or-own-group
 // fallback, but also checks the JSON body in between — needed because
 // POST /matches and PUT /matches/:id carry group_id in the body, not the

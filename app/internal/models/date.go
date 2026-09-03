@@ -53,6 +53,24 @@ func (d Date) Before(other Date) bool {
 	return time.Time(d).Before(time.Time(other))
 }
 
+// DateOf returns the calendar day t falls on, in t's *own* location. That
+// last part is the whole point: MatchService.CreateMatch derives a scheduled
+// match's Date from its kick-off timestamp, and the kick-off must stay on the
+// day the client meant. Normalizing to UTC first would shift it onto the
+// adjacent day whenever the kick-off is within the zone's offset of midnight,
+// in either direction: 00:30 in Paris is 22:30Z on the day *before*, and 21:00
+// in New York is 01:00Z on the day *after*. The result is midnight UTC on the
+// chosen day, which is what the SQL `date` column stores unambiguously (see
+// Value).
+//
+// Only the stored day goes through here. Displaying a kick-off is a separate
+// question and deliberately answered elsewhere: the frontend renders
+// ScheduledAt in the *viewer's* zone (services/datetime.js), since a kick-off
+// is one instant and a player elsewhere wants to know when it happens for them.
+func DateOf(t time.Time) Date {
+	return Date(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC))
+}
+
 // SeasonOf returns the label of the season d belongs to, e.g. "2025-2026".
 // A season starts on September 1st: a date from September onwards belongs to
 // the season starting that same year, an earlier one to the season that

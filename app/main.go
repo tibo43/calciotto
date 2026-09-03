@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"app/internal/handlers"
 	"app/internal/services"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/time/rate"
 )
 
 func main() {
@@ -48,7 +50,9 @@ func main() {
 	playerHandler := handlers.NewPlayerHandler(services.NewPlayerService(db), groupService, groupMembershipService)
 	groupHandler := handlers.NewGroupHandler(groupService, groupMembershipService, authService)
 	teamHandler := handlers.NewTeamHandler(services.NewTeamService(db))
-	matchHandler := handlers.NewMatchHandler(services.NewMatchService(db), groupMembershipService)
+	matchService := services.NewMatchService(db)
+	matchHandler := handlers.NewMatchHandler(matchService, groupMembershipService)
+	matchRegistrationHandler := handlers.NewMatchRegistrationHandler(services.NewMatchRegistrationService(db))
 	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(db, groupMembershipService), groupMembershipService)
 	authHandler := handlers.NewAuthHandler(authService)
 
@@ -58,6 +62,11 @@ func main() {
 	requireGroupMemberByPathID := handlers.RequireGroupMembershipByPathParam(groupMembershipService, "id")
 	requireGroupAdmin := handlers.RequireGroupAdmin(groupMembershipService)
 	requireGroupAdminByPathID := handlers.RequireGroupAdminByPathParam(groupMembershipService, "id")
+	// The /matches/:id/registrations routes name a *match*, not a group, so
+	// they need the pair that derives the group from the match rather than
+	// trusting a group id the caller supplies (see matchscope.go).
+	requireGroupMemberByMatchID := handlers.RequireGroupMembershipByMatchPathParam(matchService, groupMembershipService, "id")
+	requireGroupAdminByMatchID := handlers.RequireGroupAdminByMatchPathParam(matchService, groupMembershipService, "id")
 
 	// Setup routes
 	// Players — creating a player ("ghost" roster entry, e.g. from
@@ -66,8 +75,6 @@ func main() {
 	// travels in the JSON body, so this reuses the body/query-resolving
 	// requireGroupAdmin rather than a path-param variant. See CLAUDE.md.
 	r.POST("/players", authRequired, requireGroupAdmin, playerHandler.CreatePlayer)
-	r.GET("/players", playerHandler.GetPlayers)
-	r.GET("/players/search", playerHandler.SearchPlayer)
 	// Cross-group profile of the caller themselves: authRequired only, with no
 	// requireGroupMember — there is no single group_id to authorize against
 	// here, and the handler only ever reports on the groups the JWT's own
@@ -137,18 +144,46 @@ func main() {
 	// does in the handler itself.
 	r.DELETE("/matches/:id", authRequired, requireGroupAdmin, matchHandler.DeleteMatch)
 
+	// Sign-ups for a scheduled match. All five are gated by the match-scoped
+	// middlewares: the path carries a match id, so the group is derived from
+	// the match itself — a member of another group gets 404, not 403, so match
+	// ids stay unenumerable (see matchscope.go).
+	//
+	// Signing up, withdrawing and reading the list are open to any member: the
+	// player always comes from the JWT, so a member can only ever add or remove
+	// *themselves*. The DELETE has no /me suffix for that reason — there is no
+	// other sign-up it could target.
+	r.POST("/matches/:id/registrations", authRequired, requireGroupMemberByMatchID, matchRegistrationHandler.Register)
+	r.DELETE("/matches/:id/registrations", authRequired, requireGroupMemberByMatchID, matchRegistrationHandler.Unregister)
+	r.GET("/matches/:id/registrations", authRequired, requireGroupMemberByMatchID, matchRegistrationHandler.ListRegistrations)
+	// Freezing the roster (in order to compose the teams) and undoing a
+	// mis-clicked close are admin actions, like every other write on a match.
+	r.POST("/matches/:id/registrations/close", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.CloseRegistrations)
+	r.POST("/matches/:id/registrations/reopen", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.ReopenRegistrations)
+
 	// Standings
 	r.GET("/standings/points", authRequired, requireGroupMember, standingsHandler.GetPointsStandings)
 	r.GET("/standings/scorers", authRequired, requireGroupMember, standingsHandler.GetScorers)
 	r.GET("/standings/seasons", authRequired, requireGroupMember, standingsHandler.GetSeasons)
 
-	// Auth
-	r.POST("/auth/signup", authHandler.Signup)
-	r.POST("/auth/login", authHandler.Login)
+	// Auth — all four are unauthenticated by necessity (a caller signing up or
+	// resetting a lost password has no token yet), which also makes them the
+	// only routes in this app an anonymous script can hit repeatedly for free.
+	// Each gets its own per-IP rate limiter (see ratelimit.go): bcrypt already
+	// slows down one guess against Login, but not a script making thousands: a
+	// generous burst absorbs a legitimate user mistyping their password a few
+	// times in a row, then throttles hard.
+	loginRateLimit := handlers.RateLimit(rate.Every(6*time.Second), 10)          // ~10/min, burst 10
+	signupRateLimit := handlers.RateLimit(rate.Every(12*time.Minute), 5)         // ~5/hour, burst 5
+	forgotPasswordRateLimit := handlers.RateLimit(rate.Every(12*time.Minute), 5) // ~5/hour, burst 5 — also caps Brevo email spend, see CLAUDE.md
+	resetPasswordRateLimit := handlers.RateLimit(rate.Every(3*time.Minute), 20)  // ~20/hour, burst 20 — tokens are unguessable 32-byte values, this is a courtesy cap, not the real defense
+
+	r.POST("/auth/signup", signupRateLimit, authHandler.Signup)
+	r.POST("/auth/login", loginRateLimit, authHandler.Login)
 	// Public like signup/login above: someone who forgot their password has by
 	// definition no token to authenticate the request with.
-	r.POST("/auth/forgot-password", authHandler.ForgotPassword)
-	r.POST("/auth/reset-password", authHandler.ResetPassword)
+	r.POST("/auth/forgot-password", forgotPasswordRateLimit, authHandler.ForgotPassword)
+	r.POST("/auth/reset-password", resetPasswordRateLimit, authHandler.ResetPassword)
 	// Add more routes as needed
 
 	// Liveness probe for the platform's healthcheck. It deliberately does NOT

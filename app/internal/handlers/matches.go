@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"app/internal/models"
 	"app/internal/services"
@@ -20,6 +21,33 @@ func NewMatchHandler(service *services.MatchService, membershipService *services
 	return &MatchHandler{Service: service, MembershipService: membershipService}
 }
 
+// createMatchRequest is the wire shape of POST /matches, deliberately a
+// dedicated struct (as the auth handlers already do) rather than models.Match.
+//
+// Binding straight into the model would now let a client set
+// registrations_closed_at while creating the match — sign-ups closed before
+// anyone could make one — which is not an admin action that exists. A request
+// struct that simply has no such field makes that unrepresentable rather than
+// something a later filter has to remember to strip.
+//
+// The three scheduling fields are pointers so that "absent" and "zero" stay
+// distinguishable: absent means an ordinary unscheduled match, which is what
+// every existing caller sends. MatchSpec validates them as all-or-nothing.
+//
+// The timestamps are plain *time.Time, so encoding/json parses them as RFC3339
+// and keeps the offset the client sent. That is load-bearing and must not be
+// "normalized" to UTC here: MatchService.CreateMatch derives the match's
+// calendar Date from ScheduledAt *in the timestamp's own location*, so a 21:00
+// Paris kick-off keeps the day the client meant — converting first would silently
+// move some matches to the previous day.
+type createMatchRequest struct {
+	Date                models.Date `json:"date"`
+	GroupID             uuid.UUID   `json:"group_id"`
+	ScheduledAt         *time.Time  `json:"scheduled_at"`
+	RegistrationOpensAt *time.Time  `json:"registration_opens_at"`
+	MaxPlayers          *int        `json:"max_players"`
+}
+
 // CreateMatch requires authentication (see main.go), so when the payload
 // carries no group_id it falls back to a group the caller actually belongs
 // to — the same resolution RequireGroupMembership already authorized against
@@ -27,13 +55,13 @@ func NewMatchHandler(service *services.MatchService, membershipService *services
 // since removed), which had no relation to the caller and would let the match
 // get created in a group the caller was never even checked against.
 func (h *MatchHandler) CreateMatch(c *gin.Context) {
-	var match models.Match
-	if err := c.ShouldBindJSON(&match); err != nil {
+	var req createMatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	groupID := match.GroupID
+	groupID := req.GroupID
 	if groupID == uuid.Nil {
 		playerID, ok := playerIDFromContext(c)
 		if !ok {
@@ -48,9 +76,25 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 		groupID = group.ID
 	}
 
-	id, err := h.Service.CreateMatch(match.Date, groupID)
+	id, err := h.Service.CreateMatch(services.MatchSpec{
+		Date:                req.Date,
+		ScheduledAt:         req.ScheduledAt,
+		RegistrationOpensAt: req.RegistrationOpensAt,
+		MaxPlayers:          req.MaxPlayers,
+	}, groupID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		switch {
+		// An incoherent schedule is the client's mistake, not the server's:
+		// half a schedule, a window opening after kick-off, or a roster size
+		// that would bench everyone. Mapped to 400 the way every other handler
+		// maps its service's validation sentinels.
+		case errors.Is(err, services.ErrIncompleteSchedule),
+			errors.Is(err, services.ErrRegistrationOpensAfterKickoff),
+			errors.Is(err, services.ErrInvalidMaxPlayers):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 

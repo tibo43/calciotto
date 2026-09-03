@@ -185,7 +185,7 @@ func TestUpdateMatch_Integration_AdminOnly(t *testing.T) {
 		t.Fatalf("failed to add scorer to group: %v", err)
 	}
 
-	matchID, err := env.matches.CreateMatch(models.Date{}, groupID)
+	matchID, err := env.matches.CreateMatch(services.MatchSpec{Date: models.Date{}}, groupID)
 	if err != nil {
 		t.Fatalf("failed to create match: %v", err)
 	}
@@ -277,7 +277,7 @@ func TestDeleteMatch_Integration_AdminOnly(t *testing.T) {
 	groupID, adminToken, memberToken := env.matchAdminGroup(t, tx,
 		"Zzz Match Delete", "match-delete-admin@example.com", "match-delete-member@example.com")
 
-	matchID, err := env.matches.CreateMatch(models.Date{}, groupID)
+	matchID, err := env.matches.CreateMatch(services.MatchSpec{Date: models.Date{}}, groupID)
 	if err != nil {
 		t.Fatalf("failed to create match: %v", err)
 	}

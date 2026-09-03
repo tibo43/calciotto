@@ -42,7 +42,7 @@ func TestDeleteMatch_Integration_Success(t *testing.T) {
 		t.Fatalf("failed to create player: %v", err)
 	}
 
-	matchID, err := matchService.CreateMatch(models.Date(time.Now()), group.ID)
+	matchID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now())}, group.ID)
 	if err != nil {
 		t.Fatalf("failed to create match: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestDeleteMatch_Integration_WrongGroupNotFound(t *testing.T) {
 		t.Fatalf("failed to create group B: %v", err)
 	}
 
-	matchID, err := matchService.CreateMatch(models.Date(time.Now()), groupA.ID)
+	matchID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now())}, groupA.ID)
 	if err != nil {
 		t.Fatalf("failed to create match: %v", err)
 	}

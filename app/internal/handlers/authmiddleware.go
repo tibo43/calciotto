@@ -11,7 +11,8 @@ import (
 
 // AuthMiddleware validates the Authorization: Bearer <token> header and, on
 // success, injects the token's player_id claim into the Gin context under
-// the "player_id" key. Not wired to any route yet — see CLAUDE.md.
+// the "player_id" key. Wired as authRequired in main.go, ahead of every
+// route that needs a caller identity.
 func AuthMiddleware(authService *services.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")

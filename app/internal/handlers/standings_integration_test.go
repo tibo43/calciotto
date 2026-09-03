@@ -92,7 +92,7 @@ func TestStandingsSeasons_Integration(t *testing.T) {
 		{models.Date(time.Date(2024, time.September, 1, 0, 0, 0, 0, time.UTC)), 0, 1},
 	}
 	for _, m := range matches {
-		matchID, err := matchService.CreateMatch(m.date, group.ID)
+		matchID, err := matchService.CreateMatch(services.MatchSpec{Date: m.date}, group.ID)
 		if err != nil {
 			t.Fatalf("failed to create match on %s: %v", m.date, err)
 		}

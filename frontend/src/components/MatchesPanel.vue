@@ -58,6 +58,43 @@
                 Selected: {{ formatSelectedDate(selectedDate) }}
               </div>
             </div>
+
+            <!-- Optional scheduling. Unchecked (the default) the modal creates
+                 an ordinary match exactly as it always has — no scheduling
+                 field is sent at all. Checked, all three become required: the
+                 backend treats them as all-or-nothing and 400s on a partial
+                 set. -->
+            <div class="form-group schedule-group">
+              <label class="schedule-toggle">
+                <input type="checkbox" class="schedule-checkbox" v-model="isScheduled" :disabled="isCreating" />
+                <span>Schedule this match and open sign-ups</span>
+              </label>
+
+              <div v-if="isScheduled" class="schedule-fields">
+                <div class="schedule-field">
+                  <label for="schedule-kickoff-time">Kick-off time</label>
+                  <input id="schedule-kickoff-time" class="form-input schedule-input" type="time" v-model="kickoffTime"
+                    :disabled="isCreating" />
+                  <p class="schedule-hint">On the day selected above.</p>
+                </div>
+
+                <div class="schedule-field">
+                  <label for="schedule-registration-opens">Sign-ups open</label>
+                  <input id="schedule-registration-opens" class="form-input schedule-input" type="datetime-local"
+                    v-model="registrationOpensAt" :disabled="isCreating" />
+                  <p class="schedule-hint">Must be strictly before kick-off.</p>
+                </div>
+
+                <div class="schedule-field">
+                  <label for="schedule-max-players">Maximum players</label>
+                  <input id="schedule-max-players" class="form-input schedule-input" type="number" min="1" step="1"
+                    v-model="maxPlayers" :disabled="isCreating" />
+                  <p class="schedule-hint">A calciotto is 8v8, so 16 by default.</p>
+                </div>
+              </div>
+
+              <p v-if="scheduleError" class="error-message schedule-error">{{ scheduleError }}</p>
+            </div>
           </div>
 
           <div class="modal-footer">
@@ -103,8 +140,12 @@
               </button>
 
               <div v-for="match in matches" :key="match.ID" class="match-card-horizontal"
-                :class="{ 'active': selectedMatch?.ID === match.ID }" @click="selectMatch(match)">
-                <!-- Match Date -->
+                :class="{ 'active': selectedMatch?.ID === match.ID, 'scheduled': isScheduledMatch(match) }"
+                @click="selectMatch(match)">
+                <!-- Match Date — a scheduled match shows its kick-off instead
+                     (same calendar day, plus the time), so the card says when
+                     the match actually starts rather than just which day it
+                     is filed under. -->
                 <div class="match-date-horizontal">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -112,11 +153,28 @@
                     <line x1="8" y1="2" x2="8" y2="6" />
                     <line x1="3" y1="10" x2="21" y2="10" />
                   </svg>
-                  <span>{{ formatDateShort(match.Date) }}</span>
+                  <span>{{ isScheduledMatch(match) ? formatKickoff(match) : formatDateShort(match.Date) }}</span>
                 </div>
 
-                <!-- Teams and Scores -->
-                <div class="teams-horizontal">
+                <!-- Sign-ups line — one compact row (state badge + count),
+                     not a panel: these cards are ~200px wide in a horizontal
+                     carousel. The badge shows the actual registration state
+                     (open/not-open-yet/closed), not just "this is a scheduled
+                     match" — that part is already implied by the row existing
+                     at all, so it would tell a browsing member nothing they
+                     couldn't already see. Everything about the sign-up list
+                     itself (names, Participate/Withdraw) still lives below,
+                     once this card is selected, or on the match page. -->
+                <div v-if="isScheduledMatch(match)" class="match-signups-horizontal">
+                  <span class="signup-state-badge" :class="cardRegistrationState(match)">{{ cardRegistrationLabel(match) }}</span>
+                  <span class="signup-count">{{ signupCountLabel(match) }}</span>
+                </div>
+
+                <!-- Teams and Scores — hidden until composed for a scheduled
+                     match (see showTeamRoster): "0 vs 0" is noise for the
+                     whole sign-up window, where the badge/count above is what
+                     actually matters. -->
+                <div v-if="showTeamRoster(match)" class="teams-horizontal">
                   <div v-for="(team, index) in match.Teams" :key="team.ID" class="team-horizontal">
                     <div class="team-info-horizontal">
                       <div class="team-color-horizontal" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
@@ -171,7 +229,35 @@
                 <div class="details-divider"></div>
               </div>
 
-              <div class="players-section">
+              <!-- Sign-ups, without leaving this page. Deliberately light —
+                   state, count, and Participate/Withdraw only; the full
+                   confirmed/waiting roster with names stays on the match page
+                   (see MatchDetails.vue), reached via "Edit Match"/"View
+                   Match" above. -->
+              <div v-if="isScheduledMatch(selectedMatch)" class="signup-inline">
+                <!-- Badge, count and the action button all on one row — moved
+                     here from a separate row below after the badge/count
+                     alone read as a status display with nothing to act on
+                     right next to it. -->
+                <div class="signup-inline-top">
+                  <span class="signup-state-badge" :class="registrationState">{{ registrationStateLabel }}</span>
+                  <span class="signup-count-inline">{{ signupCountLabel(selectedMatch) }}</span>
+                  <div class="signup-inline-actions">
+                    <button v-if="canParticipate" @click="participate" :disabled="isUpdatingRegistration"
+                      class="btn-base btn-primary btn-small">
+                      {{ isUpdatingRegistration ? 'Signing up...' : 'Participate' }}
+                    </button>
+                    <button v-if="canWithdraw" @click="confirmWithdraw" :disabled="isUpdatingRegistration"
+                      class="btn-base btn-cancel btn-small">
+                      {{ isUpdatingRegistration ? 'Withdrawing...' : 'Withdraw' }}
+                    </button>
+                  </div>
+                </div>
+                <p v-if="registrationStateDetail" class="signup-inline-detail">{{ registrationStateDetail }}</p>
+                <p v-if="signupMessage" class="signup-inline-message" :class="signupMessageType">{{ signupMessage }}</p>
+              </div>
+
+              <div v-if="showTeamRoster(selectedMatch)" class="players-section">
                 <!-- Each team lists its own scorers — a grid column per team
                      (stacked on mobile, see below) rather than a shared table
                      with one row per player-index. The old table forced both
@@ -198,6 +284,12 @@
                   </div>
                 </div>
               </div>
+              <!-- Same hidden-until-composed rule as the card above, spelled
+                   out here since this preview otherwise has nothing else to
+                   explain the gap where the roster would be. -->
+              <p v-else-if="isScheduledMatch(selectedMatch)" class="no-roster-hint">
+                Teams will appear here once sign-ups close and are composed.
+              </p>
             </div>
           </transition>
         </div>
@@ -228,13 +320,53 @@
 </template>
 
 <script>
-import { getMatchesDetails, createMatch } from '@/services/api';
+import {
+  getMatchesDetails,
+  createMatch,
+  getMatchRegistrations,
+  registerForMatch,
+  unregisterFromMatch,
+  getToken
+} from '@/services/api';
+import { toLocalRFC3339, dateTimeLocalToRFC3339, formatDateTimeShort, formatCalendarDay, formatCalendarDayShort } from '@/services/datetime';
+import {
+  isScheduledMatch,
+  deriveRegistrationState,
+  registrationsAreOpen,
+  registrationStateLabel,
+  teamsAreComposed,
+  REGISTRATION_NOT_OPEN_YET,
+  REGISTRATION_CLOSED_BY_ADMIN,
+  REGISTRATION_CLOSED_AT_KICKOFF
+} from '@/services/matchRegistration';
+
+// Same shape as MatchDetails.vue's and Profile.vue's own helper — the app has
+// no auth store, and the player id is only ever needed to answer "which
+// registration row is mine", so each page decodes the JWT payload locally
+// rather than a third place holding state.
+function currentPlayerIdFromToken() {
+  const token = getToken();
+  if (!token) {
+    return '';
+  }
+  try {
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return decoded.player_id || '';
+  } catch (error) {
+    console.error('Error decoding token:', error);
+    return '';
+  }
+}
 
 // The Matches sub-tab of MatchesAndStandings.vue: the match carousel, the
 // selected match's preview, and the admin-only create-match modal. Everything
 // it is scoped by — the active group, the caller's admin role, the selected
 // season — is resolved once by the page and passed down, so this component
 // only ever loads matches.
+// A calciotto is 8v8, so 16 is the roster size worth defaulting to.
+const DEFAULT_MAX_PLAYERS = 16;
+
 export default {
   name: 'MatchesPanel',
   props: {
@@ -271,13 +403,36 @@ export default {
       isCreating: false,
       dateError: '',
       match: {},
+      // Optional scheduling (opt-in). All four are reset by closeModal(), so
+      // reopening the modal always starts from the unscheduled default.
+      isScheduled: false,
+      kickoffTime: '',
+      registrationOpensAt: '',
+      maxPlayers: DEFAULT_MAX_PLAYERS,
+      scheduleError: '',
       // Custom Date Picker
       currentMonth: new Date().getMonth(),
       currentYear: new Date().getFullYear(),
-      dayHeaders: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+      dayHeaders: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+      // --- Sign-ups, for whichever match is selected below the carousel ---
+      // Sampled once, in created(), the same "no polling, re-read on
+      // navigation" contract MatchDetails.vue uses for the same field.
+      nowMs: 0,
+      currentPlayerId: '',
+      // The sign-up list of `selectedMatch` alone — never all matches at
+      // once, which is why it's reloaded on every selection change rather
+      // than kept per-match. Only used to answer "am I registered", not
+      // rendered as a roster (that stays on the match page).
+      registrations: [],
+      isLoadingRegistrations: false,
+      isUpdatingRegistration: false,
+      signupMessage: '',
+      signupMessageType: 'success'
     };
   },
   async created() {
+    this.nowMs = Date.now();
+    this.currentPlayerId = currentPlayerIdFromToken();
     await this.loadMatches();
   },
   watch: {
@@ -327,6 +482,52 @@ export default {
       }
 
       return days;
+    },
+
+    // The state and copy below mirror MatchDetails.vue's own
+    // registrationState/registrationStateLabel/registrationStateDetail
+    // exactly — same feature, same words, whichever page a player reaches it
+    // from. Unlike that page, there is no separate "registrationsClosedAt"
+    // local field to keep in sync with `match`: this panel has no editable
+    // state of its own to protect from a false-dirty flag, so
+    // RegistrationsClosedAt is read straight off `selectedMatch`.
+    registrationState() {
+      if (!this.selectedMatch) return '';
+      return deriveRegistrationState(this.selectedMatch, this.nowMs);
+    },
+
+    registrationsOpen() {
+      return registrationsAreOpen(this.registrationState);
+    },
+
+    registrationStateLabel() {
+      return registrationStateLabel(this.registrationState);
+    },
+
+    registrationStateDetail() {
+      switch (this.registrationState) {
+        case REGISTRATION_NOT_OPEN_YET:
+          return `Sign-ups open on ${formatDateTimeShort(this.selectedMatch.RegistrationOpensAt)}.`;
+        case REGISTRATION_CLOSED_BY_ADMIN:
+          return 'An admin has closed sign-ups for this match.';
+        case REGISTRATION_CLOSED_AT_KICKOFF:
+          return 'Kick-off has passed, so sign-ups are closed.';
+        default:
+          return '';
+      }
+    },
+
+    isRegistered() {
+      if (!this.currentPlayerId) return false;
+      return this.registrations.some(entry => entry.PlayerID === this.currentPlayerId);
+    },
+
+    canParticipate() {
+      return this.registrationsOpen && !this.isLoadingRegistrations && !this.isUpdatingRegistration && !this.isRegistered;
+    },
+
+    canWithdraw() {
+      return this.registrationsOpen && !this.isLoadingRegistrations && !this.isUpdatingRegistration && this.isRegistered;
     }
   },
   methods: {
@@ -359,6 +560,7 @@ export default {
         if (this.matches.length > 0) {
           this.selectedMatch = this.matches[0];
         }
+        await this.loadSelectedRegistrations();
       } catch (error) {
         console.error('Error fetching matches:', error);
         // Don't leave the previous season's list on screen after a failed
@@ -382,13 +584,27 @@ export default {
         return;
       }
 
+      // Mirrors the backend's own rules so the reason shows up next to the
+      // field instead of coming back as an opaque 400. The backend stays the
+      // authority — see the catch below, which surfaces its message verbatim.
+      let scheduling = null;
+      if (this.isScheduled) {
+        scheduling = this.buildScheduling();
+        if (!scheduling) {
+          return;
+        }
+      }
+      this.scheduleError = '';
+
       this.isCreating = true;
       this.dateError = '';
 
       this.match.Date = this.selectedDate;
       try {
-        // Call your createMatch API function
-        const response = await createMatch(this.match, this.activeGroupId);
+        // Call your createMatch API function. scheduling is null for an
+        // ordinary match, which makes the request body identical to what it
+        // was before scheduling existed.
+        const response = await createMatch(this.match, this.activeGroupId, scheduling);
 
         if (response) {
           // Close modal
@@ -401,10 +617,53 @@ export default {
         }
       } catch (error) {
         console.error('Error creating match:', error);
-        this.dateError = 'Failed to create match. Please try again.';
+        // A rejected schedule (the backend re-checks everything validated
+        // above, plus whatever this client doesn't know about) says why —
+        // don't flatten it into the generic message.
+        const backendMessage = error.response && error.response.data && error.response.data.error;
+        this.dateError = backendMessage || 'Failed to create match. Please try again.';
       } finally {
         this.isCreating = false;
       }
+    },
+
+    // Returns the { scheduledAt, registrationOpensAt, maxPlayers } payload
+    // createMatch expects, or null after setting scheduleError.
+    //
+    // Both timestamps carry the browser's local UTC offset (see
+    // services/datetime.js): the backend derives the match's date — and hence
+    // its season — from scheduled_at's calendar day in the offset it was sent
+    // in, so a UTC 'Z' string would move a late kick-off to the day before.
+    buildScheduling() {
+      if (!this.kickoffTime) {
+        this.scheduleError = 'Please set a kick-off time';
+        return null;
+      }
+      if (!this.registrationOpensAt) {
+        this.scheduleError = 'Please set when sign-ups open';
+        return null;
+      }
+
+      const maxPlayers = Number(this.maxPlayers);
+      if (!Number.isInteger(maxPlayers) || maxPlayers < 1) {
+        this.scheduleError = 'Maximum players must be a whole number, at least 1';
+        return null;
+      }
+
+      const scheduledAt = toLocalRFC3339(this.selectedDate, this.kickoffTime);
+      const registrationOpensAt = dateTimeLocalToRFC3339(this.registrationOpensAt);
+      if (!scheduledAt || !registrationOpensAt) {
+        this.scheduleError = 'Please check the kick-off and sign-up times';
+        return null;
+      }
+
+      if (Date.parse(registrationOpensAt) >= Date.parse(scheduledAt)) {
+        this.scheduleError = 'Sign-ups must open before kick-off';
+        return null;
+      }
+
+      this.scheduleError = '';
+      return { scheduledAt, registrationOpensAt, maxPlayers };
     },
 
     closeModal() {
@@ -413,16 +672,15 @@ export default {
       this.dateError = '';
       this.isCreating = false;
       this.match = {};
+      this.isScheduled = false;
+      this.kickoffTime = '';
+      this.registrationOpensAt = '';
+      this.maxPlayers = DEFAULT_MAX_PLAYERS;
+      this.scheduleError = '';
     },
 
     formatSelectedDate(dateStr) {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
+      return formatCalendarDay(dateStr);
     },
 
     getCurrentMonthYear() {
@@ -497,6 +755,100 @@ export default {
     },
     selectMatch(match) {
       this.selectedMatch = match;
+      this.signupMessage = '';
+      this.loadSelectedRegistrations();
+    },
+
+    // Loads the sign-up list of `selectedMatch` alone, the same one-request-
+    // per-open-match cost MatchDetails.vue already pays — the list endpoint
+    // deliberately carries no "am I registered" flag (see CLAUDE.md), so this
+    // is the only way to answer it. A no-op for an unscheduled match, or when
+    // nothing is selected (an empty list).
+    async loadSelectedRegistrations() {
+      if (!this.selectedMatch || !isScheduledMatch(this.selectedMatch)) {
+        this.registrations = [];
+        return;
+      }
+      this.isLoadingRegistrations = true;
+      try {
+        const entries = await getMatchRegistrations(this.selectedMatch.ID);
+        this.registrations = Array.isArray(entries) ? entries : [];
+      } catch (error) {
+        console.error('Error loading registrations:', error);
+        this.registrations = [];
+      } finally {
+        this.isLoadingRegistrations = false;
+      }
+    },
+
+    // Signs the caller up for `selectedMatch`. The count on both this panel
+    // and the match's own card (signupCountLabel reads the same
+    // RegistrationCount) is bumped locally rather than waiting on a full
+    // loadMatches() reload — safe to do without re-deriving anything
+    // server-side, since a successful call always adds exactly one
+    // registration, confirmed or waiting. Position/waiting status themselves
+    // are never guessed client-side, which is why loadSelectedRegistrations()
+    // still runs afterward — see MatchDetails.vue's own participate() for the
+    // same split.
+    async participate() {
+      if (this.isUpdatingRegistration) return;
+      this.isUpdatingRegistration = true;
+      try {
+        const entry = await registerForMatch(this.selectedMatch.ID);
+        this.selectedMatch.RegistrationCount = (this.selectedMatch.RegistrationCount || 0) + 1;
+        await this.loadSelectedRegistrations();
+        if (entry && entry.IsWaiting) {
+          this.showSignupMessage(`Signed up — you are #${entry.Position}, on the waiting list.`, 'success');
+        } else {
+          const position = entry && entry.Position ? ` You are #${entry.Position}.` : '';
+          this.showSignupMessage(`You're in for this match.${position}`, 'success');
+        }
+      } catch (error) {
+        console.error('Error signing up for match:', error);
+        // A 409 says precisely why (not open yet, closed, already
+        // registered) — worth showing verbatim, same pattern as
+        // MatchDetails.vue. Reload either way: a rejection usually means this
+        // panel's view of the list is stale.
+        this.showSignupMessage(this.registrationErrorMessage(error, 'Error signing up for this match.'), 'error');
+        await this.loadSelectedRegistrations();
+      } finally {
+        this.isUpdatingRegistration = false;
+      }
+    },
+
+    // Same confirm-before-acting pattern as MatchDetails.vue's own
+    // confirmWithdraw — withdrawing hands your place to the first player on
+    // the waiting list, which is worth a heads-up before it happens.
+    confirmWithdraw() {
+      if (this.isUpdatingRegistration) return;
+      const confirmed = window.confirm('Withdraw from this match? Your place goes to the first player on the waiting list.');
+      if (!confirmed) return;
+      this.withdraw();
+    },
+
+    async withdraw() {
+      this.isUpdatingRegistration = true;
+      try {
+        await unregisterFromMatch(this.selectedMatch.ID);
+        this.selectedMatch.RegistrationCount = Math.max(0, (this.selectedMatch.RegistrationCount || 1) - 1);
+        await this.loadSelectedRegistrations();
+        this.showSignupMessage('You have withdrawn from this match.', 'success');
+      } catch (error) {
+        console.error('Error withdrawing from match:', error);
+        this.showSignupMessage(this.registrationErrorMessage(error, 'Error withdrawing from this match.'), 'error');
+        await this.loadSelectedRegistrations();
+      } finally {
+        this.isUpdatingRegistration = false;
+      }
+    },
+
+    registrationErrorMessage(error, fallback) {
+      return error?.response?.data?.error || fallback;
+    },
+
+    showSignupMessage(text, type) {
+      this.signupMessage = text;
+      this.signupMessageType = type;
     },
 
     scrollLeft() {
@@ -534,30 +886,56 @@ export default {
     },
 
     formatDate(dateString) {
-      try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-          weekday: 'short',
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        });
-      } catch (error) {
-        return dateString;
-      }
+      return formatCalendarDay(dateString);
+    },
+
+    // Exposed as a method rather than imported into the template directly:
+    // this component has no setup()/computed path for a bare helper, and every
+    // other formatter here is a method too.
+    isScheduledMatch(match) {
+      return isScheduledMatch(match);
+    },
+
+    // Gates the card's own team/score row and the "Selected Match Details"
+    // preview's team columns — see teamsAreComposed's own comment. Unscheduled
+    // matches have always had a populated roster, so this stays true for them;
+    // a scheduled match hides both until an admin has actually assigned
+    // someone to a team.
+    showTeamRoster(match) {
+      return !isScheduledMatch(match) || teamsAreComposed(match);
+    },
+
+    // Per-card equivalent of the `registrationState`/`registrationStateLabel`
+    // computed pair above, which are scoped to `selectedMatch` alone and
+    // can't answer "what state is *this* card's match in" for the rest of the
+    // carousel. `deriveRegistrationState` only ever needs a match's own
+    // scheduling fields — already on every entry `matches` holds — so this
+    // costs no extra request, unlike `isRegistered` which needs the sign-up
+    // list itself and stays scoped to whichever match is selected.
+    cardRegistrationState(match) {
+      return deriveRegistrationState(match, this.nowMs);
+    },
+
+    cardRegistrationLabel(match) {
+      return registrationStateLabel(this.cardRegistrationState(match));
+    },
+
+    formatKickoff(match) {
+      return formatDateTimeShort(match.ScheduledAt);
+    },
+
+    // RegistrationCount is present-but-zero on a scheduled match nobody has
+    // signed up for yet (it is a *int with omitempty on the Go side precisely
+    // so 0 and "not scheduled" stay distinguishable), so `?? 0` rather than
+    // `|| 0` — not that it matters for 0, but it keeps the intent explicit
+    // that only a genuinely absent count falls back.
+    signupCountLabel(match) {
+      const count = match.RegistrationCount ?? 0;
+      return `${count} / ${match.MaxPlayers} signed up`;
     },
 
     formatDateShort(dateString) {
-      try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        });
-      } catch (error) {
-        return dateString;
-      }
+      return formatCalendarDayShort(dateString);
     },
 
     getTeamColor(colour) {
@@ -653,6 +1031,55 @@ export default {
 .selected-date-display svg {
   width: 16px;
   height: 16px;
+}
+
+/* Optional Scheduling */
+.schedule-group {
+  margin-bottom: 0;
+}
+
+.schedule-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0;
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.schedule-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+  margin: 0;
+}
+
+.schedule-fields {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.schedule-field label {
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.schedule-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.schedule-error {
+  margin-top: 0.75rem;
 }
 
 .date-picker-header {
@@ -875,6 +1302,36 @@ export default {
   font-size: 0.875rem;
 }
 
+/* A scheduled match reads differently at a glance: a coloured left edge, so
+   it is distinguishable from a played match even before the badge below is
+   read (and for anyone who can't tell the badge's colour apart). The border
+   is only the left one, so .active's full 2px accent border still wins
+   visually on the selected card. */
+.match-card-horizontal.scheduled {
+  border-left-color: var(--primary-color);
+}
+
+/* The kick-off string is longer than a bare date, so the date row is allowed
+   to wrap on a scheduled card rather than overflowing the 220px card. */
+.match-card-horizontal.scheduled .match-date-horizontal {
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.match-signups-horizontal {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.signup-count {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
 .match-date-horizontal svg {
   width: 14px;
   height: 14px;
@@ -1024,6 +1481,82 @@ export default {
   color: white !important;
 }
 
+/* Sign-ups inline in the Matches tab preview — same visual language as
+   MatchDetails.vue's own .signup-panel (state badge colours included), just
+   condensed to one row plus a detail line, since this panel has no room for
+   (and no need for) the full roster. */
+.signup-inline {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.signup-inline-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.signup-count-inline {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Same pill shape and colours as MatchDetails.vue's .signup-state-badge —
+   duplicated rather than shared, the same way getTeamColor() is duplicated
+   between the two files. */
+.signup-state-badge {
+  padding: 0.3rem 0.65rem;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.signup-state-badge.open {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.signup-state-badge.not-open-yet {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.signup-state-badge.closed-by-admin,
+.signup-state-badge.closed-at-kickoff {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.signup-inline-detail {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.signup-inline-actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.signup-inline-message {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+}
+
+.signup-inline-message.success {
+  color: #065f46;
+}
+
+.signup-inline-message.error {
+  color: var(--danger-color);
+}
+
 /* Players by team — one column per team, each an independent list of its
    own scorers. Side by side on desktop; stacked on mobile (see the 768px
    media query) so seeing the second team never requires scrolling. */
@@ -1031,6 +1564,13 @@ export default {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.no-roster-hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 .teams-columns {

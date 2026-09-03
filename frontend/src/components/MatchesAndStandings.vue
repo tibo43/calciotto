@@ -61,6 +61,7 @@
 <script>
 import { getPointsStandings, getScorers, getSeasons } from '@/services/api';
 import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
+import { seasonOf } from '@/services/datetime';
 import MatchesPanel from '@/components/MatchesPanel.vue';
 import PointsStandingsTable from '@/components/PointsStandingsTable.vue';
 import ScorersTable from '@/components/ScorersTable.vue';
@@ -132,11 +133,20 @@ export default {
         console.error('Error fetching seasons:', error);
         this.seasons = [];
       }
-      // The backend returns the group's seasons in ascending order, so the
-      // last one is the most recent — that's what we open on. With no seasons
-      // at all (a group without matches), an empty selection means "no
-      // filtering", which is exactly what the backend already does.
-      this.selectedSeason = this.seasons.length ? this.seasons[this.seasons.length - 1] : '';
+      // Default to whichever season *today* actually falls in, not to "the
+      // last one in the list": ComputeSeasons counts a scheduled match even
+      // before it's played, so scheduling one far enough out introduces a
+      // season later than today's own — and picking "the last entry" would
+      // silently jump the default view onto that near-empty future season
+      // instead of the history in progress. seasonOf(now) is stable against
+      // that; only a season with no matches *at all* falls back to the last
+      // one that has some, the same "no filtering" fallback as before.
+      const current = seasonOf(new Date());
+      if (this.seasons.includes(current)) {
+        this.selectedSeason = current;
+      } else {
+        this.selectedSeason = this.seasons.length ? this.seasons[this.seasons.length - 1] : '';
+      }
     },
     // Both standings tables are (re)loaded together, as they were when they
     // were two sub-tabs of their own page: switching between Points and

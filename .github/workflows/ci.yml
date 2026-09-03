@@ -4,6 +4,22 @@ on:
   push:
   pull_request:
 
+# A push to a branch with an open PR fires both `push` and `pull_request`
+# (synchronize) for the same commit, which without this runs CI — and the
+# Docker/Vercel builds inside it — twice for nothing. `head_ref` is only set on
+# a pull_request event (the PR's source branch) and `ref_name` is the *short*
+# branch name push events carry (unlike `ref`, which is the full
+# `refs/heads/...`); for the same branch the two resolve to the same string, so
+# both events land in one group and the newer run cancels the older.
+#
+# `cancel-in-progress` is false on master specifically: `push` there is what
+# gates deploy-backend/deploy-frontend (see their own `if:` below), and cutting
+# one off mid-run could leave a Docker push or a Vercel deploy half-done. A
+# feature branch has no such job, so cancelling freely there is safe.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 jobs:
   backend:
     name: Backend (Go)
@@ -81,13 +97,76 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+  visual:
+    name: Frontend visual regression
+    runs-on: ubuntu-latest
+    # Runs *inside* the Playwright image rather than installing browsers onto
+    # the runner, and the tag is pinned to the @playwright/test version in
+    # frontend/package.json. This is the load-bearing part of the whole job:
+    # pixel baselines are only comparable when the font stack and the browser
+    # build are identical to the ones that produced them, and this is the same
+    # image `npm run test:visual` uses locally (see
+    # frontend/tests/visual/run-in-docker.sh). Bump the two together, or every
+    # screenshot fails at once.
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      # Playwright's own recommendation for Chromium in a container: the default
+      # 64MB /dev/shm makes the browser crash on a large page, which would show
+      # up here as a flaky screenshot rather than as what it is. The local
+      # runner passes the same flag (run-in-docker.sh).
+      options: --ipc=host
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # No actions/setup-node: the image ships its own Node, and pulling a
+      # different one in would change nothing about the rendering while adding a
+      # way for the two environments to drift apart.
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # The tests are served the production build (dist/), not the dev server:
+      # what is worth pinning is what users get, HMR and eval-source-map
+      # excluded.
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Visual tests
+        working-directory: frontend
+        run: npx playwright test
+
+      # Uploaded on every run, not just on failure: the HTML reporter writes
+      # frontend/playwright-report/ either way, and on a passing run it's the
+      # only place to actually look at the current baselines (each test embeds
+      # its screenshot) without checking the PNGs out locally. On a failing run
+      # it carries the expected/actual/diff triptych, the only practical way to
+      # judge a visual diff from a log. `always()` rather than the default
+      # (which skips a step after an earlier failure) — playwright test itself
+      # already exited non-zero by the time this runs, so success() would never
+      # even be evaluated without it.
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          retention-days: 7
+
   # ---------------------------------------------------------------------------
   # Deployment. Both jobs are part of this workflow rather than separate ones so
-  # that `needs: [backend, frontend]` is a real gate: a failing Go test or Jest
-  # test makes deployment impossible, which a `workflow_run` trigger in another
+  # that `needs: [...]` is a real gate: a failing Go test, Jest test or visual
+  # diff makes deployment impossible, which a `workflow_run` trigger in another
   # file cannot guarantee (it fires on completion, not on success). They only run
   # on a direct push to master — never on a pull request, whose fork variant has
   # no access to the production environment's secrets anyway.
+  #
+  # deploy-frontend additionally needs `visual`: a visual regression is a
+  # frontend-only concern, so it gates deploy-frontend but not deploy-backend —
+  # there's no reason a screenshot diff should block a backend rollout that has
+  # nothing to do with it.
   # ---------------------------------------------------------------------------
 
   deploy-backend:
@@ -242,7 +321,7 @@ jobs:
   deploy-frontend:
     name: Deploy frontend (Vercel)
     runs-on: ubuntu-latest
-    needs: [backend, frontend]
+    needs: [backend, frontend, visual]
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     environment: production
 

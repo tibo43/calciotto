@@ -123,7 +123,7 @@ func TestPlayerProfile_Integration(t *testing.T) {
 		{groupB.ID, teamsB, models.Date(time.Date(2024, time.August, 15, 0, 0, 0, 0, time.UTC)), carolID, 1, 1},
 	}
 	for _, f := range fixtures {
-		matchID, err := matchService.CreateMatch(f.date, f.groupID)
+		matchID, err := matchService.CreateMatch(services.MatchSpec{Date: f.date}, f.groupID)
 		if err != nil {
 			t.Fatalf("failed to create match on %s: %v", f.date, err)
 		}

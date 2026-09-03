@@ -80,11 +80,70 @@ type Team struct {
 }
 
 // Match représente un match, scopé à un groupe.
+//
+// Scheduling is optional and purely additive: a match created without any of
+// the four fields below behaves exactly as it always did (an admin records a
+// match that has already been played). That is why all four are nullable —
+// no data migration is needed for matches created before the feature
+// existed. A match is scheduled iff ScheduledAt is set; use IsScheduled
+// rather than scattering nil checks through the callers.
+//
+// Date stays load-bearing and is deliberately *not* replaced by ScheduledAt:
+// SeasonOf derives the season from it, the matches list is ordered by it, and
+// its "YYYY-MM-DD" JSON shape is the existing API contract. The two can never
+// disagree because MatchService.CreateMatch derives Date from ScheduledAt's
+// calendar day instead of letting a caller supply both — a single write path.
+//
+// RegistrationsClosedAt is a nullable timestamp rather than a bool because an
+// admin closes sign-ups manually (in order to then compose the teams) and can
+// re-open them to recover from a mis-click: NULL means open, a value records
+// when they were closed. It is not the only thing that closes sign-ups,
+// though — ScheduledAt is a hard backstop, see RegistrationWindowError.
 type Match struct {
 	BaseModel
-	GroupID          uuid.UUID     `gorm:"type:uuid;index" json:"group_id"`
-	Date             Date          `gorm:"type:date" json:"date"`
-	TeamCompositions []MatchPlayer `gorm:"foreignKey:MatchID"`
+	GroupID uuid.UUID `gorm:"type:uuid;index" json:"group_id"`
+	Date    Date      `gorm:"type:date" json:"date"`
+	// ScheduledAt is the kick-off date *and time* (unlike Date, which is a
+	// calendar day only), hence timestamptz: a 21:00 Paris kick-off has to
+	// survive a round-trip through a server running in another zone.
+	ScheduledAt           *time.Time    `gorm:"type:timestamptz" json:"scheduled_at,omitempty"`
+	RegistrationOpensAt   *time.Time    `gorm:"type:timestamptz" json:"registration_opens_at,omitempty"`
+	RegistrationsClosedAt *time.Time    `gorm:"type:timestamptz" json:"registrations_closed_at,omitempty"`
+	MaxPlayers            *int          `json:"max_players,omitempty"`
+	TeamCompositions      []MatchPlayer `gorm:"foreignKey:MatchID"`
+}
+
+// IsScheduled reports whether this is a scheduled match — one with a kick-off
+// time players can sign up for — as opposed to a plain match recorded after
+// the fact. MatchService.CreateMatch validates scheduling as all-or-nothing,
+// so ScheduledAt being set implies RegistrationOpensAt and MaxPlayers are set
+// too.
+func (m Match) IsScheduled() bool {
+	return m.ScheduledAt != nil
+}
+
+// MatchRegistration is one player's sign-up for a scheduled match. It is
+// deliberately *not* a MatchPlayer: a MatchPlayer carries a TeamID and a goal
+// count, neither of which exists yet when a player merely says they will come,
+// and — more importantly — ComputePointsStandings treats any match whose two
+// teams both have players as played, so recording sign-ups as MatchPlayer rows
+// would make next Sunday's match appear in the standings as a 0-0 draw.
+//
+// The waiting list is derived, never stored: no status column, no promotion
+// job. Sign-ups are ordered by CreatedAt (auto-filled by GORM, and therefore
+// the key that *defines* the waiting list), the first Match.MaxPlayers of them
+// are confirmed and the rest are waiting — see ComputeRegistrationPositions.
+// A withdrawal is then a plain row delete which mechanically promotes the next
+// player, with no race to lose, and lowering MaxPlayers rolls the tail of the
+// list into the waiting list for free.
+//
+// The composite unique index is what makes a double-clicked "Participate"
+// harmless: a player holds at most one sign-up per match.
+type MatchRegistration struct {
+	BaseModel
+	MatchID   uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_match_registration_match_player" json:"match_id"`
+	PlayerID  uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_match_registration_match_player" json:"player_id"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // MatchPlayer représente la composition d'une équipe pour un match.

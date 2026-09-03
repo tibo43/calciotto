@@ -63,3 +63,10 @@ pnpm-debug.log*
 # and the pulled production env here. Local state, never committed.
 .vercel
 .env*
+
+# Playwright visual tests — reports and diffs are per-run artifacts. The
+# baselines themselves (frontend/tests/visual/__screenshots__) are committed:
+# they are the assertion.
+/frontend/test-results
+/frontend/playwright-report
+/frontend/blob-report
