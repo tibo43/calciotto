@@ -12,8 +12,14 @@
 
 // Kept separate from buildWhatsAppShareUrl so a test can assert on the
 // readable message without also asserting on its URL-encoding.
-export function buildWhatsAppShareText({ kickoffLabel, signupCountLabel, matchUrl }) {
-  return `⚽ Match: ${kickoffLabel}\nSign-ups are open — ${signupCountLabel}. Join here:\n${matchUrl}`;
+//
+// The URL is on its own line, in full, rather than hidden behind "Join
+// Calciotto" as anchor text: WhatsApp's text messages have no such thing —
+// only *bold*/_italic_/~strikethrough~ markdown, no link-with-custom-text
+// syntax — so a raw URL is the only thing WhatsApp will actually turn into a
+// tappable link.
+export function buildWhatsAppShareText({ kickoffLabel, matchUrl }) {
+  return `Match: ${kickoffLabel}\nSign-ups are open — Join Calciotto:\n${matchUrl}`;
 }
 
 export function buildWhatsAppShareUrl(text) {

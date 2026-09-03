@@ -369,7 +369,7 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
     expect(wrapper.find('.whatsapp-share-btn').exists()).toBe(false);
   });
 
-  it('includes the kick-off and the sign-up count in the shared message', async () => {
+  it('includes the kick-off and the page\'s own URL, with the URL on its own line', async () => {
     const wrapper = await mountDetails({
       match: scheduledMatch(),
       registrations: registrationList(),
@@ -379,7 +379,7 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
     const href = wrapper.find('.whatsapp-share-btn').attributes('href');
     const text = decodeURIComponent(href.replace('https://wa.me/?text=', ''));
     expect(text).toContain(wrapper.vm.kickoffLabel);
-    expect(text).toContain(wrapper.vm.signupCountLabel);
+    expect(text.split('\n').pop()).toBe(window.location.href);
   });
 });
 

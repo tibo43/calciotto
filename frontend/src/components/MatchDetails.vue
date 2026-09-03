@@ -775,7 +775,6 @@ export default {
     whatsappShareUrl() {
       const text = buildWhatsAppShareText({
         kickoffLabel: this.kickoffLabel,
-        signupCountLabel: this.signupCountLabel,
         matchUrl: window.location.href
       });
       return buildWhatsAppShareUrl(text);
