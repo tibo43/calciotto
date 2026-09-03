@@ -613,6 +613,7 @@ import {
   REGISTRATION_CLOSED_AT_KICKOFF
 } from '@/services/matchRegistration';
 import { buildWhatsAppShareText, buildWhatsAppShareUrl } from '@/services/whatsappShare';
+import { encodeMatchId } from '@/services/shortLink';
 
 // Same shape as Profile.vue's own helper — the app has no auth store, and the
 // player id is only ever needed to answer "which of these rows is me", so both
@@ -768,14 +769,14 @@ export default {
       return `${this.registrations.length} / ${this.match.MaxPlayers} signed up`;
     },
 
-    // window.location.href is this exact page — reusing it rather than
-    // rebuilding a /matches/:id/edit path keeps this in sync with the router
-    // for free, and it's already the URL an admin sharing this match would
-    // want recipients to land on.
+    // The full /matches/:id/edit URL reads badly in a chat next to "Join
+    // Calciotto" — window.location.origin + the encoded id is the same
+    // "tinylink" the /m/:code route (router/index.js) decodes back.
     whatsappShareUrl() {
+      const shortUrl = `${window.location.origin}/m/${encodeMatchId(this.match.ID)}`;
       const text = buildWhatsAppShareText({
         kickoffLabel: this.kickoffLabel,
-        matchUrl: window.location.href
+        matchUrl: shortUrl
       });
       return buildWhatsAppShareUrl(text);
     },

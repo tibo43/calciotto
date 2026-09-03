@@ -12,6 +12,7 @@ import {
   getToken
 } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
+import { decodeMatchId } from '@/services/shortLink';
 
 jest.mock('@/services/api', () => ({
   getMatchDetailsByID: jest.fn(),
@@ -33,6 +34,10 @@ jest.mock('@/services/activeGroup', () => ({
 
 const ME = '11111111-1111-1111-1111-111111111111';
 const SOMEONE_ELSE = '22222222-2222-2222-2222-222222222222';
+// A real-looking UUID rather than a placeholder string: whatsappShareUrl
+// (see the "Share on WhatsApp" describe block) base62-encodes match.ID, which
+// only works on an actual UUID.
+const MATCH_ID = 'cccccccc-0000-4000-8000-000000000001';
 
 // A JWT is only ever read here for its player_id claim, so an unsigned token
 // with a real base64url payload is enough — currentPlayerIdFromToken never
@@ -54,7 +59,7 @@ const teams = () => [
 ];
 
 const scheduledMatch = (overrides = {}) => ({
-  ID: 'match-uuid',
+  ID: MATCH_ID,
   GroupID: 'group-uuid',
   Date: '2026-09-06',
   ScheduledAt: KICKOFF,
@@ -66,7 +71,7 @@ const scheduledMatch = (overrides = {}) => ({
 });
 
 const unscheduledMatch = () => ({
-  ID: 'match-uuid',
+  ID: MATCH_ID,
   GroupID: 'group-uuid',
   Date: '2026-09-06',
   Teams: teams()
@@ -95,7 +100,7 @@ const mountDetails = async ({ match, registrations = [], isAdmin = false, now = 
   const wrapper = mount(MatchDetails, {
     global: {
       mocks: {
-        $route: { params: { id: 'match-uuid' } },
+        $route: { params: { id: MATCH_ID } },
         $router: { go: jest.fn(), push: jest.fn() }
       }
     }
@@ -152,7 +157,7 @@ describe('MatchDetails.vue sign-up panel visibility', () => {
   it('loads the sign-up list for a scheduled match, without a group_id', async () => {
     await mountDetails({ match: scheduledMatch(), registrations: registrationList() });
 
-    expect(getMatchRegistrations).toHaveBeenCalledWith('match-uuid');
+    expect(getMatchRegistrations).toHaveBeenCalledWith(MATCH_ID);
     expect(getMatchRegistrations).toHaveBeenCalledTimes(1);
   });
 });
@@ -304,7 +309,7 @@ describe('MatchDetails.vue admin close/reopen', () => {
 
     await wrapper.vm.closeRegistrations();
 
-    expect(closeMatchRegistrations).toHaveBeenCalledWith('match-uuid');
+    expect(closeMatchRegistrations).toHaveBeenCalledWith(MATCH_ID);
     expect(wrapper.vm.registrationState).toBe('closed-by-admin');
     expect(wrapper.vm.match.RegistrationsClosedAt).toBeUndefined();
     expect(wrapper.vm.hasUnsavedChanges()).toBe(false);
@@ -319,7 +324,7 @@ describe('MatchDetails.vue admin close/reopen', () => {
 
     await wrapper.vm.reopenRegistrations();
 
-    expect(reopenMatchRegistrations).toHaveBeenCalledWith('match-uuid');
+    expect(reopenMatchRegistrations).toHaveBeenCalledWith(MATCH_ID);
     expect(wrapper.vm.registrationState).toBe('open');
   });
 });
@@ -369,7 +374,7 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
     expect(wrapper.find('.whatsapp-share-btn').exists()).toBe(false);
   });
 
-  it('includes the kick-off and the page\'s own URL, with the URL on its own line', async () => {
+  it('includes the kick-off and a short /m/:code link, not the full /matches/:id/edit URL', async () => {
     const wrapper = await mountDetails({
       match: scheduledMatch(),
       registrations: registrationList(),
@@ -379,7 +384,10 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
     const href = wrapper.find('.whatsapp-share-btn').attributes('href');
     const text = decodeURIComponent(href.replace('https://wa.me/?text=', ''));
     expect(text).toContain(wrapper.vm.kickoffLabel);
-    expect(text.split('\n').pop()).toBe(window.location.href);
+
+    const shortUrl = text.split('\n').pop();
+    expect(shortUrl).toMatch(/^http:\/\/localhost\/m\/[0-9A-Za-z]+$/);
+    expect(decodeMatchId(shortUrl.split('/m/')[1])).toBe(MATCH_ID);
   });
 });
 
@@ -445,7 +453,7 @@ describe('MatchDetails.vue signing up and withdrawing', () => {
 
     await wrapper.vm.participate();
 
-    expect(registerForMatch).toHaveBeenCalledWith('match-uuid');
+    expect(registerForMatch).toHaveBeenCalledWith(MATCH_ID);
     // Once on load, once after the sign-up.
     expect(getMatchRegistrations).toHaveBeenCalledTimes(2);
     expect(wrapper.vm.registrations).toHaveLength(4);
@@ -500,7 +508,7 @@ describe('MatchDetails.vue signing up and withdrawing', () => {
     wrapper.vm.confirmWithdraw();
     await flushPromises();
 
-    expect(unregisterFromMatch).toHaveBeenCalledWith('match-uuid');
+    expect(unregisterFromMatch).toHaveBeenCalledWith(MATCH_ID);
     expect(wrapper.vm.waitingRegistrations).toHaveLength(0);
     expect(wrapper.vm.confirmedRegistrations).toHaveLength(3);
     confirmSpy.mockRestore();
@@ -772,7 +780,7 @@ describe('MatchDetails.vue Save Changes and empty teams', () => {
 
     await wrapper.vm.saveChanges();
 
-    expect(updateMatch).toHaveBeenCalledWith('match-uuid', expect.objectContaining({ ID: 'match-uuid' }));
+    expect(updateMatch).toHaveBeenCalledWith(MATCH_ID, expect.objectContaining({ ID: MATCH_ID }));
   });
 
   it('allows saving a scheduled match with only one team filled', async () => {
