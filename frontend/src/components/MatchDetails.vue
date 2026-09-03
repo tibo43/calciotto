@@ -197,7 +197,8 @@
                  whichever team tab happens to be selected, so they come
                  before the team switcher rather than being grouped with it. -->
             <div class="action-buttons">
-              <button v-if="isAdmin" @click="saveChanges" class="btn-base btn-primary btn-small" :disabled="isSaving">
+              <button v-if="isAdmin" @click="saveChanges" class="btn-base btn-primary btn-small" :disabled="isSaving || !showTeamRoster"
+                :title="showTeamRoster ? '' : 'Nothing to save yet — compose the teams first'">
                 <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                   <polyline points="17,21 17,13 7,13 7,21" />

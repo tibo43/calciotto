@@ -731,10 +731,11 @@ describe('MatchDetails.vue Save Changes and empty teams', () => {
 // The score header and the whole roster/team-management block (tabs, Add
 // Player, the player list) hide until a scheduled match's teams are actually
 // composed — an empty "0 vs 0" / two "No players yet" columns is noise for
-// the whole sign-up window, not something worth rendering. Save Changes and
-// Delete Match are deliberately left out of this gate (see the template):
-// they stay reachable regardless, since cancelling a still-empty scheduled
-// match is a legitimate action.
+// the whole sign-up window, not something worth rendering. Delete Match is
+// deliberately left out of this gate (see the template): it stays reachable
+// regardless, since cancelling a still-empty scheduled match is a legitimate
+// action. Save Changes stays visible too, but disabled — there's nothing to
+// persist before the roster exists, so a live button there was confusing.
 describe('MatchDetails.vue team roster visibility on a scheduled match', () => {
   it('hides the score header and the roster while both teams are still empty', async () => {
     const wrapper = await mountDetails({ match: scheduledMatch(), isAdmin: true });
@@ -756,11 +757,21 @@ describe('MatchDetails.vue team roster visibility on a scheduled match', () => {
     expect(wrapper.find('.no-roster-hint').exists()).toBe(false);
   });
 
-  it('still offers Save Changes and Delete Match to an admin while the roster is hidden', async () => {
+  it('still offers Save Changes and Delete Match to an admin while the roster is hidden, but Save is disabled', async () => {
     const wrapper = await mountDetails({ match: scheduledMatch(), isAdmin: true });
 
     expect(wrapper.html()).toContain('Save Changes');
+    expect(wrapper.find('.team-management .btn-primary').attributes('disabled')).toBeDefined();
     expect(wrapper.html()).toContain('Delete Match');
+    expect(wrapper.find('.delete-match-btn').attributes('disabled')).toBeUndefined();
+  });
+
+  it('enables Save Changes once the roster is composed', async () => {
+    const match = scheduledMatch();
+    match.Teams[0].Players = [{ ID: SOMEONE_ELSE, Name: 'marco', GoalNumber: 0 }];
+    const wrapper = await mountDetails({ match, isAdmin: true });
+
+    expect(wrapper.find('.team-management .btn-primary').attributes('disabled')).toBeUndefined();
   });
 
   it('leaves an unscheduled match exactly as it was, roster and all', async () => {
