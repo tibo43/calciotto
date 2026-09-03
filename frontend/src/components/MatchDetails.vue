@@ -747,7 +747,28 @@ export default {
         && this.isAdmin
         && !this.isLoadingRegistrations
         && (this.registrationState === REGISTRATION_CLOSED_BY_ADMIN
-          || this.registrationState === REGISTRATION_CLOSED_AT_KICKOFF);
+          || this.registrationState === REGISTRATION_CLOSED_AT_KICKOFF)
+        && !this.allConfirmedAlreadyPlaced;
+    },
+
+    // True once every confirmed sign-up already has a team — offering "Fill
+    // teams from sign-ups" again at that point would promise composition work
+    // there's none left to do (clicking it would be a same-state no-op).
+    // Reuses fillTeamsFromRegistrations itself — the exact function the
+    // button's own click handler calls — rather than re-deriving "already
+    // placed" a second way that could quietly drift from it.
+    //
+    // Deliberately narrower than "nothing to fill": an empty confirmed list
+    // returns false here on purpose, leaving the button reachable and
+    // fillTeamsFromSignups()'s own "nothing to fill the teams with" error
+    // message intact — an admin who closed sign-ups on an empty list should
+    // find out why clicking does nothing, not have the button vanish with no
+    // explanation.
+    allConfirmedAlreadyPlaced() {
+      if (this.confirmedRegistrations.length === 0) return false;
+      if (!this.match.Teams || this.match.Teams.length < 2) return false;
+      const rosters = this.match.Teams.map(team => team.Players || []);
+      return fillTeamsFromRegistrations(this.confirmedRegistrations, rosters).addedCount === 0;
     },
 
     confirmedRegistrations() {
@@ -1418,7 +1439,21 @@ export default {
       return this.match.Teams.reduce((total, team) => total + (team.Players ? team.Players.length : 0), 0);
     },
 
+    // Predates scheduled matches: "any goal recorded" was a reasonable proxy
+    // for "has this been played" back when a match was always created and
+    // scored immediately after the fact. For a scheduled match that's no
+    // longer true — an admin can compose the roster and enter goals (via
+    // "Fill teams from sign-ups" plus manual editing) *before* kick-off, and
+    // the goal count alone would then call a match that hasn't happened yet
+    // "Completed". Kick-off is checked first for exactly that case: before
+    // it, the match is unambiguously upcoming regardless of what's already
+    // been entered. An unscheduled match has no ScheduledAt to check, so it
+    // falls straight through to the original goal-based heuristic — same
+    // behaviour as before this feature existed.
     getMatchStatus() {
+      if (this.isScheduled && this.nowMs < Date.parse(this.match.ScheduledAt)) {
+        return 'upcoming';
+      }
       const totalGoals = this.getTotalGoals();
       if (totalGoals === 0) return 'upcoming';
       return 'completed';

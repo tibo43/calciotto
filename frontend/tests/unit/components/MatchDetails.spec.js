@@ -529,6 +529,46 @@ describe('MatchDetails.vue "Fill teams from sign-ups" gating', () => {
 
     expect(wrapper.find('.fill-teams-btn').exists()).toBe(false);
   });
+
+  // registrationList()'s 3 confirmed entries are marco (SOMEONE_ELSE), luca
+  // (p3) and gigi (p4) — see the fixture above.
+  it('hides it once every confirmed sign-up already has a team', async () => {
+    const match = scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' });
+    match.Teams[0].Players = [
+      { ID: SOMEONE_ELSE, Name: 'marco', GoalNumber: 0 },
+      { ID: 'p3', Name: 'luca', GoalNumber: 0 }
+    ];
+    match.Teams[1].Players = [{ ID: 'p4', Name: 'gigi', GoalNumber: 0 }];
+    const wrapper = await mountDetails({ match, registrations: registrationList(), isAdmin: true });
+
+    expect(wrapper.find('.fill-teams-btn').exists()).toBe(false);
+    expect(wrapper.find('.fill-teams-hint').exists()).toBe(false);
+  });
+
+  it('still offers it while at least one confirmed sign-up has no team yet', async () => {
+    const match = scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' });
+    // Only marco placed — luca and gigi are still unplaced.
+    match.Teams[0].Players = [{ ID: SOMEONE_ELSE, Name: 'marco', GoalNumber: 0 }];
+    const wrapper = await mountDetails({ match, registrations: registrationList(), isAdmin: true });
+
+    expect(wrapper.find('.fill-teams-btn').exists()).toBe(true);
+  });
+
+  // The empty-confirmed-list case is deliberately left alone: hiding the
+  // button there too would leave an admin who closed an empty sign-up list
+  // with no explanation for why nothing happens. See the "refuses with an
+  // error when nobody is on the confirmed list" case below, which still
+  // exercises the button being clickable in that state.
+  it('still offers it when the confirmed list is empty, unlike the all-placed case', async () => {
+    const match = scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' });
+    const wrapper = await mountDetails({
+      match,
+      registrations: [{ PlayerID: 'p5', Name: 'nico', Position: 1, IsWaiting: true, RegisteredAt: OPENS_AT }],
+      isAdmin: true
+    });
+
+    expect(wrapper.find('.fill-teams-btn').exists()).toBe(true);
+  });
 });
 
 describe('MatchDetails.vue "Fill teams from sign-ups" behaviour', () => {
@@ -707,5 +747,52 @@ describe('MatchDetails.vue team roster visibility on a scheduled match', () => {
     expect(wrapper.find('.teams-score').exists()).toBe(true);
     expect(wrapper.find('.tabs-buttons').exists()).toBe(true);
     expect(wrapper.find('.no-roster-hint').exists()).toBe(false);
+  });
+});
+
+// getMatchStatus() predates scheduled matches: "any goal recorded" was a
+// reasonable proxy for "has this been played" back when a match was always
+// created and scored immediately after the fact. These pin the fix for a
+// scheduled match with a composed, scored roster entered *before* kick-off —
+// it must read as upcoming regardless of the goal count, and only fall back
+// to the goal-based heuristic once kick-off has actually passed.
+describe('MatchDetails.vue match-status badge', () => {
+  const scoredTeams = () => [
+    { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 3, Players: [{ ID: 'p1', Name: 'marco', GoalNumber: 3 }] },
+    { ID: 'team-b', Name: 'White', Colour: 'white', Score: 1, Players: [{ ID: 'p2', Name: 'luca', GoalNumber: 1 }] }
+  ];
+
+  it('reads "Upcoming" for a scheduled, already-scored match before kick-off', async () => {
+    const match = scheduledMatch({ Teams: scoredTeams() });
+    const wrapper = await mountDetails({ match, now: DURING_SIGNUPS }); // before KICKOFF
+
+    expect(wrapper.find('.match-status-badge').classes()).toContain('upcoming');
+    expect(wrapper.find('.match-status-badge').text()).toBe('Upcoming');
+  });
+
+  it('falls back to the goal-based read once kick-off has passed', async () => {
+    const match = scheduledMatch({ Teams: scoredTeams() });
+    const wrapper = await mountDetails({ match, now: AFTER_KICKOFF });
+
+    expect(wrapper.find('.match-status-badge').classes()).toContain('completed');
+  });
+
+  it('reads "Upcoming" for a scheduled match with no goals yet, even past kick-off', async () => {
+    const match = scheduledMatch(); // teams() defaults to Score: 0, Players: []
+    const wrapper = await mountDetails({ match, now: AFTER_KICKOFF });
+
+    expect(wrapper.find('.match-status-badge').classes()).toContain('upcoming');
+  });
+
+  it('leaves an unscheduled match on the original goal-based heuristic', async () => {
+    const withGoals = { ...unscheduledMatch(), Teams: scoredTeams() };
+    const wrapper = await mountDetails({ match: withGoals });
+
+    expect(wrapper.find('.match-status-badge').classes()).toContain('completed');
+
+    const noGoals = unscheduledMatch();
+    const wrapper2 = await mountDetails({ match: noGoals });
+
+    expect(wrapper2.find('.match-status-badge').classes()).toContain('upcoming');
   });
 });
