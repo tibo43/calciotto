@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { getToken } from '@/services/api';
+import { decodeMatchId } from '@/services/shortLink';
 
 const routes = [
   {
@@ -13,6 +14,21 @@ const routes = [
     name: 'MatchDetails',
     component: () => import('@/components/MatchDetails.vue'),
     props: true
+  },
+  // The "tinylink" shared on WhatsApp (see whatsappShare.js) — a bare
+  // redirect rather than its own component, since decoding a code and
+  // resolving where it points to is all there is to do. An invalid code
+  // (hand-edited, truncated in transit) falls back home instead of throwing
+  // partway through a navigation.
+  {
+    path: '/m/:code',
+    redirect: (to) => {
+      try {
+        return `/matches/${decodeMatchId(to.params.code)}/edit`;
+      } catch {
+        return '/';
+      }
+    }
   },
   // Matches and standings used to be two pages; they are one now. Kept as a
   // redirect so an old bookmark or link still lands on the merged page rather
