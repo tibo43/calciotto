@@ -21,15 +21,6 @@ func NewPlayerHandler(service *services.PlayerService, groupService *services.Gr
 	return &PlayerHandler{Service: service, GroupService: groupService, MembershipService: membershipService}
 }
 
-func (h *PlayerHandler) GetPlayers(c *gin.Context) {
-	players, err := h.Service.GetPlayers()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, players)
-}
-
 // CreatePlayer creates a player (a "ghost" roster entry — see
 // MatchDetails.vue's create-on-the-fly flow), then attaches it to a group —
 // group_id in the body if provided, else the caller's own first group
@@ -130,14 +121,4 @@ func (h *PlayerHandler) UpdateMyName(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"name": name})
-}
-
-func (h *PlayerHandler) SearchPlayer(c *gin.Context) {
-	name := c.Query("name")
-	player, err := h.Service.SearchPlayer(name)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Player not found"})
-		return
-	}
-	c.JSON(http.StatusOK, player)
 }

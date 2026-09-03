@@ -292,33 +292,6 @@ export const createPlayer = async (playerData) => {
   }
 };
 
-// Existing function (referenced in PlayersAll.vue)
-export const getPlayers = async () => {
-  try {
-    const response = await api.get(`/players`);
-    if (response.status !== 200) {
-      throw new Error('Failed to fetch players');
-    }
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching players:', error);
-    throw error;
-  }
-};
-
-export async function searchPlayerByName(playerName) {
-  try {
-    const response = await api.get(`/players/search?name=${encodeURIComponent(playerName)}`);
-    if (response.status !== 200) {
-      throw new Error('Player search failed');
-    }
-    return response.data;
-  } catch (error) {
-    console.error('Error searching for player:', error);
-    throw error;
-  }
-}
-
 // Standings
 export const getPointsStandings = async (season, groupId) => {
   try {

@@ -75,8 +75,6 @@ func main() {
 	// travels in the JSON body, so this reuses the body/query-resolving
 	// requireGroupAdmin rather than a path-param variant. See CLAUDE.md.
 	r.POST("/players", authRequired, requireGroupAdmin, playerHandler.CreatePlayer)
-	r.GET("/players", playerHandler.GetPlayers)
-	r.GET("/players/search", playerHandler.SearchPlayer)
 	// Cross-group profile of the caller themselves: authRequired only, with no
 	// requireGroupMember — there is no single group_id to authorize against
 	// here, and the handler only ever reports on the groups the JWT's own
