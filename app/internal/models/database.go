@@ -146,6 +146,31 @@ type MatchRegistration struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// MatchVote is one group member's vote for who they think deserves the Man
+// of the Match award for a match with a composed roster (either an ordinary
+// already-recorded match, or a scheduled one once teams have been filled in).
+//
+// Unlike MatchRegistration.Register (a one-shot action that rejects a
+// duplicate with ErrAlreadyRegistered), casting a vote is deliberately an
+// upsert: a player changing their mind about who deserves MOTM is the normal
+// case, not a mistake to refuse — see MatchVoteService.Vote. The composite
+// unique index on (match_id, voter_id) is therefore not "at most one sign-up"
+// the way MatchRegistration's is, but "exactly one *current* vote per voter
+// per match", enforced the same way.
+//
+// There is no award or "winner" column anywhere: the MOTM award for a match
+// is derived, never stored, by tallying VotedForID per match and taking
+// whoever has the most votes — ties included, with no arbitrary tie-break
+// (see MatchVoteService.ComputeMotmWinners). That mirrors the waiting list's
+// own "derive it, don't store it" choice on MatchRegistration.
+type MatchVote struct {
+	BaseModel
+	MatchID    uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_match_vote_match_voter" json:"match_id"`
+	VoterID    uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_match_vote_match_voter" json:"voter_id"`
+	VotedForID uuid.UUID `gorm:"type:uuid" json:"voted_for_id"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 // MatchPlayer représente la composition d'une équipe pour un match.
 type MatchPlayer struct {
 	BaseModel

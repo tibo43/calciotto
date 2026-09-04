@@ -114,6 +114,44 @@ type MatchRegistrationEntry struct {
 	RegisteredAt time.Time `json:"RegisteredAt"`
 }
 
+// MatchVoteTally is one candidate's line in a match's Man of the Match tally,
+// part of MatchVoteSummary below. PascalCase JSON, matching the other
+// match-scoped DTOs (MatchRegistrationEntry) rather than the group/player
+// DTOs' lowercase convention — see CLAUDE.md's "API payload field casing"
+// note.
+type MatchVoteTally struct {
+	PlayerID uuid.UUID `json:"PlayerID"`
+	Name     string    `json:"Name"`
+	Votes    int       `json:"Votes"`
+}
+
+// MatchVoteSummary is GET /matches/:id/votes' whole response: the tally
+// (every candidate with at least one vote, ordered by vote count desc then
+// name asc) plus which player, if any, the caller has voted for.
+//
+// MyVoteFor is a *uuid.UUID with omitempty rather than a plain uuid.UUID, the
+// same reasoning as MatchWithDetails.RegistrationCount: "the caller has not
+// voted" (nil, key absent) has to stay distinguishable from a real player id,
+// and uuid.Nil is a value a genuine vote could never hold anyway but a zero
+// value would be an ambiguous way to say so.
+type MatchVoteSummary struct {
+	Tally     []MatchVoteTally `json:"Tally"`
+	MyVoteFor *uuid.UUID       `json:"MyVoteFor,omitempty"`
+}
+
+// MotmStandingRow is one player's row in the season-long Man of the Match
+// leaderboard: how many matches' MOTM award they have won. A match tied
+// between several players counts as an award for each of them (see
+// ComputeMotmWinners), so Awards summed across a row is not the same as the
+// number of matches played. IsMember is tagged the same post-processing way
+// as PointsStandingRow/ScorerRow — see their comment.
+type MotmStandingRow struct {
+	PlayerID uuid.UUID `json:"PlayerID"`
+	Name     string    `json:"Name"`
+	Awards   int       `json:"Awards"`
+	IsMember bool      `json:"IsMember"`
+}
+
 // GroupWithRole is a Group tagged with the role the *requesting* player holds
 // in it — the shape GET /groups/me returns, so a client can tell which of its
 // groups it may act as an admin in without a follow-up request per group. It

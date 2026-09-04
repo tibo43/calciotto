@@ -1,11 +1,12 @@
 import { shallowMount, flushPromises } from '@vue/test-utils';
 import MatchesAndStandings from '@/components/MatchesAndStandings.vue';
-import { getPointsStandings, getScorers, getSeasons } from '@/services/api';
+import { getPointsStandings, getScorers, getMotmStandings, getSeasons } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
 
 jest.mock('@/services/api', () => ({
   getPointsStandings: jest.fn(),
   getScorers: jest.fn(),
+  getMotmStandings: jest.fn(),
   getSeasons: jest.fn()
 }));
 
@@ -22,6 +23,7 @@ const mountPage = async (seasons) => {
   getSeasons.mockResolvedValue(seasons);
   getPointsStandings.mockResolvedValue([]);
   getScorers.mockResolvedValue([]);
+  getMotmStandings.mockResolvedValue([]);
 
   // Children are stubbed: this file is only about the shell's own season
   // preselection, not about what MatchesPanel/the standings tables render —

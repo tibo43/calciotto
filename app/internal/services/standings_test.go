@@ -172,3 +172,107 @@ func TestComputeScorers_TieBrokenByName(t *testing.T) {
 		t.Errorf("expected alphabetical tie-break (alice, zack), got %+v", rows)
 	}
 }
+
+// motmRowsByID mirrors pointsRowsByID above, for ComputeMotmStandings' rows.
+func motmRowsByID(rows []models.MotmStandingRow) map[uuid.UUID]models.MotmStandingRow {
+	m := make(map[uuid.UUID]models.MotmStandingRow, len(rows))
+	for _, r := range rows {
+		m[r.PlayerID] = r
+	}
+	return m
+}
+
+// TestComputeMotmStandings_CountsOneAwardPerMatch: a match with a clear
+// winner increments that player's award count by exactly one, and a player
+// who was in the tally but not the eventual winner earns nothing that match.
+func TestComputeMotmStandings_CountsOneAwardPerMatch(t *testing.T) {
+	alice, bob := uuid.New(), uuid.New()
+	match := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0), newPlayer(bob, "bob", 0)))
+
+	votes := map[uuid.UUID][]models.MatchVoteTally{
+		match.ID: {candidate(alice, "alice", 3), candidate(bob, "bob", 1)},
+	}
+
+	rows := motmRowsByID(ComputeMotmStandings([]models.MatchWithDetails{match}, votes))
+	if r, ok := rows[alice]; !ok || r.Awards != 1 {
+		t.Errorf("alice = %+v (present=%v), want 1 award", r, ok)
+	}
+	if _, ok := rows[bob]; ok {
+		t.Errorf("bob has a standings row despite never winning the award: %+v", rows)
+	}
+}
+
+// TestComputeMotmStandings_TieAwardsEveryone: a tie in one match's tally
+// increments every tied player's count, matching ComputeMotmWinners' own
+// tie-inclusive rule.
+func TestComputeMotmStandings_TieAwardsEveryone(t *testing.T) {
+	alice, bob := uuid.New(), uuid.New()
+	match := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0), newPlayer(bob, "bob", 0)))
+
+	votes := map[uuid.UUID][]models.MatchVoteTally{
+		match.ID: {candidate(alice, "alice", 2), candidate(bob, "bob", 2)},
+	}
+
+	rows := motmRowsByID(ComputeMotmStandings([]models.MatchWithDetails{match}, votes))
+	if r := rows[alice]; r.Awards != 1 {
+		t.Errorf("alice = %+v, want 1 award", r)
+	}
+	if r := rows[bob]; r.Awards != 1 {
+		t.Errorf("bob = %+v, want 1 award", r)
+	}
+}
+
+// TestComputeMotmStandings_AccumulatesAcrossMatches: winning two matches'
+// award counts as 2, not a new row each time.
+func TestComputeMotmStandings_AccumulatesAcrossMatches(t *testing.T) {
+	alice := uuid.New()
+	match1 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0)))
+	match2 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0)))
+
+	votes := map[uuid.UUID][]models.MatchVoteTally{
+		match1.ID: {candidate(alice, "alice", 1)},
+		match2.ID: {candidate(alice, "alice", 5)},
+	}
+
+	rows := motmRowsByID(ComputeMotmStandings([]models.MatchWithDetails{match1, match2}, votes))
+	if r := rows[alice]; r.Awards != 2 {
+		t.Errorf("alice = %+v, want 2 awards (won both matches)", r)
+	}
+}
+
+// TestComputeMotmStandings_MatchWithNoVotesContributesNothing: a match absent
+// from the votesByMatch map (nobody voted) must not blow up or fabricate a
+// row.
+func TestComputeMotmStandings_MatchWithNoVotesContributesNothing(t *testing.T) {
+	match := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(uuid.New(), "alice", 0)))
+
+	rows := ComputeMotmStandings([]models.MatchWithDetails{match}, map[uuid.UUID][]models.MatchVoteTally{})
+	if len(rows) != 0 {
+		t.Errorf("rows = %+v, want none for a match with no votes at all", rows)
+	}
+}
+
+// TestComputeMotmStandings_SortOrder: most awards first, alphabetical name as
+// the tie-break, mirroring ComputePointsStandings/ComputeScorers' own
+// convention.
+func TestComputeMotmStandings_SortOrder(t *testing.T) {
+	alice, bob, carol := uuid.New(), uuid.New(), uuid.New()
+	match1 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0)))
+	match2 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(bob, "bob", 0)))
+	match3 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(carol, "carol", 0)))
+
+	votes := map[uuid.UUID][]models.MatchVoteTally{
+		match1.ID: {candidate(alice, "alice", 1)},
+		match2.ID: {candidate(bob, "bob", 1)},
+		match3.ID: {candidate(carol, "carol", 1)},
+	}
+
+	rows := ComputeMotmStandings([]models.MatchWithDetails{match1, match2, match3}, votes)
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d: %+v", len(rows), rows)
+	}
+	// All three are tied at 1 award each, so alphabetical order decides.
+	if rows[0].Name != "alice" || rows[1].Name != "bob" || rows[2].Name != "carol" {
+		t.Errorf("expected alphabetical tie-break (alice, bob, carol), got %+v", rows)
+	}
+}

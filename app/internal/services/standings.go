@@ -13,6 +13,7 @@ type StandingsService struct {
 	MatchService      *MatchService
 	MembershipService *GroupMembershipService
 	PlayerService     *PlayerService
+	VoteService       *MatchVoteService
 }
 
 func NewStandingsService(db *gorm.DB, membershipService *GroupMembershipService) *StandingsService {
@@ -20,6 +21,7 @@ func NewStandingsService(db *gorm.DB, membershipService *GroupMembershipService)
 		MatchService:      NewMatchService(db),
 		MembershipService: membershipService,
 		PlayerService:     NewPlayerService(db),
+		VoteService:       NewMatchVoteService(db),
 	}
 }
 
@@ -51,6 +53,42 @@ func (s *StandingsService) GetScorers(groupID uuid.UUID, season string) ([]model
 		return nil, err
 	}
 	rows := ComputeScorers(FilterMatchesBySeason(matches, season))
+
+	currentMembers, err := s.currentMemberIDs(groupID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rows[i].IsMember = currentMembers[rows[i].PlayerID]
+	}
+	return rows, nil
+}
+
+// GetMotmStandings ranks a group's players by how many matches' Man of the
+// Match award they have won, following the exact same shape as
+// GetPointsStandings/GetScorers: load the group's matches, season-filter in
+// Go, run a pure Compute* function, then tag IsMember as a post-processing
+// step. The one difference is the extra data source — a match's votes are
+// not part of MatchWithDetails at all (the same reason RegistrationCount
+// isn't: see CLAUDE.md's "flatten/reconstruct pattern"), so they are loaded
+// separately, once, for every match in the (already season-filtered) result.
+func (s *StandingsService) GetMotmStandings(groupID uuid.UUID, season string) ([]models.MotmStandingRow, error) {
+	matches, err := s.MatchService.GetMatchesDetails(groupID, "")
+	if err != nil {
+		return nil, err
+	}
+	matches = FilterMatchesBySeason(matches, season)
+
+	matchIDs := make([]uuid.UUID, len(matches))
+	for i, match := range matches {
+		matchIDs[i] = match.ID
+	}
+	votesByMatch, err := s.VoteService.TallyVotesForMatches(matchIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	rows := ComputeMotmStandings(matches, votesByMatch)
 
 	currentMembers, err := s.currentMemberIDs(groupID)
 	if err != nil {
@@ -330,6 +368,63 @@ func ComputeScorers(matches []models.MatchWithDetails) []models.ScorerRow {
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].Goals != rows[j].Goals {
 			return rows[i].Goals > rows[j].Goals
+		}
+		return rows[i].Name < rows[j].Name
+	})
+	return rows
+}
+
+// ComputeMotmStandings ranks players by how many matches' Man of the Match
+// award they have won, over an already-loaded set of matches and their vote
+// tallies keyed by match id (as produced by
+// MatchVoteService.TallyVotesForMatches). Like ComputePointsStandings/
+// ComputeScorers, it is a pure function of its inputs — which matches and
+// which votes to consider is entirely the caller's concern, so scoping (by
+// group, by season) never has to touch this logic.
+//
+// A tie for the most votes in a match is not resolved here either: every
+// player ComputeMotmWinners returns for that match has their award count
+// incremented, so a three-way tie in one match increments three rows rather
+// than picking a winner.
+func ComputeMotmStandings(matches []models.MatchWithDetails, votesByMatch map[uuid.UUID][]models.MatchVoteTally) []models.MotmStandingRow {
+	type acc struct {
+		name   string
+		awards int
+	}
+	stats := make(map[uuid.UUID]*acc)
+
+	for _, match := range matches {
+		tally := votesByMatch[match.ID]
+		if len(tally) == 0 {
+			continue
+		}
+
+		// Names come from the tally itself (players.name, resolved at query
+		// time) rather than from the match roster: a tally entry only exists
+		// for a player who actually received a vote.
+		nameByID := make(map[uuid.UUID]string, len(tally))
+		for _, candidate := range tally {
+			nameByID[candidate.PlayerID] = candidate.Name
+		}
+
+		for _, winner := range ComputeMotmWinners(tally) {
+			row, ok := stats[winner]
+			if !ok {
+				row = &acc{name: nameByID[winner]}
+				stats[winner] = row
+			}
+			row.awards++
+		}
+	}
+
+	rows := make([]models.MotmStandingRow, 0, len(stats))
+	for id, row := range stats {
+		rows = append(rows, models.MotmStandingRow{PlayerID: id, Name: row.name, Awards: row.awards})
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Awards != rows[j].Awards {
+			return rows[i].Awards > rows[j].Awards
 		}
 		return rows[i].Name < rows[j].Name
 	})

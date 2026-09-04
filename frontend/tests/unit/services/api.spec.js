@@ -126,3 +126,60 @@ describe('the match sign-up calls', () => {
     await expect(api.registerForMatch('match-uuid')).rejects.toBe(conflict);
   });
 });
+
+// Same reasoning as the sign-up calls above: the group is derived from the
+// match named in the path, so none of these three carry a group_id either.
+describe('the Man of the Match vote calls', () => {
+  beforeEach(() => {
+    mockInstance.get.mockReset();
+    mockInstance.post.mockReset();
+    mockInstance.delete.mockReset();
+    mockInstance.get.mockResolvedValue({ status: 200, data: { Tally: [], MyVoteFor: null } });
+    mockInstance.post.mockResolvedValue({ status: 200, data: { Tally: [], MyVoteFor: null } });
+    mockInstance.delete.mockResolvedValue({ status: 200, data: { unvoted: true } });
+  });
+
+  it('casts a vote with the candidate id in the body and no group_id', async () => {
+    mockInstance.post.mockResolvedValue({
+      status: 200,
+      data: { Tally: [{ PlayerID: 'p1', Name: 'alice', Votes: 1 }], MyVoteFor: 'p1' }
+    });
+
+    const summary = await api.voteForMotm('match-uuid', 'p1');
+
+    expect(mockInstance.post).toHaveBeenCalledWith('/matches/match-uuid/votes', { voted_for_id: 'p1' });
+    expect(summary).toEqual({ Tally: [{ PlayerID: 'p1', Name: 'alice', Votes: 1 }], MyVoteFor: 'p1' });
+  });
+
+  it('removes the caller\'s vote with a bare DELETE', async () => {
+    await expect(api.removeMotmVote('match-uuid')).resolves.toEqual({ unvoted: true });
+
+    expect(mockInstance.delete).toHaveBeenCalledWith('/matches/match-uuid/votes');
+  });
+
+  it('fetches the tally with a bare GET', async () => {
+    await api.getMatchVotes('match-uuid');
+
+    expect(mockInstance.get).toHaveBeenCalledWith('/matches/match-uuid/votes');
+  });
+
+  it('rethrows so a 400 (self-vote / not on roster) reaches the caller', async () => {
+    const badRequest = { response: { status: 400, data: { error: 'not on roster' } } };
+    mockInstance.post.mockRejectedValue(badRequest);
+
+    await expect(api.voteForMotm('match-uuid', 'p1')).rejects.toBe(badRequest);
+  });
+});
+
+describe('getMotmStandings', () => {
+  beforeEach(() => {
+    mockInstance.get.mockReset();
+    mockInstance.get.mockResolvedValue({ status: 200, data: [] });
+  });
+
+  it('queries /standings/motm with season and group_id', async () => {
+    await api.getMotmStandings('2025-2026', 'group-uuid');
+
+    expect(mockInstance.get).toHaveBeenCalledWith('/standings/motm?season=2025-2026&group_id=group-uuid');
+  });
+});

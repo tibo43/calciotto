@@ -129,7 +129,7 @@ func applySchema(db *gorm.DB) error {
 	// "this match was never scheduled" state every pre-existing match is in —
 	// unlike GroupMembership.IsFavorite below, whose non-null default(false)
 	// broke an invariant and had to be repaired.
-	if err := db.AutoMigrate(&models.Group{}, &models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{}, &models.MatchRegistration{}, &models.GroupMembership{}, &models.PasswordResetToken{}); err != nil {
+	if err := db.AutoMigrate(&models.Group{}, &models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{}, &models.MatchRegistration{}, &models.MatchVote{}, &models.GroupMembership{}, &models.PasswordResetToken{}); err != nil {
 		return err
 	}
 

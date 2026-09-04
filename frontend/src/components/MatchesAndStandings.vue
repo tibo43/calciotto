@@ -51,7 +51,8 @@
         <div class="container">
           <PointsStandingsTable v-if="activeSubTab === 'points'" :rows="pointsStandings"
             :is-loading="isLoadingStandings" />
-          <ScorersTable v-else :rows="topScorers" :is-loading="isLoadingStandings" />
+          <ScorersTable v-else-if="activeSubTab === 'scorers'" :rows="topScorers" :is-loading="isLoadingStandings" />
+          <MotmStandingsTable v-else :rows="motmStandings" :is-loading="isLoadingStandings" />
         </div>
       </section>
     </template>
@@ -59,20 +60,21 @@
 </template>
 
 <script>
-import { getPointsStandings, getScorers, getSeasons } from '@/services/api';
+import { getPointsStandings, getScorers, getMotmStandings, getSeasons } from '@/services/api';
 import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
 import { seasonOf } from '@/services/datetime';
 import MatchesPanel from '@/components/MatchesPanel.vue';
 import PointsStandingsTable from '@/components/PointsStandingsTable.vue';
 import ScorersTable from '@/components/ScorersTable.vue';
+import MotmStandingsTable from '@/components/MotmStandingsTable.vue';
 
-// The app's home page: the group's matches and its two standings tables, under
-// one season selector. It owns everything the three sub-tabs share — the
+// The app's home page: the group's matches and its three standings tables,
+// under one season selector. It owns everything the four sub-tabs share — the
 // active group, whether the caller is an admin of it, the list of seasons and
-// the selected one — and composes the three presentational children.
+// the selected one — and composes the four presentational children.
 export default {
   name: 'MatchesAndStandings',
-  components: { MatchesPanel, PointsStandingsTable, ScorersTable },
+  components: { MatchesPanel, PointsStandingsTable, ScorersTable, MotmStandingsTable },
   data() {
     return {
       // Resolved once, before any child mounts: MatchesPanel creates matches
@@ -92,11 +94,13 @@ export default {
       isLoadingStandings: false,
       pointsStandings: [],
       topScorers: [],
+      motmStandings: [],
       activeSubTab: 'matches',
       subTabs: [
         { key: 'matches', label: 'Matches' },
         { key: 'points', label: 'Points' },
-        { key: 'scorers', label: 'Scorers' }
+        { key: 'scorers', label: 'Scorers' },
+        { key: 'motm', label: 'MOTM' }
       ]
     };
   },
@@ -148,23 +152,27 @@ export default {
         this.selectedSeason = this.seasons.length ? this.seasons[this.seasons.length - 1] : '';
       }
     },
-    // Both standings tables are (re)loaded together, as they were when they
-    // were two sub-tabs of their own page: switching between Points and
-    // Scorers then costs no request. MatchesPanel reloads itself off the
-    // season prop instead, since only it knows how to load matches.
+    // All three standings tables are (re)loaded together, as the first two
+    // were when they were sub-tabs of their own page: switching between
+    // Points, Scorers and MOTM then costs no request. MatchesPanel reloads
+    // itself off the season prop instead, since only it knows how to load
+    // matches.
     async loadStandings() {
       this.isLoadingStandings = true;
       try {
-        const [points, scorers] = await Promise.all([
+        const [points, scorers, motm] = await Promise.all([
           getPointsStandings(this.selectedSeason, this.activeGroupId),
-          getScorers(this.selectedSeason, this.activeGroupId)
+          getScorers(this.selectedSeason, this.activeGroupId),
+          getMotmStandings(this.selectedSeason, this.activeGroupId)
         ]);
         this.pointsStandings = Array.isArray(points) ? points : [];
         this.topScorers = Array.isArray(scorers) ? scorers : [];
+        this.motmStandings = Array.isArray(motm) ? motm : [];
       } catch (error) {
         console.error('Error fetching standings:', error);
         this.pointsStandings = [];
         this.topScorers = [];
+        this.motmStandings = [];
       } finally {
         this.isLoadingStandings = false;
       }
