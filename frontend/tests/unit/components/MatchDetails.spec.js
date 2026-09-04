@@ -9,9 +9,6 @@ import {
   closeMatchRegistrations,
   reopenMatchRegistrations,
   getGroupMembers,
-  getMatchVotes,
-  voteForMotm,
-  removeMotmVote,
   getToken
 } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
@@ -28,9 +25,6 @@ jest.mock('@/services/api', () => ({
   unregisterFromMatch: jest.fn(),
   closeMatchRegistrations: jest.fn(),
   reopenMatchRegistrations: jest.fn(),
-  getMatchVotes: jest.fn(),
-  voteForMotm: jest.fn(),
-  removeMotmVote: jest.fn(),
   getToken: jest.fn()
 }));
 
@@ -122,13 +116,6 @@ beforeEach(() => {
   unregisterFromMatch.mockResolvedValue({ unregistered: true });
   closeMatchRegistrations.mockResolvedValue({ closed: true });
   reopenMatchRegistrations.mockResolvedValue({ reopened: true });
-  // A composed roster (see many fixtures below) makes MatchDetails.vue load
-  // the Man of the Match tally in created() regardless of what a given test
-  // is actually about — every test needs this mocked or loadMotmVotes' own
-  // catch block logs a spurious "getMatchVotes is not a function" error.
-  getMatchVotes.mockResolvedValue({ Tally: [], MyVoteFor: null });
-  voteForMotm.mockResolvedValue({ Tally: [], MyVoteFor: null });
-  removeMotmVote.mockResolvedValue({ unvoted: true });
 });
 
 afterEach(() => {
@@ -1044,101 +1031,5 @@ describe('MatchDetails.vue Add Player list tiers sign-ups first', () => {
     // allPlayers' own order, not sign-up order — and no badges anywhere.
     expect(names).toEqual(['Marco', 'Luca', 'Gigi', 'Nico', 'Unrelated']);
     expect(wrapper.find('.registration-badge').exists()).toBe(false);
-  });
-});
-
-// Man of the Match voting: gated on teamsAreComposed exactly like the score
-// header/roster itself (see "team roster visibility" above), and — unlike
-// every other control on this page — not admin-gated at all.
-describe('MatchDetails.vue Man of the Match voting', () => {
-  const composedMatch = () => {
-    const match = unscheduledMatch();
-    match.Teams[0].Players = [
-      { ID: ME, Name: 'me', GoalNumber: 0 },
-      { ID: SOMEONE_ELSE, Name: 'marco', GoalNumber: 0 }
-    ];
-    return match;
-  };
-
-  it('hides the panel while no player has been placed on either team', async () => {
-    const wrapper = await mountDetails({ match: scheduledMatch() });
-
-    expect(wrapper.find('.motm-panel').exists()).toBe(false);
-    expect(getMatchVotes).not.toHaveBeenCalled();
-  });
-
-  it('shows the panel and loads the tally, without a group_id, once the roster is composed', async () => {
-    const wrapper = await mountDetails({ match: composedMatch() });
-
-    expect(wrapper.find('.motm-panel').exists()).toBe(true);
-    expect(getMatchVotes).toHaveBeenCalledWith(MATCH_ID);
-    expect(getMatchVotes).toHaveBeenCalledTimes(1);
-  });
-
-  it('is not admin-gated: a plain member sees the same voting form', async () => {
-    const wrapper = await mountDetails({ match: composedMatch(), isAdmin: false });
-
-    expect(wrapper.find('.motm-panel').exists()).toBe(true);
-    expect(wrapper.find('.motm-candidate-select').exists()).toBe(true);
-  });
-
-  it('excludes the caller from the candidate dropdown, but offers other roster players', async () => {
-    const wrapper = await mountDetails({ match: composedMatch() });
-
-    const values = wrapper.findAll('.motm-candidate-select option').map(o => o.attributes('value'));
-    expect(values).not.toContain(ME);
-    expect(values).toContain(SOMEONE_ELSE);
-  });
-
-  it('shows "Nobody has voted yet" and no tally list when nobody has voted', async () => {
-    const wrapper = await mountDetails({ match: composedMatch() });
-
-    expect(wrapper.find('.motm-empty').exists()).toBe(true);
-    expect(wrapper.find('.motm-tally').exists()).toBe(false);
-  });
-
-  it('disables the vote button until a candidate is chosen', async () => {
-    const wrapper = await mountDetails({ match: composedMatch() });
-
-    expect(wrapper.find('.motm-vote-form .btn-primary').attributes('disabled')).toBeDefined();
-  });
-
-  it('preselects the dropdown on the caller\'s existing vote and offers "Change vote"/"Remove vote"', async () => {
-    getMatchVotes.mockResolvedValue({
-      Tally: [{ PlayerID: SOMEONE_ELSE, Name: 'marco', Votes: 1 }],
-      MyVoteFor: SOMEONE_ELSE
-    });
-    const wrapper = await mountDetails({ match: composedMatch() });
-
-    expect(wrapper.find('.motm-candidate-select').element.value).toBe(SOMEONE_ELSE);
-    expect(wrapper.find('.motm-vote-form .btn-primary').text()).toBe('Change vote');
-    expect(wrapper.find('.motm-vote-form .btn-secondary').exists()).toBe(true);
-    expect(wrapper.find('.motm-my-vote').text()).toContain('Marco');
-  });
-
-  it('casts a vote for the selected candidate and reloads the tally', async () => {
-    const wrapper = await mountDetails({ match: composedMatch() });
-
-    await wrapper.find('.motm-candidate-select').setValue(SOMEONE_ELSE);
-    await wrapper.find('.motm-vote-form .btn-primary').trigger('click');
-    await flushPromises();
-
-    expect(voteForMotm).toHaveBeenCalledWith(MATCH_ID, SOMEONE_ELSE);
-    // Once on created(), once more after the vote is cast — always a full
-    // reload rather than a locally-patched tally, same as loadRegistrations.
-    expect(getMatchVotes).toHaveBeenCalledTimes(2);
-  });
-
-  it('removes the caller\'s own vote via "Remove vote"', async () => {
-    getMatchVotes.mockResolvedValue({
-      Tally: [{ PlayerID: SOMEONE_ELSE, Name: 'marco', Votes: 1 }],
-      MyVoteFor: SOMEONE_ELSE
-    });
-    const wrapper = await mountDetails({ match: composedMatch() });
-
-    await wrapper.find('.motm-vote-form .btn-secondary').trigger('click');
-    await flushPromises();
-
-    expect(removeMotmVote).toHaveBeenCalledWith(MATCH_ID);
   });
 });

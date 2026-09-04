@@ -295,6 +295,123 @@ func TestVote_Integration_UnknownMatchNotFound(t *testing.T) {
 	}
 }
 
+// TestVote_Integration_WindowClosedForOldUnscheduledMatch checks the 24h
+// window end to end for the non-scheduled anchor: a match recorded well over
+// a day ago (CreatedAt, backdated directly since CreateMatch always stamps
+// "now") refuses a new vote, a change of vote, and a withdrawal alike, but
+// still answers ListVotes with whatever tally already existed.
+func TestVote_Integration_WindowClosedForOldUnscheduledMatch(t *testing.T) {
+	env := newVoteEnv(t, "WindowClosedOld", 2, 0)
+	voter, second := env.roster[0], env.roster[1]
+
+	// Cast a vote while the window is still open (CreateMatch just stamped
+	// CreatedAt as "now"), then backdate the match by more than 24h.
+	otherVoter := env.roster[1]
+	if err := env.votes.Vote(env.matchID, otherVoter, env.roster[0]); err != nil {
+		t.Fatalf("Vote before backdating returned error: %v", err)
+	}
+	if err := env.tx.Model(&models.Match{}).Where("id = ?", env.matchID).
+		Update("created_at", time.Now().Add(-25*time.Hour)).Error; err != nil {
+		t.Fatalf("failed to backdate the match: %v", err)
+	}
+
+	if err := env.votes.Vote(env.matchID, voter, second); !errors.Is(err, services.ErrVotingClosed) {
+		t.Errorf("Vote after the window closed = %v, want services.ErrVotingClosed", err)
+	}
+	if err := env.votes.Unvote(env.matchID, otherVoter); !errors.Is(err, services.ErrVotingClosed) {
+		t.Errorf("Unvote after the window closed = %v, want services.ErrVotingClosed", err)
+	}
+
+	// The existing tally is still readable — ListVotes is never gated on the
+	// window, since the result is finalized, not hidden.
+	summary, err := env.votes.ListVotes(env.matchID, voter)
+	if err != nil {
+		t.Fatalf("ListVotes returned error: %v", err)
+	}
+	if len(summary.Tally) != 1 || summary.Tally[0].PlayerID != env.roster[0] || summary.Tally[0].Votes != 1 {
+		t.Errorf("tally = %+v after the window closed, want the pre-existing vote for roster[0] untouched", summary.Tally)
+	}
+}
+
+// TestVote_Integration_WindowStillOpenJustBeforeDeadline is the mirror check:
+// a match one second shy of 24 hours old must still accept a vote.
+func TestVote_Integration_WindowStillOpenJustBeforeDeadline(t *testing.T) {
+	env := newVoteEnv(t, "WindowStillOpen", 2, 0)
+
+	if err := env.tx.Model(&models.Match{}).Where("id = ?", env.matchID).
+		Update("created_at", time.Now().Add(-24*time.Hour+time.Second)).Error; err != nil {
+		t.Fatalf("failed to backdate the match: %v", err)
+	}
+
+	if err := env.votes.Vote(env.matchID, env.roster[0], env.roster[1]); err != nil {
+		t.Errorf("Vote just before the 24h deadline returned error: %v, want nil", err)
+	}
+}
+
+// TestVote_Integration_ScheduledMatchWindowAnchorsOnKickoff: a scheduled
+// match's window is measured from ScheduledAt (kick-off), not from CreatedAt
+// — a match created (and therefore logged) well over 24h ago but scheduled to
+// kick off just now must still accept a vote.
+func TestVote_Integration_ScheduledMatchWindowAnchorsOnKickoff(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+	teamService := services.NewTeamService(tx)
+	playerService := services.NewPlayerService(tx)
+	matchService := services.NewMatchService(tx)
+	voteService := services.NewMatchVoteService(tx)
+
+	group, err := groupService.CreateGroup("Zzz Votes ScheduledAnchor", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group: %v", err)
+	}
+	teams, err := teamService.GetTeamsByGroupID(group.ID)
+	if err != nil {
+		t.Fatalf("failed to load group's teams: %v", err)
+	}
+	black := teams[0]
+
+	kickoff := time.Now().Add(-time.Hour)
+	opensAt := kickoff.Add(-48 * time.Hour)
+	maxPlayers := 10
+	matchID, err := matchService.CreateMatch(services.MatchSpec{
+		ScheduledAt:         &kickoff,
+		RegistrationOpensAt: &opensAt,
+		MaxPlayers:          &maxPlayers,
+	}, group.ID)
+	if err != nil {
+		t.Fatalf("failed to create the scheduled match: %v", err)
+	}
+
+	alice, err := playerService.CreatePlayer("Zzz Vote ScheduledAnchor Alice " + uuid.NewString())
+	if err != nil {
+		t.Fatalf("failed to create player: %v", err)
+	}
+	bob, err := playerService.CreatePlayer("Zzz Vote ScheduledAnchor Bob " + uuid.NewString())
+	if err != nil {
+		t.Fatalf("failed to create player: %v", err)
+	}
+	if err := matchService.UpdateMatch(models.MatchWithDetails{
+		ID:    matchID,
+		Teams: []models.TeamWithPlayers{{ID: black.ID, Players: []models.PlayerCustom{{ID: alice}, {ID: bob}}}},
+	}); err != nil {
+		t.Fatalf("failed to compose roster: %v", err)
+	}
+
+	// Backdate the row itself (CreateMatch stamps CreatedAt as "now", long
+	// before kick-off in this scenario) to prove the window uses ScheduledAt,
+	// not CreatedAt, for a scheduled match.
+	if err := tx.Model(&models.Match{}).Where("id = ?", matchID).
+		Update("created_at", time.Now().Add(-30*24*time.Hour)).Error; err != nil {
+		t.Fatalf("failed to backdate the match's CreatedAt: %v", err)
+	}
+
+	if err := voteService.Vote(matchID, alice, bob); err != nil {
+		t.Errorf("Vote shortly after kick-off returned error: %v, want nil (window anchors on ScheduledAt)", err)
+	}
+}
+
 // TestTallyVotesForMatches_Integration_GroupsPerMatch is what
 // StandingsService.GetMotmStandings relies on: one query covering several
 // matches at once, correctly keyed and with a match that has no votes at all

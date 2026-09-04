@@ -206,34 +206,38 @@
               <div class="details-header">
                 <div class="details-title-section">
                   <h3>{{ formatDate(selectedMatch.Date) }} - Match Details</h3>
-                  <!-- The destination page (MatchDetails.vue) stays viewable by
-                       any member — only its own editing controls are
-                       admin-gated — so this link is never hidden, just
-                       relabelled: showing "Edit Match" with a pencil icon to a
-                       non-admin implied an ability that isn't actually there. -->
+                  <!-- Admin-only now: MatchDetails.vue is gated by a router
+                       guard (router/index.js's canEditMatch) to admins of the
+                       match's own group, so a plain member following this
+                       link would just bounce straight back here. Hidden
+                       rather than relabelled "View Match" as it used to be —
+                       everything a member needs (the full sign-up list with
+                       names, Man of the Match voting) now lives in this
+                       panel directly, so there is no reduced "view" version
+                       of that page left to send them to. -->
                   <router-link
+                    v-if="isAdmin"
                     :to="`/matches/${selectedMatch.ID}/edit`"
                     class="btn-base btn-primary btn-small edit-match-btn"
                   >
-                    <svg v-if="isAdmin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                     </svg>
-                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                    {{ isAdmin ? 'Edit Match' : 'View Match' }}
+                    Edit Match
                   </router-link>
                 </div>
                 <div class="details-divider"></div>
               </div>
 
-              <!-- Sign-ups, without leaving this page. Deliberately light —
-                   state, count, and Participate/Withdraw only; the full
-                   confirmed/waiting roster with names stays on the match page
-                   (see MatchDetails.vue), reached via "Edit Match"/"View
-                   Match" above. -->
+              <!-- Sign-ups, without leaving this page. This used to be
+                   deliberately light — state, count, and Participate/Withdraw
+                   only, with the full confirmed/waiting roster reserved for
+                   the match page — but a plain member can no longer reach
+                   that page at all (see the router guard above), so the full
+                   named lists moved here too, reusing MatchDetails.vue's own
+                   .signup-list* markup/classes rather than inventing new
+                   ones. -->
               <div v-if="isScheduledMatch(selectedMatch)" class="signup-inline">
                 <!-- Badge, count and the action button all on one row — moved
                      here from a separate row below after the badge/count
@@ -255,6 +259,46 @@
                 </div>
                 <p v-if="registrationStateDetail" class="signup-inline-detail">{{ registrationStateDetail }}</p>
                 <p v-if="signupMessage" class="signup-inline-message" :class="signupMessageType">{{ signupMessage }}</p>
+
+                <!-- Same confirmed/waiting split as MatchDetails.vue's own
+                     .signup-panel: server-derived IsWaiting, never guessed
+                     here from Position vs. MaxPlayers. -->
+                <div v-if="isLoadingRegistrations" class="signup-loading">
+                  <div class="loading-spinner-small"></div>
+                  <span>Loading sign-ups...</span>
+                </div>
+                <div v-else class="signup-lists">
+                  <div class="signup-list">
+                    <h4 class="signup-list-title">
+                      Confirmed
+                      <span class="count-badge">{{ confirmedRegistrations.length }} / {{ selectedMatch.MaxPlayers }}</span>
+                    </h4>
+                    <ul class="signup-entries">
+                      <li v-for="entry in confirmedRegistrations" :key="entry.PlayerID" class="signup-entry"
+                        :class="{ 'is-me': entry.PlayerID === currentPlayerId }">
+                        <span class="signup-position">{{ entry.Position }}</span>
+                        <span class="signup-name">{{ formatPlayerNameForDisplay(entry.Name) }}</span>
+                        <span v-if="entry.PlayerID === currentPlayerId" class="signup-you">you</span>
+                      </li>
+                      <li v-if="confirmedRegistrations.length === 0" class="signup-empty">Nobody has signed up yet</li>
+                    </ul>
+                  </div>
+
+                  <div v-if="waitingRegistrations.length > 0" class="signup-list signup-list-waiting">
+                    <h4 class="signup-list-title">
+                      Waiting list
+                      <span class="count-badge">{{ waitingRegistrations.length }}</span>
+                    </h4>
+                    <ul class="signup-entries">
+                      <li v-for="entry in waitingRegistrations" :key="entry.PlayerID" class="signup-entry"
+                        :class="{ 'is-me': entry.PlayerID === currentPlayerId }">
+                        <span class="signup-position">{{ entry.Position }}</span>
+                        <span class="signup-name">{{ formatPlayerNameForDisplay(entry.Name) }}</span>
+                        <span v-if="entry.PlayerID === currentPlayerId" class="signup-you">you</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
               </div>
 
               <div v-if="showTeamRoster(selectedMatch)" class="players-section">
@@ -277,12 +321,38 @@
                         <div class="player-info">
                           <span class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</span>
                         </div>
+                        <!-- Man of the Match voting — moved here from
+                             MatchDetails.vue entirely (see CLAUDE.md): a star
+                             per candidate rather than a dropdown, right next
+                             to the player it's voting for. Not admin-gated —
+                             voter eligibility is broader than "played in this
+                             match" — and offered for any composed roster,
+                             scheduled or not (showTeamRoster already implies
+                             that). Hidden for the caller's own row: the
+                             backend rejects a self-vote outright, so there is
+                             nothing to gain from offering it here. -->
+                        <div class="player-motm">
+                          <span v-if="motmVoteCount(player.ID) > 0" class="motm-vote-count">
+                            {{ motmVoteCount(player.ID) }} vote{{ motmVoteCount(player.ID) === 1 ? '' : 's' }}
+                          </span>
+                          <button v-if="player.ID && player.ID !== currentPlayerId" type="button"
+                            class="motm-star-btn" :class="{ 'is-voted': isMyMotmVote(player.ID) }"
+                            :disabled="isUpdatingMotmVote || !motmVotingOpen" :title="motmStarTitle(player)"
+                            :aria-label="motmStarTitle(player)" @click="toggleMotmVote(player.ID)">
+                            <svg viewBox="0 0 24 24" :fill="isMyMotmVote(player.ID) ? 'currentColor' : 'none'"
+                              stroke="currentColor" stroke-width="2">
+                              <polygon
+                                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                            </svg>
+                          </button>
+                        </div>
                         <span class="goal-badge">{{ player.GoalNumber || 0 }}</span>
                       </li>
                       <li v-if="!team.Players.length" class="empty-slot">No players yet</li>
                     </ul>
                   </div>
                 </div>
+                <p v-if="motmMessage" class="motm-inline-message" :class="motmMessageType">{{ motmMessage }}</p>
               </div>
               <!-- Same hidden-until-composed rule as the card above, spelled
                    out here since this preview otherwise has nothing else to
@@ -326,6 +396,9 @@ import {
   getMatchRegistrations,
   registerForMatch,
   unregisterFromMatch,
+  voteForMotm,
+  removeMotmVote,
+  getMatchVotes,
   getToken
 } from '@/services/api';
 import { toLocalRFC3339, dateTimeLocalToRFC3339, formatDateTimeShort, formatCalendarDay, formatCalendarDayShort } from '@/services/datetime';
@@ -339,6 +412,7 @@ import {
   REGISTRATION_CLOSED_BY_ADMIN,
   REGISTRATION_CLOSED_AT_KICKOFF
 } from '@/services/matchRegistration';
+import { isMotmVotingOpen } from '@/services/motmVoting';
 
 // Same shape as MatchDetails.vue's and Profile.vue's own helper — the app has
 // no auth store, and the player id is only ever needed to answer "which
@@ -427,7 +501,17 @@ export default {
       isLoadingRegistrations: false,
       isUpdatingRegistration: false,
       signupMessage: '',
-      signupMessageType: 'success'
+      signupMessageType: 'success',
+      // --- Man of the Match voting, for whichever match is selected ---
+      // Moved here from MatchDetails.vue in full — see CLAUDE.md. Same
+      // "always fully re-fetch after a change" contract as the sign-up list
+      // above: the tally is server-derived, so patching it locally is how the
+      // display drifts from reality.
+      motmVotes: { Tally: [], MyVoteFor: null },
+      isLoadingMotmVotes: false,
+      isUpdatingMotmVote: false,
+      motmMessage: '',
+      motmMessageType: 'success'
     };
   },
   async created() {
@@ -528,6 +612,25 @@ export default {
 
     canWithdraw() {
       return this.registrationsOpen && !this.isLoadingRegistrations && !this.isUpdatingRegistration && this.isRegistered;
+    },
+
+    // The confirmed/waiting split, same as MatchDetails.vue's own computed
+    // pair: server-derived IsWaiting, never re-derived here from Position vs.
+    // MaxPlayers (the two would disagree the moment an admin changes the cap).
+    confirmedRegistrations() {
+      return this.registrations.filter(entry => !entry.IsWaiting);
+    },
+
+    waitingRegistrations() {
+      return this.registrations.filter(entry => entry.IsWaiting);
+    },
+
+    // Whether a Man of the Match vote can still be cast/changed/removed for
+    // `selectedMatch` at this page's one sampled `nowMs` — see
+    // services/motmVoting.js. The backend re-checks this on every call
+    // regardless; this only lets a star grey out with a tooltip before a 409.
+    motmVotingOpen() {
+      return isMotmVotingOpen(this.selectedMatch, this.nowMs);
     }
   },
   methods: {
@@ -561,6 +664,7 @@ export default {
           this.selectedMatch = this.matches[0];
         }
         await this.loadSelectedRegistrations();
+        await this.loadSelectedMotmVotes();
       } catch (error) {
         console.error('Error fetching matches:', error);
         // Don't leave the previous season's list on screen after a failed
@@ -756,7 +860,9 @@ export default {
     selectMatch(match) {
       this.selectedMatch = match;
       this.signupMessage = '';
+      this.motmMessage = '';
       this.loadSelectedRegistrations();
+      this.loadSelectedMotmVotes();
     },
 
     // Loads the sign-up list of `selectedMatch` alone, the same one-request-
@@ -849,6 +955,82 @@ export default {
     showSignupMessage(text, type) {
       this.signupMessage = text;
       this.signupMessageType = type;
+    },
+
+    // --- Man of the Match voting, for `selectedMatch` alone -----------------
+    // Loaded whenever the selection changes, exactly like
+    // loadSelectedRegistrations() — a no-op for a match with no composed
+    // roster, since there is nobody to vote for yet.
+    async loadSelectedMotmVotes() {
+      if (!this.selectedMatch || !teamsAreComposed(this.selectedMatch)) {
+        this.motmVotes = { Tally: [], MyVoteFor: null };
+        return;
+      }
+      this.isLoadingMotmVotes = true;
+      try {
+        const summary = await getMatchVotes(this.selectedMatch.ID);
+        this.motmVotes = summary && Array.isArray(summary.Tally)
+          ? summary
+          : { Tally: [], MyVoteFor: null };
+      } catch (error) {
+        console.error('Error loading Man of the Match votes:', error);
+        this.motmVotes = { Tally: [], MyVoteFor: null };
+      } finally {
+        this.isLoadingMotmVotes = false;
+      }
+    },
+
+    // How many votes playerId currently holds in the loaded tally, or 0 if
+    // none (a candidate with zero votes is simply absent from Tally).
+    motmVoteCount(playerId) {
+      const entry = this.motmVotes.Tally.find(candidate => candidate.PlayerID === playerId);
+      return entry ? entry.Votes : 0;
+    },
+
+    isMyMotmVote(playerId) {
+      return this.motmVotes.MyVoteFor === playerId;
+    },
+
+    // The star's tooltip/aria-label: the 24h window takes priority over
+    // vote/change-vote wording, since it explains why the star is disabled
+    // rather than what clicking it used to do.
+    motmStarTitle(player) {
+      if (!this.motmVotingOpen) {
+        return 'Vote fermé 24h après le match';
+      }
+      return this.isMyMotmVote(player.ID)
+        ? `Remove your Man of the Match vote for ${player.Name}`
+        : `Vote for ${player.Name} as Man of the Match`;
+    },
+
+    // Clicking the star of the player the caller already voted for removes
+    // the vote (a toggle); clicking any other candidate's star casts or
+    // changes it — MatchVoteService.Vote is an upsert on the backend, so
+    // there is no separate "already voted" conflict to handle here, unlike
+    // participate() above.
+    async toggleMotmVote(playerId) {
+      if (this.isUpdatingMotmVote || !this.motmVotingOpen) return;
+      this.isUpdatingMotmVote = true;
+      const removing = this.isMyMotmVote(playerId);
+      try {
+        if (removing) {
+          await removeMotmVote(this.selectedMatch.ID);
+        } else {
+          await voteForMotm(this.selectedMatch.ID, playerId);
+        }
+        await this.loadSelectedMotmVotes();
+        this.motmMessage = removing
+          ? 'Your Man of the Match vote has been removed.'
+          : 'Your Man of the Match vote has been saved.';
+        this.motmMessageType = 'success';
+      } catch (error) {
+        console.error('Error updating Man of the Match vote:', error);
+        this.motmMessage = this.registrationErrorMessage(error, 'Error updating your Man of the Match vote.');
+        this.motmMessageType = 'error';
+        await this.loadSelectedMotmVotes();
+      } finally {
+        this.isUpdatingMotmVote = false;
+      }
     },
 
     scrollLeft() {
@@ -1557,6 +1739,108 @@ export default {
   color: var(--danger-color);
 }
 
+/* Confirmed/waiting sign-up lists, with names — duplicated verbatim from
+   MatchDetails.vue's own .signup-panel (state badge colours already
+   duplicated above), the same way getTeamColor() is duplicated between the
+   two files. This panel became the only place a plain member can see this
+   list once MatchDetails.vue turned admin-only (see router/index.js). */
+.signup-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.signup-lists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.signup-list-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.count-badge {
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.signup-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.signup-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius);
+  font-size: 0.875rem;
+}
+
+.signup-entry.is-me {
+  border: 1px solid var(--primary-color);
+}
+
+.signup-position {
+  min-width: 1.5rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.signup-name {
+  flex: 1;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.signup-you {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--primary-color);
+}
+
+.signup-list-waiting .signup-entry {
+  opacity: 0.8;
+}
+
+.signup-empty {
+  padding: 0.5rem 0.65rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-style: italic;
+}
+
+@media (max-width: 768px) {
+  .signup-lists {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Players by team — one column per team, each an independent list of its
    own scorers. Side by side on desktop; stacked on mobile (see the 768px
    media query) so seeing the second team never requires scrolling. */
@@ -1666,6 +1950,78 @@ export default {
   text-align: center;
   color: var(--text-light);
   font-style: italic;
+}
+
+/* Man of the Match voting, per roster row — moved here from MatchDetails.vue
+   entirely (see CLAUDE.md). The vote-count pill follows this codebase's own
+   "muted pill" convention (.registration-badge.waiting in MatchDetails.vue,
+   .left-group-tag in PointsStandingsTable.vue/ScorersTable.vue) rather than
+   inventing a new style language. */
+.player-motm {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.motm-vote-count {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.motm-star-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.motm-star-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.motm-star-btn:hover:not(:disabled) {
+  background-color: var(--bg-tertiary);
+  color: #f59e0b;
+}
+
+/* The caller's own current vote — filled star, same accent used for goal
+   totals/counts elsewhere on this card. */
+.motm-star-btn.is-voted {
+  color: #f59e0b;
+}
+
+.motm-star-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.motm-inline-message {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+}
+
+.motm-inline-message.success {
+  color: #065f46;
+}
+
+.motm-inline-message.error {
+  color: var(--danger-color);
 }
 
 /* Transitions */

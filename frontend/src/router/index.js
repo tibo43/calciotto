@@ -1,6 +1,49 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import { getToken } from '@/services/api';
+import { getToken, getMatchDetailsByID } from '@/services/api';
 import { decodeMatchId } from '@/services/shortLink';
+import { loadMyGroups } from '@/services/activeGroup';
+
+// MatchDetails.vue (the editing page) is admin-only now: every control on it
+// was already hidden from a non-admin (see MatchDetails.vue's own isAdmin
+// gating), but a plain member could still land on the page itself and see a
+// mostly-blank shell. MatchesPanel.vue — reachable by any member — covers
+// reading a match (including, since this same product change, its full
+// sign-up list and Man of the Match voting), so a non-admin has no remaining
+// reason to be here at all.
+//
+// This is a FRONTEND-only gate. GET /matches/:id/details itself stays open to
+// any group member on the backend — MatchesPanel.vue depends on reading it —
+// so this does not (and must not) tighten that route.
+//
+// The match's own group isn't known ahead of time from the URL alone (it only
+// carries a match id), and GetMatchDetailsByID resolves an unspecified
+// group_id to the caller's *first* group — which silently answers "not
+// found" the moment the match belongs to any other group the caller is in.
+// So this tries each of the caller's groups, from GET /groups/me (the exact
+// source MatchesAndStandings.vue/MatchDetails.vue already read their own role
+// from — see resolveActiveGroup()), passing it explicitly as group_id until
+// the match is found in one of them, then checks that group's role. A 404 for
+// one group just means the match isn't in it, so the search continues; any
+// other failure aborts the search and is treated as "cannot verify" one level
+// up, in beforeEnter below — failing closed (redirect) rather than open.
+export async function canEditMatch(matchId) {
+  const groups = await loadMyGroups();
+  for (const group of groups) {
+    try {
+      await getMatchDetailsByID(matchId, group.id);
+      return group.role === 'admin';
+    } catch (error) {
+      if (error?.response?.status !== 404) {
+        throw error;
+      }
+      // Not this group — the match may still belong to another one the
+      // caller is in, so keep looking rather than giving up here.
+    }
+  }
+  // No group of the caller's contains this match at all — either it belongs
+  // to a group they aren't a member of, or the id names no match.
+  return false;
+}
 
 const routes = [
   {
@@ -13,7 +56,23 @@ const routes = [
     path: '/matches/:id/edit',
     name: 'MatchDetails',
     component: () => import('@/components/MatchDetails.vue'),
-    props: true
+    props: true,
+    beforeEnter: async (to) => {
+      try {
+        const allowed = await canEditMatch(to.params.id);
+        if (!allowed) {
+          return { path: '/' };
+        }
+      } catch (error) {
+        // Same degrade-instead-of-break contract as resolveActiveGroup()'s own
+        // callers: a failure here (a network error, a malformed id, ...) is
+        // treated the same as "not allowed" rather than letting a half-broken
+        // navigation through.
+        console.error('Error checking match edit access:', error);
+        return { path: '/' };
+      }
+      return true;
+    }
   },
   // The "tinylink" shared on WhatsApp (see whatsappShare.js) — a bare
   // redirect rather than its own component, since decoding a code and

@@ -158,6 +158,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
         SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
+               matches.created_at as match_created_at,
                matches.scheduled_at as match_scheduled_at,
                matches.registration_opens_at as match_registration_opens_at,
                matches.registrations_closed_at as match_registrations_closed_at,
@@ -207,6 +208,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 				ID:                    rowMatches.MatchID,
 				GroupID:               rowMatches.MatchGroupID,
 				Date:                  rowMatches.MatchDate,
+				CreatedAt:             rowMatches.MatchCreatedAt,
 				ScheduledAt:           rowMatches.MatchScheduledAt,
 				RegistrationOpensAt:   rowMatches.MatchRegistrationOpensAt,
 				RegistrationsClosedAt: rowMatches.MatchRegistrationsClosedAt,
@@ -335,6 +337,7 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
         SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
+               matches.created_at as match_created_at,
                matches.scheduled_at as match_scheduled_at,
                matches.registration_opens_at as match_registration_opens_at,
                matches.registrations_closed_at as match_registrations_closed_at,
@@ -365,6 +368,7 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 		ID:                    id,
 		GroupID:               rowsMatch[0].MatchGroupID,
 		Date:                  rowsMatch[0].MatchDate,
+		CreatedAt:             rowsMatch[0].MatchCreatedAt,
 		ScheduledAt:           rowsMatch[0].MatchScheduledAt,
 		RegistrationOpensAt:   rowsMatch[0].MatchRegistrationOpensAt,
 		RegistrationsClosedAt: rowsMatch[0].MatchRegistrationsClosedAt,

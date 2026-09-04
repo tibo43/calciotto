@@ -301,53 +301,6 @@
           </div>
         </div>
 
-        <!-- Man of the Match voting — any match with a composed roster, not
-             just a scheduled one, and not admin-gated: unlike the sign-up
-             panel's Close/Reopen, there is no admin-only action here at all.
-             Voter eligibility is deliberately broader than "played in this
-             match" (a sub or a watching member can judge too), which is why
-             this isn't behind isAdmin — but the dropdown itself only offers
-             roster players other than the caller, since the backend rejects
-             a self-vote outright and there is nothing to gain from letting a
-             member discover that from a 400. -->
-        <div v-if="isRosterComposed" class="motm-panel card-base">
-          <div class="motm-header">
-            <h3 class="motm-title">Man of the Match</h3>
-            <span v-if="hasVotedForMotm" class="motm-my-vote">
-              You voted for {{ formatPlayerNameForDisplay(myMotmVoteName) }}
-            </span>
-          </div>
-
-          <div class="motm-vote-form">
-            <select v-model="selectedMotmCandidateId" class="motm-candidate-select" :disabled="isUpdatingMotmVote"
-              aria-label="Choose who deserves Man of the Match">
-              <option value="" disabled>Choose a player…</option>
-              <option v-for="player in motmCandidates" :key="player.ID" :value="player.ID">
-                {{ formatPlayerNameForDisplay(player.Name) }}
-              </option>
-            </select>
-            <button @click="castMotmVote" class="btn-base btn-primary btn-small"
-              :disabled="isUpdatingMotmVote || !selectedMotmCandidateId">
-              <div v-if="isUpdatingMotmVote" class="loading-spinner-small"></div>
-              {{ isUpdatingMotmVote ? 'Saving...' : (hasVotedForMotm ? 'Change vote' : 'Vote') }}
-            </button>
-            <button v-if="hasVotedForMotm" @click="removeMotmVoteAction" class="btn-base btn-secondary btn-small"
-              :disabled="isUpdatingMotmVote">
-              Remove vote
-            </button>
-          </div>
-
-          <div v-if="isLoadingMotmVotes" class="motm-loading">
-            <div class="loading-spinner-small"></div>
-          </div>
-          <ul v-else-if="motmVotes.Tally.length > 0" class="motm-tally">
-            <li v-for="candidate in motmVotes.Tally" :key="candidate.PlayerID" class="motm-tally-entry">
-              <span class="motm-tally-name">{{ formatPlayerNameForDisplay(candidate.Name) }}</span>
-              <span class="motm-tally-votes">{{ candidate.Votes }} vote{{ candidate.Votes === 1 ? '' : 's' }}</span>
-            </li>
-          </ul>
-          <p v-else class="motm-empty">Nobody has voted yet.</p>
-        </div>
       </div>
     </div>
 
@@ -644,9 +597,6 @@ import {
   unregisterFromMatch,
   closeMatchRegistrations,
   reopenMatchRegistrations,
-  getMatchVotes,
-  voteForMotm,
-  removeMotmVote,
   getToken
 } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
@@ -742,18 +692,6 @@ export default {
       // they find out at all, since nothing notifies them.
       nowMs: 0,
       currentPlayerId: '',
-      // --- Man of the Match voting ---
-      // { Tally: [{PlayerID, Name, Votes}], MyVoteFor } exactly as
-      // GET /matches/:id/votes sent it. Like the sign-up list, always fully
-      // re-fetched rather than patched locally after a vote/unvote — the
-      // whole point is showing the real tally, not a locally-guessed one.
-      motmVotes: { Tally: [], MyVoteFor: null },
-      isLoadingMotmVotes: false,
-      isUpdatingMotmVote: false,
-      // The candidate currently selected in the dropdown; seeded from the
-      // caller's existing vote (if any) each time the tally reloads, so
-      // "Change vote" opens on what is currently true rather than blank.
-      selectedMotmCandidateId: '',
     };
   },
   async created() {
@@ -798,46 +736,6 @@ export default {
     // be able to cancel a still-empty scheduled match regardless.
     showTeamRoster() {
       return !this.isScheduled || teamsAreComposed(this.match);
-    },
-
-    // Gates the Man of the Match panel: any match — scheduled or not — with
-    // at least one player actually placed on a team. Unlike showTeamRoster,
-    // this is not "or unscheduled": an unscheduled match's roster is
-    // essentially always composed already, but the rule here is simply
-    // "is there anyone to vote for", so it reuses teamsAreComposed directly.
-    isRosterComposed() {
-      return teamsAreComposed(this.match);
-    },
-
-    // Every roster player across both teams, deduplicated by id, minus the
-    // caller themselves — MatchVoteService rejects a self-vote outright
-    // (ErrCannotVoteForSelf), so offering yourself in the dropdown would
-    // only set a member up for a 400 with nothing to gain from it.
-    motmCandidates() {
-      if (!this.match || !Array.isArray(this.match.Teams)) return [];
-      const seen = new Set();
-      const candidates = [];
-      this.match.Teams.forEach(team => {
-        (team.Players || []).forEach(player => {
-          if (!player.ID || player.ID === this.currentPlayerId || seen.has(player.ID)) return;
-          seen.add(player.ID);
-          candidates.push(player);
-        });
-      });
-      return candidates;
-    },
-
-    hasVotedForMotm() {
-      return Boolean(this.motmVotes.MyVoteFor);
-    },
-
-    // Looked up from the tally rather than stored separately: the caller's
-    // own vote is guaranteed to appear there (a tally entry exists for every
-    // candidate with at least one vote, and casting one is exactly that).
-    myMotmVoteName() {
-      if (!this.motmVotes.MyVoteFor) return '';
-      const entry = this.motmVotes.Tally.find(candidate => candidate.PlayerID === this.motmVotes.MyVoteFor);
-      return entry ? entry.Name : '';
     },
 
     // The closed flag comes from local state rather than from `match` (see the
@@ -1022,11 +920,6 @@ export default {
       if (this.isScheduled) {
         await this.loadRegistrations();
       }
-      // Same reasoning: only a match with an actual roster has anything to
-      // vote on, and this panel renders its own spinner too.
-      if (teamsAreComposed(this.match)) {
-        await this.loadMotmVotes();
-      }
     },
 
     // --- Sign-ups -----------------------------------------------------------
@@ -1135,65 +1028,6 @@ export default {
 
     registrationErrorMessage(error, fallback) {
       return error?.response?.data?.error || fallback;
-    },
-
-    // --- Man of the Match voting ---------------------------------------
-    // Always a full re-fetch after a change, same reasoning as
-    // loadRegistrations: the tally is server-derived and patching it locally
-    // is how the display drifts from reality.
-    async loadMotmVotes() {
-      this.isLoadingMotmVotes = true;
-      try {
-        const summary = await getMatchVotes(this.match.ID);
-        this.motmVotes = summary && Array.isArray(summary.Tally)
-          ? summary
-          : { Tally: [], MyVoteFor: null };
-        this.selectedMotmCandidateId = this.motmVotes.MyVoteFor || '';
-      } catch (error) {
-        console.error('Error loading Man of the Match votes:', error);
-        this.showMessage('Error loading Man of the Match votes', 'error');
-        this.motmVotes = { Tally: [], MyVoteFor: null };
-      } finally {
-        this.isLoadingMotmVotes = false;
-      }
-    },
-
-    // Casting a vote is an upsert on the backend (MatchVoteService.Vote), so
-    // this is used for both the first vote and every later change of mind —
-    // there is no separate "conflict" path to handle, unlike registerForMatch.
-    async castMotmVote() {
-      if (this.isUpdatingMotmVote || !this.selectedMotmCandidateId) return;
-      this.isUpdatingMotmVote = true;
-      try {
-        await voteForMotm(this.match.ID, this.selectedMotmCandidateId);
-        await this.loadMotmVotes();
-        this.showMessage('Your Man of the Match vote has been saved.', 'success');
-      } catch (error) {
-        console.error('Error casting Man of the Match vote:', error);
-        this.showMessage(this.registrationErrorMessage(error, 'Error casting your vote.'), 'error');
-        await this.loadMotmVotes();
-      } finally {
-        this.isUpdatingMotmVote = false;
-      }
-    },
-
-    // A no-op success on the backend even with no existing vote, so there is
-    // nothing to confirm here the way confirmWithdraw does — removing a vote
-    // has no effect on anyone else's place the way withdrawing does.
-    async removeMotmVoteAction() {
-      if (this.isUpdatingMotmVote) return;
-      this.isUpdatingMotmVote = true;
-      try {
-        await removeMotmVote(this.match.ID);
-        this.selectedMotmCandidateId = '';
-        await this.loadMotmVotes();
-        this.showMessage('Your Man of the Match vote has been removed.', 'success');
-      } catch (error) {
-        console.error('Error removing Man of the Match vote:', error);
-        this.showMessage(this.registrationErrorMessage(error, 'Error removing your vote.'), 'error');
-      } finally {
-        this.isUpdatingMotmVote = false;
-      }
     },
 
     // Populates the two team rosters from the confirmed sign-up list and stops
@@ -2178,114 +2012,6 @@ export default {
 @media (max-width: 768px) {
   .signup-lists {
     grid-template-columns: 1fr;
-  }
-}
-
-/* Man of the Match voting — deliberately its own small panel rather than a
-   tab inside .team-management: it applies to every composed match, scheduled
-   or not, so it can't live behind the sign-up-only gating above it. */
-.motm-panel {
-  margin-bottom: 2rem;
-}
-
-.motm-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.motm-title {
-  margin: 0;
-  font-size: 1.1rem;
-  color: var(--text-primary);
-}
-
-.motm-my-vote {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-
-.motm-vote-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.motm-candidate-select {
-  flex: 1;
-  min-width: 12rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--border-radius);
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 0.875rem;
-}
-
-.motm-loading {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 1.5rem;
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-}
-
-.motm-tally {
-  list-style: none;
-  margin: 1.5rem 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  /* Same cap as .signup-entries, for the same reason: a big roster must not
-     push the team management section off the bottom of the page. */
-  max-height: 14rem;
-  overflow-y: auto;
-}
-
-.motm-tally-entry {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
-  padding: 0.5rem 0.65rem;
-  background-color: var(--bg-tertiary);
-  border-radius: var(--border-radius);
-  font-size: 0.875rem;
-}
-
-.motm-tally-name {
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.motm-tally-votes {
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-.motm-empty {
-  margin: 1.5rem 0 0;
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  font-style: italic;
-}
-
-@media (max-width: 768px) {
-  .motm-vote-form {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .motm-candidate-select {
-    width: 100%;
   }
 }
 

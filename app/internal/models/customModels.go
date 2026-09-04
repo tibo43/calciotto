@@ -48,10 +48,19 @@ type TeamWithPlayers struct {
 // the four StandingsService calls that have no caller identity to give, for
 // something only the detail page needs — and GET /matches/:id/registrations
 // already tells it.
+//
+// CreatedAt is not omitempty, unlike the scheduling fields: every match, past
+// or future, has one, so there is no "unscheduled match" case to keep byte-
+// identical here the way there is for ScheduledAt et al. It exists on this DTO
+// so the frontend can compute the Man of the Match voting window's own anchor
+// for a match with no kick-off at all (see matchRegistration.js's
+// votingWindowError/MatchVoteService.VotingWindowError on the Go side) without
+// a second request.
 type MatchWithDetails struct {
 	ID                    uuid.UUID         `json:"ID"`
 	GroupID               uuid.UUID         `json:"GroupID"`
 	Date                  Date              `json:"Date"`
+	CreatedAt             time.Time         `json:"CreatedAt"`
 	ScheduledAt           *time.Time        `json:"ScheduledAt,omitempty"`
 	RegistrationOpensAt   *time.Time        `json:"RegistrationOpensAt,omitempty"`
 	RegistrationsClosedAt *time.Time        `json:"RegistrationsClosedAt,omitempty"`
@@ -79,6 +88,7 @@ type RowsMatchDetails struct {
 	MatchID                    uuid.UUID
 	MatchGroupID               uuid.UUID
 	MatchDate                  Date
+	MatchCreatedAt             time.Time
 	MatchScheduledAt           *time.Time
 	MatchRegistrationOpensAt   *time.Time
 	MatchRegistrationsClosedAt *time.Time

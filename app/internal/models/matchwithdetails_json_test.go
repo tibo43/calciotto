@@ -15,10 +15,11 @@ import (
 
 func TestMatchWithDetails_JSON_UnscheduledMatchHasNoSchedulingKeys(t *testing.T) {
 	match := MatchWithDetails{
-		ID:      uuid.New(),
-		GroupID: uuid.New(),
-		Date:    Date(time.Date(2025, time.October, 5, 0, 0, 0, 0, time.UTC)),
-		Teams:   []TeamWithPlayers{},
+		ID:        uuid.New(),
+		GroupID:   uuid.New(),
+		Date:      Date(time.Date(2025, time.October, 5, 0, 0, 0, 0, time.UTC)),
+		CreatedAt: time.Date(2025, time.October, 5, 18, 0, 0, 0, time.UTC),
+		Teams:     []TeamWithPlayers{},
 	}
 
 	raw, err := json.Marshal(match)
@@ -31,9 +32,13 @@ func TestMatchWithDetails_JSON_UnscheduledMatchHasNoSchedulingKeys(t *testing.T)
 		t.Fatalf("failed to unmarshal match: %v", err)
 	}
 
-	// Exactly the pre-feature key set: a client that knows nothing about
-	// scheduling must not see a single new key on an ordinary match.
-	wantKeys := map[string]bool{"ID": true, "GroupID": true, "Date": true, "Teams": true}
+	// Exactly the pre-feature key set plus CreatedAt (added for the Man of the
+	// Match voting window's non-scheduled anchor — see VotingWindowError):
+	// unlike the *scheduling* fields, CreatedAt is not omitempty, since every
+	// match — scheduled or not — has one. A client that knows nothing about
+	// scheduling must still not see a single new *scheduling* key on an
+	// ordinary match.
+	wantKeys := map[string]bool{"ID": true, "GroupID": true, "Date": true, "CreatedAt": true, "Teams": true}
 	for key := range decoded {
 		if !wantKeys[key] {
 			t.Errorf("unscheduled match JSON carries unexpected key %q: %s", key, raw)

@@ -110,7 +110,17 @@ type Match struct {
 	RegistrationOpensAt   *time.Time    `gorm:"type:timestamptz" json:"registration_opens_at,omitempty"`
 	RegistrationsClosedAt *time.Time    `gorm:"type:timestamptz" json:"registrations_closed_at,omitempty"`
 	MaxPlayers            *int          `json:"max_players,omitempty"`
-	TeamCompositions      []MatchPlayer `gorm:"foreignKey:MatchID"`
+	// CreatedAt is the moment this row was logged — GORM's usual
+	// auto-populate-on-create convention, like MatchRegistration.CreatedAt and
+	// MatchVote.CreatedAt. It exists on this model specifically as the Man of
+	// the Match voting window's anchor for a match with no kick-off at all: an
+	// unscheduled match has no better proxy for "when it was played" than the
+	// moment an admin recorded it, which in practice is normally right after
+	// the game (see MatchVoteService.VotingWindowError). Added after `matches`
+	// already had rows, unlike the two structs above — see connect.go's
+	// backfill for why that matters here and didn't for RegistrationOpensAt.
+	CreatedAt        time.Time     `json:"created_at"`
+	TeamCompositions []MatchPlayer `gorm:"foreignKey:MatchID"`
 }
 
 // IsScheduled reports whether this is a scheduled match — one with a kick-off

@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"time"
 
 	"app/internal/models"
 
@@ -21,7 +22,50 @@ var (
 	// (see MatchVoteService.Vote's own comment), but the candidate must have
 	// actually played.
 	ErrVotedForPlayerNotOnRoster = errors.New("the player voted for is not on this match's roster")
+
+	// ErrVotingClosed is returned once more than motmVotingWindow has passed
+	// since the match "happened" — see VotingWindowError. Casting, changing
+	// and removing a vote are all refused past that point; reading the tally
+	// (ListVotes) never is, following the same status-code convention as
+	// ErrRegistrationsClosed: a 409, since the window having passed is a state
+	// conflict rather than a malformed request.
+	ErrVotingClosed = errors.New("voting for man of the match is closed for this match")
 )
+
+// motmVotingWindow is how long after a match "happened" its Man of the Match
+// award can still be cast, changed, or removed. Fixed rather than
+// configurable — there is no product need yet for anything else, and unlike
+// the sign-up window there is no admin close/reopen to interact with it.
+const motmVotingWindow = 24 * time.Hour
+
+// VotingWindowError reports why match is no longer accepting a MOTM
+// vote/unvote at instant now, or nil when it still is. It is a pure function
+// of an already-loaded match, mirroring RegistrationWindowError's own split
+// between a pure window-check function and its thin callers (Vote/Unvote
+// below) — the whole policy is therefore unit-testable without a database.
+//
+// The anchor — "when the match happened" — depends on whether the match
+// carries a kick-off:
+//   - A scheduled match anchors on ScheduledAt itself: that instant *is* when
+//     it was played.
+//   - A match recorded after the fact (no kick-off at all) has no better
+//     proxy than its own CreatedAt, the moment it was logged — which in
+//     practice is normally right after playing. This is an explicit product
+//     decision, not a default worth reconsidering here.
+//
+// Unlike the sign-up window, there is nothing for an admin to reopen once this
+// closes: the tally past this point is the finalized result, still worth
+// showing (ListVotes is never gated on this), just no longer worth changing.
+func VotingWindowError(match models.Match, now time.Time) error {
+	anchor := match.CreatedAt
+	if match.IsScheduled() {
+		anchor = *match.ScheduledAt
+	}
+	if !now.Before(anchor.Add(motmVotingWindow)) {
+		return ErrVotingClosed
+	}
+	return nil
+}
 
 // MatchVoteService owns a match's Man of the Match votes and the tally
 // derived from them. Like MatchRegistrationService, it deliberately does not
@@ -62,7 +106,11 @@ func NewMatchVoteService(db *gorm.DB) *MatchVoteService {
 // what keeps "who was the best player" scoped to people who could plausibly
 // have been.
 func (s *MatchVoteService) Vote(matchID, voterID, votedForID uuid.UUID) error {
-	if _, err := s.findMatch(matchID); err != nil {
+	match, err := s.findMatch(matchID)
+	if err != nil {
+		return err
+	}
+	if err := VotingWindowError(*match, time.Now()); err != nil {
 		return err
 	}
 	if voterID == votedForID {
@@ -95,11 +143,27 @@ func (s *MatchVoteService) Vote(matchID, voterID, votedForID uuid.UUID) error {
 //
 // It is a no-op success when the caller had not voted — the same "a retried
 // request must not fail for nothing" philosophy as
-// MatchRegistrationService.ReopenRegistrations — rather than a 404, and
-// deliberately does not check that matchID names a real match first: deleting
-// a vote that was never cast, for a match that may not even exist any more,
-// is still exactly nothing to do.
+// MatchRegistrationService.ReopenRegistrations — rather than a 404.
+//
+// An unknown matchID is *also* still a no-op, not ErrMatchNotFound: there is
+// no window to enforce against a match that doesn't exist (or no longer
+// does), and any vote row somehow left behind for it is unreachable anyway —
+// still exactly nothing to do (see TestVote_Integration_UnknownMatchNotFound).
+// This route is unreachable over HTTP for an unrecognised match id regardless
+// — RequireGroupMembershipByMatchPathParam 404s before the handler ever calls
+// this — so the distinction only matters to a direct caller of the service.
 func (s *MatchVoteService) Unvote(matchID, voterID uuid.UUID) error {
+	match, err := s.findMatch(matchID)
+	switch {
+	case errors.Is(err, ErrMatchNotFound):
+		// Fall through to the plain delete below with no window to check.
+	case err != nil:
+		return err
+	default:
+		if err := VotingWindowError(*match, time.Now()); err != nil {
+			return err
+		}
+	}
 	return s.DB.Where("match_id = ? AND voter_id = ?", matchID, voterID).Delete(&models.MatchVote{}).Error
 }
 

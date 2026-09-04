@@ -300,6 +300,45 @@ func TestUnvote_Integration_NoOpSuccess(t *testing.T) {
 	}
 }
 
+// TestMatchVotes_Integration_WindowClosedIs409 checks the HTTP mapping for
+// ErrVotingClosed: once the match is backdated past the 24h window, both POST
+// and DELETE answer 409, while GET keeps serving the tally unchanged.
+func TestMatchVotes_Integration_WindowClosedIs409(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newVoteEnv(t, tx)
+
+	group := env.newGroupWithComposedMatch(t, "windowclosed")
+	path := "/matches/" + group.matchID.String() + "/votes"
+
+	// Cast a vote while the window is open, then backdate the match.
+	if rec := env.do(http.MethodPost, path, group.member2Token, map[string]string{"voted_for_id": group.adminID.String()}); rec.Code != http.StatusOK {
+		t.Fatalf("initial vote returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+	if err := tx.Model(&models.Match{}).Where("id = ?", group.matchID).
+		Update("created_at", time.Now().Add(-25*time.Hour)).Error; err != nil {
+		t.Fatalf("failed to backdate the match: %v", err)
+	}
+
+	postRec := env.do(http.MethodPost, path, group.member1Token, map[string]string{"voted_for_id": group.adminID.String()})
+	if postRec.Code != http.StatusConflict {
+		t.Errorf("POST after the window closed returned status %d, want 409, body: %s", postRec.Code, postRec.Body.String())
+	}
+	deleteRec := env.do(http.MethodDelete, path, group.member2Token, nil)
+	if deleteRec.Code != http.StatusConflict {
+		t.Errorf("DELETE after the window closed returned status %d, want 409, body: %s", deleteRec.Code, deleteRec.Body.String())
+	}
+
+	getRec := env.do(http.MethodGet, path, group.member1Token, nil)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET after the window closed returned status %d, want 200, body: %s", getRec.Code, getRec.Body.String())
+	}
+	summary := decodeVoteSummary(t, getRec)
+	if len(summary.Tally) != 1 || summary.Tally[0].PlayerID != group.adminID || summary.Tally[0].Votes != 1 {
+		t.Errorf("tally after the window closed = %+v, want the pre-existing vote for the admin untouched", summary.Tally)
+	}
+}
+
 // TestMatchVotes_Integration_OtherGroupGets404 mirrors the equivalent
 // registration test: an admin of a different group must not be able to reach
 // this match at all, on any of the three routes.

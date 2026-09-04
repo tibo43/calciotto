@@ -1,7 +1,9 @@
 package services
 
 import (
+	"errors"
 	"testing"
+	"time"
 
 	"app/internal/models"
 
@@ -78,5 +80,80 @@ func TestComputeMotmWinners_AllTiedMeansEveryoneWins(t *testing.T) {
 
 	if len(winners) != 3 {
 		t.Errorf("winners = %v, want all 3 candidates tied at 1 vote each", winners)
+	}
+}
+
+// TestVotingWindowError mirrors TestRegistrationWindowError's own table shape:
+// VotingWindowError is a pure function of an already-loaded match, so both
+// anchor cases (scheduled vs. recorded-after-the-fact) are covered without a
+// database.
+func TestVotingWindowError(t *testing.T) {
+	kickoff := time.Date(2026, 9, 6, 18, 0, 0, 0, time.UTC)
+	loggedAt := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name  string
+		match models.Match
+		now   time.Time
+		want  error
+	}{
+		{
+			name:  "scheduled match, well within the window after kick-off",
+			match: models.Match{ScheduledAt: &kickoff, CreatedAt: loggedAt},
+			now:   kickoff.Add(time.Hour),
+			want:  nil,
+		},
+		{
+			name:  "scheduled match, exactly at the 24h deadline after kick-off",
+			match: models.Match{ScheduledAt: &kickoff, CreatedAt: loggedAt},
+			now:   kickoff.Add(motmVotingWindow),
+			want:  ErrVotingClosed,
+		},
+		{
+			name:  "scheduled match, one second before the deadline",
+			match: models.Match{ScheduledAt: &kickoff, CreatedAt: loggedAt},
+			now:   kickoff.Add(motmVotingWindow - time.Second),
+			want:  nil,
+		},
+		{
+			// The anchor is kick-off, not CreatedAt: a match logged long ago
+			// but scheduled for a recent kick-off is still votable.
+			name:  "scheduled match anchors on kick-off, not on CreatedAt",
+			match: models.Match{ScheduledAt: &kickoff, CreatedAt: kickoff.Add(-30 * 24 * time.Hour)},
+			now:   kickoff.Add(time.Hour),
+			want:  nil,
+		},
+		{
+			name:  "unscheduled match anchors on CreatedAt, well within the window",
+			match: models.Match{CreatedAt: loggedAt},
+			now:   loggedAt.Add(time.Hour),
+			want:  nil,
+		},
+		{
+			name:  "unscheduled match, exactly at the 24h deadline after being logged",
+			match: models.Match{CreatedAt: loggedAt},
+			now:   loggedAt.Add(motmVotingWindow),
+			want:  ErrVotingClosed,
+		},
+		{
+			name:  "unscheduled match, one second before the deadline",
+			match: models.Match{CreatedAt: loggedAt},
+			now:   loggedAt.Add(motmVotingWindow - time.Second),
+			want:  nil,
+		},
+		{
+			name:  "unscheduled match, long past the deadline",
+			match: models.Match{CreatedAt: loggedAt},
+			now:   loggedAt.Add(30 * 24 * time.Hour),
+			want:  ErrVotingClosed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := VotingWindowError(tt.match, tt.now); !errors.Is(got, tt.want) {
+				t.Errorf("VotingWindowError() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

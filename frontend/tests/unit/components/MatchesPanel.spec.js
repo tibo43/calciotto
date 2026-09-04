@@ -6,6 +6,9 @@ import {
   getMatchRegistrations,
   registerForMatch,
   unregisterFromMatch,
+  getMatchVotes,
+  voteForMotm,
+  removeMotmVote,
   getToken
 } from '@/services/api';
 
@@ -15,6 +18,9 @@ jest.mock('@/services/api', () => ({
   getMatchRegistrations: jest.fn(),
   registerForMatch: jest.fn(),
   unregisterFromMatch: jest.fn(),
+  getMatchVotes: jest.fn(),
+  voteForMotm: jest.fn(),
+  removeMotmVote: jest.fn(),
   getToken: jest.fn()
 }));
 
@@ -35,18 +41,19 @@ const tokenFor = (playerId) => {
 let offsetSpy;
 let push;
 
-const mountPanel = async () => {
+const mountPanel = async (propsOverrides = {}) => {
   const wrapper = mount(MatchesPanel, {
-    props: { activeGroupId: 'group-uuid', isAdmin: true, season: '' },
+    props: { activeGroupId: 'group-uuid', isAdmin: true, season: '', ...propsOverrides },
     global: {
       stubs: { 'router-link': true },
       mocks: { $router: { push } }
     }
   });
   // created() kicks off loadMatches(), which now also awaits
-  // loadSelectedRegistrations() for whichever match got auto-selected —
-  // flushPromises is what reliably drains both, where a fixed number of
-  // nextTick()s would be guessing at the chain's depth.
+  // loadSelectedRegistrations() and loadSelectedMotmVotes() for whichever
+  // match got auto-selected — flushPromises is what reliably drains all of
+  // it, where a fixed number of nextTick()s would be guessing at the chain's
+  // depth.
   await flushPromises();
   return wrapper;
 };
@@ -68,6 +75,12 @@ beforeEach(() => {
   registerForMatch.mockResolvedValue({ PlayerID: ME, Name: 'me', Position: 1, IsWaiting: false });
   unregisterFromMatch.mockReset();
   unregisterFromMatch.mockResolvedValue({ unregistered: true });
+  getMatchVotes.mockReset();
+  getMatchVotes.mockResolvedValue({ Tally: [], MyVoteFor: null });
+  voteForMotm.mockReset();
+  voteForMotm.mockResolvedValue({ Tally: [], MyVoteFor: null });
+  removeMotmVote.mockReset();
+  removeMotmVote.mockResolvedValue({ unvoted: true });
   getToken.mockReset();
   getToken.mockReturnValue(tokenFor(ME));
   push = jest.fn();
@@ -520,6 +533,210 @@ describe('MatchesPanel.vue inline sign-up panel', () => {
     const wrapper = await mountPanel();
 
     expect(wrapper.find('.signup-inline-actions button').text()).toContain('Participate');
+  });
+});
+
+// The full confirmed/waiting lists, with names — moved here from
+// MatchDetails.vue's own .signup-panel now that a plain member can no longer
+// reach that page at all (see router/index.js's canEditMatch). Reuses its
+// exact markup/classes rather than inventing new ones.
+describe('MatchesPanel.vue inline sign-up panel named lists', () => {
+  const scheduled = (overrides = {}) => ({
+    ID: 'scheduled-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-09-06',
+    ScheduledAt: '2026-09-06T20:30:00+02:00',
+    RegistrationOpensAt: '2026-09-01T12:00:00+02:00',
+    MaxPlayers: 2,
+    RegistrationCount: 3,
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+    ],
+    ...overrides
+  });
+
+  const registrations = () => [
+    { PlayerID: ME, Name: 'me', Position: 1, IsWaiting: false, RegisteredAt: '2026-09-01T12:00:00+02:00' },
+    { PlayerID: SOMEONE_ELSE, Name: 'marco', Position: 2, IsWaiting: false, RegisteredAt: '2026-09-01T13:00:00+02:00' },
+    { PlayerID: 'p3', Name: 'luca', Position: 3, IsWaiting: true, RegisteredAt: '2026-09-01T14:00:00+02:00' }
+  ];
+
+  it('renders the confirmed and waiting lists with names, marking the caller as "you"', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled()]);
+    getMatchRegistrations.mockResolvedValue(registrations());
+    const wrapper = await mountPanel();
+
+    const confirmedNames = wrapper.findAll('.signup-list:not(.signup-list-waiting) .signup-name').map(n => n.text());
+    expect(confirmedNames).toEqual(['Me', 'Marco']);
+    expect(wrapper.find('.signup-list:not(.signup-list-waiting) .count-badge').text()).toBe('2 / 2');
+
+    const waitingNames = wrapper.findAll('.signup-list-waiting .signup-name').map(n => n.text());
+    expect(waitingNames).toEqual(['Luca']);
+    expect(wrapper.find('.signup-entry.is-me .signup-you').exists()).toBe(true);
+    expect(wrapper.find('.signup-entry.is-me .signup-name').text()).toBe('Me');
+  });
+
+  it('shows "Nobody has signed up yet" for an empty confirmed list, and no waiting section at all', async () => {
+    getMatchesDetails.mockResolvedValue([scheduled({ RegistrationCount: 0 })]);
+    getMatchRegistrations.mockResolvedValue([]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-empty').text()).toBe('Nobody has signed up yet');
+    expect(wrapper.find('.signup-list-waiting').exists()).toBe(false);
+  });
+});
+
+// The "Edit Match" link is admin-only now that MatchDetails.vue's route
+// itself is (see router/index.js's beforeEnter/canEditMatch) — a plain
+// member following it would only bounce straight back here, so it is hidden
+// rather than shown-and-relabelled the way it used to be.
+describe('MatchesPanel.vue edit-match link visibility', () => {
+  const played = () => ({
+    ID: 'played-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-08-30',
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 3, Players: [{ ID: 'p1', Name: 'marco', GoalNumber: 1 }] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 2, Players: [] }
+    ]
+  });
+
+  it('shows the link to an admin', async () => {
+    getMatchesDetails.mockResolvedValue([played()]);
+    const wrapper = await mountPanel({ isAdmin: true });
+
+    expect(wrapper.find('.edit-match-btn').exists()).toBe(true);
+  });
+
+  it('hides the link entirely from a plain member', async () => {
+    getMatchesDetails.mockResolvedValue([played()]);
+    const wrapper = await mountPanel({ isAdmin: false });
+
+    expect(wrapper.find('.edit-match-btn').exists()).toBe(false);
+  });
+});
+
+// Man of the Match voting — moved here from MatchDetails.vue entirely (see
+// CLAUDE.md): a star per roster player instead of a dropdown, with a small
+// muted vote-count pill next to it. Needs a frozen clock, same reasoning as
+// the registration-state badge describe below: the star's own disabled state
+// depends on where "now" falls relative to the match's 24h voting window.
+describe('MatchesPanel.vue Man of the Match voting', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const composedMatch = (overrides = {}) => ({
+    ID: 'played-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-08-30',
+    CreatedAt: '2026-08-30T18:00:00+02:00',
+    Teams: [
+      {
+        ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0,
+        Players: [
+          { ID: ME, Name: 'me', GoalNumber: 0 },
+          { ID: SOMEONE_ELSE, Name: 'marco', GoalNumber: 0 }
+        ]
+      },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+    ],
+    ...overrides
+  });
+
+  // Well within 24h of composedMatch()'s default CreatedAt — the "window
+  // open" instant every test below starts from unless it says otherwise.
+  const withinWindow = () => jest.useFakeTimers().setSystemTime(new Date('2026-08-30T19:00:00+02:00'));
+
+  it('offers a star for every roster player except the caller', async () => {
+    withinWindow();
+    getMatchesDetails.mockResolvedValue([composedMatch()]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.findAll('.motm-star-btn').length).toBe(1);
+    expect(wrapper.find('.motm-star-btn').attributes('aria-label')).toMatch(/marco/i);
+  });
+
+  it('shows a muted vote-count pill only for a candidate with at least one vote', async () => {
+    withinWindow();
+    getMatchesDetails.mockResolvedValue([composedMatch()]);
+    getMatchVotes.mockResolvedValue({
+      Tally: [{ PlayerID: SOMEONE_ELSE, Name: 'marco', Votes: 3 }],
+      MyVoteFor: null
+    });
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.motm-vote-count').text()).toBe('3 votes');
+  });
+
+  it('casts a vote when the star is clicked, then reloads the tally', async () => {
+    withinWindow();
+    getMatchesDetails.mockResolvedValue([composedMatch()]);
+    const wrapper = await mountPanel();
+    getMatchVotes.mockClear();
+
+    await wrapper.find('.motm-star-btn').trigger('click');
+    await flushPromises();
+
+    expect(voteForMotm).toHaveBeenCalledWith('played-uuid', SOMEONE_ELSE);
+    expect(getMatchVotes).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes the vote (toggles off) when clicking the star already voted for', async () => {
+    withinWindow();
+    getMatchesDetails.mockResolvedValue([composedMatch()]);
+    getMatchVotes.mockResolvedValue({
+      Tally: [{ PlayerID: SOMEONE_ELSE, Name: 'marco', Votes: 1 }],
+      MyVoteFor: SOMEONE_ELSE
+    });
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.motm-star-btn').classes()).toContain('is-voted');
+
+    await wrapper.find('.motm-star-btn').trigger('click');
+    await flushPromises();
+
+    expect(removeMotmVote).toHaveBeenCalledWith('played-uuid');
+    expect(voteForMotm).not.toHaveBeenCalled();
+  });
+
+  it('disables the star and explains why once the 24h window has passed', async () => {
+    // CreatedAt is the anchor for this unscheduled match; "now" set well
+    // more than 24h after it.
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-02T09:00:00+02:00'));
+    getMatchesDetails.mockResolvedValue([composedMatch({ CreatedAt: '2026-08-01T18:00:00+02:00' })]);
+    const wrapper = await mountPanel();
+
+    const star = wrapper.find('.motm-star-btn');
+    expect(star.attributes('disabled')).toBeDefined();
+    expect(star.attributes('title')).toBe('Vote fermé 24h après le match');
+
+    await star.trigger('click');
+    await flushPromises();
+    expect(voteForMotm).not.toHaveBeenCalled();
+  });
+
+  it('offers no star at all before any player has been placed on a team', async () => {
+    withinWindow();
+    const scheduledEmpty = {
+      ID: 'scheduled-uuid',
+      GroupID: 'group-uuid',
+      Date: '2026-09-06',
+      ScheduledAt: '2026-09-06T20:30:00+02:00',
+      RegistrationOpensAt: '2026-09-01T12:00:00+02:00',
+      MaxPlayers: 16,
+      RegistrationCount: 0,
+      Teams: [
+        { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
+        { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+      ]
+    };
+    getMatchesDetails.mockResolvedValue([scheduledEmpty]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.motm-star-btn').exists()).toBe(false);
+    expect(getMatchVotes).not.toHaveBeenCalled();
   });
 });
 

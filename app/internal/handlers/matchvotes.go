@@ -120,6 +120,9 @@ func (h *MatchVoteHandler) ListVotes(c *gin.Context) {
 // state conflicts (409): unlike a sign-up window opening or closing, whether
 // a candidate is on the roster and whether the voter is themselves are true
 // or false regardless of timing, so there is nothing to retry into validity.
+// ErrVotingClosed, on the other hand, IS a timing-dependent state conflict —
+// the same 409 convention as ErrRegistrationsClosed — since the identical
+// request would have succeeded before the window passed.
 func respondMatchVoteError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrMatchNotFound):
@@ -127,6 +130,8 @@ func respondMatchVoteError(c *gin.Context, err error) {
 	case errors.Is(err, services.ErrCannotVoteForSelf),
 		errors.Is(err, services.ErrVotedForPlayerNotOnRoster):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case errors.Is(err, services.ErrVotingClosed):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
