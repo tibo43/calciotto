@@ -105,6 +105,31 @@ func newVoteEnv(t *testing.T, label string, rosterSize, benchSize int) *voteEnv 
 	return env
 }
 
+// TestDeleteMatch_Integration_RemovesVotes: MatchVote rows are not cascaded
+// by the database (MatchVote declares no association on Match, same as
+// MatchRegistration), so deleting a match has to take its votes with it too —
+// otherwise they'd be orphan rows nothing can ever read or clean up again.
+func TestDeleteMatch_Integration_RemovesVotes(t *testing.T) {
+	env := newVoteEnv(t, "DeleteMatch", 2, 0)
+
+	if err := env.votes.Vote(env.matchID, env.roster[0], env.roster[1]); err != nil {
+		t.Fatalf("Vote returned error: %v", err)
+	}
+
+	if err := env.matches.DeleteMatch(env.matchID, env.groupID); err != nil {
+		t.Fatalf("DeleteMatch returned error: %v", err)
+	}
+
+	var remaining int64
+	if err := env.tx.Model(&models.MatchVote{}).Where("match_id = ?", env.matchID).
+		Count(&remaining).Error; err != nil {
+		t.Fatalf("failed to count votes: %v", err)
+	}
+	if remaining != 0 {
+		t.Errorf("%d votes survived the match deletion, want 0", remaining)
+	}
+}
+
 // TestVote_Integration_SelfVoteRejected: a roster player cannot vote for
 // themselves, even though they are otherwise a perfectly valid candidate.
 func TestVote_Integration_SelfVoteRejected(t *testing.T) {

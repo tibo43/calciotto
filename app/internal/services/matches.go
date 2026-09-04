@@ -529,6 +529,8 @@ func (s *MatchService) registrationCount(matchID uuid.UUID) (int, error) {
 // match_players row for this match is deleted first, inside the same
 // transaction as the match itself, or the match delete would fail with a
 // foreign-key violation instead of a clean application-level result.
+// MatchRegistration and MatchVote rows are cleaned up in the same transaction
+// too — see the comments below for why nothing forces that one.
 func (s *MatchService) DeleteMatch(matchID, groupID uuid.UUID) error {
 	var match models.Match
 	if err := s.DB.Where("id = ? AND group_id = ?", matchID, groupID).First(&match).Error; err != nil {
@@ -547,6 +549,12 @@ func (s *MatchService) DeleteMatch(matchID, groupID uuid.UUID) error {
 		// leaving a deleted match's sign-up list behind would be dead rows
 		// nothing can ever read or clean up again.
 		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchRegistration{}).Error; err != nil {
+			return err
+		}
+		// Man of the Match votes, for the same reason as sign-ups: MatchVote
+		// declares no association on Match either, so nothing forces this, but
+		// a deleted match's votes would otherwise be unreachable orphan rows.
+		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchVote{}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&models.Match{}, "id = ?", matchID).Error
