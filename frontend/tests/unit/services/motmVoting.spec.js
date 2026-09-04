@@ -1,62 +1,58 @@
-import { MOTM_VOTING_WINDOW_MS, motmVotingAnchorMs, isMotmVotingOpen } from '@/services/motmVoting';
+import { motmVotingDeadlineMs, isMotmVotingOpen } from '@/services/motmVoting';
 
-// Mirrors matchRegistration.spec.js's own style: fixed instants with explicit
-// offsets, so nothing here depends on the machine's zone.
-const KICKOFF = '2026-09-06T20:30:00+02:00';
-const CREATED_AT = '2026-09-01T12:00:00+02:00';
+// A match played 2026-09-03 accepts votes through 2026-09-04, closing at the
+// stroke of 2026-09-05 — the exact example the product rule was phrased
+// around. Local-midnight instants, so nothing here depends on the machine's
+// zone beyond what parseCalendarDay itself already commits to.
+const PLAYED_ON = '2026-09-03';
+const at = (y, m, d) => new Date(y, m - 1, d).getTime();
 
-const at = (rfc3339) => Date.parse(rfc3339);
-
-describe('motmVotingAnchorMs', () => {
-  it('anchors on ScheduledAt for a scheduled match, ignoring CreatedAt entirely', () => {
-    const match = { ScheduledAt: KICKOFF, CreatedAt: '2020-01-01T00:00:00Z' };
-    expect(motmVotingAnchorMs(match)).toBe(at(KICKOFF));
+describe('motmVotingDeadlineMs', () => {
+  it('is local midnight two days after the match Date', () => {
+    const match = { Date: PLAYED_ON };
+    expect(motmVotingDeadlineMs(match)).toBe(at(2026, 9, 5));
   });
 
-  it('anchors on CreatedAt for a match with no kick-off at all', () => {
-    const match = { CreatedAt: CREATED_AT };
-    expect(motmVotingAnchorMs(match)).toBe(at(CREATED_AT));
+  it('ignores ScheduledAt/CreatedAt entirely — only Date matters', () => {
+    const match = { Date: PLAYED_ON, ScheduledAt: '2020-01-01T00:00:00Z', CreatedAt: '2020-01-01T00:00:00Z' };
+    expect(motmVotingDeadlineMs(match)).toBe(at(2026, 9, 5));
   });
 
-  it('is NaN for a null/undefined match rather than throwing', () => {
-    expect(Number.isNaN(motmVotingAnchorMs(null))).toBe(true);
-    expect(Number.isNaN(motmVotingAnchorMs(undefined))).toBe(true);
+  it('is NaN for a null/undefined match, or one with no Date, rather than throwing', () => {
+    expect(Number.isNaN(motmVotingDeadlineMs(null))).toBe(true);
+    expect(Number.isNaN(motmVotingDeadlineMs(undefined))).toBe(true);
+    expect(Number.isNaN(motmVotingDeadlineMs({}))).toBe(true);
   });
 });
 
 describe('isMotmVotingOpen', () => {
-  it('is open right at the anchor instant, for a scheduled match', () => {
-    const match = { ScheduledAt: KICKOFF };
-    expect(isMotmVotingOpen(match, at(KICKOFF))).toBe(true);
+  it('is open on the match day itself', () => {
+    const match = { Date: PLAYED_ON };
+    expect(isMotmVotingOpen(match, at(2026, 9, 3))).toBe(true);
   });
 
-  it('is still open one second before the 24h deadline, for a scheduled match', () => {
-    const match = { ScheduledAt: KICKOFF };
-    expect(isMotmVotingOpen(match, at(KICKOFF) + MOTM_VOTING_WINDOW_MS - 1000)).toBe(true);
+  it('is still open the day after, right up to the last millisecond', () => {
+    const match = { Date: PLAYED_ON };
+    expect(isMotmVotingOpen(match, at(2026, 9, 5) - 1)).toBe(true);
   });
 
-  it('is closed exactly at the 24h deadline, for a scheduled match', () => {
-    const match = { ScheduledAt: KICKOFF };
-    expect(isMotmVotingOpen(match, at(KICKOFF) + MOTM_VOTING_WINDOW_MS)).toBe(false);
+  it('is closed exactly at the stroke of the second day after', () => {
+    const match = { Date: PLAYED_ON };
+    expect(isMotmVotingOpen(match, at(2026, 9, 5))).toBe(false);
   });
 
-  it('is closed well past the 24h deadline, for a scheduled match', () => {
-    const match = { ScheduledAt: KICKOFF };
-    expect(isMotmVotingOpen(match, at(KICKOFF) + 30 * 24 * 60 * 60 * 1000)).toBe(false);
+  it('is closed well past the deadline', () => {
+    const match = { Date: PLAYED_ON };
+    expect(isMotmVotingOpen(match, at(2026, 10, 1))).toBe(false);
   });
 
-  it('anchors on CreatedAt, not ScheduledAt, for a match with no kick-off', () => {
-    const match = { CreatedAt: CREATED_AT };
-    expect(isMotmVotingOpen(match, at(CREATED_AT) + 1000)).toBe(true);
-    expect(isMotmVotingOpen(match, at(CREATED_AT) + MOTM_VOTING_WINDOW_MS)).toBe(false);
+  it('a scheduled match\'s window still depends only on Date, ignoring kick-off entirely', () => {
+    const match = { Date: PLAYED_ON, ScheduledAt: '2020-01-01T00:00:00Z' };
+    expect(isMotmVotingOpen(match, at(2026, 9, 4))).toBe(true);
+    expect(isMotmVotingOpen(match, at(2026, 9, 5))).toBe(false);
   });
 
-  it('a scheduled match ignores a long-past CreatedAt: the window is still open shortly after kick-off', () => {
-    const match = { ScheduledAt: KICKOFF, CreatedAt: '2020-01-01T00:00:00Z' };
-    expect(isMotmVotingOpen(match, at(KICKOFF) + 60 * 1000)).toBe(true);
-  });
-
-  it('fails open when no anchor can be determined at all', () => {
+  it('fails open when no Date can be determined at all', () => {
     expect(isMotmVotingOpen({}, Date.now())).toBe(true);
     expect(isMotmVotingOpen(null, Date.now())).toBe(true);
   });

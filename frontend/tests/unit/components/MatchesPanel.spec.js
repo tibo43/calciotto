@@ -327,15 +327,22 @@ describe('MatchesPanel.vue scheduled match cards', () => {
     expect(wrapper.find('.signup-count').text()).toBe('0 / 16 signed up');
   });
 
-  it('leaves an ordinary card exactly as it was: no badge, no count, plain date', async () => {
+  // An unscheduled card still gets no sign-up count (it never had a sign-up
+  // list), but it does now always carry the same Upcoming/Completed status
+  // badge every match gets — see the dedicated describe block further down
+  // for why that badge is unconditional.
+  it('leaves an ordinary card\'s date/count untouched, but still shows a status badge', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-31T09:00:00+02:00'));
     getMatchesDetails.mockResolvedValue([played]);
     const wrapper = await mountPanel();
 
     const card = wrapper.find('.match-card-horizontal:not(.add-match-card)');
     expect(card.classes()).not.toContain('scheduled');
-    expect(wrapper.find('.signup-state-badge').exists()).toBe(false);
+    expect(wrapper.find('.signup-state-badge').text()).toBe('Completed');
     expect(wrapper.find('.signup-count').exists()).toBe(false);
     expect(card.find('.match-date-horizontal').text()).toBe('Aug 30, 2026');
+
+    jest.useRealTimers();
   });
 
   // loadMatches() discards the *entire* list if any match fails its shape check,
@@ -518,11 +525,17 @@ describe('MatchesPanel.vue inline sign-up panel', () => {
   });
 
   it('hides both actions once sign-ups are closed', async () => {
+    // Match day itself, so matchStatus (which the badge now shows once
+    // sign-ups are no longer open) reads "Upcoming" rather than "Completed"
+    // — that distinction isn't what this test is about, the buttons are.
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-03T09:00:00+02:00'));
     getMatchesDetails.mockResolvedValue([scheduled({ RegistrationsClosedAt: '2026-09-02T09:00:00+02:00' })]);
     const wrapper = await mountPanel();
 
-    expect(wrapper.find('.signup-state-badge').text()).toBe('Sign-ups closed');
+    expect(wrapper.find('.signup-state-badge').text()).toBe('Upcoming');
     expect(wrapper.find('.signup-inline-actions button').exists()).toBe(false);
+
+    jest.useRealTimers();
   });
 
   it("says who is already registered as 'me', not a stranger's entry", async () => {
@@ -751,18 +764,19 @@ describe('MatchesPanel.vue Man of the Match voting', () => {
     expect(voteForMotm).not.toHaveBeenCalled();
   });
 
-  it('disables the star and explains why once the 24h window has passed', async () => {
-    // CreatedAt is the anchor for this unscheduled match; "now" set well
-    // more than 24h after it. Targets marco's star specifically — the
+  it('disables the star and explains why once the voting window has passed', async () => {
+    // The window is Date-based now (see motmVoting.js): a match played
+    // 2026-08-01 stays votable through 2026-08-02, closing 2026-08-03 — "now"
+    // is set well past that. Targets marco's star specifically — the
     // caller's own star is disabled unconditionally (see the self-vote
     // test above) and would pass this assertion for the wrong reason.
     jest.useFakeTimers().setSystemTime(new Date('2026-09-02T09:00:00+02:00'));
-    getMatchesDetails.mockResolvedValue([composedMatch({ CreatedAt: '2026-08-01T18:00:00+02:00' })]);
+    getMatchesDetails.mockResolvedValue([composedMatch({ Date: '2026-08-01' })]);
     const wrapper = await mountPanel();
 
     const star = wrapper.find('.motm-star-btn:not(.is-self)');
     expect(star.attributes('disabled')).toBeDefined();
-    expect(star.attributes('title')).toBe('Vote fermé 24h après le match');
+    expect(star.attributes('title')).toBe('Vote fermé depuis le lendemain du match, à minuit');
 
     await star.trigger('click');
     await flushPromises();
@@ -893,39 +907,18 @@ describe("MatchesPanel.vue card's registration state badge", () => {
     expect(wrapper.find('.signup-state-badge').text()).toBe('Sign-ups not open yet');
   });
 
-  it('labels it "Sign-ups closed" once an admin has closed the list', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-03T09:00:00+02:00'));
+  // Real feedback: once sign-ups are closed, "Sign-ups closed" is a stale
+  // fact about a process that already finished — Upcoming/Completed (the
+  // same concept MatchDetails.vue's own getMatchStatus already established)
+  // is the more useful thing to say instead, computed purely from the
+  // match's own Date rather than kick-off/goals — see matchStatus's own
+  // comment for why. Match day itself (Sep 6) is still "Upcoming"; only the
+  // day after flips it to "Completed", regardless of whether a goal has
+  // been recorded — a deliberate simplification over the old kick-off/goal
+  // heuristic, which could show a badge for some matches and not others.
+  it('labels it "Upcoming" once an admin has closed the list, on match day itself', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-06T09:00:00+02:00'));
     getMatchesDetails.mockResolvedValue([scheduled({ RegistrationsClosedAt: '2026-09-02T18:00:00+02:00' })]);
-    const wrapper = await mountPanel();
-
-    expect(wrapper.find('.signup-state-badge').text()).toBe('Sign-ups closed');
-  });
-
-  it('labels it "Sign-ups closed" once kick-off has passed, with no admin close at all', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T09:00:00+02:00'));
-    getMatchesDetails.mockResolvedValue([scheduled()]);
-    const wrapper = await mountPanel();
-
-    expect(wrapper.find('.signup-state-badge').text()).toBe('Sign-ups closed');
-  });
-
-  const composed = (overrides = {}) => scheduled({
-    Teams: [
-      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [{ ID: 'p1', Name: 'marco', GoalNumber: 0 }] },
-      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
-    ],
-    RegistrationsClosedAt: '2026-09-02T18:00:00+02:00',
-    ...overrides
-  });
-
-  // Real feedback: once the roster exists, "Sign-ups closed" is a stale fact
-  // about a process that already finished — Upcoming/Completed (the same
-  // concept MatchDetails.vue's own getMatchStatus already established) is
-  // the more useful thing to say instead. A scheduled match always showed a
-  // badge here, so this is the same badge reading differently, not a new one.
-  it('switches the badge from "Sign-ups closed" to "Upcoming" once the roster is composed, before kick-off', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-03T09:00:00+02:00'));
-    getMatchesDetails.mockResolvedValue([composed()]);
     const wrapper = await mountPanel();
 
     const badge = wrapper.find('.signup-state-badge');
@@ -933,20 +926,9 @@ describe("MatchesPanel.vue card's registration state badge", () => {
     expect(badge.classes()).toContain('upcoming');
   });
 
-  it('still reads "Upcoming" once composed, even after kick-off, as long as no goal has been recorded', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T09:00:00+02:00'));
-    getMatchesDetails.mockResolvedValue([composed()]);
-    const wrapper = await mountPanel();
-
-    expect(wrapper.find('.signup-state-badge').text()).toBe('Upcoming');
-  });
-
-  it('reads "Completed" once composed, after kick-off, once a goal is actually recorded', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T09:00:00+02:00'));
-    const withGoal = composed();
-    withGoal.Teams[0].Score = 1;
-    withGoal.Teams[0].Players[0].GoalNumber = 1;
-    getMatchesDetails.mockResolvedValue([withGoal]);
+  it('labels it "Completed" the day after the match, with no admin close needed at all', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01+02:00'));
+    getMatchesDetails.mockResolvedValue([scheduled()]);
     const wrapper = await mountPanel();
 
     const badge = wrapper.find('.signup-state-badge');
@@ -955,27 +937,32 @@ describe("MatchesPanel.vue card's registration state badge", () => {
   });
 });
 
-// An unscheduled match never had a sign-up state to show, so it never had a
-// badge row here at all — this is the one new case where it gets one: a
-// composed-but-not-yet-played roster (an admin building next week's teams
-// ahead of time, without going through the scheduling/sign-up flow). An
-// already-played unscheduled match — the overwhelming majority of this
-// app's match history — must stay exactly as unbadged as it always was, or
-// every past match would suddenly sprout a "Completed" pill it never had.
-describe("MatchesPanel.vue unscheduled match's card status once composed", () => {
-  const unscheduledComposed = (overrides = {}) => ({
+// An unscheduled match never had a sign-up state to show, so before this
+// change it never had a badge row here at all. Real feedback pointed out
+// that was itself inconsistent — some matches ("composed but not played")
+// had a badge, most ("already played, so never composed by this
+// definition") didn't — so the badge is now unconditional, for every match,
+// scheduled or not, composed or not: the same Upcoming/Completed rule as
+// the describe block above, which needs nothing about a roster at all.
+describe("MatchesPanel.vue unscheduled match's card status", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const unscheduled = (overrides = {}) => ({
     ID: 'unscheduled-uuid',
     GroupID: 'group-uuid',
     Date: '2026-09-06',
     Teams: [
-      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [{ ID: 'p1', Name: 'marco', GoalNumber: 0 }] },
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
       { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
     ],
     ...overrides
   });
 
-  it('shows an "Upcoming" badge for a composed roster with no goals recorded yet', async () => {
-    getMatchesDetails.mockResolvedValue([unscheduledComposed()]);
+  it('shows "Upcoming" on match day itself, roster empty and all', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-06T09:00:00+02:00'));
+    getMatchesDetails.mockResolvedValue([unscheduled()]);
     const wrapper = await mountPanel();
 
     const badge = wrapper.find('.signup-state-badge');
@@ -985,27 +972,25 @@ describe("MatchesPanel.vue unscheduled match's card status once composed", () =>
     expect(wrapper.find('.signup-count').exists()).toBe(false);
   });
 
-  it('shows no badge at all once a goal has been recorded, same as before this change', async () => {
-    const played = unscheduledComposed();
-    played.Teams[0].Score = 1;
-    played.Teams[0].Players[0].GoalNumber = 1;
+  it('shows "Completed" the day after, even with goals already recorded — the ordinary historical-match case', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01+02:00'));
+    const played = unscheduled();
+    played.Teams[0].Score = 3;
+    played.Teams[1].Score = 2;
     getMatchesDetails.mockResolvedValue([played]);
     const wrapper = await mountPanel();
 
-    expect(wrapper.find('.signup-state-badge').exists()).toBe(false);
+    const badge = wrapper.find('.signup-state-badge');
+    expect(badge.text()).toBe('Completed');
+    expect(badge.classes()).toContain('completed');
   });
 
-  it('shows no badge at all before the roster is composed', async () => {
-    const empty = unscheduledComposed({
-      Teams: [
-        { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
-        { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
-      ]
-    });
-    getMatchesDetails.mockResolvedValue([empty]);
+  it('shows "Completed" the day after even with no roster at all — the status no longer depends on composition', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01+02:00'));
+    getMatchesDetails.mockResolvedValue([unscheduled()]);
     const wrapper = await mountPanel();
 
-    expect(wrapper.find('.signup-state-badge').exists()).toBe(false);
+    expect(wrapper.find('.signup-state-badge').text()).toBe('Completed');
   });
 });
 

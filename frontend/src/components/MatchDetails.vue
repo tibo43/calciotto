@@ -1595,34 +1595,30 @@ export default {
         .join(' ');
     },
 
-    getTotalGoals() {
-      if (!this.match || !this.match.Teams) return 0;
-      return this.match.Teams.reduce((total, team) => total + (team.Score || 0), 0);
-    },
-
     getTotalPlayers() {
       if (!this.match || !this.match.Teams) return 0;
       return this.match.Teams.reduce((total, team) => total + (team.Players ? team.Players.length : 0), 0);
     },
 
-    // Predates scheduled matches: "any goal recorded" was a reasonable proxy
-    // for "has this been played" back when a match was always created and
-    // scored immediately after the fact. For a scheduled match that's no
-    // longer true — an admin can compose the roster and enter goals (via
-    // "Fill teams from sign-ups" plus manual editing) *before* kick-off, and
-    // the goal count alone would then call a match that hasn't happened yet
-    // "Completed". Kick-off is checked first for exactly that case: before
-    // it, the match is unambiguously upcoming regardless of what's already
-    // been entered. An unscheduled match has no ScheduledAt to check, so it
-    // falls straight through to the original goal-based heuristic — same
-    // behaviour as before this feature existed.
+    // Purely Date-based: a match is "Completed" starting midnight the day
+    // *after* it was played, and "Upcoming" for every moment up to and
+    // including its own match day — identical rule to MatchesPanel.vue's own
+    // matchStatus (see its comment for the full rationale), which this used
+    // to disagree with. This predates scheduled matches as a goal-count
+    // heuristic ("any goal recorded" was a reasonable proxy for "has this
+    // been played" back when a match was always scored immediately after the
+    // fact), then predates *this* Date-based version as a kick-off+goal-count
+    // heuristic — both replaced once real feedback pointed out a match could
+    // show "Completed" for some matches and not others depending on
+    // scheduling and on whether goals had been entered yet. Constructing the
+    // next day via `new Date(y, m - 1, d + 1)` (rather than adding 24 hours
+    // in milliseconds) is what keeps this correct across a DST transition —
+    // JS normalizes the day-overflow using the local calendar, not
+    // fixed-width time arithmetic.
     getMatchStatus() {
-      if (this.isScheduled && this.nowMs < Date.parse(this.match.ScheduledAt)) {
-        return 'upcoming';
-      }
-      const totalGoals = this.getTotalGoals();
-      if (totalGoals === 0) return 'upcoming';
-      return 'completed';
+      const [year, month, day] = this.match.Date.split('-').map(Number);
+      const dayAfter = new Date(year, month - 1, day + 1).getTime();
+      return this.nowMs >= dayAfter ? 'completed' : 'upcoming';
     },
 
     getMatchStatusText() {

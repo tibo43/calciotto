@@ -83,13 +83,13 @@ func TestComputeMotmWinners_AllTiedMeansEveryoneWins(t *testing.T) {
 	}
 }
 
-// TestVotingWindowError mirrors TestRegistrationWindowError's own table shape:
-// VotingWindowError is a pure function of an already-loaded match, so both
-// anchor cases (scheduled vs. recorded-after-the-fact) are covered without a
-// database.
+// TestVotingWindowError pins the Date-based rule: a match played on Date D
+// accepts votes through the end of D+1, closing at the stroke of D+2 —
+// identical for a scheduled or an unscheduled match, since neither
+// ScheduledAt nor CreatedAt play any part in it any more.
 func TestVotingWindowError(t *testing.T) {
-	kickoff := time.Date(2026, 9, 6, 18, 0, 0, 0, time.UTC)
-	loggedAt := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	playedOn := models.Date(time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC))
+	kickoff := time.Date(2026, 9, 3, 18, 0, 0, 0, time.UTC)
 
 	tests := []struct {
 		name  string
@@ -98,53 +98,35 @@ func TestVotingWindowError(t *testing.T) {
 		want  error
 	}{
 		{
-			name:  "scheduled match, well within the window after kick-off",
-			match: models.Match{ScheduledAt: &kickoff, CreatedAt: loggedAt},
-			now:   kickoff.Add(time.Hour),
+			name:  "still open on match day itself",
+			match: models.Match{Date: playedOn},
+			now:   time.Date(2026, 9, 3, 23, 0, 0, 0, time.UTC),
 			want:  nil,
 		},
 		{
-			name:  "scheduled match, exactly at the 24h deadline after kick-off",
-			match: models.Match{ScheduledAt: &kickoff, CreatedAt: loggedAt},
-			now:   kickoff.Add(motmVotingWindow),
+			name:  "still open the day after, right up to the last second",
+			match: models.Match{Date: playedOn},
+			now:   time.Date(2026, 9, 4, 23, 59, 59, 0, time.UTC),
+			want:  nil,
+		},
+		{
+			name:  "closed at the stroke of the second day after",
+			match: models.Match{Date: playedOn},
+			now:   time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC),
 			want:  ErrVotingClosed,
 		},
 		{
-			name:  "scheduled match, one second before the deadline",
-			match: models.Match{ScheduledAt: &kickoff, CreatedAt: loggedAt},
-			now:   kickoff.Add(motmVotingWindow - time.Second),
-			want:  nil,
-		},
-		{
-			// The anchor is kick-off, not CreatedAt: a match logged long ago
-			// but scheduled for a recent kick-off is still votable.
-			name:  "scheduled match anchors on kick-off, not on CreatedAt",
-			match: models.Match{ScheduledAt: &kickoff, CreatedAt: kickoff.Add(-30 * 24 * time.Hour)},
-			now:   kickoff.Add(time.Hour),
-			want:  nil,
-		},
-		{
-			name:  "unscheduled match anchors on CreatedAt, well within the window",
-			match: models.Match{CreatedAt: loggedAt},
-			now:   loggedAt.Add(time.Hour),
-			want:  nil,
-		},
-		{
-			name:  "unscheduled match, exactly at the 24h deadline after being logged",
-			match: models.Match{CreatedAt: loggedAt},
-			now:   loggedAt.Add(motmVotingWindow),
+			name:  "closed long after",
+			match: models.Match{Date: playedOn},
+			now:   time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC),
 			want:  ErrVotingClosed,
 		},
 		{
-			name:  "unscheduled match, one second before the deadline",
-			match: models.Match{CreatedAt: loggedAt},
-			now:   loggedAt.Add(motmVotingWindow - time.Second),
-			want:  nil,
-		},
-		{
-			name:  "unscheduled match, long past the deadline",
-			match: models.Match{CreatedAt: loggedAt},
-			now:   loggedAt.Add(30 * 24 * time.Hour),
+			// ScheduledAt/kick-off no longer plays any part in the window —
+			// only Date does, scheduled or not.
+			name:  "a scheduled match's kick-off time is irrelevant to the window",
+			match: models.Match{Date: playedOn, ScheduledAt: &kickoff},
+			now:   time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC),
 			want:  ErrVotingClosed,
 		},
 	}

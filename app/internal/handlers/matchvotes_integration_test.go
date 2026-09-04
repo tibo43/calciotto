@@ -301,8 +301,9 @@ func TestUnvote_Integration_NoOpSuccess(t *testing.T) {
 }
 
 // TestMatchVotes_Integration_WindowClosedIs409 checks the HTTP mapping for
-// ErrVotingClosed: once the match is backdated past the 24h window, both POST
-// and DELETE answer 409, while GET keeps serving the tally unchanged.
+// ErrVotingClosed: once the match is backdated (its Date, not CreatedAt) past
+// the Date+2 window, both POST and DELETE answer 409, while GET keeps
+// serving the tally unchanged.
 func TestMatchVotes_Integration_WindowClosedIs409(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -316,7 +317,7 @@ func TestMatchVotes_Integration_WindowClosedIs409(t *testing.T) {
 		t.Fatalf("initial vote returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
 	}
 	if err := tx.Model(&models.Match{}).Where("id = ?", group.matchID).
-		Update("created_at", time.Now().Add(-25*time.Hour)).Error; err != nil {
+		Update("date", time.Now().AddDate(0, 0, -5)).Error; err != nil {
 		t.Fatalf("failed to backdate the match: %v", err)
 	}
 

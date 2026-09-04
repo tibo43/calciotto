@@ -144,8 +144,12 @@ func TestPlayerProfile_Integration(t *testing.T) {
 	// the only vote cast anywhere in this test — so the profile's MotmAwards
 	// can be checked at both scopes (group A and overall) and both season
 	// filters (present in seasonOld, absent in seasonNew) the same way the
-	// points/goals assertions already are above.
-	if err := services.NewMatchVoteService(tx).Vote(matchIDs[0], bobID, aliceID); err != nil {
+	// points/goals assertions already are above. Inserted directly rather
+	// than through MatchVoteService.Vote: that match is dated 2024-08-31,
+	// long past the real Date-based voting window by the time this test
+	// actually runs — this test is about GetPlayerProfile's aggregation, not
+	// about VotingWindowError, so the row is seeded straight into the table.
+	if err := tx.Create(&models.MatchVote{MatchID: matchIDs[0], VoterID: bobID, VotedForID: aliceID}).Error; err != nil {
 		t.Fatalf("failed to cast Bob's MOTM vote for Alice: %v", err)
 	}
 

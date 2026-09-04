@@ -112,13 +112,16 @@ type Match struct {
 	MaxPlayers            *int          `json:"max_players,omitempty"`
 	// CreatedAt is the moment this row was logged — GORM's usual
 	// auto-populate-on-create convention, like MatchRegistration.CreatedAt and
-	// MatchVote.CreatedAt. It exists on this model specifically as the Man of
-	// the Match voting window's anchor for a match with no kick-off at all: an
-	// unscheduled match has no better proxy for "when it was played" than the
-	// moment an admin recorded it, which in practice is normally right after
-	// the game (see MatchVoteService.VotingWindowError). Added after `matches`
-	// already had rows, unlike the two structs above — see connect.go's
-	// backfill for why that matters here and didn't for RegistrationOpensAt.
+	// MatchVote.CreatedAt. It was originally added as the Man of the Match
+	// voting window's anchor for an unscheduled match (no kick-off to anchor
+	// on instead) — MatchVoteService.VotingWindowError has since moved to a
+	// simpler, Date-based rule that needs neither this nor ScheduledAt, so
+	// this field is currently plain metadata with no reader in this codebase.
+	// Left in place rather than removed: it required a real backfill to add
+	// (see connect.go) and remains a reasonable thing to have on a match row
+	// regardless. Added after `matches` already had rows, unlike the two
+	// structs above — see connect.go's backfill for why that mattered here
+	// and didn't for RegistrationOpensAt.
 	CreatedAt        time.Time     `json:"created_at"`
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:MatchID"`
 }

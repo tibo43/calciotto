@@ -158,32 +158,21 @@
 
                 <!-- Sign-ups/status line — one compact row (state badge +
                      count), not a panel: these cards are ~200px wide in a
-                     horizontal carousel. For a scheduled match the badge
-                     shows the actual registration state
-                     (open/not-open-yet/closed) until the roster is composed,
-                     then switches to Upcoming/Completed (see
-                     cardRegistrationState) — a scheduled match always showed
-                     a badge here, so this is a same-badge-different-text
-                     change, not new visual noise.
-
-                     An *unscheduled* match with a composed roster never had
-                     a row here at all (it has no sign-up state to show), and
-                     still doesn't in general — adding one unconditionally
-                     would slap a new "Completed" pill on every historical
-                     match this app has ever recorded, none of which ever had
-                     one. Only the specific case the roster is composed but
-                     matchStatus still reads 'upcoming' (no goals recorded
-                     yet — an admin building next week's teams ahead of time,
-                     say) gets the row, since that's a genuinely new fact
-                     worth surfacing; an already-played match stays exactly
-                     as unbadged as it always was. The sign-up count itself
-                     stays scheduled-only regardless (an unscheduled match
-                     has no sign-up list to count). Everything about the
-                     sign-up list itself (names, Participate/Withdraw) still
-                     lives below, once this card is selected, or on the match
+                     horizontal carousel. Always rendered, for every match —
+                     real feedback on an earlier version of this pointed out
+                     that showing it for some matches and not others ("some
+                     cards get Completed, some don't") read as a bug. The
+                     badge shows the actual sign-up state
+                     (open/not-open-yet) while that's still a live concern for
+                     a scheduled match, and Upcoming/Completed otherwise —
+                     closed sign-ups, kick-off passed, or no scheduling at
+                     all (see cardRegistrationState). The sign-up count next
+                     to it stays scheduled-only (an unscheduled match has no
+                     sign-up list to count). Everything about the sign-up
+                     list itself (names, Participate/Withdraw) still lives
+                     below, once this card is selected, or on the match
                      page. -->
-                <div v-if="isScheduledMatch(match) || (teamsAreComposed(match) && matchStatus(match) === 'upcoming')"
-                  class="match-signups-horizontal">
+                <div class="match-signups-horizontal">
                   <span class="signup-state-badge" :class="cardRegistrationState(match)">{{ cardRegistrationLabel(match) }}</span>
                   <span v-if="isScheduledMatch(match)" class="signup-count">{{ signupCountLabel(match) }}</span>
                 </div>
@@ -491,6 +480,7 @@ import {
   registrationsAreOpen,
   registrationStateLabel,
   teamsAreComposed,
+  REGISTRATION_OPEN,
   REGISTRATION_NOT_OPEN_YET,
   REGISTRATION_CLOSED_BY_ADMIN,
   REGISTRATION_CLOSED_AT_KICKOFF
@@ -675,23 +665,26 @@ export default {
     // local field to keep in sync with `match`: this panel has no editable
     // state of its own to protect from a false-dirty flag, so
     // RegistrationsClosedAt is read straight off `selectedMatch`.
-    // Once the roster is composed, the sign-up state itself is stale news —
-    // real feedback pointed out a match still reading "Sign-ups closed"
-    // indefinitely, long after that stopped being the interesting fact about
-    // it. matchStatus/matchStatusLabel (below) take over instead, the exact
-    // same "Upcoming"/"Completed" concept MatchDetails.vue's own
-    // getMatchStatus() already established — this is that same idea, just
-    // reachable from here too, since a plain member no longer visits that
-    // admin-only page at all. registrationsOpen/registrationStateDetail need
-    // no changes for this: 'upcoming'/'completed' never equal
-    // REGISTRATION_OPEN (so Participate/Withdraw correctly stay hidden) and
-    // never match any REGISTRATION_* detail case either (so the "why closed"
-    // sentence disappears on its own, which is exactly right — there's
-    // nothing left to explain once the teams exist).
+    //
+    // Real feedback on an earlier version of this: switching to
+    // matchStatus only once the roster was composed made a match's status
+    // show up "sometimes, for some matches" — inconsistent, and confusing
+    // once an admin noticed some cards had it and others didn't. The rule
+    // now is simpler and applies uniformly: while sign-ups are still a live
+    // concern (open, or not open yet), show that; the instant they're not
+    // (closed, or the match was never scheduled at all), always show
+    // matchStatus — never gated on whether a roster happens to exist yet.
+    // registrationsOpen/registrationStateDetail need no changes for this:
+    // 'upcoming'/'completed' never equal REGISTRATION_OPEN (so
+    // Participate/Withdraw correctly stay hidden) and never match any
+    // REGISTRATION_* detail case either (so the "why closed" sentence
+    // disappears on its own, which is exactly right — there's nothing left
+    // to explain once sign-ups aren't the active concern any more).
     registrationState() {
       if (!this.selectedMatch) return '';
-      if (teamsAreComposed(this.selectedMatch)) return this.matchStatus(this.selectedMatch);
-      return deriveRegistrationState(this.selectedMatch, this.nowMs);
+      const state = deriveRegistrationState(this.selectedMatch, this.nowMs);
+      if (state === REGISTRATION_OPEN || state === REGISTRATION_NOT_OPEN_YET) return state;
+      return this.matchStatus(this.selectedMatch);
     },
 
     registrationsOpen() {
@@ -699,10 +692,9 @@ export default {
     },
 
     registrationStateLabel() {
-      if (this.selectedMatch && teamsAreComposed(this.selectedMatch)) {
-        return this.matchStatusLabel(this.selectedMatch);
-      }
-      return registrationStateLabel(this.registrationState);
+      const state = this.registrationState;
+      if (state === 'upcoming' || state === 'completed') return this.matchStatusLabel(this.selectedMatch);
+      return registrationStateLabel(state);
     },
 
     registrationStateDetail() {
@@ -1155,15 +1147,15 @@ export default {
       return !!entry && entry.Votes === maxVotes;
     },
 
-    // The star's tooltip/aria-label: the 24h window takes priority over
-    // vote/change-vote wording, since it explains why the star is disabled
-    // rather than what clicking it used to do.
+    // The star's tooltip/aria-label: the voting-window wording takes
+    // priority over vote/change-vote wording, since it explains why the
+    // star is disabled rather than what clicking it used to do.
     motmStarTitle(player) {
       if (player.ID === this.currentPlayerId) {
         return 'You can\'t vote for yourself as Man of the Match';
       }
       if (!this.motmVotingOpen) {
-        return 'Vote fermé 24h après le match';
+        return 'Vote fermé depuis le lendemain du match, à minuit';
       }
       return this.isMyMotmVote(player.ID)
         ? `Remove your Man of the Match vote for ${player.Name}`
@@ -1245,14 +1237,6 @@ export default {
       return isScheduledMatch(match);
     },
 
-    // Same reasoning as isScheduledMatch just above — the card's own status
-    // row needs the raw "is this roster composed" check directly (unlike
-    // showTeamRoster, which is true for *any* unscheduled match whether or
-    // not it actually has a roster yet).
-    teamsAreComposed(match) {
-      return teamsAreComposed(match);
-    },
-
     // Gates the card's own team/score row and the "Selected Match Details"
     // preview's team columns — see teamsAreComposed's own comment. Unscheduled
     // matches have always had a populated roster, so this stays true for them;
@@ -1269,39 +1253,49 @@ export default {
     // scheduling fields — already on every entry `matches` holds — so this
     // costs no extra request, unlike `isRegistered` which needs the sign-up
     // list itself and stays scoped to whichever match is selected.
-    // 'upcoming' before kick-off (or, for an unscheduled match, always —
-    // there's no kick-off to check), 'completed' once some goal has actually
-    // been recorded. Mirrors MatchDetails.vue's own getMatchStatus() exactly
-    // (same fallback ambiguity: 0 goals reads as "not played yet" even after
-    // kick-off, since there's no better signal) — duplicated rather than
-    // shared, the same way getTeamColor() is between the two files.
+    // Purely date-based, real feedback after the previous kick-off/goal-count
+    // heuristic produced a badge that was only sometimes there: "Completed"
+    // has to mean the same thing for every match, not depend on whether an
+    // admin has gotten around to entering goals yet. A match is "Completed"
+    // starting midnight the day *after* it was played, and "Upcoming" for
+    // every moment up to and including its own match day — matching
+    // MatchDetails.vue's Date-only contract (Match.Date is a calendar day,
+    // identical for every viewer, not an instant), so this needs no
+    // ScheduledAt/timezone handling at all, scheduled or not. Constructing
+    // the next day via `new Date(y, m - 1, d + 1)` (rather than adding
+    // 24 hours in milliseconds) is what keeps this correct across a DST
+    // transition — JS normalizes the day-overflow using the local
+    // calendar, not fixed-width time arithmetic.
     matchStatus(match) {
-      if (isScheduledMatch(match) && this.nowMs < Date.parse(match.ScheduledAt)) {
-        return 'upcoming';
-      }
-      const totalGoals = (match.Teams || []).reduce((total, team) => total + (team.Score || 0), 0);
-      return totalGoals === 0 ? 'upcoming' : 'completed';
+      const [year, month, day] = match.Date.split('-').map(Number);
+      const dayAfter = new Date(year, month - 1, day + 1).getTime();
+      return this.nowMs >= dayAfter ? 'completed' : 'upcoming';
     },
 
     matchStatusLabel(match) {
       return this.matchStatus(match) === 'upcoming' ? 'Upcoming' : 'Completed';
     },
 
-    // Once the roster is composed, this switches from the sign-up state
-    // (open/not-open-yet/closed) to matchStatus's Upcoming/Completed — see
-    // the registrationState computed's own comment above for why. This is
-    // also what lets an *unscheduled* match's row show anything at all here:
-    // showTeamRoster/teamsAreComposed already imply it has a roster, so
-    // there is always a real status to report once composed, scheduled or
-    // not.
+    // Shows the sign-up state while it's still a live concern (open, or not
+    // open yet); the instant it isn't (closed, or the match was never
+    // scheduled at all) shows matchStatus instead — see the
+    // registrationState computed's identical rule and comment above for why
+    // this is no longer conditioned on whether a roster happens to be
+    // composed. This is also what makes an *unscheduled* match's row show
+    // anything at all here: it never had a registration state, but it always
+    // has a match status.
     cardRegistrationState(match) {
-      if (teamsAreComposed(match)) return this.matchStatus(match);
-      return deriveRegistrationState(match, this.nowMs);
+      if (isScheduledMatch(match)) {
+        const state = deriveRegistrationState(match, this.nowMs);
+        if (state === REGISTRATION_OPEN || state === REGISTRATION_NOT_OPEN_YET) return state;
+      }
+      return this.matchStatus(match);
     },
 
     cardRegistrationLabel(match) {
-      if (teamsAreComposed(match)) return this.matchStatusLabel(match);
-      return registrationStateLabel(this.cardRegistrationState(match));
+      const state = this.cardRegistrationState(match);
+      if (state === 'upcoming' || state === 'completed') return this.matchStatusLabel(match);
+      return registrationStateLabel(state);
     },
 
     formatKickoff(match) {

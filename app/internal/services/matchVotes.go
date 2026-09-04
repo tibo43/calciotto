@@ -23,20 +23,14 @@ var (
 	// actually played.
 	ErrVotedForPlayerNotOnRoster = errors.New("the player voted for is not on this match's roster")
 
-	// ErrVotingClosed is returned once more than motmVotingWindow has passed
-	// since the match "happened" — see VotingWindowError. Casting, changing
-	// and removing a vote are all refused past that point; reading the tally
+	// ErrVotingClosed is returned once the voting window (see
+	// VotingWindowError) has passed for this match. Casting, changing and
+	// removing a vote are all refused past that point; reading the tally
 	// (ListVotes) never is, following the same status-code convention as
 	// ErrRegistrationsClosed: a 409, since the window having passed is a state
 	// conflict rather than a malformed request.
 	ErrVotingClosed = errors.New("voting for man of the match is closed for this match")
 )
-
-// motmVotingWindow is how long after a match "happened" its Man of the Match
-// award can still be cast, changed, or removed. Fixed rather than
-// configurable — there is no product need yet for anything else, and unlike
-// the sign-up window there is no admin close/reopen to interact with it.
-const motmVotingWindow = 24 * time.Hour
 
 // VotingWindowError reports why match is no longer accepting a MOTM
 // vote/unvote at instant now, or nil when it still is. It is a pure function
@@ -44,24 +38,25 @@ const motmVotingWindow = 24 * time.Hour
 // between a pure window-check function and its thin callers (Vote/Unvote
 // below) — the whole policy is therefore unit-testable without a database.
 //
-// The anchor — "when the match happened" — depends on whether the match
-// carries a kick-off:
-//   - A scheduled match anchors on ScheduledAt itself: that instant *is* when
-//     it was played.
-//   - A match recorded after the fact (no kick-off at all) has no better
-//     proxy than its own CreatedAt, the moment it was logged — which in
-//     practice is normally right after playing. This is an explicit product
-//     decision, not a default worth reconsidering here.
+// The rule is deliberately date-based, not instant-based, and the same for
+// every match: a match played on Date D can still be voted on through the
+// end of the following calendar day, closing at the start of D+2. A match
+// played September 3rd accepts votes through September 4th 23:59 and closes
+// at the stroke of September 5th. This replaced an earlier "24 hours after
+// kick-off, or after CreatedAt for an unscheduled match" rule — correct in
+// principle, but it anchored differently depending on whether a match was
+// scheduled, which fed into a status badge that ended up looking
+// inconsistent from one match to the next (see the frontend's matchStatus,
+// which now uses this exact same Date-based rule for the same reason).
+// Anchoring on Date alone needs no ScheduledAt/CreatedAt distinction at all
+// any more.
 //
 // Unlike the sign-up window, there is nothing for an admin to reopen once this
 // closes: the tally past this point is the finalized result, still worth
 // showing (ListVotes is never gated on this), just no longer worth changing.
 func VotingWindowError(match models.Match, now time.Time) error {
-	anchor := match.CreatedAt
-	if match.IsScheduled() {
-		anchor = *match.ScheduledAt
-	}
-	if !now.Before(anchor.Add(motmVotingWindow)) {
+	deadline := time.Time(match.Date).AddDate(0, 0, 2)
+	if !now.Before(deadline) {
 		return ErrVotingClosed
 	}
 	return nil
