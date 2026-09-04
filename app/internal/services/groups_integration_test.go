@@ -227,7 +227,10 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 		t.Fatalf("failed to create player bob: %v", err)
 	}
 
-	matchAID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now())}, groupA.ID)
+	// Two days ago, not one: see the comment on the equivalent line in
+	// matches_integration_test.go for why "yesterday" is too close to the
+	// IsMatchCompleted boundary to be reliable.
+	matchAID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now().AddDate(0, 0, -2))}, groupA.ID)
 	if err != nil {
 		t.Fatalf("failed to create match in group A: %v", err)
 	}
@@ -241,7 +244,7 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 		t.Fatalf("UpdateMatch (group A) returned error: %v", err)
 	}
 
-	matchBID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now())}, groupB.ID)
+	matchBID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now().AddDate(0, 0, -2))}, groupB.ID) // same reason as group A's match above
 	if err != nil {
 		t.Fatalf("failed to create match in group B: %v", err)
 	}
@@ -492,7 +495,10 @@ func TestStandings_Integration_IsMemberAfterRemoval(t *testing.T) {
 		t.Fatalf("failed to add bob: %v", err)
 	}
 
-	matchID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now())}, group.ID)
+	// Two days ago, not one: see the comment on the equivalent line in
+	// matches_integration_test.go for why "yesterday" is too close to the
+	// IsMatchCompleted boundary to be reliable.
+	matchID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now().AddDate(0, 0, -2))}, group.ID)
 	if err != nil {
 		t.Fatalf("failed to create match: %v", err)
 	}

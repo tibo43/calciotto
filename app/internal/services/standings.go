@@ -2,6 +2,7 @@ package services
 
 import (
 	"sort"
+	"time"
 
 	"app/internal/models"
 
@@ -35,7 +36,8 @@ func (s *StandingsService) GetPointsStandings(groupID uuid.UUID, season string) 
 	if err != nil {
 		return nil, err
 	}
-	rows := ComputePointsStandings(FilterMatchesBySeason(matches, season))
+	matches = FilterCompletedMatches(FilterMatchesBySeason(matches, season), time.Now())
+	rows := ComputePointsStandings(matches)
 
 	currentMembers, err := s.currentMemberIDs(groupID)
 	if err != nil {
@@ -52,7 +54,8 @@ func (s *StandingsService) GetScorers(groupID uuid.UUID, season string) ([]model
 	if err != nil {
 		return nil, err
 	}
-	rows := ComputeScorers(FilterMatchesBySeason(matches, season))
+	matches = FilterCompletedMatches(FilterMatchesBySeason(matches, season), time.Now())
+	rows := ComputeScorers(matches)
 
 	currentMembers, err := s.currentMemberIDs(groupID)
 	if err != nil {
@@ -77,7 +80,7 @@ func (s *StandingsService) GetMotmStandings(groupID uuid.UUID, season string) ([
 	if err != nil {
 		return nil, err
 	}
-	matches = FilterMatchesBySeason(matches, season)
+	matches = FilterCompletedMatches(FilterMatchesBySeason(matches, season), time.Now())
 
 	matchIDs := make([]uuid.UUID, len(matches))
 	for i, match := range matches {
@@ -177,7 +180,7 @@ func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (
 		if err != nil {
 			return nil, err
 		}
-		matches = FilterMatchesBySeason(matches, season)
+		matches = FilterCompletedMatches(FilterMatchesBySeason(matches, season), time.Now())
 		allMatches = append(allMatches, matches...)
 
 		row := zeroRow
@@ -244,6 +247,40 @@ func FilterMatchesBySeason(matches []models.MatchWithDetails, season string) []m
 	filtered := make([]models.MatchWithDetails, 0, len(matches))
 	for _, match := range matches {
 		if models.SeasonOf(match.Date) == season {
+			filtered = append(filtered, match)
+		}
+	}
+	return filtered
+}
+
+// IsMatchCompleted mirrors the frontend's matchStatus (MatchesPanel.vue/
+// MatchDetails.vue) exactly: a match is "Completed" starting midnight the
+// day *after* it was played, and still "Upcoming" for every instant up to
+// and including its own match day — independent of goals recorded, roster
+// composition, or scheduling. Real feedback: an admin can compose a
+// scheduled match's roster (via "Fill teams from sign-ups") before its own
+// kick-off, and a Man of the Match vote can be cast the moment that roster
+// exists too, so "both teams have players" (ComputePointsStandings'/
+// ComputeScorers' own check) and "somebody voted" (ComputeMotmStandings')
+// are both satisfiable well before the match has actually happened —
+// without this, an upcoming match built ahead of time would count in the
+// standings the instant its teams were set, not once it was actually played.
+func IsMatchCompleted(match models.MatchWithDetails, now time.Time) bool {
+	deadline := time.Time(match.Date).AddDate(0, 0, 1)
+	return !now.Before(deadline)
+}
+
+// FilterCompletedMatches keeps only the matches IsMatchCompleted reports true
+// for at instant now. Applied in every StandingsService method that feeds a
+// Compute* aggregator (GetPointsStandings, GetScorers, GetMotmStandings,
+// GetPlayerProfile) — deliberately not in GetSeasons/ComputeSeasons, whose
+// season list is documented to include an unplayed scheduled match on
+// purpose (see CLAUDE.md's "Seasons" section), a different, unrelated
+// decision this one must not disturb.
+func FilterCompletedMatches(matches []models.MatchWithDetails, now time.Time) []models.MatchWithDetails {
+	filtered := make([]models.MatchWithDetails, 0, len(matches))
+	for _, match := range matches {
+		if IsMatchCompleted(match, now) {
 			filtered = append(filtered, match)
 		}
 	}

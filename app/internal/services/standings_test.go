@@ -2,6 +2,7 @@ package services
 
 import (
 	"testing"
+	"time"
 
 	"app/internal/models"
 
@@ -274,5 +275,75 @@ func TestComputeMotmStandings_SortOrder(t *testing.T) {
 	// All three are tied at 1 award each, so alphabetical order decides.
 	if rows[0].Name != "alice" || rows[1].Name != "bob" || rows[2].Name != "carol" {
 		t.Errorf("expected alphabetical tie-break (alice, bob, carol), got %+v", rows)
+	}
+}
+
+// TestIsMatchCompleted mirrors the frontend's own matchStatus tests
+// (MatchesPanel.spec.js/MatchDetails.spec.js): "Completed" starts at
+// midnight the day after the match, "Upcoming" covers every instant up to
+// and including the match's own day — independent of anything else about
+// the match.
+func TestIsMatchCompleted(t *testing.T) {
+	playedOn := models.Date(time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC))
+
+	tests := []struct {
+		name string
+		now  time.Time
+		want bool
+	}{
+		{"on match day itself", time.Date(2026, 9, 3, 23, 0, 0, 0, time.UTC), false},
+		{"one second before the day after", time.Date(2026, 9, 3, 23, 59, 59, 0, time.UTC), false},
+		{"at the stroke of the day after", time.Date(2026, 9, 4, 0, 0, 0, 0, time.UTC), true},
+		{"well after", time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			match := models.MatchWithDetails{Date: playedOn}
+			if got := IsMatchCompleted(match, tt.now); got != tt.want {
+				t.Errorf("IsMatchCompleted() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestFilterCompletedMatches_ExcludesAComposedButUpcomingMatch is the exact
+// scenario real feedback flagged: an admin can compose a scheduled match's
+// roster (via "Fill teams from sign-ups") before its own kick-off, so
+// ComputePointsStandings'/ComputeScorers' own "both teams have players"
+// check alone can't tell an upcoming match from a played one. The filter
+// applied upstream of those functions (see GetPointsStandings/GetScorers/
+// GetMotmStandings in standings.go) is what actually excludes it.
+func TestFilterCompletedMatches_ExcludesAComposedButUpcomingMatch(t *testing.T) {
+	alice, bob := uuid.New(), uuid.New()
+	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+
+	upcoming := models.MatchWithDetails{
+		ID:   uuid.New(),
+		Date: models.Date(now), // today — not completed until tomorrow
+		Teams: []models.TeamWithPlayers{
+			newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
+			newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+		},
+	}
+	played := models.MatchWithDetails{
+		ID:   uuid.New(),
+		Date: models.Date(now.AddDate(0, 0, -2)),
+		Teams: []models.TeamWithPlayers{
+			newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
+			newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+		},
+	}
+
+	filtered := FilterCompletedMatches([]models.MatchWithDetails{upcoming, played}, now)
+	if len(filtered) != 1 || filtered[0].ID != played.ID {
+		t.Fatalf("FilterCompletedMatches = %+v, want only the played match", filtered)
+	}
+
+	// Threaded all the way through: an upcoming composed match must not
+	// inflate a player's points/goals until it's actually completed.
+	rows := pointsRowsByID(ComputePointsStandings(filtered))
+	if r := rows[alice]; r.Played != 1 {
+		t.Errorf("alice.Played = %d after filtering, want 1 (only the played match should count)", r.Played)
 	}
 }
