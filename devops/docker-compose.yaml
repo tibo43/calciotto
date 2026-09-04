@@ -40,7 +40,13 @@ services:
     working_dir: /frontend
     command: sh -c "npm install && npm run serve"
     environment:
-      - VUE_APP_API_BASE_URL=http://127.0.0.1:8080
+      # 192.168.1.7 rather than 127.0.0.1/localhost: this is baked into the
+      # served JS bundle, so it has to be reachable from wherever the browser
+      # loading it actually runs — including another device on the LAN
+      # (http://192.168.1.7:4000), not just this machine. Still works from
+      # this machine too, since 192.168.1.7 loops back to itself. Update if
+      # this machine's LAN IP ever changes.
+      - VUE_APP_API_BASE_URL=http://192.168.1.7:8080
     depends_on:
       backend:
         condition: service_started
