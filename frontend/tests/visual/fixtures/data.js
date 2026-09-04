@@ -167,6 +167,26 @@ const topScorers = [
   { PlayerID: 'e6', Name: 'Davide Fontana', Played: 6, Goals: 4, IsMember: false },
 ];
 
+// GET /standings/motm — models.MotmStandingRow. Same "one IsMember: false row"
+// convention as pointsStandings/topScorers above.
+const motmStandings = [
+  { PlayerID: 'e1', Name: 'Andrea Conti', Awards: 5, IsMember: true },
+  { PlayerID: 'e2', Name: 'Marco Rossi', Awards: 3, IsMember: true },
+  { PlayerID: 'e6', Name: 'Davide Fontana', Awards: 1, IsMember: false },
+];
+
+// GET /matches/:id/votes — models.MatchVoteSummary. A single default tally
+// reused regardless of which match is selected, the same "only GET is
+// exercised" simplification `registrations` above already makes: PlayerID
+// matches Marco Rossi (player 1), who's on the roster of every fixture match
+// that has one, so the gold leader marker and the vote-count pill both have
+// something real to render. MyVoteFor stays null — none of these tests click
+// a star, so there is no "is-voted" state worth fixturing.
+const motmVotes = {
+  Tally: [{ PlayerID: player(1, 'Marco Rossi', 0).ID, Name: 'Marco Rossi', Votes: 2 }],
+  MyVoteFor: null,
+};
+
 // GET /groups/:id/players — PlayerWithRole, so lowercase keys with `role`
 // alongside. The credential-less entry is the admin-created "ghost player" the
 // roster shows an "Invite" action for.
@@ -189,5 +209,7 @@ module.exports = {
   registrations,
   pointsStandings,
   topScorers,
+  motmStandings,
+  motmVotes,
   groupMembers,
 };
