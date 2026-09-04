@@ -169,4 +169,23 @@ function expectEverythingStubbed(unstubbed) {
   expect(unstubbed, `API calls reached no stub:\n  ${unstubbed.join('\n  ')}`).toEqual([]);
 }
 
-module.exports = { gotoApp, expectEverythingStubbed, data };
+/**
+ * Fails the test if the page itself scrolls horizontally — a real bug found
+ * on the @mobile project: four equal-flex sub-tab buttons (Matches/Points/
+ * Scorers/MOTM) defaulted to min-width: auto, so on a narrow phone the row
+ * didn't shrink, it overflowed, and the MOTM tab stuck out past the right
+ * edge needing a sideways scroll to reach. A screenshot diff alone wouldn't
+ * necessarily catch a regression here — a *narrower* overflow could still
+ * look plausible at a glance — so this checks the actual layout invariant
+ * ("nothing should ever force this page to scroll sideways") directly,
+ * independent of any one baseline.
+ */
+async function expectNoHorizontalOverflow(page) {
+  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(scrollWidth, 'page.documentElement.scrollWidth should never exceed clientWidth').toBeLessThanOrEqual(clientWidth);
+}
+
+module.exports = { gotoApp, expectEverythingStubbed, expectNoHorizontalOverflow, data };

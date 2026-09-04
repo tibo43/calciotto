@@ -4,7 +4,7 @@
 // in one of them says which.
 
 const { test, expect } = require('@playwright/test');
-const { gotoApp, expectEverythingStubbed } = require('./fixtures/app');
+const { gotoApp, expectEverythingStubbed, expectNoHorizontalOverflow } = require('./fixtures/app');
 
 // The horizontal match carousel is CSS scroll-behavior: smooth, and clicking
 // a card off-screen makes Playwright auto-scroll it into view before the
@@ -55,6 +55,14 @@ test.describe('home page', () => {
     expectEverythingStubbed(unstubbed);
   });
 
+  test('motm tab', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/');
+    await page.getByRole('button', { name: 'MOTM' }).click();
+    await expect(page.locator('.left-group-tag').first()).toBeVisible();
+    await expect(page).toHaveScreenshot('motm-tab.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
   test('matches tab in dark mode', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, '/', { theme: 'dark' });
     await expect(page.locator('.dark-mode')).toBeVisible();
@@ -70,6 +78,23 @@ test.describe('home page', () => {
     const { unstubbed } = await gotoApp(page, '/');
     await expect(page.locator('.add-match-card')).toBeVisible();
     await expect(page).toHaveScreenshot('matches-tab-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  // The MOTM sub-tab specifically: real feedback found it sticking out past
+  // the right edge of a phone screen, needing a sideways scroll to reach —
+  // four equal-flex tab buttons that didn't shrink (see
+  // expectNoHorizontalOverflow's own comment). This tab had no @mobile
+  // coverage at all before that, on any baseline — it's the newest of the
+  // four sub-tabs and was added after the "matches tab" mobile baseline
+  // above already existed.
+  test('motm tab on a narrow viewport @mobile', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/');
+    await page.getByRole('button', { name: 'MOTM' }).click();
+    await expect(page.locator('.left-group-tag').first()).toBeVisible();
+    await expect(page).toHaveScreenshot('motm-tab-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
     expectEverythingStubbed(unstubbed);
   });
 

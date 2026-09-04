@@ -379,5 +379,23 @@ export default {
     white-space: nowrap;
     border: 0;
   }
+
+  /* Four equal-flex tabs (Matches/Points/Scorers/MOTM) each default to
+     min-width: auto, which for a flex item means "at least my content's own
+     width" — so on a narrow phone the row simply overflowed the viewport
+     instead of shrinking, MOTM's button sticking out past the right edge
+     needing a sideways scroll to see. This was already tight with three tabs;
+     MOTM's addition was what pushed it over. min-width: 0 is what actually
+     lets flex: 1 shrink the buttons below their content size; the smaller
+     padding/font just keep "Matches"/"Scorers" legible at that width. */
+  .sub-tabs-bar {
+    gap: 0.35rem;
+  }
+
+  .sub-tab-button {
+    min-width: 0;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.8rem;
+  }
 }
 </style>
