@@ -359,20 +359,29 @@
                         <!-- Man of the Match voting — moved here from
                              MatchDetails.vue entirely (see CLAUDE.md): a star
                              per candidate rather than a dropdown, right next
-                             to the player it's voting for. Not admin-gated —
-                             voter eligibility is broader than "played in this
-                             match" — and offered for any composed roster,
-                             scheduled or not (showTeamRoster already implies
-                             that). Hidden for the caller's own row: the
-                             backend rejects a self-vote outright, so there is
-                             nothing to gain from offering it here. -->
+                             to the goal count, in its own fixed-width column
+                             so the star lines up vertically across every row
+                             regardless of whether the vote-count pill is
+                             showing. Not admin-gated — voter eligibility is
+                             broader than "played in this match" — and offered
+                             for any composed roster, scheduled or not
+                             (showTeamRoster already implies that). The
+                             caller's own row still renders the button (so the
+                             column stays aligned) but makes it
+                             visibility:hidden via .is-self — the backend
+                             rejects a self-vote outright, so there is nothing
+                             to gain from offering it, but removing the
+                             element entirely would shift every other row's
+                             star out of its column. -->
                         <div class="player-motm">
                           <span v-if="motmVoteCount(player.ID) > 0" class="motm-vote-count">
                             {{ motmVoteCount(player.ID) }} vote{{ motmVoteCount(player.ID) === 1 ? '' : 's' }}
                           </span>
-                          <button v-if="player.ID && player.ID !== currentPlayerId" type="button"
-                            class="motm-star-btn" :class="{ 'is-voted': isMyMotmVote(player.ID) }"
-                            :disabled="isUpdatingMotmVote || !motmVotingOpen" :title="motmStarTitle(player)"
+                          <button v-if="player.ID" type="button"
+                            class="motm-star-btn"
+                            :class="{ 'is-voted': isMyMotmVote(player.ID), 'is-self': player.ID === currentPlayerId }"
+                            :disabled="isUpdatingMotmVote || !motmVotingOpen || player.ID === currentPlayerId"
+                            :title="motmStarTitle(player)"
                             :aria-label="motmStarTitle(player)" @click="toggleMotmVote(player.ID)">
                             <svg viewBox="0 0 24 24" :fill="isMyMotmVote(player.ID) ? 'currentColor' : 'none'"
                               stroke="currentColor" stroke-width="2">
@@ -1081,6 +1090,9 @@ export default {
     // vote/change-vote wording, since it explains why the star is disabled
     // rather than what clicking it used to do.
     motmStarTitle(player) {
+      if (player.ID === this.currentPlayerId) {
+        return 'You can\'t vote for yourself as Man of the Match';
+      }
       if (!this.motmVotingOpen) {
         return 'Vote fermé 24h après le match';
       }
@@ -2041,7 +2053,6 @@ export default {
 .team-player-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
   padding: 0.4rem 0.5rem;
   border-radius: var(--border-radius);
@@ -2053,6 +2064,12 @@ export default {
 }
 
 .team-player-row .player-info {
+  /* Grows to fill the row, which is what pushes .player-motm and
+     .goal-badge together at the end with just the row's own gap between
+     them, instead of the old justify-content: space-between spreading all
+     three children evenly (and drifting the star around depending on
+     whether the vote-count pill was showing). */
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -2089,7 +2106,13 @@ export default {
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  /* Fixed width, right-aligned content: the star's x-position stays
+     constant across every row in the column whether or not the
+     vote-count pill is present, which is what keeps the stars lined up
+     vertically instead of drifting per-row. */
+  justify-content: flex-end;
   gap: 0.4rem;
+  min-width: 5.75rem;
 }
 
 .motm-vote-count {
@@ -2137,6 +2160,12 @@ export default {
 .motm-star-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Still rendered (so .player-motm's column width/alignment never shifts),
+   just invisible — see the template comment above this button. */
+.motm-star-btn.is-self {
+  visibility: hidden;
 }
 
 .motm-inline-message {

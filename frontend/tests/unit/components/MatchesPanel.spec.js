@@ -649,13 +649,22 @@ describe('MatchesPanel.vue Man of the Match voting', () => {
   // open" instant every test below starts from unless it says otherwise.
   const withinWindow = () => jest.useFakeTimers().setSystemTime(new Date('2026-08-30T19:00:00+02:00'));
 
-  it('offers a star for every roster player except the caller', async () => {
+  // The caller's own star still renders (disabled, visibility:hidden via
+  // .is-self) rather than being omitted — omitting it would shift every
+  // other row's star out of its column, since .player-motm's alignment
+  // depends on every row having the same internal structure.
+  it('renders a star for every roster player, hiding and disabling the caller\'s own', async () => {
     withinWindow();
     getMatchesDetails.mockResolvedValue([composedMatch()]);
     const wrapper = await mountPanel();
 
-    expect(wrapper.findAll('.motm-star-btn').length).toBe(1);
-    expect(wrapper.find('.motm-star-btn').attributes('aria-label')).toMatch(/marco/i);
+    const stars = wrapper.findAll('.motm-star-btn');
+    expect(stars.length).toBe(2);
+
+    const myStar = stars.find(star => star.classes().includes('is-self'));
+    const otherStar = stars.find(star => !star.classes().includes('is-self'));
+    expect(myStar.attributes('disabled')).toBeDefined();
+    expect(otherStar.attributes('aria-label')).toMatch(/marco/i);
   });
 
   it('shows a muted vote-count pill only for a candidate with at least one vote', async () => {
@@ -676,7 +685,7 @@ describe('MatchesPanel.vue Man of the Match voting', () => {
     const wrapper = await mountPanel();
     getMatchVotes.mockClear();
 
-    await wrapper.find('.motm-star-btn').trigger('click');
+    await wrapper.find('.motm-star-btn:not(.is-self)').trigger('click');
     await flushPromises();
 
     expect(voteForMotm).toHaveBeenCalledWith('played-uuid', SOMEONE_ELSE);
@@ -692,9 +701,10 @@ describe('MatchesPanel.vue Man of the Match voting', () => {
     });
     const wrapper = await mountPanel();
 
-    expect(wrapper.find('.motm-star-btn').classes()).toContain('is-voted');
+    const marcoStar = wrapper.find('.motm-star-btn:not(.is-self)');
+    expect(marcoStar.classes()).toContain('is-voted');
 
-    await wrapper.find('.motm-star-btn').trigger('click');
+    await marcoStar.trigger('click');
     await flushPromises();
 
     expect(removeMotmVote).toHaveBeenCalledWith('played-uuid');
@@ -703,12 +713,14 @@ describe('MatchesPanel.vue Man of the Match voting', () => {
 
   it('disables the star and explains why once the 24h window has passed', async () => {
     // CreatedAt is the anchor for this unscheduled match; "now" set well
-    // more than 24h after it.
+    // more than 24h after it. Targets marco's star specifically — the
+    // caller's own star is disabled unconditionally (see the self-vote
+    // test above) and would pass this assertion for the wrong reason.
     jest.useFakeTimers().setSystemTime(new Date('2026-09-02T09:00:00+02:00'));
     getMatchesDetails.mockResolvedValue([composedMatch({ CreatedAt: '2026-08-01T18:00:00+02:00' })]);
     const wrapper = await mountPanel();
 
-    const star = wrapper.find('.motm-star-btn');
+    const star = wrapper.find('.motm-star-btn:not(.is-self)');
     expect(star.attributes('disabled')).toBeDefined();
     expect(star.attributes('title')).toBe('Vote fermé 24h après le match');
 

@@ -34,17 +34,49 @@ function base62ToBigInt(code) {
   return value;
 }
 
+// The width every code is padded to: the length of the largest possible
+// 128-bit value (2^128 - 1) written in base62, computed rather than
+// hardcoded so it stays correct if BASE62_ALPHABET ever changed size. A
+// *shorter* value — most real match ids, which almost never have enough
+// leading zero bits to need all 22 characters — still gets left-padded with
+// '0' (itself a valid base62 digit, distinct from an *absent* character) up
+// to this width. Fixing the width is what makes a truncated-in-transit code
+// detectable at all: a base62 string with a few trailing characters cut off
+// is still a perfectly valid, perfectly canonical encoding of some *smaller*
+// value — nothing about its content marks it as truncated, only its length
+// does.
+const CODE_LENGTH = bigIntToBase62((1n << 128n) - 1n).length;
+
 export function encodeMatchId(uuid) {
   const hex = uuid.replace(/-/g, '');
-  return bigIntToBase62(BigInt(`0x${hex}`));
+  return bigIntToBase62(BigInt(`0x${hex}`)).padStart(CODE_LENGTH, '0');
 }
 
 // The inverse of encodeMatchId. Re-pads to the UUID's fixed 32 hex digits
 // before re-inserting the hyphens: base62 strips leading zero bits (a UUID
-// starting 0x00...) the same way parseInt would, so the length of `code`
-// alone can't be trusted to reconstruct the original grouping.
+// starting 0x00...) the same way parseInt would, so the *decoded value's*
+// own hex length can't be trusted to reconstruct the original grouping —
+// that's a separate concern from CODE_LENGTH above, which guards the input
+// string.
+//
+// Two checks reject a corrupted code instead of silently decoding a
+// different, wrong-but-plausible match id:
+// - The code must be exactly CODE_LENGTH characters. A truncated code is
+//   shorter; a code with stray extra characters appended is longer; both
+//   are still made entirely of valid base62 digits, so only the fixed
+//   width catches them.
+// - The decoded value must still fit in 128 bits after that — a
+//   CODE_LENGTH-character code can represent a value past 2^128-1 (62^22
+//   exceeds 2^128), which the fixed-width hex slicing below would
+//   otherwise silently truncate from the front instead of rejecting.
 export function decodeMatchId(code) {
+  if (code.length !== CODE_LENGTH) {
+    throw new Error(`short link code has the wrong length: ${code}`);
+  }
   const hex = base62ToBigInt(code).toString(16).padStart(32, '0');
+  if (hex.length > 32) {
+    throw new Error(`short link code out of range: ${code}`);
+  }
   return [
     hex.slice(0, 8),
     hex.slice(8, 12),
