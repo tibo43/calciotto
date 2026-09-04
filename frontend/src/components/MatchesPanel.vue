@@ -156,18 +156,36 @@
                   <span>{{ isScheduledMatch(match) ? formatKickoff(match) : formatDateShort(match.Date) }}</span>
                 </div>
 
-                <!-- Sign-ups line — one compact row (state badge + count),
-                     not a panel: these cards are ~200px wide in a horizontal
-                     carousel. The badge shows the actual registration state
-                     (open/not-open-yet/closed), not just "this is a scheduled
-                     match" — that part is already implied by the row existing
-                     at all, so it would tell a browsing member nothing they
-                     couldn't already see. Everything about the sign-up list
-                     itself (names, Participate/Withdraw) still lives below,
-                     once this card is selected, or on the match page. -->
-                <div v-if="isScheduledMatch(match)" class="match-signups-horizontal">
+                <!-- Sign-ups/status line — one compact row (state badge +
+                     count), not a panel: these cards are ~200px wide in a
+                     horizontal carousel. For a scheduled match the badge
+                     shows the actual registration state
+                     (open/not-open-yet/closed) until the roster is composed,
+                     then switches to Upcoming/Completed (see
+                     cardRegistrationState) — a scheduled match always showed
+                     a badge here, so this is a same-badge-different-text
+                     change, not new visual noise.
+
+                     An *unscheduled* match with a composed roster never had
+                     a row here at all (it has no sign-up state to show), and
+                     still doesn't in general — adding one unconditionally
+                     would slap a new "Completed" pill on every historical
+                     match this app has ever recorded, none of which ever had
+                     one. Only the specific case the roster is composed but
+                     matchStatus still reads 'upcoming' (no goals recorded
+                     yet — an admin building next week's teams ahead of time,
+                     say) gets the row, since that's a genuinely new fact
+                     worth surfacing; an already-played match stays exactly
+                     as unbadged as it always was. The sign-up count itself
+                     stays scheduled-only regardless (an unscheduled match
+                     has no sign-up list to count). Everything about the
+                     sign-up list itself (names, Participate/Withdraw) still
+                     lives below, once this card is selected, or on the match
+                     page. -->
+                <div v-if="isScheduledMatch(match) || (teamsAreComposed(match) && matchStatus(match) === 'upcoming')"
+                  class="match-signups-horizontal">
                   <span class="signup-state-badge" :class="cardRegistrationState(match)">{{ cardRegistrationLabel(match) }}</span>
-                  <span class="signup-count">{{ signupCountLabel(match) }}</span>
+                  <span v-if="isScheduledMatch(match)" class="signup-count">{{ signupCountLabel(match) }}</span>
                 </div>
 
                 <!-- Teams and Scores — hidden until composed for a scheduled
@@ -657,8 +675,22 @@ export default {
     // local field to keep in sync with `match`: this panel has no editable
     // state of its own to protect from a false-dirty flag, so
     // RegistrationsClosedAt is read straight off `selectedMatch`.
+    // Once the roster is composed, the sign-up state itself is stale news —
+    // real feedback pointed out a match still reading "Sign-ups closed"
+    // indefinitely, long after that stopped being the interesting fact about
+    // it. matchStatus/matchStatusLabel (below) take over instead, the exact
+    // same "Upcoming"/"Completed" concept MatchDetails.vue's own
+    // getMatchStatus() already established — this is that same idea, just
+    // reachable from here too, since a plain member no longer visits that
+    // admin-only page at all. registrationsOpen/registrationStateDetail need
+    // no changes for this: 'upcoming'/'completed' never equal
+    // REGISTRATION_OPEN (so Participate/Withdraw correctly stay hidden) and
+    // never match any REGISTRATION_* detail case either (so the "why closed"
+    // sentence disappears on its own, which is exactly right — there's
+    // nothing left to explain once the teams exist).
     registrationState() {
       if (!this.selectedMatch) return '';
+      if (teamsAreComposed(this.selectedMatch)) return this.matchStatus(this.selectedMatch);
       return deriveRegistrationState(this.selectedMatch, this.nowMs);
     },
 
@@ -667,6 +699,9 @@ export default {
     },
 
     registrationStateLabel() {
+      if (this.selectedMatch && teamsAreComposed(this.selectedMatch)) {
+        return this.matchStatusLabel(this.selectedMatch);
+      }
       return registrationStateLabel(this.registrationState);
     },
 
@@ -1210,6 +1245,14 @@ export default {
       return isScheduledMatch(match);
     },
 
+    // Same reasoning as isScheduledMatch just above — the card's own status
+    // row needs the raw "is this roster composed" check directly (unlike
+    // showTeamRoster, which is true for *any* unscheduled match whether or
+    // not it actually has a roster yet).
+    teamsAreComposed(match) {
+      return teamsAreComposed(match);
+    },
+
     // Gates the card's own team/score row and the "Selected Match Details"
     // preview's team columns — see teamsAreComposed's own comment. Unscheduled
     // matches have always had a populated roster, so this stays true for them;
@@ -1226,11 +1269,38 @@ export default {
     // scheduling fields — already on every entry `matches` holds — so this
     // costs no extra request, unlike `isRegistered` which needs the sign-up
     // list itself and stays scoped to whichever match is selected.
+    // 'upcoming' before kick-off (or, for an unscheduled match, always —
+    // there's no kick-off to check), 'completed' once some goal has actually
+    // been recorded. Mirrors MatchDetails.vue's own getMatchStatus() exactly
+    // (same fallback ambiguity: 0 goals reads as "not played yet" even after
+    // kick-off, since there's no better signal) — duplicated rather than
+    // shared, the same way getTeamColor() is between the two files.
+    matchStatus(match) {
+      if (isScheduledMatch(match) && this.nowMs < Date.parse(match.ScheduledAt)) {
+        return 'upcoming';
+      }
+      const totalGoals = (match.Teams || []).reduce((total, team) => total + (team.Score || 0), 0);
+      return totalGoals === 0 ? 'upcoming' : 'completed';
+    },
+
+    matchStatusLabel(match) {
+      return this.matchStatus(match) === 'upcoming' ? 'Upcoming' : 'Completed';
+    },
+
+    // Once the roster is composed, this switches from the sign-up state
+    // (open/not-open-yet/closed) to matchStatus's Upcoming/Completed — see
+    // the registrationState computed's own comment above for why. This is
+    // also what lets an *unscheduled* match's row show anything at all here:
+    // showTeamRoster/teamsAreComposed already imply it has a roster, so
+    // there is always a real status to report once composed, scheduled or
+    // not.
     cardRegistrationState(match) {
+      if (teamsAreComposed(match)) return this.matchStatus(match);
       return deriveRegistrationState(match, this.nowMs);
     },
 
     cardRegistrationLabel(match) {
+      if (teamsAreComposed(match)) return this.matchStatusLabel(match);
       return registrationStateLabel(this.cardRegistrationState(match));
     },
 
@@ -1887,6 +1957,19 @@ export default {
 .signup-state-badge.closed-at-kickoff {
   background-color: #e5e7eb;
   color: #374151;
+}
+
+/* Same colours as MatchDetails.vue's own .match-status-badge.upcoming/
+   .completed — this is that same Upcoming/Completed concept, just shown
+   once a roster is composed instead of on the (now admin-only) match page. */
+.signup-state-badge.upcoming {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.signup-state-badge.completed {
+  background-color: #d1fae5;
+  color: #065f46;
 }
 
 .signup-inline-detail {

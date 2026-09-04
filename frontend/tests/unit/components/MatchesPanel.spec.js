@@ -908,6 +908,105 @@ describe("MatchesPanel.vue card's registration state badge", () => {
 
     expect(wrapper.find('.signup-state-badge').text()).toBe('Sign-ups closed');
   });
+
+  const composed = (overrides = {}) => scheduled({
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [{ ID: 'p1', Name: 'marco', GoalNumber: 0 }] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+    ],
+    RegistrationsClosedAt: '2026-09-02T18:00:00+02:00',
+    ...overrides
+  });
+
+  // Real feedback: once the roster exists, "Sign-ups closed" is a stale fact
+  // about a process that already finished — Upcoming/Completed (the same
+  // concept MatchDetails.vue's own getMatchStatus already established) is
+  // the more useful thing to say instead. A scheduled match always showed a
+  // badge here, so this is the same badge reading differently, not a new one.
+  it('switches the badge from "Sign-ups closed" to "Upcoming" once the roster is composed, before kick-off', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-03T09:00:00+02:00'));
+    getMatchesDetails.mockResolvedValue([composed()]);
+    const wrapper = await mountPanel();
+
+    const badge = wrapper.find('.signup-state-badge');
+    expect(badge.text()).toBe('Upcoming');
+    expect(badge.classes()).toContain('upcoming');
+  });
+
+  it('still reads "Upcoming" once composed, even after kick-off, as long as no goal has been recorded', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T09:00:00+02:00'));
+    getMatchesDetails.mockResolvedValue([composed()]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-state-badge').text()).toBe('Upcoming');
+  });
+
+  it('reads "Completed" once composed, after kick-off, once a goal is actually recorded', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T09:00:00+02:00'));
+    const withGoal = composed();
+    withGoal.Teams[0].Score = 1;
+    withGoal.Teams[0].Players[0].GoalNumber = 1;
+    getMatchesDetails.mockResolvedValue([withGoal]);
+    const wrapper = await mountPanel();
+
+    const badge = wrapper.find('.signup-state-badge');
+    expect(badge.text()).toBe('Completed');
+    expect(badge.classes()).toContain('completed');
+  });
+});
+
+// An unscheduled match never had a sign-up state to show, so it never had a
+// badge row here at all — this is the one new case where it gets one: a
+// composed-but-not-yet-played roster (an admin building next week's teams
+// ahead of time, without going through the scheduling/sign-up flow). An
+// already-played unscheduled match — the overwhelming majority of this
+// app's match history — must stay exactly as unbadged as it always was, or
+// every past match would suddenly sprout a "Completed" pill it never had.
+describe("MatchesPanel.vue unscheduled match's card status once composed", () => {
+  const unscheduledComposed = (overrides = {}) => ({
+    ID: 'unscheduled-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-09-06',
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [{ ID: 'p1', Name: 'marco', GoalNumber: 0 }] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+    ],
+    ...overrides
+  });
+
+  it('shows an "Upcoming" badge for a composed roster with no goals recorded yet', async () => {
+    getMatchesDetails.mockResolvedValue([unscheduledComposed()]);
+    const wrapper = await mountPanel();
+
+    const badge = wrapper.find('.signup-state-badge');
+    expect(badge.text()).toBe('Upcoming');
+    expect(badge.classes()).toContain('upcoming');
+    // No sign-up count for a match that never had a sign-up list.
+    expect(wrapper.find('.signup-count').exists()).toBe(false);
+  });
+
+  it('shows no badge at all once a goal has been recorded, same as before this change', async () => {
+    const played = unscheduledComposed();
+    played.Teams[0].Score = 1;
+    played.Teams[0].Players[0].GoalNumber = 1;
+    getMatchesDetails.mockResolvedValue([played]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-state-badge').exists()).toBe(false);
+  });
+
+  it('shows no badge at all before the roster is composed', async () => {
+    const empty = unscheduledComposed({
+      Teams: [
+        { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
+        { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+      ]
+    });
+    getMatchesDetails.mockResolvedValue([empty]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-state-badge').exists()).toBe(false);
+  });
 });
 
 // The compact/expanded toggle for the "Selected Match Details" preview, once
