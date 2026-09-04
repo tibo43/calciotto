@@ -222,16 +222,29 @@ type ScorerRow struct {
 // tagged with the group it belongs to. The cross-group player profile needs
 // the same shape as PointsStandingRow repeated once per group, so it embeds
 // the row rather than restating its eight fields (the JSON stays flat).
+// MotmAwards rides alongside rather than living on PointsStandingRow itself,
+// since that type is also GET /standings/points' own row shape and has no
+// business carrying a Man of the Match count.
 type PlayerGroupStanding struct {
 	PointsStandingRow
-	GroupID   uuid.UUID `json:"GroupID"`
-	GroupName string    `json:"GroupName"`
+	GroupID    uuid.UUID `json:"GroupID"`
+	GroupName  string    `json:"GroupName"`
+	MotmAwards int       `json:"MotmAwards"`
+}
+
+// PlayerOverallStanding is the profile's Overall row: the same shape as
+// PointsStandingRow across every group combined, plus MotmAwards for the
+// same reason PlayerGroupStanding carries its own copy rather than
+// PointsStandingRow growing the field.
+type PlayerOverallStanding struct {
+	PointsStandingRow
+	MotmAwards int `json:"MotmAwards"`
 }
 
 // PlayerProfileStats is one player's record across every group they belong
 // to: Overall counts all of those groups' matches together, PerGroup breaks
 // the same period down group by group.
 type PlayerProfileStats struct {
-	Overall  PointsStandingRow     `json:"Overall"`
+	Overall  PlayerOverallStanding `json:"Overall"`
 	PerGroup []PlayerGroupStanding `json:"PerGroup"`
 }

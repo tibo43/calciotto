@@ -136,8 +136,11 @@ func (s *StandingsService) GetSeasons(groupID uuid.UUID) ([]string, error) {
 // GetPlayerProfile returns one player's record across every group they belong
 // to. Overall and PerGroup are computed from the same matches, so they always
 // agree: each group's matches are loaded and season-filtered exactly like the
-// group-scoped standings endpoints do, then ComputePointsStandings runs once
-// per group for PerGroup and once over the concatenation for Overall.
+// group-scoped standings endpoints do, then ComputePointsStandings/
+// ComputeMotmStandings each run once per group for PerGroup and once over the
+// concatenation for Overall — the same "load once, compute at two scopes"
+// shape GetMotmStandings itself uses, just repeated per group here instead of
+// once for a single one.
 //
 // A group the player is a member of but has never played a match in still
 // gets a PerGroup entry, zeroed — being in the group is what puts the row
@@ -160,11 +163,15 @@ func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (
 	}
 
 	profile := &models.PlayerProfileStats{
-		Overall:  zeroRow,
+		Overall:  models.PlayerOverallStanding{PointsStandingRow: zeroRow},
 		PerGroup: make([]models.PlayerGroupStanding, 0, len(groups)),
 	}
 
 	var allMatches []models.MatchWithDetails
+	// Match ids are globally unique, so merging each group's votesByMatch
+	// into one combined map for the Overall computation below can never
+	// collide two different groups' entries under the same key.
+	allVotesByMatch := make(map[uuid.UUID][]models.MatchVoteTally)
 	for _, group := range groups {
 		matches, err := s.MatchService.GetMatchesDetails(group.ID, "")
 		if err != nil {
@@ -177,16 +184,31 @@ func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (
 		if found := findPointsRow(ComputePointsStandings(matches), playerID); found != nil {
 			row = *found
 		}
+
+		matchIDs := make([]uuid.UUID, len(matches))
+		for i, match := range matches {
+			matchIDs[i] = match.ID
+		}
+		votesByMatch, err := s.VoteService.TallyVotesForMatches(matchIDs)
+		if err != nil {
+			return nil, err
+		}
+		for id, tally := range votesByMatch {
+			allVotesByMatch[id] = tally
+		}
+
 		profile.PerGroup = append(profile.PerGroup, models.PlayerGroupStanding{
 			PointsStandingRow: row,
 			GroupID:           group.ID,
 			GroupName:         group.Name,
+			MotmAwards:        findMotmAwards(ComputeMotmStandings(matches, votesByMatch), playerID),
 		})
 	}
 
 	if found := findPointsRow(ComputePointsStandings(allMatches), playerID); found != nil {
-		profile.Overall = *found
+		profile.Overall.PointsStandingRow = *found
 	}
+	profile.Overall.MotmAwards = findMotmAwards(ComputeMotmStandings(allMatches, allVotesByMatch), playerID)
 	return profile, nil
 }
 
@@ -198,6 +220,18 @@ func findPointsRow(rows []models.PointsStandingRow, playerID uuid.UUID) *models.
 		}
 	}
 	return nil
+}
+
+// findMotmAwards picks one player's award count out of a computed Man of the
+// Match leaderboard, defaulting to 0 — a player with no awards is simply
+// absent from the computed rows, not an error.
+func findMotmAwards(rows []models.MotmStandingRow, playerID uuid.UUID) int {
+	for _, row := range rows {
+		if row.PlayerID == playerID {
+			return row.Awards
+		}
+	}
+	return 0
 }
 
 // FilterMatchesBySeason keeps only the matches belonging to season (a label as

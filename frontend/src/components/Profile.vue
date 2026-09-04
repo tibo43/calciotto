@@ -127,6 +127,10 @@
                         <span class="group-card-stat-value">{{ row.GoalsFor }}</span>
                         <span class="group-card-stat-label">Goals</span>
                       </div>
+                      <div class="group-card-stat">
+                        <span class="group-card-stat-value">{{ row.MotmAwards }}</span>
+                        <span class="group-card-stat-label">MOTM</span>
+                      </div>
                     </div>
                     <!-- Invite code + team management: a separate dialog
                          rather than folded into this card or the roster
@@ -257,7 +261,7 @@ export default {
   components: { GroupSettingsModal, CreateGroupModal, JoinGroupModal },
   data() {
     return {
-      overall: { Name: '', Played: 0, Won: 0, Drawn: 0, Lost: 0, GoalsFor: 0, Points: 0 },
+      overall: { Name: '', Played: 0, Won: 0, Drawn: 0, Lost: 0, GoalsFor: 0, Points: 0, MotmAwards: 0 },
       perGroup: [],
       isLoading: true,
       loadFailed: false,
@@ -313,6 +317,7 @@ export default {
         { label: 'Drawn', value: this.overall.Drawn },
         { label: 'Lost', value: this.overall.Lost },
         { label: 'Goals', value: this.overall.GoalsFor },
+        { label: 'MOTM', value: this.overall.MotmAwards },
         { label: 'Points', value: this.overall.Points, highlight: true }
       ];
     },
@@ -608,7 +613,7 @@ export default {
 
 .overall-stats {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 0.75rem;
 }
 
@@ -962,11 +967,11 @@ export default {
     padding: 1rem;
   }
 
-  /* All 6 stats on one row instead of wrapping to two — shrunk enough
+  /* All 7 stats on one row instead of wrapping to two — shrunk enough
      (padding, font, letter-spacing) that "PLAYED"/"DRAWN" still fit
      without wrapping inside their own cell. */
   .overall-stats {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(7, 1fr);
     gap: 0.3rem;
   }
 
