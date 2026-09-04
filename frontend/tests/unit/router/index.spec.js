@@ -4,7 +4,7 @@
 // directly" rule the rest of tests/unit/ already follows for
 // matchRegistration.js/motmVoting.js.
 
-import { canEditMatch } from '@/router/index';
+import { canEditMatch, findGroupForMatch } from '@/router/index';
 import { getMatchDetailsByID } from '@/services/api';
 import { loadMyGroups } from '@/services/activeGroup';
 
@@ -91,5 +91,61 @@ describe('canEditMatch', () => {
     getMatchDetailsByID.mockImplementation(() => serverError());
 
     await expect(canEditMatch('match-1')).rejects.toEqual({ response: { status: 500 } });
+  });
+});
+
+// The shared "which of my groups owns this match" search canEditMatch above
+// is built on — also reused by MatchesAndStandings.vue to resolve a
+// `?match=<code>` deep link (a shared /m/:code tinylink) into the group to
+// switch into and the match's own details, without a second copy of the
+// same try-each-group loop.
+describe('findGroupForMatch', () => {
+  it('returns the group and match details once found', async () => {
+    getMatchDetailsByID.mockResolvedValue({ ID: 'match-1', Date: '2026-09-06' });
+
+    const result = await findGroupForMatch('match-1', [{ id: 'group-a', role: 'member' }]);
+
+    expect(result).toEqual({
+      group: { id: 'group-a', role: 'member' },
+      details: { ID: 'match-1', Date: '2026-09-06' }
+    });
+  });
+
+  it('tries every group in turn until the match is found', async () => {
+    getMatchDetailsByID
+      .mockImplementationOnce(() => notFound())
+      .mockImplementationOnce(() => Promise.resolve({ ID: 'match-1', Date: '2026-09-06' }));
+
+    const result = await findGroupForMatch('match-1', [
+      { id: 'group-a', role: 'admin' },
+      { id: 'group-b', role: 'member' }
+    ]);
+
+    expect(result.group.id).toBe('group-b');
+    expect(getMatchDetailsByID).toHaveBeenNthCalledWith(1, 'match-1', 'group-a');
+    expect(getMatchDetailsByID).toHaveBeenNthCalledWith(2, 'match-1', 'group-b');
+  });
+
+  it('returns null when the match belongs to none of the given groups', async () => {
+    getMatchDetailsByID.mockImplementation(() => notFound());
+
+    const result = await findGroupForMatch('match-1', [{ id: 'group-a', role: 'admin' }]);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when given no groups at all', async () => {
+    const result = await findGroupForMatch('match-1', []);
+
+    expect(result).toBeNull();
+    expect(getMatchDetailsByID).not.toHaveBeenCalled();
+  });
+
+  it('propagates a non-404 failure rather than treating it as "not this group"', async () => {
+    getMatchDetailsByID.mockImplementation(() => serverError());
+
+    await expect(findGroupForMatch('match-1', [{ id: 'group-a', role: 'admin' }])).rejects.toEqual({
+      response: { status: 500 }
+    });
   });
 });

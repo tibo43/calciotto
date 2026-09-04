@@ -857,3 +857,111 @@ describe("MatchesPanel.vue card's registration state badge", () => {
     expect(wrapper.find('.signup-state-badge').text()).toBe('Sign-ups closed');
   });
 });
+
+// The compact/expanded toggle for the "Selected Match Details" preview, once
+// a scheduled match's roster is actually composed. Before that (still signing
+// up) or for an ordinary unscheduled match, the sign-up chrome *is* the main
+// content, so there is no toggle at all and .signup-inline renders exactly as
+// it always has. None of these assertions depend on the real clock — the
+// toggle's own presence/state is independent of registrationState/the 24h
+// MOTM window, unlike the describe blocks above that do mock the clock.
+describe('MatchesPanel.vue collapsible team view once composed', () => {
+  const composedScheduled = (overrides = {}) => ({
+    ID: 'scheduled-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-09-06',
+    ScheduledAt: '2026-09-06T20:30:00+02:00',
+    RegistrationOpensAt: '2026-09-01T12:00:00+02:00',
+    MaxPlayers: 16,
+    RegistrationCount: 7,
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [{ ID: 'p1', Name: 'marco', GoalNumber: 0 }] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+    ],
+    ...overrides
+  });
+
+  const notYetComposedScheduled = () => ({
+    ID: 'scheduled-empty-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-09-06',
+    ScheduledAt: '2026-09-06T20:30:00+02:00',
+    RegistrationOpensAt: '2026-09-01T12:00:00+02:00',
+    MaxPlayers: 16,
+    RegistrationCount: 7,
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: [] }
+    ]
+  });
+
+  const playedWithPlayers = () => ({
+    ID: 'played-uuid',
+    GroupID: 'group-uuid',
+    Date: '2026-08-30',
+    Teams: [
+      { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 3, Players: [{ ID: 'p1', Name: 'marco', GoalNumber: 1 }] },
+      { ID: 'team-b', Name: 'White', Colour: 'white', Score: 2, Players: [] }
+    ]
+  });
+
+  it('shows no toggle for a scheduled match whose roster is not yet composed', async () => {
+    getMatchesDetails.mockResolvedValue([notYetComposedScheduled()]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-toggle-btn').exists()).toBe(false);
+    // Nothing to collapse yet, so the full sign-up chrome is what renders,
+    // exactly as before this feature existed.
+    expect(wrapper.find('.signup-inline').exists()).toBe(true);
+  });
+
+  it('shows no toggle for an ordinary, unscheduled match, composed or not', async () => {
+    getMatchesDetails.mockResolvedValue([playedWithPlayers()]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-toggle-btn').exists()).toBe(false);
+    expect(wrapper.find('.signup-inline').exists()).toBe(false);
+  });
+
+  it('appears and defaults to collapsed once a scheduled match is composed', async () => {
+    getMatchesDetails.mockResolvedValue([composedScheduled()]);
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.signup-toggle-btn').exists()).toBe(true);
+    expect(wrapper.find('.signup-toggle-btn').attributes('aria-expanded')).toBe('false');
+    expect(wrapper.find('.signup-inline').exists()).toBe(false);
+    // The teams themselves are what a composed match leads with instead.
+    expect(wrapper.find('.players-section').exists()).toBe(true);
+  });
+
+  it('reveals the sign-up sections when clicked, and collapses again on a second click', async () => {
+    getMatchesDetails.mockResolvedValue([composedScheduled()]);
+    const wrapper = await mountPanel();
+
+    await wrapper.find('.signup-toggle-btn').trigger('click');
+
+    expect(wrapper.find('.signup-inline').exists()).toBe(true);
+    expect(wrapper.find('.signup-toggle-btn').text()).toMatch(/hide sign-up details/i);
+    expect(wrapper.find('.signup-toggle-btn').attributes('aria-expanded')).toBe('true');
+
+    await wrapper.find('.signup-toggle-btn').trigger('click');
+
+    expect(wrapper.find('.signup-inline').exists()).toBe(false);
+    expect(wrapper.find('.signup-toggle-btn').text()).toMatch(/show sign-up details/i);
+  });
+
+  it('resets to the collapsed default when a different match is selected', async () => {
+    const other = composedScheduled({ ID: 'other-scheduled-uuid' });
+    getMatchesDetails.mockResolvedValue([composedScheduled(), other]);
+    const wrapper = await mountPanel();
+
+    await wrapper.find('.signup-toggle-btn').trigger('click');
+    expect(wrapper.find('.signup-inline').exists()).toBe(true);
+
+    await wrapper.vm.selectMatch(other);
+    await flushPromises();
+
+    expect(wrapper.find('.signup-inline').exists()).toBe(false);
+    expect(wrapper.find('.signup-toggle-btn').attributes('aria-expanded')).toBe('false');
+  });
+});

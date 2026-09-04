@@ -45,7 +45,7 @@
          role, season) is resolved here once and passed down. -->
     <template v-if="!isInitializing">
       <MatchesPanel v-if="activeSubTab === 'matches'" :active-group-id="activeGroupId" :is-admin="isAdmin"
-        :season="selectedSeason" />
+        :season="selectedSeason" :deep-link-match-id="deepLinkMatchId" />
 
       <section v-else class="standings-section">
         <div class="container">
@@ -62,7 +62,9 @@
 <script>
 import { getPointsStandings, getScorers, getMotmStandings, getSeasons } from '@/services/api';
 import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
-import { seasonOf } from '@/services/datetime';
+import { seasonOf, parseCalendarDay } from '@/services/datetime';
+import { decodeMatchId } from '@/services/shortLink';
+import { findGroupForMatch } from '@/router/index';
 import MatchesPanel from '@/components/MatchesPanel.vue';
 import PointsStandingsTable from '@/components/PointsStandingsTable.vue';
 import ScorersTable from '@/components/ScorersTable.vue';
@@ -95,6 +97,16 @@ export default {
       pointsStandings: [],
       topScorers: [],
       motmStandings: [],
+      // A match id decoded from a shared `/m/:code` link's `?match=` query
+      // param (see router/index.js), once resolveDeepLinkedMatch() below has
+      // confirmed which of the caller's groups it belongs to. Passed down to
+      // MatchesPanel, which auto-selects it once its own matches list has
+      // loaded. Empty is the ordinary case — no deep link at all.
+      deepLinkMatchId: '',
+      // The deep-linked match's own season (see resolveDeepLinkedMatch()),
+      // read by loadSeasons() before it defaults selectedSeason. Empty means
+      // "no override" — the ordinary seasonOf(now) default applies.
+      deepLinkSeason: '',
       activeSubTab: 'matches',
       subTabs: [
         { key: 'matches', label: 'Matches' },
@@ -117,6 +129,18 @@ export default {
       // controls.
       console.error('Error resolving the active group:', error);
     }
+
+    // A shared match link (router/index.js's `/m/:code` redirect) lands here
+    // rather than on MatchDetails.vue directly — see that route's own
+    // comment for why. If resolveDeepLinkedMatch() switches the active group,
+    // it triggers a full reload and returns true; there is nothing more to
+    // do on this instance of the page, since the reloaded one re-runs
+    // created() from scratch against the new group_id.
+    const reloading = await this.resolveDeepLinkedMatch();
+    if (reloading) {
+      return;
+    }
+
     await this.loadSeasons();
     this.isInitializing = false;
     await this.loadStandings();
@@ -129,6 +153,46 @@ export default {
       setActiveGroupId(this.activeGroupId);
       window.location.reload();
     },
+
+    // Decodes a `?match=<code>` deep link (see router/index.js) and, on
+    // success, forces the Matches tab active and preselects the match's own
+    // season before loadSeasons() runs — otherwise the current-season default
+    // could filter the deep-linked match straight out of the list it's meant
+    // to land in. Returns true if it triggered a full-page reload to switch
+    // into the match's own group (the caller must stop here and let the
+    // reloaded page start over), false otherwise.
+    //
+    // Every failure mode — no `?match=` param, an undecodable code, the
+    // match belonging to no group the caller is in, a network error along
+    // the way — degrades silently to the ordinary page with no selection,
+    // mirroring the `/m/:code` redirect's own "malformed code falls back
+    // home" philosophy: a shared link that doesn't resolve is not worth an
+    // error toast.
+    async resolveDeepLinkedMatch() {
+      const code = this.$route?.query?.match;
+      if (!code) {
+        return false;
+      }
+      try {
+        const matchId = decodeMatchId(code);
+        const found = await findGroupForMatch(matchId, this.groups);
+        if (!found) {
+          return false;
+        }
+        this.activeSubTab = 'matches';
+        this.deepLinkMatchId = matchId;
+        this.deepLinkSeason = seasonOf(parseCalendarDay(found.details.Date));
+        if (found.group.id !== this.activeGroupId) {
+          setActiveGroupId(found.group.id);
+          window.location.reload();
+          return true;
+        }
+      } catch (error) {
+        console.error('Error resolving the shared match link:', error);
+      }
+      return false;
+    },
+
     async loadSeasons() {
       try {
         const seasons = await getSeasons(this.activeGroupId);
@@ -145,7 +209,12 @@ export default {
       // instead of the history in progress. seasonOf(now) is stable against
       // that; only a season with no matches *at all* falls back to the last
       // one that has some, the same "no filtering" fallback as before.
-      const current = seasonOf(new Date());
+      //
+      // A deep-linked match's own season (resolveDeepLinkedMatch(), above)
+      // overrides that default outright — the whole point of the deep link
+      // is to land on that match, which the current-season default could
+      // otherwise filter straight out of the list.
+      const current = this.deepLinkSeason || seasonOf(new Date());
       if (this.seasons.includes(current)) {
         this.selectedSeason = current;
       } else {

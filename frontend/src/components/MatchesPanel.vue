@@ -206,26 +206,50 @@
               <div class="details-header">
                 <div class="details-title-section">
                   <h3>{{ formatDate(selectedMatch.Date) }} - Match Details</h3>
-                  <!-- Admin-only now: MatchDetails.vue is gated by a router
-                       guard (router/index.js's canEditMatch) to admins of the
-                       match's own group, so a plain member following this
-                       link would just bounce straight back here. Hidden
-                       rather than relabelled "View Match" as it used to be —
-                       everything a member needs (the full sign-up list with
-                       names, Man of the Match voting) now lives in this
-                       panel directly, so there is no reduced "view" version
-                       of that page left to send them to. -->
-                  <router-link
-                    v-if="isAdmin"
-                    :to="`/matches/${selectedMatch.ID}/edit`"
-                    class="btn-base btn-primary btn-small edit-match-btn"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                    </svg>
-                    Edit Match
-                  </router-link>
+                  <div class="details-header-actions">
+                    <!-- Collapse/expand the sign-up chrome below, once the
+                         roster is actually composed — see
+                         canCollapseSelectedMatchSignup's own comment for why
+                         this only ever appears then. Stays visible in both
+                         states (it's what re-expands, too), and toggling
+                         never touches the team columns themselves — those
+                         are unaffected either way. -->
+                    <button
+                      v-if="canCollapseSelectedMatchSignup"
+                      type="button"
+                      class="signup-toggle-btn"
+                      :aria-expanded="isSelectedMatchExpanded.toString()"
+                      @click="isSelectedMatchExpanded = !isSelectedMatchExpanded"
+                    >
+                      <svg
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        class="signup-toggle-chevron" :class="{ 'is-expanded': isSelectedMatchExpanded }"
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                      {{ isSelectedMatchExpanded ? 'Hide sign-up details' : 'Show sign-up details' }}
+                    </button>
+                    <!-- Admin-only now: MatchDetails.vue is gated by a router
+                         guard (router/index.js's canEditMatch) to admins of
+                         the match's own group, so a plain member following
+                         this link would just bounce straight back here.
+                         Hidden rather than relabelled "View Match" as it used
+                         to be — everything a member needs (the full sign-up
+                         list with names, Man of the Match voting) now lives
+                         in this panel directly, so there is no reduced "view"
+                         version of that page left to send them to. -->
+                    <router-link
+                      v-if="isAdmin"
+                      :to="`/matches/${selectedMatch.ID}/edit`"
+                      class="btn-base btn-primary btn-small edit-match-btn"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
+                      Edit Match
+                    </router-link>
+                  </div>
                 </div>
                 <div class="details-divider"></div>
               </div>
@@ -237,8 +261,19 @@
                    that page at all (see the router guard above), so the full
                    named lists moved here too, reusing MatchDetails.vue's own
                    .signup-list* markup/classes rather than inventing new
-                   ones. -->
-              <div v-if="isScheduledMatch(selectedMatch)" class="signup-inline">
+                   ones.
+
+                   Collapsed by default once the roster is composed
+                   (showSignupInline / canCollapseSelectedMatchSignup) — once
+                   teams exist the sign-up process is effectively finished,
+                   so leading with team composition instead of sign-up chrome
+                   is the more useful default; the toggle above brings this
+                   back for whoever still wants it (a late sign-up change, an
+                   admin reopening the list, etc). Before composition, or for
+                   an unscheduled match, this always renders — there is
+                   nothing to collapse when the sign-up info *is* the main
+                   content. -->
+              <div v-if="showSignupInline" class="signup-inline">
                 <!-- Badge, count and the action button all on one row — moved
                      here from a separate row below after the badge/count
                      alone read as a status display with nothing to act on
@@ -462,6 +497,15 @@ export default {
     season: {
       type: String,
       default: ''
+    },
+    // A match id resolved from a shared `/m/:code` link (see
+    // MatchesAndStandings.vue's resolveDeepLinkedMatch() and
+    // router/index.js's `/m/:code` route). When present and found in this
+    // list, loadMatches() auto-selects it instead of the newest match.
+    // Empty is the ordinary case — no deep link at all.
+    deepLinkMatchId: {
+      type: String,
+      default: ''
     }
   },
   data() {
@@ -502,6 +546,14 @@ export default {
       isUpdatingRegistration: false,
       signupMessage: '',
       signupMessageType: 'success',
+      // Whether the full sign-up chrome (state badge, count,
+      // Participate/Withdraw, confirmed/waiting named lists) is expanded for
+      // `selectedMatch`, once its roster is composed — see
+      // canCollapseSelectedMatchSignup. Reset to the collapsed default
+      // whenever the selection changes (selectMatch()/loadMatches()); this
+      // value is only ever consulted through showSignupInline, which ignores
+      // it entirely for a match that can't be collapsed in the first place.
+      isSelectedMatchExpanded: false,
       // --- Man of the Match voting, for whichever match is selected ---
       // Moved here from MatchDetails.vue in full — see CLAUDE.md. Same
       // "always fully re-fetch after a change" contract as the sign-up list
@@ -631,6 +683,25 @@ export default {
     // regardless; this only lets a star grey out with a tooltip before a 409.
     motmVotingOpen() {
       return isMotmVotingOpen(this.selectedMatch, this.nowMs);
+    },
+
+    // Whether the toggle button (and therefore the collapse behaviour
+    // itself) applies to `selectedMatch` at all: only once it's both
+    // scheduled and its roster is composed — before that, the sign-up info
+    // *is* the main content, so there's nothing to lead with instead.
+    canCollapseSelectedMatchSignup() {
+      return Boolean(this.selectedMatch)
+        && isScheduledMatch(this.selectedMatch)
+        && teamsAreComposed(this.selectedMatch);
+    },
+
+    // Gates the sign-up chrome block itself. A match that can't collapse
+    // (unscheduled, or scheduled but not yet composed) always shows it, same
+    // as before this feature existed; a composed scheduled match shows it
+    // only while explicitly expanded.
+    showSignupInline() {
+      if (!this.selectedMatch || !isScheduledMatch(this.selectedMatch)) return false;
+      return !this.canCollapseSelectedMatchSignup || this.isSelectedMatchExpanded;
     }
   },
   methods: {
@@ -659,9 +730,20 @@ export default {
 
         this.matches = matches;
 
-        // Auto-select the newest match
+        // Auto-select the newest match — unless a deep-linked match id (a
+        // shared /m/:code link, resolved one level up in
+        // MatchesAndStandings.vue) is present and actually in this list, in
+        // which case that one wins instead. Not found (wrong season somehow,
+        // already gone) falls back to the same newest-match default.
         if (this.matches.length > 0) {
-          this.selectedMatch = this.matches[0];
+          const deepLinked = this.deepLinkMatchId
+            ? this.matches.find(match => match.ID === this.deepLinkMatchId)
+            : null;
+          this.selectedMatch = deepLinked || this.matches[0];
+          // Same reset as selectMatch() — a season change reloading a
+          // different match here shouldn't inherit whatever expand state was
+          // left over from before.
+          this.isSelectedMatchExpanded = false;
         }
         await this.loadSelectedRegistrations();
         await this.loadSelectedMotmVotes();
@@ -861,6 +943,10 @@ export default {
       this.selectedMatch = match;
       this.signupMessage = '';
       this.motmMessage = '';
+      // Reset to the collapsed default for whichever match this now is —
+      // expand state is not remembered per match, see
+      // canCollapseSelectedMatchSignup/showSignupInline.
+      this.isSelectedMatchExpanded = false;
       this.loadSelectedRegistrations();
       this.loadSelectedMotmVotes();
     },
@@ -1653,6 +1739,12 @@ export default {
   margin-bottom: 0.5rem;
 }
 
+.details-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
 .edit-match-btn {
   text-decoration: none !important;
   color: white !important;
@@ -1661,6 +1753,42 @@ export default {
 .edit-match-btn:hover {
   text-decoration: none !important;
   color: white !important;
+}
+
+/* Collapse/expand toggle for the sign-up chrome below, once the roster is
+   composed (see canCollapseSelectedMatchSignup) — a plain text-and-chevron
+   button, following this codebase's own convention for a small secondary
+   action (compare .nav-btn's month-navigation chevrons in this same file). */
+.signup-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--border-radius);
+  transition: all var(--transition-fast);
+}
+
+.signup-toggle-btn:hover {
+  color: var(--primary-color);
+  background-color: var(--bg-tertiary);
+}
+
+.signup-toggle-chevron {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--transition-fast);
+}
+
+/* Points up while expanded (matching "this is what collapses it"), down
+   while collapsed (matching "this is what expands it"). */
+.signup-toggle-chevron.is-expanded {
+  transform: rotate(180deg);
 }
 
 /* Sign-ups inline in the Matches tab preview — same visual language as
