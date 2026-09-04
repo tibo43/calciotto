@@ -679,6 +679,46 @@ describe('MatchesPanel.vue Man of the Match voting', () => {
     expect(wrapper.find('.motm-vote-count').text()).toBe('3 votes');
   });
 
+  // Real feedback: a match where the caller never voted at all still needs
+  // to show who is actually winning it — the gold "leader" marker is driven
+  // purely by the tally's own vote counts, never by MyVoteFor.
+  it('marks whoever has the most votes as the match leader, even if the caller never voted at all', async () => {
+    withinWindow();
+    getMatchesDetails.mockResolvedValue([composedMatch()]);
+    getMatchVotes.mockResolvedValue({
+      Tally: [{ PlayerID: ME, Name: 'me', Votes: 1 }],
+      MyVoteFor: null
+    });
+    const wrapper = await mountPanel();
+
+    const pill = wrapper.find('.motm-vote-count');
+    expect(pill.classes()).toContain('is-leader');
+    expect(pill.find('.motm-leader-icon').exists()).toBe(true);
+  });
+
+  it('does not mark a candidate as the leader once someone else overtakes them', async () => {
+    withinWindow();
+    getMatchesDetails.mockResolvedValue([composedMatch()]);
+    getMatchVotes.mockResolvedValue({
+      Tally: [
+        { PlayerID: ME, Name: 'me', Votes: 1 },
+        { PlayerID: SOMEONE_ELSE, Name: 'marco', Votes: 3 }
+      ],
+      // The caller voted for the trailing candidate — the leader marker
+      // must still land on marco, not on whoever the caller happened to
+      // vote for.
+      MyVoteFor: ME
+    });
+    const wrapper = await mountPanel();
+
+    const pills = wrapper.findAll('.motm-vote-count');
+    const leaderPill = pills.find(pill => pill.text() === '3 votes');
+    const trailingPill = pills.find(pill => pill !== leaderPill);
+
+    expect(leaderPill.classes()).toContain('is-leader');
+    expect(trailingPill.classes()).not.toContain('is-leader');
+  });
+
   it('casts a vote when the star is clicked, then reloads the tally', async () => {
     withinWindow();
     getMatchesDetails.mockResolvedValue([composedMatch()]);

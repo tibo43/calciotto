@@ -372,9 +372,30 @@
                              rejects a self-vote outright, so there is nothing
                              to gain from offering it, but removing the
                              element entirely would shift every other row's
-                             star out of its column. -->
+                             star out of its column.
+
+                             Two separate stars, two separate questions: the
+                             button below answers "did *I* vote for this
+                             player" (filled amber only for the caller's own
+                             choice) — it says nothing about who is actually
+                             winning. isCurrentMotmLeader answers that other
+                             question directly: a small gold star inside the
+                             vote-count pill itself marks whoever currently
+                             has the *most* votes (tie-inclusive, mirroring
+                             the backend's ComputeMotmWinners), regardless of
+                             whether the caller voted for them at all — real
+                             feedback after a match where nobody had voted for
+                             the only candidate with a vote, yet nothing on
+                             screen indicated they were the (derived) match
+                             winner. -->
                         <div class="player-motm">
-                          <span v-if="motmVoteCount(player.ID) > 0" class="motm-vote-count">
+                          <span v-if="motmVoteCount(player.ID) > 0" class="motm-vote-count"
+                            :class="{ 'is-leader': isCurrentMotmLeader(player.ID) }">
+                            <svg v-if="isCurrentMotmLeader(player.ID)" class="motm-leader-icon" viewBox="0 0 24 24"
+                              fill="currentColor" aria-hidden="true">
+                              <polygon
+                                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                            </svg>
                             {{ motmVoteCount(player.ID) }} vote{{ motmVoteCount(player.ID) === 1 ? '' : 's' }}
                           </span>
                           <button v-if="player.ID" type="button"
@@ -1084,6 +1105,19 @@ export default {
 
     isMyMotmVote(playerId) {
       return this.motmVotes.MyVoteFor === playerId;
+    },
+
+    // Mirrors the backend's ComputeMotmWinners: whoever has the *most*
+    // votes in the tally, tie-inclusive — several players can all be
+    // "leading" a match at once, same as the backend awards several MOTMs
+    // for a genuine tie. Independent of the caller's own vote entirely.
+    isCurrentMotmLeader(playerId) {
+      const tally = this.motmVotes.Tally;
+      if (!tally.length) return false;
+      const maxVotes = Math.max(...tally.map(candidate => candidate.Votes));
+      if (maxVotes <= 0) return false;
+      const entry = tally.find(candidate => candidate.PlayerID === playerId);
+      return !!entry && entry.Votes === maxVotes;
     },
 
     // The star's tooltip/aria-label: the 24h window takes priority over
@@ -2116,6 +2150,8 @@ export default {
 }
 
 .motm-vote-count {
+  display: inline-flex;
+  align-items: center;
   background-color: var(--bg-tertiary);
   color: var(--text-secondary);
   font-size: 0.7rem;
@@ -2123,6 +2159,24 @@ export default {
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
   white-space: nowrap;
+}
+
+/* Whoever currently has the *most* votes for this match (tie-inclusive) —
+   independent of the caller's own vote, unlike .motm-star-btn.is-voted
+   below. Gold rather than the pill's usual muted grey, so the match's
+   actual (derived) MOTM stands out even to someone who never voted at
+   all. */
+.motm-vote-count.is-leader {
+  background-color: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+  font-weight: 700;
+}
+
+.motm-leader-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-right: 0.2rem;
+  color: #f59e0b;
 }
 
 .motm-star-btn {
@@ -2301,11 +2355,18 @@ export default {
     justify-content: center;
   }
 
-  /* Keep both teams side by side even on mobile — stacking them (an
-     earlier attempt) fixed the horizontal scroll but traded it for a lot
-     of vertical scrolling instead. Everything inside a column is shrunk
-     to fit two ~150px-wide columns without overflowing. */
+  /* Stacked, one team per row, instead of side by side. This used to be
+     side-by-side deliberately (stacking traded the horizontal squeeze for
+     a lot of vertical scrolling) — reversed once real testing showed the
+     squeeze itself had gotten worse than that trade-off: the Man of the
+     Match star sits in its own fixed-width column right before the goal
+     badge (see .player-motm), which on a ~150px-wide column left barely
+     any room for a name at all — a long one (e.g. "hubert bonniseur de la
+     batte") rendered as a single truncated letter. A full-width column
+     gives the name room to actually be read; the extra scrolling is the
+     smaller cost. */
   .teams-columns {
+    grid-template-columns: 1fr;
     gap: 0.5rem;
   }
 
