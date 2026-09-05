@@ -35,6 +35,8 @@ import (
 	"app/internal/models"
 	"app/internal/services"
 	"app/pkg/database"
+
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -44,6 +46,7 @@ func main() {
 	maxPlayers := flag.Int("max-players", 60, "MaxPlayers on the scheduled match — keep it above the number of accounts you intend to sign up, or some will land on the waiting list on purpose")
 	kickoffInDays := flag.Int("kickoff-in-days", 7, "days from now for the match's kick-off — far enough out that it won't close registrations mid-test")
 	frontendURL := flag.String("frontend-url", "", "optional: your Vercel frontend URL, to print a ready-to-use signup link (e.g. https://calciotto.example.com)")
+	existingPlayerID := flag.String("existing-player-id", "", "optional: UUID of an already-existing real player (e.g. your own account) to add to the group as admin too, so you can log in on your normal account and watch the test live. This player is NEVER touched by devops/perf-cleanup.sql — only their membership in this throwaway group is, and even that only because the group itself is deleted.")
 	flag.Parse()
 
 	db, err := database.InitDB()
@@ -76,6 +79,28 @@ func main() {
 		log.Fatalf("failed to add admin to group: %v", err)
 	}
 
+	var existingPlayerName string
+	if *existingPlayerID != "" {
+		id, err := uuid.Parse(*existingPlayerID)
+		if err != nil {
+			log.Fatalf("invalid -existing-player-id %q: %v", *existingPlayerID, err)
+		}
+		player, err := playerService.GetPlayerByID(id)
+		if err != nil {
+			log.Fatalf("no player found with id %s: %v", id, err)
+		}
+		existingPlayerName = player.Name
+		isMember, err := membershipService.IsMember(group.ID, id)
+		if err != nil {
+			log.Fatalf("failed to check membership for %s: %v", id, err)
+		}
+		if !isMember {
+			if err := membershipService.AddPlayerToGroupWithRole(group.ID, id, models.RoleAdmin); err != nil {
+				log.Fatalf("failed to add existing player %s to group: %v", id, err)
+			}
+		}
+	}
+
 	now := time.Now()
 	registrationOpensAt := now.Add(-1 * time.Hour)
 	kickoff := now.AddDate(0, 0, *kickoffInDays)
@@ -93,6 +118,9 @@ func main() {
 	fmt.Printf("Group:        %s (id=%s)\n", group.Name, group.ID)
 	fmt.Printf("Invite code:  %s\n", group.InviteCode)
 	fmt.Printf("Admin login:  %s / %s\n", *adminEmail, *adminPassword)
+	if *existingPlayerID != "" {
+		fmt.Printf("Also added:   %s (id=%s) as admin — log in on your normal account to watch\n", existingPlayerName, *existingPlayerID)
+	}
 	fmt.Printf("Match id:     %s\n", matchID)
 	fmt.Printf("Kick-off:     %s\n", kickoff.Format(time.RFC3339))
 	fmt.Printf("Max players:  %d\n", *maxPlayers)

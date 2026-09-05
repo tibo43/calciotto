@@ -12,10 +12,20 @@
 --                                                       accounts, by email pattern)
 --
 -- Nothing here touches a row outside this group id or this email pattern —
--- real players/groups/matches are never in scope.
+-- real players/groups/matches are never in scope. The player deletion step
+-- is additionally guarded (belt and suspenders on top of the email pattern
+-- already excluding it) against ever removing a real player added to the
+-- group via `perfsetup -existing-player-id` (e.g. your own account, added so
+-- you could log in and watch the test) — see :real_player_id below. Deleting
+-- group_memberships still removes *that* player's membership in this one
+-- throwaway group (the group itself is being deleted, so the row would be
+-- meaningless left behind), but never the player row.
+
+\set real_player_id '''995079fd-05b5-4333-bbb5-e342b805ef86'''
 
 \echo 'Target group id:' :group_id
 \echo 'Test account email pattern: perfload%@perfload.test'
+\echo 'Never deleted regardless of match: real_player_id =' :real_player_id
 
 -- ---------------------------------------------------------------------------
 -- Step 1: verify before deleting anything. Re-run this block on its own (it
@@ -41,7 +51,7 @@ select 'match_votes'      as what, count(*) from match_votes
   where match_id in (select id from matches where group_id = :group_id::uuid)
 union all
 select 'test players'     as what, count(*) from players
-  where email like 'perfload%@perfload.test';
+  where email like 'perfload%@perfload.test' and id != :real_player_id::uuid;
 
 -- ---------------------------------------------------------------------------
 -- Step 2: the actual cleanup. Uncomment (remove the leading "-- ") and run
@@ -69,8 +79,12 @@ select 'test players'     as what, count(*) from players
 -- delete from groups where id = :group_id::uuid;
 
 -- delete from password_reset_tokens
---   where player_id in (select id from players where email like 'perfload%@perfload.test');
+--   where player_id in (
+--     select id from players
+--     where email like 'perfload%@perfload.test' and id != :real_player_id::uuid
+--   );
 
--- delete from players where email like 'perfload%@perfload.test';
+-- delete from players
+--   where email like 'perfload%@perfload.test' and id != :real_player_id::uuid;
 
 -- commit;

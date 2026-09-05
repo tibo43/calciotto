@@ -27,8 +27,16 @@ redeploy once the test is done** to revert.
 From `app/`, pointed at the production database:
 
 ```bash
-DATABASE_URL="<production DATABASE_URL>" go run ./cmd/perfsetup -frontend-url "<your Vercel URL>"
+DATABASE_URL="<production DATABASE_URL>" go run ./cmd/perfsetup \
+  -frontend-url "<your Vercel URL>" \
+  -existing-player-id "<your own player UUID, optional>"
 ```
+
+`-existing-player-id` adds your own real account to the throwaway group as
+admin too, so you can log in normally and watch the sign-up list fill up
+live. It is never touched by `devops/perf-cleanup.sql` — only its membership
+in this one throwaway group is removed (because the group itself is
+deleted), never the player row.
 
 This prints a group id, invite code, admin login, and match id — keep this
 output, you need the group id for step 4 and the invite code for step 2.
