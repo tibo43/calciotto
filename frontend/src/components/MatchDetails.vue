@@ -403,26 +403,9 @@
                   <div class="spinner-small"></div>
                 </div>
               </div>
-              <div v-if="showCreatePlayerOption" class="create-player-section">
-                <div class="create-player-prompt">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="info-icon">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="16" x2="12" y2="12" />
-                    <line x1="12" y1="8" x2="12.01" y2="8" />
-                  </svg>
-                  <span>Player "{{ formatPlayerNameForDisplay(playerSearchTerm) }}" not found.</span>
-                </div>
-                <button @click="createNewPlayer" :disabled="isCreatingPlayer" class="create-player-btn">
-                  <svg v-if="!isCreatingPlayer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="8.5" cy="7" r="4" />
-                    <line x1="20" y1="8" x2="20" y2="14" />
-                    <line x1="23" y1="11" x2="17" y2="11" />
-                  </svg>
-                  <div v-else class="spinner-small"></div>
-                  {{ isCreatingPlayer ? 'Creating...' : `Create "${formatPlayerNameForDisplay(playerSearchTerm)}"` }}
-                </button>
-              </div>
+              <p v-if="playerSearchTerm && filteredAvailablePlayers.length === 0" class="no-matching-players-hint">
+                No matching players in this group.
+              </p>
             </div>
           </div>
 
@@ -591,7 +574,6 @@ import {
   updateMatch,
   deleteMatch,
   getGroupMembers,
-  createPlayer,
   getMatchRegistrations,
   registerForMatch,
   unregisterFromMatch,
@@ -666,8 +648,6 @@ export default {
       isLoadingPlayers: false,
       playerSearchTerm: '',
       messageKey: 0,
-      showCreatePlayerOption: false,
-      isCreatingPlayer: false,
       // --- Sign-ups (scheduled matches only) ---
       // The ordered list from GET /matches/:id/registrations, exactly as the
       // server sent it: never reordered or patched locally, since the whole
@@ -982,9 +962,8 @@ export default {
       } catch (error) {
         console.error('Error signing up for match:', error);
         // A 409 says precisely why (not open yet, closed, already registered) —
-        // worth showing verbatim rather than flattening, same pattern as
-        // createNewPlayer above. Reload either way: a rejection usually means
-        // this page's view of the list is stale.
+        // worth showing verbatim rather than flattening. Reload either way: a
+        // rejection usually means this page's view of the list is stale.
         this.showMessage(this.registrationErrorMessage(error, 'Error signing up for this match.'), 'error');
         await this.loadRegistrations();
       } finally {
@@ -1146,13 +1125,11 @@ export default {
     filterAvailablePlayers() {
       if (!this.allPlayers || !Array.isArray(this.allPlayers) || this.allPlayers.length === 0) {
         this.filteredAvailablePlayers = [];
-        this.checkCreatePlayerOption();
         return;
       }
 
       if (!this.match || !this.match.Teams || !this.match.Teams[this.activeTeam]) {
         this.filteredAvailablePlayers = [];
-        this.checkCreatePlayerOption();
         return;
       }
 
@@ -1171,14 +1148,12 @@ export default {
         this.filteredAvailablePlayers = candidates.filter(player =>
           player.Name.toLowerCase().includes(searchTerm)
         );
-        this.checkCreatePlayerOption();
         return;
       }
 
       this.filteredAvailablePlayers = this.isScheduled
         ? this.tierCandidatesBySignup(candidates)
         : candidates;
-      this.checkCreatePlayerOption();
     },
 
     // For a scheduled match, with no search term: confirmed sign-ups first
@@ -1212,92 +1187,6 @@ export default {
       addTier(this.waitingRegistrations, true);
 
       return tiered;
-    },
-
-    // Check if we should show the create player option
-    checkCreatePlayerOption() {
-      if (!this.playerSearchTerm || this.playerSearchTerm.trim().length < 2) {
-        this.showCreatePlayerOption = false;
-        return;
-      }
-
-      const searchTerm = this.playerSearchTerm.trim().toLowerCase();
-      const exactMatch = this.allPlayers.some(player =>
-        player.Name.toLowerCase() === searchTerm
-      );
-
-      // Show create option if no exact match found and search term is not empty
-      this.showCreatePlayerOption = !exactMatch && this.filteredAvailablePlayers.length === 0;
-    },
-
-    // Create a new player
-    async createNewPlayer() {
-      if (!this.playerSearchTerm || this.playerSearchTerm.trim().length < 2) {
-        this.showMessage('Please enter a valid player name', 'error');
-        return;
-      }
-
-      const playerName = this.playerSearchTerm.trim();
-      const playerNameLowerCase = playerName.toLowerCase(); // Backend gets lowercase
-
-      // Check if player already exists (case-insensitive)
-      const existingPlayer = this.allPlayers.find(player =>
-        player.Name.toLowerCase() === playerNameLowerCase
-      );
-
-      if (existingPlayer) {
-        this.showMessage('Player already exists', 'error');
-        return;
-      }
-
-      this.isCreatingPlayer = true;
-      try {
-        const newPlayerData = {
-          Name: playerNameLowerCase, // Send lowercase to backend
-          // Exact key, lowercase with an underscore: CreatePlayer binds this
-          // into a `json:"group_id"` field, and Gin's case-insensitive JSON
-          // binding does not bridge the underscore — sending `GroupID`
-          // instead would silently fail to bind and the new player would
-          // fall through to the backend's own-first-group fallback instead
-          // of joining this match's group.
-          group_id: this.match.GroupID
-        };
-
-        await createPlayer(newPlayerData);
-
-        // RELOAD ALL PLAYERS FROM DATABASE to ensure we have fresh data
-        await this.reloadAllPlayers();
-
-        // Find the newly created player in the fresh data
-        const freshPlayer = this.allPlayers.find(player =>
-          player.Name.toLowerCase() === playerNameLowerCase
-        );
-
-        if (freshPlayer) {
-          // Add the new player to selection immediately
-          this.addPlayerToSelection(freshPlayer);
-        }
-
-        // Clear search and hide create option
-        this.playerSearchTerm = '';
-        this.showCreatePlayerOption = false;
-        this.filterAvailablePlayers();
-
-        this.showMessage(`Player "${this.formatPlayerNameForDisplay(playerNameLowerCase)}" created and added to selection!`, 'success');
-
-      } catch (error) {
-        console.error('Error creating player:', error);
-        // The backend's own per-group duplicate-name check (a case our own
-        // client-side check against this.allPlayers can't catch, since that
-        // check is global rather than scoped to this match's group) returns a
-        // specific message worth showing verbatim, same pattern as
-        // ForgotPassword.vue/Profile.vue. Fall back to a generic message for
-        // any other kind of failure.
-        const backendMessage = error.response?.data?.error;
-        this.showMessage(backendMessage || 'Error creating player. Please try again.', 'error');
-      } finally {
-        this.isCreatingPlayer = false;
-      }
     },
 
     // Scoped to this match's own group (this.activeGroupId, resolved once in
@@ -1439,8 +1328,6 @@ export default {
       this.selectedPlayers = [];
       this.playerSearchTerm = '';
       this.filteredAvailablePlayers = [];
-      this.showCreatePlayerOption = false;
-      this.isCreatingPlayer = false;
       if (this.searchTimeout) {
         clearTimeout(this.searchTimeout);
       }
@@ -2374,58 +2261,17 @@ export default {
   transform: translateY(-50%);
 }
 
-/* Create Player Section */
-.create-player-section {
-  margin-top: 1rem;
-  padding: 1rem;
+/* Shown under the search input when a search term matches nobody in this
+   group — replaces the old "create a ghost player" prompt, since that flow
+   no longer exists on the backend at all. */
+.no-matching-players-hint {
+  margin: 1rem 0 0;
+  padding: 0.75rem 1rem;
   background-color: var(--bg-tertiary);
   border-radius: var(--border-radius);
   border: 1px solid var(--border-color);
-}
-
-.create-player-prompt {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
   color: var(--text-secondary);
   font-size: 0.875rem;
-}
-
-.info-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--secondary-color);
-}
-
-.create-player-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background-color: var(--accent-color);
-  color: white;
-  border: none;
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  font-weight: 500;
-  font-size: 0.875rem;
-}
-
-.create-player-btn:hover:not(:disabled) {
-  background-color: #d97706;
-  transform: translateY(-1px);
-}
-
-.create-player-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.create-player-btn svg {
-  width: 16px;
-  height: 16px;
 }
 
 /* Two-column layout */

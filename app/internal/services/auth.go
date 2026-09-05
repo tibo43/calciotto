@@ -34,6 +34,12 @@ var (
 	// comme ErrInvalidCredentials ne distingue pas "email inconnu" de "mauvais
 	// mot de passe".
 	ErrInvalidResetToken = errors.New("invalid or expired reset token")
+	// ErrInviteCodeRequired is SignupNewPlayer's rejection when no invite code
+	// is supplied at all: signing up without joining a group is no longer
+	// allowed — every player must land in a group the moment they sign up, per
+	// a deliberate business decision (self-service group creation/joining is
+	// itself disabled, see GroupHandler.CreateGroup/JoinGroup).
+	ErrInviteCodeRequired = errors.New("invite code is required")
 )
 
 const tokenTTL = 7 * 24 * time.Hour
@@ -59,10 +65,9 @@ type playerClaims struct {
 
 // AuthService covers the account lifecycle: SignupNewPlayer is the public
 // signup flow (creates a new Player and attaches credentials in one step),
-// Signup is the "claim by name" flow for a Player row that already exists
-// (created via PlayerService) but has no credentials yet — not currently
-// wired to any route, kept for an upcoming "claim an existing ghost player"
-// feature.
+// Signup is a lower-level "attach credentials to an existing Player row" helper
+// — not currently wired to any route; kept as a convenience for tests that need
+// a player with real credentials without going through the full signup flow.
 type AuthService struct {
 	DB     *gorm.DB
 	secret []byte
@@ -79,8 +84,7 @@ func NewAuthService(db *gorm.DB, secret string) *AuthService {
 // Signup attaches email/password credentials to an existing Player. It never
 // creates a new Player — the caller must already know the Player's ID. Not
 // wired to any HTTP route today (see SignupNewPlayer for the public
-// POST /auth/signup flow); kept for an upcoming "claim an existing ghost
-// player" feature that will reuse this.
+// POST /auth/signup flow).
 func (s *AuthService) Signup(playerID uuid.UUID, email, password string) error {
 	email = normalizeEmail(email)
 	if email == "" {
@@ -130,16 +134,17 @@ func (s *AuthService) Signup(playerID uuid.UUID, email, password string) error {
 // a player only ever has one account name shared across every group they
 // belong to, per-group uniqueness wouldn't make sense either. That's a
 // deliberate product decision, not an oversight: do not add a duplicate-name
-// check here, and do not route this through PlayerService.CreatePlayer,
-// which enforces exactly that check for a different flow (admin-created
-// "ghost" players).
+// check here.
 //
-// inviteCode is optional — pass "" to sign up without joining any group,
-// the same behavior as before this parameter existed. When non-empty (after
-// normalizeInviteCode trims/uppercases it), it must resolve to an existing
-// group or the whole signup fails with ErrInviteCodeNotFound: the player row
-// and the group membership are created inside a single s.DB.Transaction, so
-// a typo'd or stale code can never leave behind an orphaned account with no
+// inviteCode is now required — self-service group creation/joining is
+// disabled (see GroupHandler.CreateGroup/JoinGroup), so signing up is the
+// only way left into a group, and a player left with no group at all would
+// have no way in afterwards either. Empty (after normalizeInviteCode
+// trims/uppercases it) fails fast with ErrInviteCodeRequired, before any
+// player row is created. A non-empty code must resolve to an existing group
+// or the whole signup fails with ErrInviteCodeNotFound: the player row and
+// the group membership are created inside a single s.DB.Transaction, so a
+// typo'd or stale code can never leave behind an orphaned account with no
 // group, and a valid code can never silently fail to attach the new player
 // to it. This intentionally does not reuse GroupService.JoinByInviteCode —
 // that helper's IsMember check is meaningless for a player created moments
@@ -161,6 +166,11 @@ func (s *AuthService) SignupNewPlayer(name, email, password, inviteCode string) 
 		return uuid.Nil, ErrPasswordRequired
 	}
 
+	normalizedInviteCode := normalizeInviteCode(inviteCode)
+	if normalizedInviteCode == "" {
+		return uuid.Nil, ErrInviteCodeRequired
+	}
+
 	var existing models.Player
 	result := s.DB.Where("email = ?", email).First(&existing)
 	if result.Error == nil {
@@ -180,13 +190,9 @@ func (s *AuthService) SignupNewPlayer(name, email, password, inviteCode string) 
 		Email:        &email,
 		PasswordHash: string(hash),
 	}
-	normalizedInviteCode := normalizeInviteCode(inviteCode)
 	err = s.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&player).Error; err != nil {
 			return err
-		}
-		if normalizedInviteCode == "" {
-			return nil
 		}
 
 		var group models.Group
@@ -218,7 +224,7 @@ func (s *AuthService) Login(email, password string) (string, error) {
 		return "", ErrInvalidCredentials
 	}
 
-	return s.generateToken(player.ID)
+	return s.GenerateToken(player.ID)
 }
 
 // ForgotPassword issues a single-use reset link for the account registered
@@ -250,78 +256,6 @@ func (s *AuthService) ForgotPassword(email string) error {
 		return err
 	}
 
-	sendPasswordResetLink(email, rawToken)
-	return nil
-}
-
-// InviteExistingPlayer attaches email to a "ghost" Player — one created by an
-// admin via PlayerService.CreatePlayer, with a Name but no credentials — and
-// issues them a link to set their own password, turning the roster entry into
-// a real account. It is the counterpart of SignupNewPlayer for someone who is
-// already on a group's roster: the Player row (and its match history) already
-// exists, only the credentials are missing.
-//
-// It reuses the password-reset token machinery rather than inventing a
-// claim-specific token type, because the two are the same operation seen from
-// two angles: hand someone a single-use, short-lived, hashed-at-rest secret
-// that authorizes setting Player.PasswordHash once. ResetPassword already
-// overwrites PasswordHash unconditionally — it never asks whether one was
-// there before — so it consumes an invite token exactly as it consumes a
-// reset token, and the frontend needs no new page: the existing
-// /reset-password?token=... link works verbatim.
-//
-// A player who already has an email is refused with ErrPlayerAlreadyClaimed:
-// this path must not silently rewrite a live account's email (that would be a
-// takeover vector, and "change my email" is an unrelated feature that doesn't
-// exist). Authorizing *who* may invite whom is the caller's job — see
-// GroupHandler.InvitePlayer, gated by RequireGroupAdminByPathParam plus an
-// explicit IsMember check on the target.
-func (s *AuthService) InviteExistingPlayer(playerID uuid.UUID, email string) error {
-	email = normalizeEmail(email)
-	if email == "" {
-		return ErrEmailRequired
-	}
-
-	var player models.Player
-	if err := s.DB.First(&player, "id = ?", playerID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrPlayerNotFound
-		}
-		return err
-	}
-	if player.Email != nil {
-		return ErrPlayerAlreadyClaimed
-	}
-
-	var existing models.Player
-	result := s.DB.Where("email = ?", email).First(&existing)
-	if result.Error == nil {
-		return ErrEmailAlreadyUsed
-	}
-	if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		return result.Error
-	}
-
-	// Attaching the email and issuing the token have to succeed or fail
-	// together: a player left with an email but no outstanding invite could
-	// neither log in nor be re-invited (the email is now set, so a retry would
-	// hit ErrPlayerAlreadyClaimed) — a dead end worse than failing outright.
-	var rawToken string
-	if err := s.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&models.Player{}).
-			Where("id = ?", player.ID).
-			Update("email", email).Error; err != nil {
-			return err
-		}
-		var err error
-		rawToken, err = issuePasswordResetToken(tx, player.ID)
-		return err
-	}); err != nil {
-		return err
-	}
-
-	// Sent only once the transaction has committed — a link pointing at a
-	// token that was rolled back would be worse than no link at all.
 	sendPasswordResetLink(email, rawToken)
 	return nil
 }
@@ -473,7 +407,12 @@ func (s *AuthService) ParseToken(tokenString string) (uuid.UUID, error) {
 	return claims.PlayerID, nil
 }
 
-func (s *AuthService) generateToken(playerID uuid.UUID) (string, error) {
+// GenerateToken signs a fresh JWT for playerID. Exported (unlike the rest of
+// this file's internals) so AuthHandler.Signup can hand the caller a usable
+// token straight away — signing up and logging in are, from the caller's
+// point of view, one action, not two round trips that both need the
+// password.
+func (s *AuthService) GenerateToken(playerID uuid.UUID) (string, error) {
 	now := time.Now()
 	claims := playerClaims{
 		PlayerID: playerID,

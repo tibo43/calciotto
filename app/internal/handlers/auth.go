@@ -22,6 +22,14 @@ func NewAuthHandler(service *services.AuthService) *AuthHandler {
 // it in one step. It does not accept a player_id — there is no existing
 // Player to pick from anymore, unlike the old "claim by name" flow that used
 // to back this route (see AuthService.Signup / AuthService.SignupNewPlayer).
+//
+// The response includes a ready-to-use JWT (the same shape Login returns)
+// alongside the player id: signing up and logging in are one action from the
+// caller's point of view, so the frontend shouldn't have to resend the
+// password through a second POST /auth/login just to get a token. A failure
+// to sign the token here is a genuine 500 — the player row already exists at
+// that point, so this can't be folded back into SignupNewPlayer's own error
+// handling.
 func (h *AuthHandler) Signup(c *gin.Context) {
 	var req struct {
 		Name       string `json:"name"`
@@ -41,6 +49,7 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 			errors.Is(err, services.ErrEmailRequired),
 			errors.Is(err, services.ErrPasswordRequired),
 			errors.Is(err, services.ErrEmailAlreadyUsed),
+			errors.Is(err, services.ErrInviteCodeRequired),
 			errors.Is(err, services.ErrInviteCodeNotFound):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		default:
@@ -49,7 +58,13 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"id": playerID})
+	token, err := h.Service.GenerateToken(playerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"id": playerID, "token": token})
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {

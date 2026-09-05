@@ -39,15 +39,6 @@ var ErrCannotChangeOwnRole = errors.New("cannot change your own role")
 // is the second way it could be broken.
 var ErrLastAdmin = errors.New("cannot demote the group's last admin")
 
-// ErrDuplicatePlayerNameInGroup is surfaced by PlayerHandler.CreatePlayer when
-// HasMemberNamed reports the target group already has a member with the
-// requested name. It's a soft, per-group safety net against an admin
-// accidentally creating the same "ghost" player twice (a typo, a double
-// click) — not a global uniqueness rule: Player.Name is deliberately allowed
-// to collide across unrelated players in unrelated groups (see
-// AuthService.SignupNewPlayer).
-var ErrDuplicatePlayerNameInGroup = errors.New("a player with this name already exists in this group")
-
 type GroupMembershipService struct {
 	DB *gorm.DB
 }
@@ -109,8 +100,7 @@ func (s *GroupMembershipService) GetPlayersByGroupID(groupID uuid.UUID) ([]model
 // query shape in the other direction (players tagged with role and filtered
 // by group, instead of groups tagged with role and filtered by player).
 // GetPlayersByGroupID itself is left untouched: it has its own callers
-// (HasMemberNamed's duplicate-name check goes through its own query, but
-// GroupMembershipService.currentMemberIDs in standings.go and a few
+// (GroupMembershipService.currentMemberIDs in standings.go and a few
 // integration tests call GetPlayersByGroupID directly) that have no use for
 // the role.
 func (s *GroupMembershipService) GetPlayersWithRoleByGroupID(groupID uuid.UUID) ([]models.PlayerWithRole, error) {
@@ -125,24 +115,6 @@ func (s *GroupMembershipService) GetPlayersWithRoleByGroupID(groupID uuid.UUID) 
 		return nil, result.Error
 	}
 	return players, nil
-}
-
-// HasMemberNamed reports whether groupID already has a member whose
-// Player.Name matches name case-insensitively. Used by PlayerHandler.CreatePlayer
-// as the soft, per-group duplicate guard described by ErrDuplicatePlayerNameInGroup
-// — two different groups can each have their own "Marco" with no conflict,
-// only a collision within the same group is flagged. Follows the same
-// players-joined-to-group-memberships join pattern as GetPlayersByGroupID.
-func (s *GroupMembershipService) HasMemberNamed(groupID uuid.UUID, name string) (bool, error) {
-	var count int64
-	result := s.DB.Model(&models.Player{}).
-		Joins("JOIN group_memberships ON group_memberships.player_id = players.id").
-		Where("group_memberships.group_id = ? AND LOWER(players.name) = LOWER(?)", groupID, name).
-		Count(&count)
-	if result.Error != nil {
-		return false, result.Error
-	}
-	return count > 0, nil
 }
 
 // IsMember reports whether playerID belongs to groupID — used by

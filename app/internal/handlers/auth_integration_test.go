@@ -12,9 +12,23 @@ import (
 	"app/internal/testutil"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 const testAuthJWTSecret = "zzz-integration-test-secret"
+
+// newSignupInviteCode creates a throwaway group (bypassing the disabled
+// POST /groups route — see GroupHandler.CreateGroup) purely to get a valid
+// invite code: signup now requires one on every call, since self-service
+// group creation/joining is disabled and signup is the only way left in.
+func newSignupInviteCode(t *testing.T, tx *gorm.DB) string {
+	t.Helper()
+	group, err := services.NewGroupService(tx).CreateGroup("Zzz Auth Handler Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create a group for its invite code: %v", err)
+	}
+	return group.InviteCode
+}
 
 func newAuthTestRouter(authService *services.AuthService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
@@ -34,11 +48,13 @@ func TestAuthEndpoints_Integration_SignupThenLogin(t *testing.T) {
 
 	authService := services.NewAuthService(tx, testAuthJWTSecret)
 	router := newAuthTestRouter(authService)
+	inviteCode := newSignupInviteCode(t, tx)
 
 	signupBody, _ := json.Marshal(map[string]string{
-		"name":     "Zzz Integration Handler Grace",
-		"email":    "grace@example.com",
-		"password": "s3cret-pass",
+		"name":        "Zzz Integration Handler Grace",
+		"email":       "grace@example.com",
+		"password":    "s3cret-pass",
+		"invite_code": inviteCode,
 	})
 	signupReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(signupBody))
 	signupReq.Header.Set("Content-Type", "application/json")
@@ -99,6 +115,62 @@ func TestAuthEndpoints_Integration_SignupThenLogin(t *testing.T) {
 	}
 }
 
+// TestAuthHandler_Integration_SignupReturnsUsableToken covers the newer
+// behavior: signup itself hands back a ready-to-use JWT, so the caller never
+// has to make a second POST /auth/login round trip (with the password sent a
+// second time) right after creating the account. Deliberately does NOT call
+// /auth/login at all — that's the whole point of this test.
+func TestAuthHandler_Integration_SignupReturnsUsableToken(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testAuthJWTSecret)
+	router := newAuthTestRouter(authService)
+	inviteCode := newSignupInviteCode(t, tx)
+
+	signupBody, _ := json.Marshal(map[string]string{
+		"name":        "Zzz Integration Handler Steve",
+		"email":       "steve@example.com",
+		"password":    "s3cret-pass",
+		"invite_code": inviteCode,
+	})
+	signupReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(signupBody))
+	signupReq.Header.Set("Content-Type", "application/json")
+	signupRec := httptest.NewRecorder()
+	router.ServeHTTP(signupRec, signupReq)
+	if signupRec.Code != http.StatusOK {
+		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())
+	}
+
+	var signupResp struct {
+		ID    string `json:"id"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(signupRec.Body.Bytes(), &signupResp); err != nil {
+		t.Fatalf("failed to decode signup response: %v", err)
+	}
+	if signupResp.Token == "" {
+		t.Fatal("signup response has an empty token")
+	}
+
+	protectedReq := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	protectedReq.Header.Set("Authorization", "Bearer "+signupResp.Token)
+	protectedRec := httptest.NewRecorder()
+	router.ServeHTTP(protectedRec, protectedReq)
+	if protectedRec.Code != http.StatusOK {
+		t.Fatalf("protected route with the signup token returned status %d, body: %s", protectedRec.Code, protectedRec.Body.String())
+	}
+	var protectedResp struct {
+		PlayerID string `json:"player_id"`
+	}
+	if err := json.Unmarshal(protectedRec.Body.Bytes(), &protectedResp); err != nil {
+		t.Fatalf("failed to decode protected response: %v", err)
+	}
+	if protectedResp.PlayerID != signupResp.ID {
+		t.Errorf("protected route injected player_id = %q, want %q", protectedResp.PlayerID, signupResp.ID)
+	}
+}
+
 func TestAuthMiddleware_Integration_RejectsMissingAndInvalidTokens(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -128,12 +200,14 @@ func TestAuthHandler_Integration_SignupErrors(t *testing.T) {
 
 	authService := services.NewAuthService(tx, testAuthJWTSecret)
 	router := newAuthTestRouter(authService)
+	inviteCode := newSignupInviteCode(t, tx)
 
 	// Empty name -> 400.
 	emptyNameBody, _ := json.Marshal(map[string]string{
-		"name":     "  ",
-		"email":    "ghost@example.com",
-		"password": "s3cret-pass",
+		"name":        "  ",
+		"email":       "ghost@example.com",
+		"password":    "s3cret-pass",
+		"invite_code": inviteCode,
 	})
 	emptyNameReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(emptyNameBody))
 	emptyNameReq.Header.Set("Content-Type", "application/json")
@@ -145,9 +219,10 @@ func TestAuthHandler_Integration_SignupErrors(t *testing.T) {
 
 	// Empty email -> 400.
 	emptyEmailBody, _ := json.Marshal(map[string]string{
-		"name":     "Zzz Integration Handler Heidi",
-		"email":    "",
-		"password": "s3cret-pass",
+		"name":        "Zzz Integration Handler Heidi",
+		"email":       "",
+		"password":    "s3cret-pass",
+		"invite_code": inviteCode,
 	})
 	emptyEmailReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(emptyEmailBody))
 	emptyEmailReq.Header.Set("Content-Type", "application/json")
@@ -159,9 +234,10 @@ func TestAuthHandler_Integration_SignupErrors(t *testing.T) {
 
 	// Empty password -> 400.
 	emptyPasswordBody, _ := json.Marshal(map[string]string{
-		"name":     "Zzz Integration Handler Heidi",
-		"email":    "heidi@example.com",
-		"password": "",
+		"name":        "Zzz Integration Handler Heidi",
+		"email":       "heidi@example.com",
+		"password":    "",
+		"invite_code": inviteCode,
 	})
 	emptyPasswordReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(emptyPasswordBody))
 	emptyPasswordReq.Header.Set("Content-Type", "application/json")
@@ -171,11 +247,28 @@ func TestAuthHandler_Integration_SignupErrors(t *testing.T) {
 		t.Errorf("signup with an empty password returned status %d, want 400, body: %s", emptyPasswordRec.Code, emptyPasswordRec.Body.String())
 	}
 
+	// Empty invite code -> 400: self-service group creation/joining is
+	// disabled, so signup is the only way into a group and can no longer be
+	// skipped.
+	emptyInviteCodeBody, _ := json.Marshal(map[string]string{
+		"name":     "Zzz Integration Handler Heidi",
+		"email":    "heidi-no-code@example.com",
+		"password": "s3cret-pass",
+	})
+	emptyInviteCodeReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(emptyInviteCodeBody))
+	emptyInviteCodeReq.Header.Set("Content-Type", "application/json")
+	emptyInviteCodeRec := httptest.NewRecorder()
+	router.ServeHTTP(emptyInviteCodeRec, emptyInviteCodeReq)
+	if emptyInviteCodeRec.Code != http.StatusBadRequest {
+		t.Errorf("signup with no invite code returned status %d, want 400, body: %s", emptyInviteCodeRec.Code, emptyInviteCodeRec.Body.String())
+	}
+
 	// A first, valid signup succeeds...
 	firstBody, _ := json.Marshal(map[string]string{
-		"name":     "Zzz Integration Handler Heidi",
-		"email":    "heidi@example.com",
-		"password": "s3cret-pass",
+		"name":        "Zzz Integration Handler Heidi",
+		"email":       "heidi@example.com",
+		"password":    "s3cret-pass",
+		"invite_code": inviteCode,
 	})
 	firstReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(firstBody))
 	firstReq.Header.Set("Content-Type", "application/json")
@@ -187,9 +280,10 @@ func TestAuthHandler_Integration_SignupErrors(t *testing.T) {
 
 	// ...but re-using the same email fails, even with a different name.
 	duplicateEmailBody, _ := json.Marshal(map[string]string{
-		"name":     "Zzz Integration Handler Heidi Two",
-		"email":    "heidi@example.com",
-		"password": "another-pass",
+		"name":        "Zzz Integration Handler Heidi Two",
+		"email":       "heidi@example.com",
+		"password":    "another-pass",
+		"invite_code": inviteCode,
 	})
 	duplicateEmailReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(duplicateEmailBody))
 	duplicateEmailReq.Header.Set("Content-Type", "application/json")
@@ -200,11 +294,12 @@ func TestAuthHandler_Integration_SignupErrors(t *testing.T) {
 	}
 
 	// Re-using the same name (with a different email) is fine — names are not
-	// unique, unlike PlayerService.CreatePlayer's ghost-player flow.
+	// unique, unlike the old admin-created ghost-player flow (removed).
 	duplicateNameBody, _ := json.Marshal(map[string]string{
-		"name":     "Zzz Integration Handler Heidi",
-		"email":    "heidi-second-account@example.com",
-		"password": "another-pass",
+		"name":        "Zzz Integration Handler Heidi",
+		"email":       "heidi-second-account@example.com",
+		"password":    "another-pass",
+		"invite_code": inviteCode,
 	})
 	duplicateNameReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(duplicateNameBody))
 	duplicateNameReq.Header.Set("Content-Type", "application/json")
@@ -221,11 +316,13 @@ func TestAuthHandler_Integration_LoginWrongPasswordReturns401(t *testing.T) {
 
 	authService := services.NewAuthService(tx, testAuthJWTSecret)
 	router := newAuthTestRouter(authService)
+	inviteCode := newSignupInviteCode(t, tx)
 
 	signupBody, _ := json.Marshal(map[string]string{
-		"name":     "Zzz Integration Handler Ivan",
-		"email":    "ivan@example.com",
-		"password": "correct-pass",
+		"name":        "Zzz Integration Handler Ivan",
+		"email":       "ivan@example.com",
+		"password":    "correct-pass",
+		"invite_code": inviteCode,
 	})
 	signupReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(signupBody))
 	signupReq.Header.Set("Content-Type", "application/json")

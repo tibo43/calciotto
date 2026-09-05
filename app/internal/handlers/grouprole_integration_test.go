@@ -2,7 +2,6 @@ package handlers_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -35,108 +34,6 @@ func signupAndLoginRole(t *testing.T, authService *services.AuthService, playerI
 	return token
 }
 
-// TestCreateGroup_Integration_CreatorBecomesAdmin exercises the role side of
-// GroupHandler.CreateGroup: the authenticated caller who creates the group
-// must come out of it as RoleAdmin, not the RoleMember every other join path
-// assigns.
-func TestCreateGroup_Integration_CreatorBecomesAdmin(t *testing.T) {
-	db := testutil.OpenDB(t)
-	tx := testutil.BeginTx(t, db)
-
-	groupService := services.NewGroupService(tx)
-	membershipService := services.NewGroupMembershipService(tx)
-	playerService := services.NewPlayerService(tx)
-	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
-
-	creatorID, err := playerService.CreatePlayer("Zzz Role Creator")
-	if err != nil {
-		t.Fatalf("failed to create player: %v", err)
-	}
-	token := signupAndLoginRole(t, authService, creatorID, "role-creator@example.com")
-
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	router.POST("/groups", handlers.AuthMiddleware(authService), groupHandler.CreateGroup)
-
-	body := []byte(`{"name":"Zzz Role Admin Group","teams":[{"name":"Black","colour":"black"},{"name":"White","colour":"white"}]}`)
-	req := httptest.NewRequest(http.MethodPost, "/groups", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("create group returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
-	}
-
-	var created models.Group
-	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
-		t.Fatalf("failed to unmarshal created group: %v", err)
-	}
-
-	role, err := membershipService.GetRole(created.ID, creatorID)
-	if err != nil {
-		t.Fatalf("failed to get role: %v", err)
-	}
-	if role != models.RoleAdmin {
-		t.Errorf("creator role = %q, want %q", role, models.RoleAdmin)
-	}
-}
-
-// TestJoinGroup_Integration_JoinerBecomesMember covers POST /groups/join:
-// joining by invite code must assign RoleMember, never RoleAdmin.
-func TestJoinGroup_Integration_JoinerBecomesMember(t *testing.T) {
-	db := testutil.OpenDB(t)
-	tx := testutil.BeginTx(t, db)
-
-	groupService := services.NewGroupService(tx)
-	membershipService := services.NewGroupMembershipService(tx)
-	playerService := services.NewPlayerService(tx)
-	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
-
-	group, err := groupService.CreateGroup("Zzz Role Join Group", services.DefaultTeamSpecs)
-	if err != nil {
-		t.Fatalf("failed to create group: %v", err)
-	}
-
-	adminID, err := playerService.CreatePlayer("Zzz Role Join Admin")
-	if err != nil {
-		t.Fatalf("failed to create admin player: %v", err)
-	}
-	if err := membershipService.AddPlayerToGroupWithRole(group.ID, adminID, models.RoleAdmin); err != nil {
-		t.Fatalf("failed to add admin to group: %v", err)
-	}
-
-	joinerID, err := playerService.CreatePlayer("Zzz Role Joiner")
-	if err != nil {
-		t.Fatalf("failed to create joiner player: %v", err)
-	}
-	token := signupAndLoginRole(t, authService, joinerID, "role-joiner@example.com")
-
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	router.POST("/groups/join", handlers.AuthMiddleware(authService), groupHandler.JoinGroup)
-
-	body := []byte(`{"invite_code":"` + group.InviteCode + `"}`)
-	req := httptest.NewRequest(http.MethodPost, "/groups/join", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("join group returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
-	}
-
-	role, err := membershipService.GetRole(group.ID, joinerID)
-	if err != nil {
-		t.Fatalf("failed to get role: %v", err)
-	}
-	if role != models.RoleMember {
-		t.Errorf("joiner role = %q, want %q", role, models.RoleMember)
-	}
-}
-
 // TestAddPlayerToGroup_Integration_AddedPlayerBecomesMember covers POST
 // /groups/:id/players: an existing member adding another player must assign
 // that player RoleMember, never RoleAdmin.
@@ -148,7 +45,7 @@ func TestAddPlayerToGroup_Integration_AddedPlayerBecomesMember(t *testing.T) {
 	membershipService := services.NewGroupMembershipService(tx)
 	playerService := services.NewPlayerService(tx)
 	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
 
 	group, err := groupService.CreateGroup("Zzz Role Add Group", services.DefaultTeamSpecs)
 	if err != nil {

@@ -68,9 +68,10 @@ func TestPasswordResetEndpoints_Integration_ForgotThenReset(t *testing.T) {
 	router := newPasswordResetTestRouter(authService)
 
 	signupRec := postJSON(t, router, "/auth/signup", map[string]string{
-		"name":     "Zzz Integration Handler Quinn",
-		"email":    "quinn@example.com",
-		"password": "old-pass",
+		"name":        "Zzz Integration Handler Quinn",
+		"email":       "quinn@example.com",
+		"password":    "old-pass",
+		"invite_code": newSignupInviteCode(t, tx),
 	})
 	if signupRec.Code != http.StatusOK {
 		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())
@@ -127,9 +128,10 @@ func TestPasswordResetEndpoints_Integration_ForgotPasswordAlwaysReturnsTheSameAn
 	router := newPasswordResetTestRouter(authService)
 
 	signupRec := postJSON(t, router, "/auth/signup", map[string]string{
-		"name":     "Zzz Integration Handler Rita",
-		"email":    "rita@example.com",
-		"password": "old-pass",
+		"name":        "Zzz Integration Handler Rita",
+		"email":       "rita@example.com",
+		"password":    "old-pass",
+		"invite_code": newSignupInviteCode(t, tx),
 	})
 	if signupRec.Code != http.StatusOK {
 		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())

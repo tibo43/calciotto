@@ -15,113 +15,27 @@ import (
 type GroupHandler struct {
 	Service           *services.GroupService
 	MembershipService *services.GroupMembershipService
-	// AuthService backs InvitePlayer only — turning a "ghost" member into a
-	// real account is a credentials operation, and credentials live in
-	// AuthService, not in GroupService.
-	AuthService *services.AuthService
 }
 
-func NewGroupHandler(service *services.GroupService, membershipService *services.GroupMembershipService, authService *services.AuthService) *GroupHandler {
-	return &GroupHandler{Service: service, MembershipService: membershipService, AuthService: authService}
+func NewGroupHandler(service *services.GroupService, membershipService *services.GroupMembershipService) *GroupHandler {
+	return &GroupHandler{Service: service, MembershipService: membershipService}
 }
 
-// createGroupRequest is the body POST /groups expects: the group's own name,
-// plus exactly two team specs (name + colour) for its two teams — there is
-// no reasonable default team name to invent on the admin's behalf, so the
-// caller must supply both.
-type createGroupRequest struct {
-	Name  string `json:"name"`
-	Teams []struct {
-		Name   string `json:"name"`
-		Colour string `json:"colour"`
-	} `json:"teams"`
-}
-
-// CreateGroup creates a group and makes the authenticated caller its first
-// member — and its first admin, since a group whose only member were a plain
-// member could never gain one (promoting a member is itself admin-only). That
-// membership is also what closes the bootstrapping hole: a group with no
-// members can never gain one, since POST /groups/:id/players itself requires
-// membership of the target group. The service stays group-agnostic about who
-// created what — same split as PlayerHandler.CreatePlayer.
-//
-// The response deliberately doesn't include the invite code (Group carries
-// json:"-" on it); the creator reads it back from GET /groups/:id/invite-code
-// like any other member.
+// CreateGroup is temporarily disabled — a deliberate, reversible business
+// decision, not a technical limitation: players must not self-service a new
+// group right now. The underlying logic (create the group, its two teams,
+// and make the caller its first admin) is untouched in GroupService.CreateGroup
+// and GroupMembershipService.AddPlayerToGroupWithRole; re-enabling this route
+// is a matter of restoring this handler's old body, not rebuilding anything.
 func (h *GroupHandler) CreateGroup(c *gin.Context) {
-	playerID, ok := playerIDFromContext(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
-		return
-	}
-
-	var body createGroupRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if len(body.Teams) != 2 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "exactly 2 teams are required"})
-		return
-	}
-
-	teams := [2]services.TeamSpec{
-		{Name: body.Teams[0].Name, Colour: body.Teams[0].Colour},
-		{Name: body.Teams[1].Name, Colour: body.Teams[1].Colour},
-	}
-
-	created, err := h.Service.CreateGroup(body.Name, teams)
-	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrTeamNameRequired), errors.Is(err, services.ErrTeamColourRequired):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		}
-		return
-	}
-
-	if err := h.MembershipService.AddPlayerToGroupWithRole(created.ID, playerID, models.RoleAdmin); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, created)
+	c.JSON(http.StatusForbidden, gin.H{"error": "group creation is not available yet"})
 }
 
-// JoinGroup adds the authenticated caller to the group matching the invite
-// code in the body. Unlike every other group route it can't be behind
-// RequireGroupMembership — joining a group you don't belong to yet is the
-// entire point — so the invite code is the only thing authorizing the join.
+// JoinGroup is temporarily disabled for the same reason as CreateGroup above
+// — players must not self-service joining a group by invite code right now.
+// GroupService.JoinByInviteCode is untouched.
 func (h *GroupHandler) JoinGroup(c *gin.Context) {
-	playerID, ok := playerIDFromContext(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
-		return
-	}
-
-	var body struct {
-		InviteCode string `json:"invite_code"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	group, err := h.Service.JoinByInviteCode(playerID, body.InviteCode)
-	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrInviteCodeNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		case errors.Is(err, services.ErrAlreadyMember):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		}
-		return
-	}
-
-	c.JSON(http.StatusOK, group)
+	c.JSON(http.StatusForbidden, gin.H{"error": "joining a group is not available yet"})
 }
 
 // GetInviteCode returns the group's invite code so a member can share it. It
@@ -362,73 +276,6 @@ func (h *GroupHandler) UpdateMemberRole(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"group_id": groupID, "player_id": targetPlayerID, "role": body.Role})
-}
-
-// InvitePlayer gives a "ghost" member of the group in the URL — a Player with
-// a Name but no email, created by an admin via POST /players — the email the
-// admin supplies, and sends them a link to set their own password. That link
-// is an ordinary password-reset link consumed by the existing
-// POST /auth/reset-password and ResetPassword.vue; see
-// AuthService.InviteExistingPlayer for why no separate claim token exists.
-//
-// The route (POST /groups/:id/members/:playerId/invite) sits behind
-// RequireGroupAdminByPathParam, which only establishes that the *caller* is an
-// admin of :id — it says nothing about :playerId. Hence the explicit IsMember
-// check below: without it an admin of group A could hand an email (and thus an
-// account) to any player id at all, including one that belongs only to group B
-// or to no group they administer. Like the uuid.Parse calls above, that's
-// request validation guarding this route's authorization, not business logic,
-// so it belongs here rather than in the service.
-func (h *GroupHandler) InvitePlayer(c *gin.Context) {
-	groupID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
-		return
-	}
-
-	targetPlayerID, err := uuid.Parse(c.Param("playerId"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid player id"})
-		return
-	}
-
-	var body struct {
-		Email string `json:"email"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	isMember, err := h.MembershipService.IsMember(groupID, targetPlayerID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if !isMember {
-		c.JSON(http.StatusNotFound, gin.H{"error": "player is not a member of this group"})
-		return
-	}
-
-	if err := h.AuthService.InviteExistingPlayer(targetPlayerID, body.Email); err != nil {
-		switch {
-		case errors.Is(err, services.ErrEmailRequired),
-			errors.Is(err, services.ErrPlayerAlreadyClaimed),
-			errors.Is(err, services.ErrEmailAlreadyUsed):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		// The IsMember check above already proved the player row exists, so
-		// this can only fire if it were deleted in between. Mapped defensively
-		// to the same 404 as a non-member target rather than assumed
-		// impossible — same treatment RemoveMember gives gorm.ErrRecordNotFound.
-		case errors.Is(err, services.ErrPlayerNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		}
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"invited": true})
 }
 
 // GetMyGroups returns the groups the authenticated caller belongs to, each

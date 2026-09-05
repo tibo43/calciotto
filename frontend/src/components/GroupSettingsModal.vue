@@ -30,6 +30,13 @@
               <button class="btn-base btn-primary btn-small" @click="copyInviteCode">
                 {{ copied ? 'Copied!' : 'Copy' }}
               </button>
+              <!-- A plain <a>, not a click handler — it's genuinely just a
+                   URL, same convention as MatchDetails.vue's own
+                   .whatsapp-share-btn. -->
+              <a v-if="whatsAppInviteUrl" :href="whatsAppInviteUrl" target="_blank" rel="noopener"
+                class="btn-base btn-primary btn-small">
+                Invite via WhatsApp
+              </a>
             </div>
             <p v-if="codeError" class="error-message">{{ codeError }}</p>
           </section>
@@ -66,6 +73,7 @@
 <script>
 import { getInviteCode, getTeamsByGroup, updateTeam } from '@/services/api';
 import { isDarkModeActive } from '@/services/theme';
+import { buildGroupInviteShareText, buildWhatsAppShareUrl } from '@/services/whatsappShare';
 import TeamColourPicker from '@/components/TeamColourPicker.vue';
 
 const LEGACY_TEAM_COLOUR_MAP = {
@@ -111,6 +119,20 @@ export default {
   },
   async created() {
     await this.loadTeams();
+  },
+  computed: {
+    // Self-service group creation/joining is disabled (see CLAUDE.md), so an
+    // admin sharing this link — /signup?invite=CODE — is now the only way a
+    // new player gets in; Signup.vue's created() reads the query param to
+    // prefill the (now mandatory) invite-code field.
+    whatsAppInviteUrl() {
+      if (!this.inviteCode) {
+        return '';
+      }
+      const inviteUrl = `${window.location.origin}/signup?invite=${this.inviteCode}`;
+      const text = buildGroupInviteShareText({ inviteUrl, groupInviteCode: this.inviteCode });
+      return buildWhatsAppShareUrl(text);
+    }
   },
   methods: {
     async showInviteCode() {

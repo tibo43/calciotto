@@ -24,8 +24,8 @@
         <div class="form-group">
           <label for="invite-code">Invite code</label>
           <input id="invite-code" v-model="inviteCode" type="text" class="form-input" placeholder="e.g. AB2N7TQR"
-            autocapitalize="characters" />
-          <p class="field-hint">Optional — join a group right away if you have an invite code.</p>
+            autocapitalize="characters" required />
+          <p class="field-hint">Required — ask your group admin for the invite code.</p>
         </div>
 
         <p v-if="error" class="error-message">{{ error }}</p>
@@ -44,7 +44,7 @@
 </template>
 
 <script>
-import { signup } from '@/services/api';
+import { signup, setToken } from '@/services/api';
 
 export default {
   name: 'SignupPage',
@@ -58,13 +58,36 @@ export default {
       isSubmitting: false,
     };
   },
+  created() {
+    // Prefills from an admin's shared invite link (/signup?invite=CODE, see
+    // GroupSettingsModal.vue's WhatsApp invite button) so a new player never
+    // has to type the code by hand.
+    const invite = this.$route.query.invite;
+    if (typeof invite === 'string' && invite) {
+      this.inviteCode = invite;
+    }
+  },
   methods: {
     async submit() {
       this.error = '';
+      // Self-service group creation/joining is disabled, so signup is now
+      // the only way into a group — an empty code would leave a player
+      // stranded with no group, so this is checked client-side before ever
+      // reaching the network (the backend rejects it too, with the same
+      // message, via ErrInviteCodeRequired).
+      if (!this.inviteCode.trim()) {
+        this.error = 'Invite code is required.';
+        return;
+      }
       this.isSubmitting = true;
       try {
-        await signup(this.name, this.email, this.password, this.inviteCode);
-        this.$router.push('/login');
+        // POST /auth/signup now returns a ready-to-use token alongside the
+        // player id — the same shape as Login — so signing up logs the
+        // player straight in, the same way Login.vue does, instead of
+        // bouncing them to /login to re-enter the password they just typed.
+        const { token } = await signup(this.name, this.email, this.password, this.inviteCode);
+        setToken(token);
+        this.$router.push('/');
       } catch (err) {
         this.error = err.response?.data?.error || 'Signup failed. Please try again.';
       } finally {

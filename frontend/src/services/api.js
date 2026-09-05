@@ -331,21 +331,6 @@ export const getMatchVotes = async (matchId) => {
   }
 };
 
-// New function for updating a match
-export const createPlayer = async (playerData) => {
-  try {
-    const response = await api.post(`/players`, playerData);
-    if (response.status !== 200) {
-      throw new Error('Failed to create player');
-    }
-
-    return response.data;
-  } catch (error) {
-    console.error('Error creating player:', error);
-    throw error;
-  }
-};
-
 // Standings
 export const getPointsStandings = async (season, groupId) => {
   try {
@@ -536,24 +521,6 @@ export const removeMember = async (groupId, playerId) => {
     return response.data;
   } catch (error) {
     console.error('Error removing member:', error);
-    throw error;
-  }
-};
-
-// Admin-only: attaches an email to a "ghost" member (one with a Name but no
-// Email, created via createPlayer's admin-only ghost flow) and sends them a
-// link to set their own password — the frontend counterpart to
-// AuthService.InviteExistingPlayer. Rejects with the backend's own message
-// for an already-claimed player, an email already used elsewhere, etc.
-export const invitePlayer = async (groupId, playerId, email) => {
-  try {
-    const response = await api.post(`/groups/${groupId}/members/${playerId}/invite`, { email });
-    if (response.status !== 200) {
-      throw new Error('Failed to invite player');
-    }
-    return response.data;
-  } catch (error) {
-    console.error('Error inviting player:', error);
     throw error;
   }
 };

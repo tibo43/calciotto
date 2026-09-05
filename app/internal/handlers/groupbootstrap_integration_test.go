@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"app/internal/handlers"
+	"app/internal/models"
 	"app/internal/services"
 	"app/internal/testutil"
 
@@ -39,7 +40,7 @@ func newBootstrapEnv(t *testing.T, tx *gorm.DB) *bootstrapEnv {
 	groupService := services.NewGroupService(tx)
 	membershipService := services.NewGroupMembershipService(tx)
 	authService := services.NewAuthService(tx, testGroupBootstrapJWTSecret)
-	groupHandler := handlers.NewGroupHandler(groupService, membershipService, authService)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
 	matchHandler := handlers.NewMatchHandler(services.NewMatchService(tx), membershipService)
 
 	authRequired := handlers.AuthMiddleware(authService)
@@ -84,6 +85,23 @@ func (e *bootstrapEnv) newAuthenticatedPlayer(t *testing.T, name, email string) 
 	return id, token
 }
 
+// createGroupDirect creates a group and makes creatorID its first admin,
+// mirroring exactly what the now-disabled GroupHandler.CreateGroup used to do
+// (see CLAUDE.md — POST /groups is a deliberate, reversible 403 today). Tests
+// that only need *a* group to exist as setup — rather than testing the
+// disabled route itself — use this instead of the old env.do(POST /groups).
+func (e *bootstrapEnv) createGroupDirect(t *testing.T, name string, creatorID uuid.UUID) *models.Group {
+	t.Helper()
+	group, err := e.groups.CreateGroup(name, services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group %q: %v", name, err)
+	}
+	if err := e.memberships.AddPlayerToGroupWithRole(group.ID, creatorID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add creator as admin of group %q: %v", name, err)
+	}
+	return group
+}
+
 // do issues a request against the test router. An empty token means "send no
 // Authorization header at all", which is how the 401 cases are exercised.
 func (e *bootstrapEnv) do(method, path, token string, body any) *httptest.ResponseRecorder {
@@ -120,17 +138,6 @@ func createGroupBody(name string) map[string]any {
 	}
 }
 
-func decodeGroupID(t *testing.T, rec *httptest.ResponseRecorder) uuid.UUID {
-	t.Helper()
-	var created struct {
-		ID uuid.UUID `json:"id"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
-		t.Fatalf("failed to decode group from response %s: %v", rec.Body.String(), err)
-	}
-	return created.ID
-}
-
 func decodeInviteCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
 	var payload struct {
@@ -142,52 +149,9 @@ func decodeInviteCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	return payload.InviteCode
 }
 
-// TestCreateGroup_Integration_CreatorBecomesFirstMember covers the actual
-// bootstrapping hole: POST /groups/:id/players already requires membership of
-// the target group, so unless creating a group also creates the creator's
-// membership, a new group can never gain its first member.
-func TestCreateGroup_Integration_CreatorBecomesFirstMember(t *testing.T) {
-	db := testutil.OpenDB(t)
-	tx := testutil.BeginTx(t, db)
-	env := newBootstrapEnv(t, tx)
-
-	creatorID, creatorToken := env.newAuthenticatedPlayer(t,
-		"Zzz Bootstrap Creator", "bootstrap-creator@example.com")
-
-	rec := env.do(http.MethodPost, "/groups", creatorToken, createGroupBody("Zzz Bootstrap Group"))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /groups returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
-	}
-	groupID := decodeGroupID(t, rec)
-	if groupID == uuid.Nil {
-		t.Fatal("POST /groups returned a nil group id")
-	}
-
-	isMember, err := env.memberships.IsMember(groupID, creatorID)
-	if err != nil {
-		t.Fatalf("IsMember returned error: %v", err)
-	}
-	if !isMember {
-		t.Error("creator is not a member of the group they just created")
-	}
-
-	groups, err := env.memberships.GetGroupsByPlayerID(creatorID)
-	if err != nil {
-		t.Fatalf("GetGroupsByPlayerID returned error: %v", err)
-	}
-	found := false
-	for _, group := range groups {
-		if group.ID == groupID {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("created group %s missing from the creator's groups: %+v", groupID, groups)
-	}
-}
-
-// TestCreateGroup_Integration_RequiresAuth pins the route change: POST /groups
-// used to be public, but it now has to know who to make the first member.
+// TestCreateGroup_Integration_RequiresAuth pins the one thing that still runs
+// before the disabled-feature response: an anonymous caller gets 401 from
+// authRequired, never reaching GroupHandler.CreateGroup's 403 at all.
 func TestCreateGroup_Integration_RequiresAuth(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -199,153 +163,55 @@ func TestCreateGroup_Integration_RequiresAuth(t *testing.T) {
 	}
 }
 
-// TestCreateGroup_Integration_WrongNumberOfTeamsRejected covers the request
-// shape change: POST /groups now requires exactly 2 team specs, and a
-// mismatched count (here, one) must be rejected with 400 before the service
-// is ever called — not silently defaulted or padded.
-func TestCreateGroup_Integration_WrongNumberOfTeamsRejected(t *testing.T) {
+// TestCreateGroup_Integration_Disabled pins the deliberate, reversible
+// business decision that self-service group creation is off: an authenticated
+// caller with an otherwise-valid body still gets 403, not 200. See
+// GroupHandler.CreateGroup and CLAUDE.md.
+func TestCreateGroup_Integration_Disabled(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 	env := newBootstrapEnv(t, tx)
 
 	_, token := env.newAuthenticatedPlayer(t,
-		"Zzz Bootstrap Wrong Team Count", "bootstrap-wrong-team-count@example.com")
+		"Zzz Bootstrap Disabled Create", "bootstrap-disabled-create@example.com")
 
-	rec := env.do(http.MethodPost, "/groups", token, map[string]any{
-		"name":  "Zzz Bootstrap Wrong Team Count Group",
-		"teams": []map[string]string{{"name": "Black", "colour": "black"}},
-	})
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("POST /groups with 1 team returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
+	rec := env.do(http.MethodPost, "/groups", token, createGroupBody("Zzz Bootstrap Disabled Group"))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("POST /groups returned status %d, want 403 (disabled), body: %s", rec.Code, rec.Body.String())
 	}
 }
 
-// TestCreateGroup_Integration_RequiresTeamNameAndColour covers the
-// service-level sentinels (ErrTeamNameRequired/ErrTeamColourRequired)
-// surfacing as 400s through the handler.
-func TestCreateGroup_Integration_RequiresTeamNameAndColour(t *testing.T) {
+// TestJoinGroup_Integration_Disabled mirrors TestCreateGroup_Integration_Disabled
+// for the other half of the disabled bootstrapping flow: a valid invite code
+// still gets 403, never a successful join. See GroupHandler.JoinGroup.
+func TestJoinGroup_Integration_Disabled(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 	env := newBootstrapEnv(t, tx)
 
-	_, token := env.newAuthenticatedPlayer(t,
-		"Zzz Bootstrap Missing Team Fields", "bootstrap-missing-team-fields@example.com")
+	creatorID, _ := env.newAuthenticatedPlayer(t,
+		"Zzz Bootstrap Disabled Join Creator", "bootstrap-disabled-join-creator@example.com")
+	_, joinerToken := env.newAuthenticatedPlayer(t,
+		"Zzz Bootstrap Disabled Joiner", "bootstrap-disabled-joiner@example.com")
 
-	rec := env.do(http.MethodPost, "/groups", token, map[string]any{
-		"name": "Zzz Bootstrap Missing Team Name Group",
-		"teams": []map[string]string{
-			{"name": "", "colour": "black"},
-			{"name": "White", "colour": "white"},
-		},
-	})
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("POST /groups with an empty team name returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
-	}
+	group := env.createGroupDirect(t, "Zzz Bootstrap Disabled Join Group", creatorID)
 
-	rec = env.do(http.MethodPost, "/groups", token, map[string]any{
-		"name": "Zzz Bootstrap Missing Team Colour Group",
-		"teams": []map[string]string{
-			{"name": "Black", "colour": "black"},
-			{"name": "White", "colour": ""},
-		},
-	})
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("POST /groups with an empty team colour returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
+	rec := env.do(http.MethodPost, "/groups/join", joinerToken, map[string]string{"invite_code": group.InviteCode})
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("POST /groups/join returned status %d, want 403 (disabled), body: %s", rec.Code, rec.Body.String())
 	}
 }
 
-// TestJoinGroup_Integration_GrantsAccessToGroupData is the end-to-end shape of
-// the target workflow: a creator shares the invite code, an outsider joins
-// with it, and only then do the group's own routes stop answering 403.
-func TestJoinGroup_Integration_GrantsAccessToGroupData(t *testing.T) {
+// TestJoinGroup_Integration_RequiresAuth mirrors
+// TestCreateGroup_Integration_RequiresAuth for the join route.
+func TestJoinGroup_Integration_RequiresAuth(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 	env := newBootstrapEnv(t, tx)
 
-	_, creatorToken := env.newAuthenticatedPlayer(t,
-		"Zzz Bootstrap Join Creator", "bootstrap-join-creator@example.com")
-	joinerID, joinerToken := env.newAuthenticatedPlayer(t,
-		"Zzz Bootstrap Joiner", "bootstrap-joiner@example.com")
-
-	createRec := env.do(http.MethodPost, "/groups", creatorToken, createGroupBody("Zzz Bootstrap Join Group"))
-	if createRec.Code != http.StatusOK {
-		t.Fatalf("POST /groups returned status %d, body: %s", createRec.Code, createRec.Body.String())
-	}
-	groupID := decodeGroupID(t, createRec)
-
-	codeRec := env.do(http.MethodGet, "/groups/"+groupID.String()+"/invite-code", creatorToken, nil)
-	if codeRec.Code != http.StatusOK {
-		t.Fatalf("creator GET invite-code returned status %d, body: %s", codeRec.Code, codeRec.Body.String())
-	}
-	inviteCode := decodeInviteCode(t, codeRec)
-	if inviteCode == "" {
-		t.Fatal("invite code is empty — CreateGroup must generate one")
-	}
-
-	// Before joining, the group's data is off limits.
-	beforeRec := env.do(http.MethodGet, "/matches/details?group_id="+groupID.String(), joinerToken, nil)
-	if beforeRec.Code != http.StatusForbidden {
-		t.Fatalf("non-member GET /matches/details returned status %d, want 403, body: %s", beforeRec.Code, beforeRec.Body.String())
-	}
-
-	// The code is matched case-insensitively, so a hand-typed lower-case
-	// version has to work too.
-	joinRec := env.do(http.MethodPost, "/groups/join", joinerToken,
-		map[string]string{"invite_code": strings.ToLower(inviteCode)})
-	if joinRec.Code != http.StatusOK {
-		t.Fatalf("POST /groups/join returned status %d, want 200, body: %s", joinRec.Code, joinRec.Body.String())
-	}
-	if joined := decodeGroupID(t, joinRec); joined != groupID {
-		t.Errorf("POST /groups/join returned group %s, want %s", joined, groupID)
-	}
-
-	isMember, err := env.memberships.IsMember(groupID, joinerID)
-	if err != nil {
-		t.Fatalf("IsMember returned error: %v", err)
-	}
-	if !isMember {
-		t.Error("joiner is not a member of the group after a successful join")
-	}
-
-	// After joining, the very same request goes through.
-	afterRec := env.do(http.MethodGet, "/matches/details?group_id="+groupID.String(), joinerToken, nil)
-	if afterRec.Code != http.StatusOK {
-		t.Errorf("member GET /matches/details returned status %d, want 200, body: %s", afterRec.Code, afterRec.Body.String())
-	}
-
-	// Joining twice is a client mistake, not a server error.
-	againRec := env.do(http.MethodPost, "/groups/join", joinerToken, map[string]string{"invite_code": inviteCode})
-	if againRec.Code != http.StatusBadRequest {
-		t.Errorf("re-joining returned status %d, want 400 (ErrAlreadyMember), body: %s", againRec.Code, againRec.Body.String())
-	}
-}
-
-// TestJoinGroup_Integration_RejectsBadInput covers the failure modes of the
-// only route that lets a non-member in: an unknown or empty code must not
-// match anything, and an anonymous caller has no player to enroll.
-func TestJoinGroup_Integration_RejectsBadInput(t *testing.T) {
-	db := testutil.OpenDB(t)
-	tx := testutil.BeginTx(t, db)
-	env := newBootstrapEnv(t, tx)
-
-	_, token := env.newAuthenticatedPlayer(t,
-		"Zzz Bootstrap Bad Join", "bootstrap-bad-join@example.com")
-
-	unknownRec := env.do(http.MethodPost, "/groups/join", token, map[string]string{"invite_code": "ZZZZZZZZ"})
-	if unknownRec.Code != http.StatusNotFound {
-		t.Errorf("unknown invite code returned status %d, want 404, body: %s", unknownRec.Code, unknownRec.Body.String())
-	}
-
-	// An empty code must not silently match groups predating the invite-code
-	// column (whose invite_code is NULL/empty).
-	emptyRec := env.do(http.MethodPost, "/groups/join", token, map[string]string{"invite_code": "   "})
-	if emptyRec.Code != http.StatusNotFound {
-		t.Errorf("empty invite code returned status %d, want 404, body: %s", emptyRec.Code, emptyRec.Body.String())
-	}
-
-	anonRec := env.do(http.MethodPost, "/groups/join", "", map[string]string{"invite_code": "ZZZZZZZZ"})
-	if anonRec.Code != http.StatusUnauthorized {
-		t.Errorf("anonymous POST /groups/join returned status %d, want 401, body: %s", anonRec.Code, anonRec.Body.String())
+	rec := env.do(http.MethodPost, "/groups/join", "", map[string]string{"invite_code": "ZZZZZZZZ"})
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("anonymous POST /groups/join returned status %d, want 401, body: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -357,21 +223,13 @@ func TestGetInviteCode_Integration_MembersOnly(t *testing.T) {
 	tx := testutil.BeginTx(t, db)
 	env := newBootstrapEnv(t, tx)
 
-	_, memberToken := env.newAuthenticatedPlayer(t,
+	memberID, memberToken := env.newAuthenticatedPlayer(t,
 		"Zzz Bootstrap Code Member", "bootstrap-code-member@example.com")
 	_, outsiderToken := env.newAuthenticatedPlayer(t,
 		"Zzz Bootstrap Code Outsider", "bootstrap-code-outsider@example.com")
 
-	createRec := env.do(http.MethodPost, "/groups", memberToken, createGroupBody("Zzz Bootstrap Code Group"))
-	if createRec.Code != http.StatusOK {
-		t.Fatalf("POST /groups returned status %d, body: %s", createRec.Code, createRec.Body.String())
-	}
-	groupID := decodeGroupID(t, createRec)
-
-	stored, err := env.groups.GetGroupByID(groupID)
-	if err != nil {
-		t.Fatalf("GetGroupByID returned error: %v", err)
-	}
+	stored := env.createGroupDirect(t, "Zzz Bootstrap Code Group", memberID)
+	groupID := stored.ID
 
 	memberRec := env.do(http.MethodGet, "/groups/"+groupID.String()+"/invite-code", memberToken, nil)
 	if memberRec.Code != http.StatusOK {
@@ -401,19 +259,11 @@ func TestGroupJSON_Integration_NeverExposesInviteCode(t *testing.T) {
 	tx := testutil.BeginTx(t, db)
 	env := newBootstrapEnv(t, tx)
 
-	_, memberToken := env.newAuthenticatedPlayer(t,
+	memberID, memberToken := env.newAuthenticatedPlayer(t,
 		"Zzz Bootstrap Leak Member", "bootstrap-leak-member@example.com")
 
-	createRec := env.do(http.MethodPost, "/groups", memberToken, createGroupBody("Zzz Bootstrap Leak Group"))
-	if createRec.Code != http.StatusOK {
-		t.Fatalf("POST /groups returned status %d, body: %s", createRec.Code, createRec.Body.String())
-	}
-	groupID := decodeGroupID(t, createRec)
-
-	stored, err := env.groups.GetGroupByID(groupID)
-	if err != nil {
-		t.Fatalf("GetGroupByID returned error: %v", err)
-	}
+	stored := env.createGroupDirect(t, "Zzz Bootstrap Leak Group", memberID)
+	groupID := stored.ID
 	if stored.InviteCode == "" {
 		t.Fatal("stored invite code is empty — nothing to check for leaks")
 	}
@@ -423,21 +273,17 @@ func TestGroupJSON_Integration_NeverExposesInviteCode(t *testing.T) {
 		path  string
 		token string
 	}{
-		{"POST /groups response", "", memberToken},
 		{"GET /groups anonymous", "/groups", ""},
 		{"GET /groups as member", "/groups", memberToken},
 		{"GET /groups/:id anonymous", "/groups/" + groupID.String(), ""},
 		{"GET /groups/:id as member", "/groups/" + groupID.String(), memberToken},
 	}
 	for _, tc := range cases {
-		body := createRec.Body.String()
-		if tc.path != "" {
-			rec := env.do(http.MethodGet, tc.path, tc.token, nil)
-			if rec.Code != http.StatusOK {
-				t.Fatalf("%s returned status %d, body: %s", tc.name, rec.Code, rec.Body.String())
-			}
-			body = rec.Body.String()
+		rec := env.do(http.MethodGet, tc.path, tc.token, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s returned status %d, body: %s", tc.name, rec.Code, rec.Body.String())
 		}
+		body := rec.Body.String()
 		if strings.Contains(body, "invite_code") {
 			t.Errorf("%s exposes an invite_code field: %s", tc.name, body)
 		}
@@ -474,29 +320,16 @@ func TestGetMyGroups_Integration_ReturnsOnlyTheCallersGroups(t *testing.T) {
 	tx := testutil.BeginTx(t, db)
 	env := newBootstrapEnv(t, tx)
 
-	_, token := env.newAuthenticatedPlayer(t,
+	playerID, token := env.newAuthenticatedPlayer(t,
 		"Zzz My Groups Member", "my-groups-member@example.com")
-	_, otherToken := env.newAuthenticatedPlayer(t,
+	otherID, _ := env.newAuthenticatedPlayer(t,
 		"Zzz My Groups Outsider", "my-groups-outsider@example.com")
 
-	firstRec := env.do(http.MethodPost, "/groups", token, createGroupBody("Zzz My Groups First"))
-	if firstRec.Code != http.StatusOK {
-		t.Fatalf("POST /groups returned status %d, body: %s", firstRec.Code, firstRec.Body.String())
-	}
-	firstID := decodeGroupID(t, firstRec)
-
-	secondRec := env.do(http.MethodPost, "/groups", token, createGroupBody("Zzz My Groups Second"))
-	if secondRec.Code != http.StatusOK {
-		t.Fatalf("POST /groups returned status %d, body: %s", secondRec.Code, secondRec.Body.String())
-	}
-	secondID := decodeGroupID(t, secondRec)
+	firstID := env.createGroupDirect(t, "Zzz My Groups First", playerID).ID
+	secondID := env.createGroupDirect(t, "Zzz My Groups Second", playerID).ID
 
 	// A third group the caller has nothing to do with — it must not show up.
-	foreignRec := env.do(http.MethodPost, "/groups", otherToken, createGroupBody("Zzz My Groups Foreign"))
-	if foreignRec.Code != http.StatusOK {
-		t.Fatalf("POST /groups returned status %d, body: %s", foreignRec.Code, foreignRec.Body.String())
-	}
-	foreignID := decodeGroupID(t, foreignRec)
+	foreignID := env.createGroupDirect(t, "Zzz My Groups Foreign", otherID).ID
 
 	rec := env.do(http.MethodGet, "/groups/me", token, nil)
 	if rec.Code != http.StatusOK {

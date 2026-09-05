@@ -27,14 +27,10 @@ func TestGetMatchesDetails_Integration_EmptyGroupReturnsEmptyArray(t *testing.T)
 	tx := testutil.BeginTx(t, db)
 	env := newBootstrapEnv(t, tx)
 
-	_, token := env.newAuthenticatedPlayer(t,
+	playerID, token := env.newAuthenticatedPlayer(t,
 		"Zzz Matches Details Empty Player", "matches-details-empty@example.com")
 
-	createRec := env.do(http.MethodPost, "/groups", token, createGroupBody("Zzz Matches Details Empty Group"))
-	if createRec.Code != http.StatusOK {
-		t.Fatalf("POST /groups returned status %d, body: %s", createRec.Code, createRec.Body.String())
-	}
-	groupID := decodeGroupID(t, createRec)
+	groupID := env.createGroupDirect(t, "Zzz Matches Details Empty Group", playerID).ID
 
 	rec := env.do(http.MethodGet, "/matches/details?group_id="+groupID.String(), token, nil)
 	if rec.Code != http.StatusOK {

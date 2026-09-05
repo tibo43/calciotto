@@ -47,8 +47,8 @@ func main() {
 	groupService := services.NewGroupService(db)
 	groupMembershipService := services.NewGroupMembershipService(db)
 	authService := services.NewAuthService(db, jwtSecret)
-	playerHandler := handlers.NewPlayerHandler(services.NewPlayerService(db), groupService, groupMembershipService)
-	groupHandler := handlers.NewGroupHandler(groupService, groupMembershipService, authService)
+	playerHandler := handlers.NewPlayerHandler(services.NewPlayerService(db))
+	groupHandler := handlers.NewGroupHandler(groupService, groupMembershipService)
 	teamHandler := handlers.NewTeamHandler(services.NewTeamService(db))
 	matchService := services.NewMatchService(db)
 	matchHandler := handlers.NewMatchHandler(matchService, groupMembershipService)
@@ -70,12 +70,9 @@ func main() {
 	requireGroupAdminByMatchID := handlers.RequireGroupAdminByMatchPathParam(matchService, groupMembershipService, "id")
 
 	// Setup routes
-	// Players — creating a player ("ghost" roster entry, e.g. from
-	// MatchDetails.vue's create-on-the-fly flow) is admin-only, gated to the
-	// admin of the target group the same way POST /matches is: group_id
-	// travels in the JSON body, so this reuses the body/query-resolving
-	// requireGroupAdmin rather than a path-param variant. See CLAUDE.md.
-	r.POST("/players", authRequired, requireGroupAdmin, playerHandler.CreatePlayer)
+	// Players — there is no admin-only "create a player" route any more:
+	// ghost (credential-less) players were removed, so every player row now
+	// comes from POST /auth/signup instead. See CLAUDE.md.
 	// Cross-group profile of the caller themselves: authRequired only, with no
 	// requireGroupMember — there is no single group_id to authorize against
 	// here, and the handler only ever reports on the groups the JWT's own
@@ -86,11 +83,13 @@ func main() {
 	r.PATCH("/players/me", authRequired, playerHandler.UpdateMyName)
 
 	// Groups
-	// POST /groups and POST /groups/join take authRequired but no
-	// requireGroupMember: creating a group means there is no group to be a
-	// member of yet, and joining one by invite code is precisely the way in
-	// for a non-member. Together they are the group bootstrapping flow — the
-	// creator becomes the first member, then shares the invite code.
+	// POST /groups and POST /groups/join are temporarily disabled (both
+	// handlers always answer 403 — see GroupHandler.CreateGroup/JoinGroup): a
+	// player can no longer self-service creating or joining a group.
+	// authRequired stays so an unauthenticated caller still gets 401 before
+	// reaching that 403. The only way into a group now is an admin sharing the
+	// invite-code link (GroupSettingsModal.vue) that pre-fills the mandatory
+	// invite code on POST /auth/signup — see CLAUDE.md.
 	r.POST("/groups", authRequired, groupHandler.CreateGroup)
 	r.POST("/groups/join", authRequired, groupHandler.JoinGroup)
 	r.GET("/groups", groupHandler.GetGroups)
@@ -123,11 +122,6 @@ func main() {
 	// admin besides its creator, so it has to be reachable by any existing
 	// admin, and by no one else.
 	r.PATCH("/groups/:id/members/:playerId/role", authRequired, requireGroupAdminByPathID, groupHandler.UpdateMemberRole)
-	// Admin-only "invite a ghost member": attaches an email to a member who has
-	// none (a roster entry created via POST /players) and sends them a link to
-	// set their own password. Same admin gate as the two routes above; the
-	// handler additionally checks the target is a member of *this* group.
-	r.POST("/groups/:id/members/:playerId/invite", authRequired, requireGroupAdminByPathID, groupHandler.InvitePlayer)
 
 	// Matches
 	// Creating a match and editing its scores are admin-only

@@ -20,7 +20,6 @@ jest.mock('@/services/api', () => ({
   updateMatch: jest.fn(),
   deleteMatch: jest.fn(),
   getGroupMembers: jest.fn(),
-  createPlayer: jest.fn(),
   getMatchRegistrations: jest.fn(),
   registerForMatch: jest.fn(),
   unregisterFromMatch: jest.fn(),
