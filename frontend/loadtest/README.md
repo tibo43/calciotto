@@ -72,6 +72,17 @@ this: raise `SIGNUP_TIMEOUT_MS` (default 60000) rather than treating it as a
 bug, and treat the actual signup latency this reveals as a real perf-test
 finding in its own right.
 
+If instead a failure's error text is the UI's generic fallback ("Signup
+failed. Please try again.") rather than a timeout, that error already
+resolved quickly — raising a timeout won't change it. Every such failure logs
+the actual observed HTTP response or network error in `[brackets]` right
+after the UI text (e.g. `[http 502: ...]` or `[network error: ...]`) — that's
+the backend or connection actually breaking under load, a genuine perf
+finding rather than a script issue. `STEP_TIMEOUT_MS` (default 120000)
+raises every other wait in the script (page rendering, the roster panel,
+logout) together, for a "just give it plenty of room and see what actually
+happens" run.
+
 ## 3. Clean up
 
 Fill in the group id from step 1 into `devops/perf-cleanup.sql`'s

@@ -37,9 +37,18 @@
 //                       (check the failure screenshot — it may show the app
 //                       already past signup), raise this rather than
 //                       assuming the app is broken.
-//   PARTICIPATE_TIMEOUT_MS  same idea, for the Participate click (default 30000) —
+//   PARTICIPATE_TIMEOUT_MS  same idea, for the Participate click (default 60000) —
 //                       a real run has already shown this can legitimately
 //                       need more than a shorter deadline too.
+//   STEP_TIMEOUT_MS     every other wait (nav rendering, roster panel,
+//                       logout, ...) shares this one (default 120000).
+//
+// A failed signup/participate additionally logs the actual HTTP response
+// (status + body) or network error observed for that call, in [brackets] —
+// the UI's own error text alone ("Signup failed. Please try again.") is a
+// generic fallback whenever the backend's response has no JSON error body
+// (a dropped connection, a bare 502/503 under load), so this is often the
+// only way to tell "cleanly rejected" apart from "the request itself broke".
 //
 // A failure's `error` field always names what actually happened (a visible
 // `.error-message`/`.signup-inline-message.error` if one appeared, or "no
@@ -70,7 +79,13 @@ const SIGNUP_TIMEOUT_MS = parseInt(process.env.SIGNUP_TIMEOUT_MS || '60000', 10)
 // same limited Koyeb instance/DB connections), and a real run has already
 // shown it can resolve just past a shorter deadline — see the README's
 // "no navigation and no error message" note.
-const PARTICIPATE_TIMEOUT_MS = parseInt(process.env.PARTICIPATE_TIMEOUT_MS || '30000', 10);
+const PARTICIPATE_TIMEOUT_MS = parseInt(process.env.PARTICIPATE_TIMEOUT_MS || '60000', 10);
+// Every other wait in this script (nav rendering, roster panel, logout, ...)
+// used to be hardcoded at 15-30s. Under load those turned out to need more
+// room too (see SIGNUP_TIMEOUT_MS/PARTICIPATE_TIMEOUT_MS above) — this one
+// knob raises all of them together for a "just give it plenty of time and
+// see what actually happens" run, rather than chasing each one individually.
+const STEP_TIMEOUT_MS = parseInt(process.env.STEP_TIMEOUT_MS || '120000', 10);
 const PASSWORD = 'PerfLoad!2026';
 
 if (!INVITE_CODE) {
@@ -132,6 +147,39 @@ async function saveFailureScreenshot(page, index, stepName) {
   }
 }
 
+// A rejected signup/participate call surfaces to the UI only as
+// `err.response?.data?.error` (Signup.vue) — when the request fails at the
+// network level (a dropped connection, a 502/503 with no JSON body under
+// load, ...) that's undefined and the UI falls back to a generic "...failed.
+// Please try again.", which tells you nothing about what actually happened
+// server-side. Listening for the raw HTTP response (or its absence) alongside
+// that generic text is the only way to tell "the backend rejected this
+// cleanly" apart from "the backend or the connection to it broke".
+function trackApiResponse(page, urlSubstring) {
+  const state = { status: null, body: null, requestFailed: null };
+  page.on('response', async (response) => {
+    if (!response.url().includes(urlSubstring)) return;
+    state.status = response.status();
+    try {
+      state.body = (await response.text()).slice(0, 500);
+    } catch {
+      state.body = '(could not read response body)';
+    }
+  });
+  page.on('requestfailed', (request) => {
+    if (request.url().includes(urlSubstring)) {
+      state.requestFailed = request.failure()?.errorText || 'unknown network error';
+    }
+  });
+  return state;
+}
+
+function describeApiState(state) {
+  if (state.status !== null) return `http ${state.status}: ${state.body}`;
+  if (state.requestFailed) return `network error: ${state.requestFailed}`;
+  return 'no response observed at all (request may still be in flight)';
+}
+
 async function runOneUser(browser, index) {
   const name = `Perf User ${index}`;
   const email = `perfload+u${index}@${EMAIL_DOMAIN}`;
@@ -140,6 +188,8 @@ async function runOneUser(browser, index) {
   const context = await browser.newContext();
   const page = await context.newPage();
   let currentStep = 'signup';
+  const signupApi = trackApiResponse(page, '/auth/signup');
+  const participateApi = trackApiResponse(page, '/registrations');
 
   try {
     // --- Sign up (auto-logs in and redirects to `/` on success) ---
@@ -159,9 +209,9 @@ async function runOneUser(browser, index) {
     });
     if (!signupOutcome.ok) {
       const shot = await saveFailureScreenshot(page, index, 'signup');
-      throw new Error(`signup: ${signupOutcome.error}${shot ? ` (screenshot: ${shot})` : ''}`);
+      throw new Error(`signup: ${signupOutcome.error} [${describeApiState(signupApi)}]${shot ? ` (screenshot: ${shot})` : ''}`);
     }
-    await page.locator('.nav-menu').waitFor({ state: 'visible', timeout: 30_000 });
+    await page.locator('.nav-menu').waitFor({ state: 'visible', timeout: STEP_TIMEOUT_MS });
     timer.mark('signup');
 
     // --- Sign up for the match ---
@@ -173,7 +223,7 @@ async function runOneUser(browser, index) {
     const signupPanel = page.locator('.signup-inline');
     if (!(await signupPanel.isVisible().catch(() => false))) {
       await page.locator('.match-card-horizontal.scheduled').first().click();
-      await signupPanel.waitFor({ state: 'visible', timeout: 15_000 });
+      await signupPanel.waitFor({ state: 'visible', timeout: STEP_TIMEOUT_MS });
     }
     await signupPanel.getByRole('button', { name: 'Participate' }).click();
 
@@ -184,7 +234,7 @@ async function runOneUser(browser, index) {
     });
     if (!participateOutcome.ok) {
       const shot = await saveFailureScreenshot(page, index, 'participate');
-      throw new Error(`participate: ${participateOutcome.error}${shot ? ` (screenshot: ${shot})` : ''}`);
+      throw new Error(`participate: ${participateOutcome.error} [${describeApiState(participateApi)}]${shot ? ` (screenshot: ${shot})` : ''}`);
     }
     timer.mark('participate');
 
@@ -192,14 +242,14 @@ async function runOneUser(browser, index) {
     currentStep = 'view_roster';
     await page.goto(`${BASE_URL}/profile`);
     await page.locator('.group-card-horizontal').first().click();
-    await page.locator('.roster-panel-container').waitFor({ state: 'visible', timeout: 15_000 });
-    await page.locator('.member-row').first().waitFor({ state: 'visible', timeout: 15_000 });
+    await page.locator('.roster-panel-container').waitFor({ state: 'visible', timeout: STEP_TIMEOUT_MS });
+    await page.locator('.member-row').first().waitFor({ state: 'visible', timeout: STEP_TIMEOUT_MS });
     timer.mark('view_roster');
 
     // --- Log out ---
     currentStep = 'logout';
     await page.getByRole('button', { name: 'Log out' }).click();
-    await page.waitForURL((url) => url.pathname === '/login', { timeout: 15_000 });
+    await page.waitForURL((url) => url.pathname === '/login', { timeout: STEP_TIMEOUT_MS });
     timer.mark('logout');
 
     return { index, email, ok: true, ms: Date.now() - startedAt, steps: timer.steps };
