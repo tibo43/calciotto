@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -178,8 +179,17 @@ func main() {
 	// slows down one guess against Login, but not a script making thousands: a
 	// generous burst absorbs a legitimate user mistyping their password a few
 	// times in a row, then throttles hard.
-	loginRateLimit := handlers.RateLimit(rate.Every(6*time.Second), 10)          // ~10/min, burst 10
-	signupRateLimit := handlers.RateLimit(rate.Every(12*time.Minute), 5)         // ~5/hour, burst 5
+	loginRateLimit := handlers.RateLimit(rate.Every(6*time.Second), 10) // ~10/min, burst 10
+	// Signup's rate/burst are the one pair overridable via env
+	// (SIGNUP_RATE_LIMIT_PER_HOUR/SIGNUP_RATE_LIMIT_BURST), both defaulting to
+	// today's hardcoded 5/hour, burst 5 when unset — needed to run a real
+	// load test (many accounts created in a short window from one IP) against
+	// production without leaving the limit permanently loosened. See
+	// envIntOrDefault below and the "Sync secrets to Koyeb" step in
+	// .github/workflows/ci.yml, which only pushes these when explicitly set.
+	signupPerHour := envIntOrDefault("SIGNUP_RATE_LIMIT_PER_HOUR", 5)
+	signupBurst := envIntOrDefault("SIGNUP_RATE_LIMIT_BURST", 5)
+	signupRateLimit := handlers.RateLimit(rate.Every(time.Hour/time.Duration(signupPerHour)), signupBurst)
 	forgotPasswordRateLimit := handlers.RateLimit(rate.Every(12*time.Minute), 5) // ~5/hour, burst 5 — also caps Brevo email spend, see CLAUDE.md
 	resetPasswordRateLimit := handlers.RateLimit(rate.Every(3*time.Minute), 20)  // ~20/hour, burst 20 — tokens are unguessable 32-byte values, this is a courtesy cap, not the real defense
 
@@ -235,4 +245,21 @@ func allowedOrigins() []string {
 		return []string{"http://localhost:4000", "http://127.0.0.1:4000"}
 	}
 	return origins
+}
+
+// envIntOrDefault reads a positive integer from an env var, falling back to
+// def when the var is unset, empty, or not a valid positive integer — used to
+// make the signup rate limit tunable for a load test without a code change,
+// while defaulting to today's hardcoded behavior when nothing overrides it.
+func envIntOrDefault(key string, def int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return def
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		log.Printf("invalid %s=%q, using default %d", key, raw, def)
+		return def
+	}
+	return n
 }

@@ -229,6 +229,8 @@ jobs:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          SIGNUP_RATE_LIMIT_PER_HOUR: ${{ secrets.SIGNUP_RATE_LIMIT_PER_HOUR }}
+          SIGNUP_RATE_LIMIT_BURST: ${{ secrets.SIGNUP_RATE_LIMIT_BURST }}
         run: |
           set -euo pipefail
 
@@ -263,6 +265,18 @@ jobs:
             echo "::warning::BREVO_API_KEY is not set — password-reset and invite emails will only be written to the Koyeb logs"
           fi
 
+          # Signup rate-limit override is optional and normally unset: only
+          # needed to loosen the default 5/hour, burst 5 for the duration of a
+          # deliberate load test (see main.go's envIntOrDefault). Left unset,
+          # the app falls back to its hardcoded default with no warning here —
+          # unlike Brevo, there is no degraded-but-working state to call out.
+          if [ -n "$SIGNUP_RATE_LIMIT_PER_HOUR" ]; then
+            sync_secret SIGNUP_RATE_LIMIT_PER_HOUR "$SIGNUP_RATE_LIMIT_PER_HOUR"
+          fi
+          if [ -n "$SIGNUP_RATE_LIMIT_BURST" ]; then
+            sync_secret SIGNUP_RATE_LIMIT_BURST "$SIGNUP_RATE_LIMIT_BURST"
+          fi
+
       - name: Deploy to Koyeb
         env:
           IMAGE: ${{ vars.DOCKERHUB_IMAGE }}:${{ github.sha }}
@@ -271,6 +285,8 @@ jobs:
           BREVO_SENDER_EMAIL: ${{ vars.BREVO_SENDER_EMAIL }}
           BREVO_SENDER_NAME: ${{ vars.BREVO_SENDER_NAME }}
           HAS_BREVO_KEY: ${{ secrets.BREVO_API_KEY != '' }}
+          HAS_SIGNUP_RATE_LIMIT_PER_HOUR: ${{ secrets.SIGNUP_RATE_LIMIT_PER_HOUR != '' }}
+          HAS_SIGNUP_RATE_LIMIT_BURST: ${{ secrets.SIGNUP_RATE_LIMIT_BURST != '' }}
         run: |
           set -euo pipefail
 
@@ -313,6 +329,17 @@ jobs:
               --env "BREVO_SENDER_EMAIL=$BREVO_SENDER_EMAIL"
               --env "BREVO_SENDER_NAME=$BREVO_SENDER_NAME"
             )
+          fi
+
+          # Signup rate-limit override — see the "Sync secrets to Koyeb" step
+          # above. Omitted entirely when unset, so the app's own
+          # envIntOrDefault fallback (5/hour, burst 5) applies, exactly as
+          # before this override existed.
+          if [ "$HAS_SIGNUP_RATE_LIMIT_PER_HOUR" = "true" ]; then
+            args+=(--env SIGNUP_RATE_LIMIT_PER_HOUR=@SIGNUP_RATE_LIMIT_PER_HOUR)
+          fi
+          if [ "$HAS_SIGNUP_RATE_LIMIT_BURST" = "true" ]; then
+            args+=(--env SIGNUP_RATE_LIMIT_BURST=@SIGNUP_RATE_LIMIT_BURST)
           fi
 
           koyeb services update "$KOYEB_APP/$KOYEB_SERVICE" "${args[@]}" \
