@@ -70,3 +70,7 @@ pnpm-debug.log*
 /frontend/test-results
 /frontend/playwright-report
 /frontend/blob-report
+
+# Perf load-test reports (frontend/loadtest/run.js) — one JSON+txt pair per
+# run, against a moving target (production), never meant to be committed.
+/frontend/loadtest/reports

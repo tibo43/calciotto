@@ -44,7 +44,13 @@ BASE_URL="<your Vercel URL>" INVITE_CODE="<from step 1>" USERS=50 node loadtest/
 Each of the 50 virtual users, in parallel: signs up via `/signup?invite=...`
 (auto-logs in), participates in the match, opens the group's roster on
 `/profile` to see the other sign-ups, then logs out. A pass/fail summary with
-p50/p95/max durations prints at the end.
+p50/p95/max durations (overall, and broken down per step: signup, participate,
+view_roster, logout) prints at the end **and** is written to
+`loadtest/reports/report-<timestamp>.{json,txt}` — the JSON carries the full
+per-user breakdown (useful for a spreadsheet or a follow-up script), the
+`.txt` is the same summary in a form you can paste straight into a message.
+These report files are gitignored — they're per-run artifacts against a
+moving target, not something to commit.
 
 ## 3. Clean up
 
