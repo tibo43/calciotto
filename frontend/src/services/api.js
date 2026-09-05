@@ -8,9 +8,19 @@ export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
+// Overridable via VUE_APP_API_TIMEOUT_MS (a Vercel build-time var, same
+// mechanism as VUE_APP_API_BASE_URL — see ci.yml's deploy-frontend job) so a
+// deliberate load test can raise it temporarily to see the backend's real
+// response time under concurrent load, instead of every request past 10s
+// being aborted client-side (ECONNABORTED, no `.response`) and surfacing as
+// a generic "...failed. Please try again." even when the backend went on to
+// complete the request successfully — see CLAUDE.md's perf load-test notes.
+// Defaults to today's exact 10000 when unset or invalid.
+const apiTimeoutMs = parseInt(process.env.VUE_APP_API_TIMEOUT_MS, 10) || 10000;
+
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: apiTimeoutMs,
   headers: {
     'Content-Type': 'application/json',
   }
