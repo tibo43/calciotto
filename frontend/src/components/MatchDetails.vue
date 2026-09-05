@@ -597,6 +597,7 @@ import {
   unregisterFromMatch,
   closeMatchRegistrations,
   reopenMatchRegistrations,
+  getInviteCode,
   getToken
 } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
@@ -692,6 +693,12 @@ export default {
       // they find out at all, since nothing notifies them.
       nowMs: 0,
       currentPlayerId: '',
+      // Fetched once, in created(), only for an admin of a scheduled match —
+      // the one case whatsappShareUrl needs it. GET /groups/:id/invite-code
+      // is member-only, not admin-only, but nothing else on this page uses
+      // it, so there's no reason to fetch it for anyone who won't see the
+      // Share on WhatsApp link.
+      groupInviteCode: '',
     };
   },
   async created() {
@@ -708,6 +715,21 @@ export default {
       console.error('Error resolving the active group:', error);
     }
     await this.loadMatch();
+
+    // Same condition the Share on WhatsApp link itself is gated on
+    // (isAdmin && isScheduled) — fetched here rather than lazily on click so
+    // the link stays a plain <a href>, not a click handler waiting on a
+    // network request. A failure just leaves groupInviteCode empty, which
+    // buildWhatsAppShareText already treats as "omit the line" rather than
+    // blocking the share link over a roster/schedule concern.
+    if (this.isAdmin && this.isScheduled) {
+      try {
+        const data = await getInviteCode(this.activeGroupId);
+        this.groupInviteCode = data.invite_code || '';
+      } catch (error) {
+        console.error('Error fetching the group invite code:', error);
+      }
+    }
   },
   beforeRouteLeave(to, from, next) {
     if (this.hasUnsavedChanges()) {
@@ -777,7 +799,8 @@ export default {
       const shortUrl = `${window.location.origin}/m/${encodeMatchId(this.match.ID)}`;
       const text = buildWhatsAppShareText({
         kickoffLabel: this.kickoffLabel,
-        matchUrl: shortUrl
+        matchUrl: shortUrl,
+        groupInviteCode: this.groupInviteCode
       });
       return buildWhatsAppShareUrl(text);
     },

@@ -18,8 +18,23 @@
 // only *bold*/_italic_/~strikethrough~ markdown, no link-with-custom-text
 // syntax — so a raw URL is the only thing WhatsApp will actually turn into a
 // tappable link.
-export function buildWhatsAppShareText({ kickoffLabel, matchUrl }) {
-  return `Match: ${kickoffLabel}\nSign-ups are open — Join Calciotto:\n${matchUrl}`;
+//
+// groupInviteCode is optional and, when present, gets its own trailing line:
+// the link alone gets an existing member back into the match, but someone in
+// the WhatsApp group who hasn't joined the Calciotto group yet has no way in
+// without the code too. Omitted entirely rather than printed empty/undefined
+// when the caller couldn't fetch it (see MatchDetails.vue's created()) — a
+// share message is more useful without that line than with a broken one.
+export function buildWhatsAppShareText({ kickoffLabel, matchUrl, groupInviteCode }) {
+  const lines = [
+    `Match: ${kickoffLabel}`,
+    'Sign-ups are open — Join Calciotto:',
+    matchUrl
+  ];
+  if (groupInviteCode) {
+    lines.push(`Group code: ${groupInviteCode}`);
+  }
+  return lines.join('\n');
 }
 
 export function buildWhatsAppShareUrl(text) {

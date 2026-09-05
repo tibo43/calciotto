@@ -196,6 +196,10 @@ const groupMembers = [
   { id: 'e2', name: 'Marco Rossi', role: 'member' },
 ];
 
+// GET /groups/:id/invite-code — fetched by MatchDetails.vue for an admin
+// viewing a scheduled match, to append to its "Share on WhatsApp" message.
+const inviteCode = 'ABC23XYZ';
+
 module.exports = {
   FIXED_NOW,
   GROUP_ID,
@@ -212,4 +216,5 @@ module.exports = {
   motmStandings,
   motmVotes,
   groupMembers,
+  inviteCode,
 };

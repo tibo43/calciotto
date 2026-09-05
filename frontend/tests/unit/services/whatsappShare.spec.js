@@ -26,6 +26,35 @@ describe('buildWhatsAppShareText', () => {
     const lines = text.split('\n');
     expect(lines[lines.length - 1]).toBe('https://calciotto.app/matches/abc-123/edit');
   });
+
+  it('appends the group invite code on its own trailing line when given one', () => {
+    const text = buildWhatsAppShareText({
+      kickoffLabel: 'Sun, Sep 6, 2026, 8:30 PM',
+      matchUrl: 'https://calciotto.app/matches/abc-123/edit',
+      groupInviteCode: 'ABC23XYZ'
+    });
+
+    const lines = text.split('\n');
+    expect(lines[lines.length - 1]).toBe('Group code: ABC23XYZ');
+  });
+
+  // A failed fetch (see MatchDetails.vue's created()) leaves groupInviteCode
+  // as '' — this must read as "nothing to add", not as a line reading
+  // "Group code: " with nothing after the colon.
+  it('omits the group-code line entirely when no code is given', () => {
+    const withEmptyCode = buildWhatsAppShareText({
+      kickoffLabel: 'Sun, Sep 6, 2026, 8:30 PM',
+      matchUrl: 'https://calciotto.app/matches/abc-123/edit',
+      groupInviteCode: ''
+    });
+    const withNoCodeAtAll = buildWhatsAppShareText({
+      kickoffLabel: 'Sun, Sep 6, 2026, 8:30 PM',
+      matchUrl: 'https://calciotto.app/matches/abc-123/edit'
+    });
+
+    expect(withEmptyCode).not.toContain('Group code');
+    expect(withEmptyCode).toBe(withNoCodeAtAll);
+  });
 });
 
 describe('buildWhatsAppShareUrl', () => {
