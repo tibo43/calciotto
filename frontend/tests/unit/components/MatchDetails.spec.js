@@ -9,6 +9,7 @@ import {
   closeMatchRegistrations,
   reopenMatchRegistrations,
   getGroupMembers,
+  getInviteCode,
   getToken
 } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
@@ -25,6 +26,7 @@ jest.mock('@/services/api', () => ({
   unregisterFromMatch: jest.fn(),
   closeMatchRegistrations: jest.fn(),
   reopenMatchRegistrations: jest.fn(),
+  getInviteCode: jest.fn(),
   getToken: jest.fn()
 }));
 
@@ -123,6 +125,7 @@ beforeEach(() => {
   unregisterFromMatch.mockResolvedValue({ unregistered: true });
   closeMatchRegistrations.mockResolvedValue({ closed: true });
   reopenMatchRegistrations.mockResolvedValue({ reopened: true });
+  getInviteCode.mockResolvedValue({ invite_code: 'ABC23XYZ' });
 });
 
 afterEach(() => {
@@ -392,9 +395,52 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
     const text = decodeURIComponent(href.replace('https://wa.me/?text=', ''));
     expect(text).toContain(wrapper.vm.kickoffLabel);
 
-    const shortUrl = text.split('\n').pop();
+    const lines = text.split('\n');
+    const shortUrl = lines[lines.length - 2];
     expect(shortUrl).toMatch(/^http:\/\/localhost\/m\/[0-9A-Za-z]+$/);
     expect(decodeMatchId(shortUrl.split('/m/')[1])).toBe(MATCH_ID);
+  });
+
+  it("includes the group's invite code, fetched once on load", async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    expect(getInviteCode).toHaveBeenCalledWith('group-uuid');
+    expect(getInviteCode).toHaveBeenCalledTimes(1);
+
+    const href = wrapper.find('.whatsapp-share-btn').attributes('href');
+    const text = decodeURIComponent(href.replace('https://wa.me/?text=', ''));
+    expect(text.split('\n').pop()).toBe('Group code: ABC23XYZ');
+  });
+
+  // A member never sees the link at all, and an admin viewing an unscheduled
+  // (never-composed) match has no link to fetch it for either — fetching the
+  // invite code for either would be a wasted request.
+  it('does not fetch the invite code when the share link will not be shown', async () => {
+    await mountDetails({ match: scheduledMatch(), registrations: registrationList(), isAdmin: false });
+    expect(getInviteCode).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    getInviteCode.mockResolvedValue({ invite_code: 'ABC23XYZ' });
+    await mountDetails({ match: unscheduledMatch(), isAdmin: true });
+    expect(getInviteCode).not.toHaveBeenCalled();
+  });
+
+  it('degrades to no group-code line, rather than breaking the page, if the invite code fails to load', async () => {
+    getInviteCode.mockRejectedValue(new Error('network error'));
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    const link = wrapper.find('.whatsapp-share-btn');
+    expect(link.exists()).toBe(true);
+    const text = decodeURIComponent(link.attributes('href').replace('https://wa.me/?text=', ''));
+    expect(text).not.toContain('Group code');
   });
 });
 
