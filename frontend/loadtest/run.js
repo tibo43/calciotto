@@ -26,6 +26,17 @@
 //   EMAIL_DOMAIN domain for the throwaway accounts      (default perfload.test — reserved TLD, never emailed)
 //   HEADLESS     "false" to watch the browsers          (default true)
 //   REPORT_DIR   where to write the report files        (default loadtest/reports, relative to this file)
+//   SIGNUP_TIMEOUT_MS  how long to wait for signup to resolve before giving up
+//                       (default 60000) — bcrypt hashing is deliberately slow,
+//                       and under N concurrent signups on a small/shared
+//                       Koyeb instance this can legitimately take much longer
+//                       than a single request would; a real load test wants
+//                       to *measure* that latency, not misreport it as a
+//                       hung request. If a run's failures all show a
+//                       navigation succeeding right around this deadline
+//                       (check the failure screenshot — it may show the app
+//                       already past signup), raise this rather than
+//                       assuming the app is broken.
 //
 // A failure's `error` field always names what actually happened (a visible
 // `.error-message`/`.signup-inline-message.error` if one appeared, or "no
@@ -50,6 +61,7 @@ const USER_COUNT = parseInt(process.env.USERS || '50', 10);
 const EMAIL_DOMAIN = process.env.EMAIL_DOMAIN || 'perfload.test';
 const HEADLESS = process.env.HEADLESS !== 'false';
 const REPORT_DIR = process.env.REPORT_DIR || path.join(__dirname, 'reports');
+const SIGNUP_TIMEOUT_MS = parseInt(process.env.SIGNUP_TIMEOUT_MS || '60000', 10);
 const PASSWORD = 'PerfLoad!2026';
 
 if (!INVITE_CODE) {
@@ -134,6 +146,7 @@ async function runOneUser(browser, index) {
     const signupOutcome = await waitForOutcome(page, {
       successCheck: () => urlPathIs(page, '/'),
       errorSelector: '.error-message',
+      timeoutMs: SIGNUP_TIMEOUT_MS,
     });
     if (!signupOutcome.ok) {
       const shot = await saveFailureScreenshot(page, index, 'signup');

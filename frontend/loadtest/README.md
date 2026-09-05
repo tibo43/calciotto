@@ -52,6 +52,18 @@ per-user breakdown (useful for a spreadsheet or a follow-up script), the
 These report files are gitignored — they're per-run artifacts against a
 moving target, not something to commit.
 
+If a run reports every user failing at the `signup` step with "no
+navigation and no error message shown", **check the failure screenshot in
+`loadtest/reports/failures/` before assuming the app is broken** — a common
+cause is the signup request simply taking longer than the wait allows under
+concurrent load (bcrypt hashing is deliberately slow, and the backend runs on
+Koyeb's `free` instance type, a shared/limited CPU — see
+`.github/workflows/ci.yml`'s `KOYEB_INSTANCE_TYPE`). If the screenshot shows
+the app already past signup (matches loaded, group selected), that's exactly
+this: raise `SIGNUP_TIMEOUT_MS` (default 60000) rather than treating it as a
+bug, and treat the actual signup latency this reveals as a real perf-test
+finding in its own right.
+
 ## 3. Clean up
 
 Fill in the group id from step 1 into `devops/perf-cleanup.sql`'s
