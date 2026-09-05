@@ -53,6 +53,7 @@ func main() {
 	matchService := services.NewMatchService(db)
 	matchHandler := handlers.NewMatchHandler(matchService, groupMembershipService)
 	matchRegistrationHandler := handlers.NewMatchRegistrationHandler(services.NewMatchRegistrationService(db))
+	matchVoteHandler := handlers.NewMatchVoteHandler(services.NewMatchVoteService(db))
 	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(db, groupMembershipService), groupMembershipService)
 	authHandler := handlers.NewAuthHandler(authService)
 
@@ -161,9 +162,19 @@ func main() {
 	r.POST("/matches/:id/registrations/close", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.CloseRegistrations)
 	r.POST("/matches/:id/registrations/reopen", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.ReopenRegistrations)
 
+	// Man of the Match voting. Same match-scoped middleware pair as the
+	// sign-up routes above, but every route is open to any member: voting has
+	// no admin-only action at all, since eligibility to vote is deliberately
+	// broader than "played in the match" and there is no close/reopen concept
+	// for it (see MatchVoteService).
+	r.POST("/matches/:id/votes", authRequired, requireGroupMemberByMatchID, matchVoteHandler.Vote)
+	r.DELETE("/matches/:id/votes", authRequired, requireGroupMemberByMatchID, matchVoteHandler.Unvote)
+	r.GET("/matches/:id/votes", authRequired, requireGroupMemberByMatchID, matchVoteHandler.ListVotes)
+
 	// Standings
 	r.GET("/standings/points", authRequired, requireGroupMember, standingsHandler.GetPointsStandings)
 	r.GET("/standings/scorers", authRequired, requireGroupMember, standingsHandler.GetScorers)
+	r.GET("/standings/motm", authRequired, requireGroupMember, standingsHandler.GetMotmStandings)
 	r.GET("/standings/seasons", authRequired, requireGroupMember, standingsHandler.GetSeasons)
 
 	// Auth — all four are unauthenticated by necessity (a caller signing up or

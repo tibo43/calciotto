@@ -52,6 +52,13 @@ const KICKOFF = '2026-09-06T20:30:00+02:00';
 const DURING_SIGNUPS = Date.parse('2026-09-04T09:00:00+02:00');
 const BEFORE_SIGNUPS = Date.parse('2026-08-30T09:00:00+02:00');
 const AFTER_KICKOFF = Date.parse('2026-09-06T22:00:00+02:00');
+// No explicit offset here, unlike the constants above: getMatchStatus()
+// builds its own day-after boundary with `new Date(year, month, day)` (the
+// runtime's local time zone), so this fake "now" has to be local too, or a
+// CI runner in a different zone (UTC there, not the +02:00 this was first
+// written against) can land on the wrong side of the boundary by a couple
+// of hours and flip the badge to "upcoming".
+const DAY_AFTER_MATCH = Date.parse('2026-09-07T00:00:01');
 
 const teams = () => [
   { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
@@ -850,50 +857,49 @@ describe('MatchDetails.vue team roster visibility on a scheduled match', () => {
   });
 });
 
-// getMatchStatus() predates scheduled matches: "any goal recorded" was a
-// reasonable proxy for "has this been played" back when a match was always
-// created and scored immediately after the fact. These pin the fix for a
-// scheduled match with a composed, scored roster entered *before* kick-off —
-// it must read as upcoming regardless of the goal count, and only fall back
-// to the goal-based heuristic once kick-off has actually passed.
+// getMatchStatus() is purely Date-based: "Upcoming" for every instant up to
+// and including the match's own day, "Completed" starting midnight the day
+// after — identical for a scheduled or unscheduled match, and independent of
+// goals or kick-off time entirely. This replaced first a plain goal-count
+// heuristic, then a kick-off-aware one, both retired once real feedback
+// pointed out the badge could read "Completed" for some matches and not
+// others depending on scheduling and on whether goals had been entered yet.
 describe('MatchDetails.vue match-status badge', () => {
   const scoredTeams = () => [
     { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 3, Players: [{ ID: 'p1', Name: 'marco', GoalNumber: 3 }] },
     { ID: 'team-b', Name: 'White', Colour: 'white', Score: 1, Players: [{ ID: 'p2', Name: 'luca', GoalNumber: 1 }] }
   ];
 
-  it('reads "Upcoming" for a scheduled, already-scored match before kick-off', async () => {
+  it('reads "Upcoming" before the match day, regardless of goals already entered', async () => {
     const match = scheduledMatch({ Teams: scoredTeams() });
-    const wrapper = await mountDetails({ match, now: DURING_SIGNUPS }); // before KICKOFF
+    const wrapper = await mountDetails({ match, now: DURING_SIGNUPS });
 
     expect(wrapper.find('.match-status-badge').classes()).toContain('upcoming');
     expect(wrapper.find('.match-status-badge').text()).toBe('Upcoming');
   });
 
-  it('falls back to the goal-based read once kick-off has passed', async () => {
+  it('still reads "Upcoming" on the match day itself, even with goals entered and kick-off passed', async () => {
     const match = scheduledMatch({ Teams: scoredTeams() });
-    const wrapper = await mountDetails({ match, now: AFTER_KICKOFF });
-
-    expect(wrapper.find('.match-status-badge').classes()).toContain('completed');
-  });
-
-  it('reads "Upcoming" for a scheduled match with no goals yet, even past kick-off', async () => {
-    const match = scheduledMatch(); // teams() defaults to Score: 0, Players: []
     const wrapper = await mountDetails({ match, now: AFTER_KICKOFF });
 
     expect(wrapper.find('.match-status-badge').classes()).toContain('upcoming');
   });
 
-  it('leaves an unscheduled match on the original goal-based heuristic', async () => {
-    const withGoals = { ...unscheduledMatch(), Teams: scoredTeams() };
-    const wrapper = await mountDetails({ match: withGoals });
+  it('reads "Completed" the day after the match, even with no goals recorded at all', async () => {
+    const match = scheduledMatch(); // teams() defaults to Score: 0, Players: []
+    const wrapper = await mountDetails({ match, now: DAY_AFTER_MATCH });
 
     expect(wrapper.find('.match-status-badge').classes()).toContain('completed');
+  });
+
+  it('applies the exact same Date-based rule to an unscheduled match', async () => {
+    const withGoals = { ...unscheduledMatch(), Teams: scoredTeams() };
+    const onMatchDay = await mountDetails({ match: withGoals, now: AFTER_KICKOFF });
+    expect(onMatchDay.find('.match-status-badge').classes()).toContain('upcoming');
 
     const noGoals = unscheduledMatch();
-    const wrapper2 = await mountDetails({ match: noGoals });
-
-    expect(wrapper2.find('.match-status-badge').classes()).toContain('upcoming');
+    const dayAfter = await mountDetails({ match: noGoals, now: DAY_AFTER_MATCH });
+    expect(dayAfter.find('.match-status-badge').classes()).toContain('completed');
   });
 });
 

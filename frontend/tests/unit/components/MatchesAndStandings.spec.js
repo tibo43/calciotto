@@ -1,11 +1,14 @@
 import { shallowMount, flushPromises } from '@vue/test-utils';
 import MatchesAndStandings from '@/components/MatchesAndStandings.vue';
-import { getPointsStandings, getScorers, getSeasons } from '@/services/api';
-import { resolveActiveGroup } from '@/services/activeGroup';
+import { getPointsStandings, getScorers, getMotmStandings, getSeasons } from '@/services/api';
+import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
+import { decodeMatchId } from '@/services/shortLink';
+import { findGroupForMatch } from '@/router/index';
 
 jest.mock('@/services/api', () => ({
   getPointsStandings: jest.fn(),
   getScorers: jest.fn(),
+  getMotmStandings: jest.fn(),
   getSeasons: jest.fn()
 }));
 
@@ -14,7 +17,20 @@ jest.mock('@/services/activeGroup', () => ({
   setActiveGroupId: jest.fn()
 }));
 
-const mountPage = async (seasons) => {
+// Both mocked wholesale for the same reason: real findGroupForMatch would
+// hit the real getMatchDetailsByID (not stubbed here), and real
+// decodeMatchId has its own dedicated spec (shortLink.spec.js) already
+// covering the base62 round-trip — this file only cares that the page wires
+// their results into the right tab/group/season/prop.
+jest.mock('@/services/shortLink', () => ({
+  decodeMatchId: jest.fn()
+}));
+
+jest.mock('@/router/index', () => ({
+  findGroupForMatch: jest.fn()
+}));
+
+const mountPage = async (seasons, { routeQuery = {} } = {}) => {
   resolveActiveGroup.mockResolvedValue({
     groups: [{ id: 'group-uuid', name: 'Test Group', role: 'admin' }],
     activeGroupId: 'group-uuid'
@@ -22,11 +38,14 @@ const mountPage = async (seasons) => {
   getSeasons.mockResolvedValue(seasons);
   getPointsStandings.mockResolvedValue([]);
   getScorers.mockResolvedValue([]);
+  getMotmStandings.mockResolvedValue([]);
 
   // Children are stubbed: this file is only about the shell's own season
   // preselection, not about what MatchesPanel/the standings tables render —
   // each of those already has its own test file.
-  const wrapper = shallowMount(MatchesAndStandings);
+  const wrapper = shallowMount(MatchesAndStandings, {
+    global: { mocks: { $route: { query: routeQuery } } }
+  });
   await flushPromises();
   return wrapper;
 };
@@ -70,5 +89,93 @@ describe('MatchesAndStandings.vue season preselection', () => {
     const wrapper = await mountPage([]);
 
     expect(wrapper.vm.selectedSeason).toBe('');
+  });
+});
+
+// The `/m/:code` tinylink (router/index.js) now lands here with `?match=`
+// rather than on the admin-only MatchDetails.vue — see CLAUDE.md. This is
+// what actually resolves that query param: decode it, find which of the
+// caller's groups owns it (findGroupForMatch — the exact search
+// canEditMatch already does, reused rather than duplicated), force the
+// Matches tab, preselect that match's own season, and hand its id down to
+// MatchesPanel. Every failure mode degrades silently, mirroring the
+// `/m/:code` redirect's own "malformed code falls back home" contract.
+describe('MatchesAndStandings.vue shared match deep link (?match=<code>)', () => {
+  beforeEach(() => {
+    decodeMatchId.mockReset();
+    findGroupForMatch.mockReset();
+    setActiveGroupId.mockReset();
+  });
+
+  it('selects the Matches tab, preselects the match\'s own season, and passes its id to MatchesPanel', async () => {
+    decodeMatchId.mockReturnValue('match-uuid');
+    findGroupForMatch.mockResolvedValue({
+      group: { id: 'group-uuid', role: 'admin' },
+      details: { ID: 'match-uuid', Date: '2026-09-06' }
+    });
+
+    const wrapper = await mountPage(['2025-2026', '2026-2027'], { routeQuery: { match: 'abc123' } });
+
+    expect(decodeMatchId).toHaveBeenCalledWith('abc123');
+    expect(findGroupForMatch).toHaveBeenCalledWith(
+      'match-uuid',
+      [{ id: 'group-uuid', name: 'Test Group', role: 'admin' }]
+    );
+    expect(wrapper.vm.activeSubTab).toBe('matches');
+    // 2026-09-06 falls in 2026-2027, the *later* of the two seasons on offer
+    // — proof this overrides the ordinary seasonOf(now) default rather than
+    // coincidentally matching it.
+    expect(wrapper.vm.selectedSeason).toBe('2026-2027');
+    expect(wrapper.findComponent({ name: 'MatchesPanel' }).props('deepLinkMatchId')).toBe('match-uuid');
+    // Already the active group — no reload needed.
+    expect(setActiveGroupId).not.toHaveBeenCalled();
+  });
+
+  it('switches into the match\'s own group (and reloads) when it differs from the active one', async () => {
+    decodeMatchId.mockReturnValue('match-uuid');
+    findGroupForMatch.mockResolvedValue({
+      group: { id: 'other-group-uuid', role: 'member' },
+      details: { ID: 'match-uuid', Date: '2026-09-06' }
+    });
+    const reload = jest.fn();
+    const originalLocation = window.location;
+    delete window.location;
+    window.location = { ...originalLocation, reload };
+
+    await mountPage(['2025-2026'], { routeQuery: { match: 'abc123' } });
+
+    expect(setActiveGroupId).toHaveBeenCalledWith('other-group-uuid');
+    expect(reload).toHaveBeenCalledTimes(1);
+
+    window.location = originalLocation;
+  });
+
+  it('degrades silently when the match belongs to no group the caller is in', async () => {
+    decodeMatchId.mockReturnValue('match-uuid');
+    findGroupForMatch.mockResolvedValue(null);
+
+    const wrapper = await mountPage(['2025-2026'], { routeQuery: { match: 'abc123' } });
+
+    expect(wrapper.vm.deepLinkMatchId).toBe('');
+    expect(wrapper.vm.selectedSeason).toBe('2025-2026');
+  });
+
+  it('degrades silently when the code cannot be decoded', async () => {
+    decodeMatchId.mockImplementation(() => {
+      throw new Error('invalid character in short link code');
+    });
+
+    const wrapper = await mountPage(['2025-2026'], { routeQuery: { match: 'not-a-real-code' } });
+
+    expect(findGroupForMatch).not.toHaveBeenCalled();
+    expect(wrapper.vm.deepLinkMatchId).toBe('');
+  });
+
+  it('does nothing when there is no ?match= param at all', async () => {
+    const wrapper = await mountPage(['2025-2026']);
+
+    expect(decodeMatchId).not.toHaveBeenCalled();
+    expect(findGroupForMatch).not.toHaveBeenCalled();
+    expect(wrapper.vm.deepLinkMatchId).toBe('');
   });
 });

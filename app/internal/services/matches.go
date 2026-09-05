@@ -158,6 +158,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
         SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
+               matches.created_at as match_created_at,
                matches.scheduled_at as match_scheduled_at,
                matches.registration_opens_at as match_registration_opens_at,
                matches.registrations_closed_at as match_registrations_closed_at,
@@ -207,6 +208,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 				ID:                    rowMatches.MatchID,
 				GroupID:               rowMatches.MatchGroupID,
 				Date:                  rowMatches.MatchDate,
+				CreatedAt:             rowMatches.MatchCreatedAt,
 				ScheduledAt:           rowMatches.MatchScheduledAt,
 				RegistrationOpensAt:   rowMatches.MatchRegistrationOpensAt,
 				RegistrationsClosedAt: rowMatches.MatchRegistrationsClosedAt,
@@ -335,6 +337,7 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 	// Execute the SQL query and scan the results into a flat structure
 	result := s.DB.Raw(`
         SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
+               matches.created_at as match_created_at,
                matches.scheduled_at as match_scheduled_at,
                matches.registration_opens_at as match_registration_opens_at,
                matches.registrations_closed_at as match_registrations_closed_at,
@@ -365,6 +368,7 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 		ID:                    id,
 		GroupID:               rowsMatch[0].MatchGroupID,
 		Date:                  rowsMatch[0].MatchDate,
+		CreatedAt:             rowsMatch[0].MatchCreatedAt,
 		ScheduledAt:           rowsMatch[0].MatchScheduledAt,
 		RegistrationOpensAt:   rowsMatch[0].MatchRegistrationOpensAt,
 		RegistrationsClosedAt: rowsMatch[0].MatchRegistrationsClosedAt,
@@ -525,6 +529,8 @@ func (s *MatchService) registrationCount(matchID uuid.UUID) (int, error) {
 // match_players row for this match is deleted first, inside the same
 // transaction as the match itself, or the match delete would fail with a
 // foreign-key violation instead of a clean application-level result.
+// MatchRegistration and MatchVote rows are cleaned up in the same transaction
+// too — see the comments below for why nothing forces that one.
 func (s *MatchService) DeleteMatch(matchID, groupID uuid.UUID) error {
 	var match models.Match
 	if err := s.DB.Where("id = ? AND group_id = ?", matchID, groupID).First(&match).Error; err != nil {
@@ -543,6 +549,12 @@ func (s *MatchService) DeleteMatch(matchID, groupID uuid.UUID) error {
 		// leaving a deleted match's sign-up list behind would be dead rows
 		// nothing can ever read or clean up again.
 		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchRegistration{}).Error; err != nil {
+			return err
+		}
+		// Man of the Match votes, for the same reason as sign-ups: MatchVote
+		// declares no association on Match either, so nothing forces this, but
+		// a deleted match's votes would otherwise be unreachable orphan rows.
+		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchVote{}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&models.Match{}, "id = ?", matchID).Error

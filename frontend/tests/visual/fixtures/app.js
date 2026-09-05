@@ -70,6 +70,7 @@ async function stubApi(page, overrides = {}) {
   await page.route(`${API}/standings/seasons*`, (route) => json(route, overrides.seasons ?? data.seasons));
   await page.route(`${API}/standings/points*`, (route) => json(route, overrides.pointsStandings ?? data.pointsStandings));
   await page.route(`${API}/standings/scorers*`, (route) => json(route, overrides.topScorers ?? data.topScorers));
+  await page.route(`${API}/standings/motm*`, (route) => json(route, overrides.motmStandings ?? data.motmStandings));
   await page.route(`${API}/matches/details*`, (route) => json(route, overrides.matches ?? data.matches));
 
   // Keyed by id so one test can put a match in a state another test doesn't
@@ -93,6 +94,17 @@ async function stubApi(page, overrides = {}) {
       return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
     }
     return json(route, overrides.registrations ?? data.registrations);
+  });
+
+  // Fetched for any match with a composed roster (scheduled or not — see
+  // CLAUDE.md's Man of the Match section), same "GET only" simplification as
+  // registrations above.
+  await page.route(`${API}/matches/*/votes`, (route) => {
+    if (route.request().method() !== 'GET') {
+      unstubbed.push(`${route.request().method()} ${route.request().url()}`);
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
+    }
+    return json(route, overrides.motmVotes ?? data.motmVotes);
   });
 
   return unstubbed;
@@ -132,6 +144,18 @@ async function gotoApp(page, path, options = {}) {
 
   await page.goto(path);
 
+  // The horizontal match carousel is `scroll-behavior: smooth` (global-styles),
+  // so Playwright's own auto-scroll-into-view before a `.click()` (e.g.
+  // selecting a card off-screen) animates instead of jumping — and unlike CSS
+  // transitions/animations, that isn't neutralized by toHaveScreenshot's own
+  // animation-disabling, which only applies once the screenshot call itself
+  // starts, well after the click already happened. Without this, a test that
+  // clicks a card can capture mid-scroll, blurred text — a real, if small and
+  // intermittent, diff. Forcing `auto` here, once, up front, is cheaper and
+  // more robust than adding a manual settle-wait to every test that clicks
+  // anything in the carousel.
+  await page.addStyleTag({ content: '* { scroll-behavior: auto !important; }' });
+
   // The app renders a spinner while it resolves the active group; every page
   // under test is past that once the navbar and the main content are both up.
   await expect(page.locator('.nav-menu')).toBeVisible();
@@ -145,4 +169,23 @@ function expectEverythingStubbed(unstubbed) {
   expect(unstubbed, `API calls reached no stub:\n  ${unstubbed.join('\n  ')}`).toEqual([]);
 }
 
-module.exports = { gotoApp, expectEverythingStubbed, data };
+/**
+ * Fails the test if the page itself scrolls horizontally — a real bug found
+ * on the @mobile project: four equal-flex sub-tab buttons (Matches/Points/
+ * Scorers/MOTM) defaulted to min-width: auto, so on a narrow phone the row
+ * didn't shrink, it overflowed, and the MOTM tab stuck out past the right
+ * edge needing a sideways scroll to reach. A screenshot diff alone wouldn't
+ * necessarily catch a regression here — a *narrower* overflow could still
+ * look plausible at a glance — so this checks the actual layout invariant
+ * ("nothing should ever force this page to scroll sideways") directly,
+ * independent of any one baseline.
+ */
+async function expectNoHorizontalOverflow(page) {
+  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(scrollWidth, 'page.documentElement.scrollWidth should never exceed clientWidth').toBeLessThanOrEqual(clientWidth);
+}
+
+module.exports = { gotoApp, expectEverythingStubbed, expectNoHorizontalOverflow, data };

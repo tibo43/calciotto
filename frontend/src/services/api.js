@@ -277,6 +277,60 @@ export const reopenMatchRegistrations = async (matchId) => {
   }
 };
 
+// Man of the Match voting. Like the five sign-up calls above, none of these
+// three carry a group_id: the backend derives the group from the match named
+// in the path (RequireGroupMembershipByMatchPathParam), so sending one would
+// be the same hole that design already closes.
+
+// Casts or replaces the *caller's* vote — the voter comes from the JWT, so
+// there is no voter argument, only the id of the player being voted for.
+// Unlike registerForMatch, calling this again after already voting is not an
+// error: it is an upsert, and the response (the same shape getMatchVotes
+// returns) reflects the *new* choice.
+export const voteForMotm = async (matchId, votedForId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/votes`, { voted_for_id: votedForId });
+    if (response.status !== 200) {
+      throw new Error('Failed to cast Man of the Match vote');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error casting Man of the Match vote:', error);
+    throw error;
+  }
+};
+
+// Removes the caller's own vote, if any. A no-op success when they had not
+// voted — never a 404 — so this never needs special-casing "nothing to undo".
+export const removeMotmVote = async (matchId) => {
+  try {
+    const response = await api.delete(`/matches/${matchId}/votes`);
+    if (response.status !== 200) {
+      throw new Error('Failed to remove Man of the Match vote');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error removing Man of the Match vote:', error);
+    throw error;
+  }
+};
+
+// The tally ({ Tally: [{ PlayerID, Name, Votes }], MyVoteFor }), open to any
+// member — seeing who is leading isn't privileged, only voting is scoped to
+// the caller's own choice.
+export const getMatchVotes = async (matchId) => {
+  try {
+    const response = await api.get(`/matches/${matchId}/votes`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch Man of the Match votes');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching Man of the Match votes:', error);
+    throw error;
+  }
+};
+
 // New function for updating a match
 export const createPlayer = async (playerData) => {
   try {
@@ -315,6 +369,19 @@ export const getScorers = async (season, groupId) => {
     return response.data;
   } catch (error) {
     console.error('Error fetching scorers:', error);
+    throw error;
+  }
+};
+
+export const getMotmStandings = async (season, groupId) => {
+  try {
+    const response = await api.get(`/standings/motm${query({ season, group_id: groupId })}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch Man of the Match standings');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching Man of the Match standings:', error);
     throw error;
   }
 };

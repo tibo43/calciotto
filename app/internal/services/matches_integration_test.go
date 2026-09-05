@@ -48,7 +48,12 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 		t.Fatalf("failed to create player bob: %v", err)
 	}
 
-	matchID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now())}, group.ID)
+	// Two days ago, not today: IsMatchCompleted (standings.go) only counts
+	// a match starting the day after it was played, and "exactly one day
+	// ago" is too close to that boundary to be reliable across timezones
+	// (a test run shortly after local midnight can still be "today" in
+	// UTC, where the match's Date actually gets stored).
+	matchID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now().AddDate(0, 0, -2))}, group.ID)
 	if err != nil {
 		t.Fatalf("failed to create match: %v", err)
 	}
@@ -199,6 +204,98 @@ func TestGetMatchDetailsByID_Integration_WrongGroupNotFound(t *testing.T) {
 	_, err = matchService.GetMatchDetailsByID(matchID, groupB.ID)
 	if !errors.Is(err, services.ErrMatchNotFound) {
 		t.Errorf("GetMatchDetailsByID(match from group A, group B) error = %v, want services.ErrMatchNotFound", err)
+	}
+}
+
+// TestGetPointsStandings_Integration_ExcludesUpcomingComposedMatch is the
+// real product scenario real feedback flagged: an admin can compose a
+// scheduled match's roster ahead of its own kick-off (via "Fill teams from
+// sign-ups"), which already satisfies ComputePointsStandings'/
+// ComputeScorers' own "both teams have players" check — without
+// FilterCompletedMatches (standings.go), that match's goals would count
+// immediately, before it has actually been played.
+func TestGetPointsStandings_Integration_ExcludesUpcomingComposedMatch(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+	teamService := services.NewTeamService(tx)
+	playerService := services.NewPlayerService(tx)
+	matchService := services.NewMatchService(tx)
+	standingsService := services.NewStandingsService(tx, services.NewGroupMembershipService(tx))
+
+	group, err := groupService.CreateGroup("Zzz Integration Upcoming Composed", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group: %v", err)
+	}
+	teams, err := teamService.GetTeamsByGroupID(group.ID)
+	if err != nil || len(teams) != 2 {
+		t.Fatalf("failed to load group's 2 teams: %v (got %d)", err, len(teams))
+	}
+	black, white := teams[0], teams[1]
+
+	aliceID, err := playerService.CreatePlayer("Zzz Integration Upcoming Alice")
+	if err != nil {
+		t.Fatalf("failed to create player alice: %v", err)
+	}
+	bobID, err := playerService.CreatePlayer("Zzz Integration Upcoming Bob")
+	if err != nil {
+		t.Fatalf("failed to create player bob: %v", err)
+	}
+
+	// A scheduled match kicking off tomorrow, with sign-ups already closed —
+	// the state "Fill teams from sign-ups" is offered in.
+	kickoff := time.Now().Add(24 * time.Hour)
+	opensAt := kickoff.Add(-48 * time.Hour)
+	maxPlayers := 10
+	matchID, err := matchService.CreateMatch(services.MatchSpec{
+		ScheduledAt:         &kickoff,
+		RegistrationOpensAt: &opensAt,
+		MaxPlayers:          &maxPlayers,
+	}, group.ID)
+	if err != nil {
+		t.Fatalf("failed to create the scheduled match: %v", err)
+	}
+
+	// Composed ahead of kick-off, same as "Fill teams from sign-ups" would do.
+	if err := matchService.UpdateMatch(models.MatchWithDetails{
+		ID: matchID,
+		Teams: []models.TeamWithPlayers{
+			{ID: black.ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
+			{ID: white.ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 1}}},
+		},
+	}); err != nil {
+		t.Fatalf("failed to compose the roster: %v", err)
+	}
+
+	points, err := standingsService.GetPointsStandings(group.ID, "")
+	if err != nil {
+		t.Fatalf("GetPointsStandings returned error: %v", err)
+	}
+	if row := pointsRowByID(points, aliceID); row != nil {
+		t.Errorf("alice already appears in points standings for a match that hasn't been played yet: %+v", row)
+	}
+	scorers, err := standingsService.GetScorers(group.ID, "")
+	if err != nil {
+		t.Fatalf("GetScorers returned error: %v", err)
+	}
+	if row := scorerRowByID(scorers, aliceID); row != nil {
+		t.Errorf("alice already appears in scorers for a match that hasn't been played yet: %+v", row)
+	}
+
+	// Once the match's own Date is safely in the past, the exact same roster
+	// must count — nothing here changes except how much time has passed.
+	if err := tx.Model(&models.Match{}).Where("id = ?", matchID).
+		Update("date", time.Now().AddDate(0, 0, -2)).Error; err != nil {
+		t.Fatalf("failed to backdate the match: %v", err)
+	}
+
+	points, err = standingsService.GetPointsStandings(group.ID, "")
+	if err != nil {
+		t.Fatalf("GetPointsStandings returned error: %v", err)
+	}
+	if row := pointsRowByID(points, aliceID); row == nil || row.Points != 3 || row.GoalsFor != 2 {
+		t.Errorf("alice points row after completion = %+v, want 3 points / 2 goals", row)
 	}
 }
 

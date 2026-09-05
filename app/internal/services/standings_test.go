@@ -2,6 +2,7 @@ package services
 
 import (
 	"testing"
+	"time"
 
 	"app/internal/models"
 
@@ -170,5 +171,179 @@ func TestComputeScorers_TieBrokenByName(t *testing.T) {
 	rows := ComputeScorers([]models.MatchWithDetails{match})
 	if len(rows) != 2 || rows[0].Name != "alice" || rows[1].Name != "zack" {
 		t.Errorf("expected alphabetical tie-break (alice, zack), got %+v", rows)
+	}
+}
+
+// motmRowsByID mirrors pointsRowsByID above, for ComputeMotmStandings' rows.
+func motmRowsByID(rows []models.MotmStandingRow) map[uuid.UUID]models.MotmStandingRow {
+	m := make(map[uuid.UUID]models.MotmStandingRow, len(rows))
+	for _, r := range rows {
+		m[r.PlayerID] = r
+	}
+	return m
+}
+
+// TestComputeMotmStandings_CountsOneAwardPerMatch: a match with a clear
+// winner increments that player's award count by exactly one, and a player
+// who was in the tally but not the eventual winner earns nothing that match.
+func TestComputeMotmStandings_CountsOneAwardPerMatch(t *testing.T) {
+	alice, bob := uuid.New(), uuid.New()
+	match := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0), newPlayer(bob, "bob", 0)))
+
+	votes := map[uuid.UUID][]models.MatchVoteTally{
+		match.ID: {candidate(alice, "alice", 3), candidate(bob, "bob", 1)},
+	}
+
+	rows := motmRowsByID(ComputeMotmStandings([]models.MatchWithDetails{match}, votes))
+	if r, ok := rows[alice]; !ok || r.Awards != 1 {
+		t.Errorf("alice = %+v (present=%v), want 1 award", r, ok)
+	}
+	if _, ok := rows[bob]; ok {
+		t.Errorf("bob has a standings row despite never winning the award: %+v", rows)
+	}
+}
+
+// TestComputeMotmStandings_TieAwardsEveryone: a tie in one match's tally
+// increments every tied player's count, matching ComputeMotmWinners' own
+// tie-inclusive rule.
+func TestComputeMotmStandings_TieAwardsEveryone(t *testing.T) {
+	alice, bob := uuid.New(), uuid.New()
+	match := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0), newPlayer(bob, "bob", 0)))
+
+	votes := map[uuid.UUID][]models.MatchVoteTally{
+		match.ID: {candidate(alice, "alice", 2), candidate(bob, "bob", 2)},
+	}
+
+	rows := motmRowsByID(ComputeMotmStandings([]models.MatchWithDetails{match}, votes))
+	if r := rows[alice]; r.Awards != 1 {
+		t.Errorf("alice = %+v, want 1 award", r)
+	}
+	if r := rows[bob]; r.Awards != 1 {
+		t.Errorf("bob = %+v, want 1 award", r)
+	}
+}
+
+// TestComputeMotmStandings_AccumulatesAcrossMatches: winning two matches'
+// award counts as 2, not a new row each time.
+func TestComputeMotmStandings_AccumulatesAcrossMatches(t *testing.T) {
+	alice := uuid.New()
+	match1 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0)))
+	match2 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0)))
+
+	votes := map[uuid.UUID][]models.MatchVoteTally{
+		match1.ID: {candidate(alice, "alice", 1)},
+		match2.ID: {candidate(alice, "alice", 5)},
+	}
+
+	rows := motmRowsByID(ComputeMotmStandings([]models.MatchWithDetails{match1, match2}, votes))
+	if r := rows[alice]; r.Awards != 2 {
+		t.Errorf("alice = %+v, want 2 awards (won both matches)", r)
+	}
+}
+
+// TestComputeMotmStandings_MatchWithNoVotesContributesNothing: a match absent
+// from the votesByMatch map (nobody voted) must not blow up or fabricate a
+// row.
+func TestComputeMotmStandings_MatchWithNoVotesContributesNothing(t *testing.T) {
+	match := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(uuid.New(), "alice", 0)))
+
+	rows := ComputeMotmStandings([]models.MatchWithDetails{match}, map[uuid.UUID][]models.MatchVoteTally{})
+	if len(rows) != 0 {
+		t.Errorf("rows = %+v, want none for a match with no votes at all", rows)
+	}
+}
+
+// TestComputeMotmStandings_SortOrder: most awards first, alphabetical name as
+// the tie-break, mirroring ComputePointsStandings/ComputeScorers' own
+// convention.
+func TestComputeMotmStandings_SortOrder(t *testing.T) {
+	alice, bob, carol := uuid.New(), uuid.New(), uuid.New()
+	match1 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0)))
+	match2 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(bob, "bob", 0)))
+	match3 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(carol, "carol", 0)))
+
+	votes := map[uuid.UUID][]models.MatchVoteTally{
+		match1.ID: {candidate(alice, "alice", 1)},
+		match2.ID: {candidate(bob, "bob", 1)},
+		match3.ID: {candidate(carol, "carol", 1)},
+	}
+
+	rows := ComputeMotmStandings([]models.MatchWithDetails{match1, match2, match3}, votes)
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d: %+v", len(rows), rows)
+	}
+	// All three are tied at 1 award each, so alphabetical order decides.
+	if rows[0].Name != "alice" || rows[1].Name != "bob" || rows[2].Name != "carol" {
+		t.Errorf("expected alphabetical tie-break (alice, bob, carol), got %+v", rows)
+	}
+}
+
+// TestIsMatchCompleted mirrors the frontend's own matchStatus tests
+// (MatchesPanel.spec.js/MatchDetails.spec.js): "Completed" starts at
+// midnight the day after the match, "Upcoming" covers every instant up to
+// and including the match's own day — independent of anything else about
+// the match.
+func TestIsMatchCompleted(t *testing.T) {
+	playedOn := models.Date(time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC))
+
+	tests := []struct {
+		name string
+		now  time.Time
+		want bool
+	}{
+		{"on match day itself", time.Date(2026, 9, 3, 23, 0, 0, 0, time.UTC), false},
+		{"one second before the day after", time.Date(2026, 9, 3, 23, 59, 59, 0, time.UTC), false},
+		{"at the stroke of the day after", time.Date(2026, 9, 4, 0, 0, 0, 0, time.UTC), true},
+		{"well after", time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			match := models.MatchWithDetails{Date: playedOn}
+			if got := IsMatchCompleted(match, tt.now); got != tt.want {
+				t.Errorf("IsMatchCompleted() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestFilterCompletedMatches_ExcludesAComposedButUpcomingMatch is the exact
+// scenario real feedback flagged: an admin can compose a scheduled match's
+// roster (via "Fill teams from sign-ups") before its own kick-off, so
+// ComputePointsStandings'/ComputeScorers' own "both teams have players"
+// check alone can't tell an upcoming match from a played one. The filter
+// applied upstream of those functions (see GetPointsStandings/GetScorers/
+// GetMotmStandings in standings.go) is what actually excludes it.
+func TestFilterCompletedMatches_ExcludesAComposedButUpcomingMatch(t *testing.T) {
+	alice, bob := uuid.New(), uuid.New()
+	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+
+	upcoming := models.MatchWithDetails{
+		ID:   uuid.New(),
+		Date: models.Date(now), // today — not completed until tomorrow
+		Teams: []models.TeamWithPlayers{
+			newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
+			newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+		},
+	}
+	played := models.MatchWithDetails{
+		ID:   uuid.New(),
+		Date: models.Date(now.AddDate(0, 0, -2)),
+		Teams: []models.TeamWithPlayers{
+			newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
+			newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+		},
+	}
+
+	filtered := FilterCompletedMatches([]models.MatchWithDetails{upcoming, played}, now)
+	if len(filtered) != 1 || filtered[0].ID != played.ID {
+		t.Fatalf("FilterCompletedMatches = %+v, want only the played match", filtered)
+	}
+
+	// Threaded all the way through: an upcoming composed match must not
+	// inflate a player's points/goals until it's actually completed.
+	rows := pointsRowsByID(ComputePointsStandings(filtered))
+	if r := rows[alice]; r.Played != 1 {
+		t.Errorf("alice.Played = %d after filtering, want 1 (only the played match should count)", r.Played)
 	}
 }

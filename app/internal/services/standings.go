@@ -2,6 +2,7 @@ package services
 
 import (
 	"sort"
+	"time"
 
 	"app/internal/models"
 
@@ -13,6 +14,7 @@ type StandingsService struct {
 	MatchService      *MatchService
 	MembershipService *GroupMembershipService
 	PlayerService     *PlayerService
+	VoteService       *MatchVoteService
 }
 
 func NewStandingsService(db *gorm.DB, membershipService *GroupMembershipService) *StandingsService {
@@ -20,6 +22,7 @@ func NewStandingsService(db *gorm.DB, membershipService *GroupMembershipService)
 		MatchService:      NewMatchService(db),
 		MembershipService: membershipService,
 		PlayerService:     NewPlayerService(db),
+		VoteService:       NewMatchVoteService(db),
 	}
 }
 
@@ -33,7 +36,8 @@ func (s *StandingsService) GetPointsStandings(groupID uuid.UUID, season string) 
 	if err != nil {
 		return nil, err
 	}
-	rows := ComputePointsStandings(FilterMatchesBySeason(matches, season))
+	matches = FilterCompletedMatches(FilterMatchesBySeason(matches, season), time.Now())
+	rows := ComputePointsStandings(matches)
 
 	currentMembers, err := s.currentMemberIDs(groupID)
 	if err != nil {
@@ -50,7 +54,44 @@ func (s *StandingsService) GetScorers(groupID uuid.UUID, season string) ([]model
 	if err != nil {
 		return nil, err
 	}
-	rows := ComputeScorers(FilterMatchesBySeason(matches, season))
+	matches = FilterCompletedMatches(FilterMatchesBySeason(matches, season), time.Now())
+	rows := ComputeScorers(matches)
+
+	currentMembers, err := s.currentMemberIDs(groupID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rows[i].IsMember = currentMembers[rows[i].PlayerID]
+	}
+	return rows, nil
+}
+
+// GetMotmStandings ranks a group's players by how many matches' Man of the
+// Match award they have won, following the exact same shape as
+// GetPointsStandings/GetScorers: load the group's matches, season-filter in
+// Go, run a pure Compute* function, then tag IsMember as a post-processing
+// step. The one difference is the extra data source — a match's votes are
+// not part of MatchWithDetails at all (the same reason RegistrationCount
+// isn't: see CLAUDE.md's "flatten/reconstruct pattern"), so they are loaded
+// separately, once, for every match in the (already season-filtered) result.
+func (s *StandingsService) GetMotmStandings(groupID uuid.UUID, season string) ([]models.MotmStandingRow, error) {
+	matches, err := s.MatchService.GetMatchesDetails(groupID, "")
+	if err != nil {
+		return nil, err
+	}
+	matches = FilterCompletedMatches(FilterMatchesBySeason(matches, season), time.Now())
+
+	matchIDs := make([]uuid.UUID, len(matches))
+	for i, match := range matches {
+		matchIDs[i] = match.ID
+	}
+	votesByMatch, err := s.VoteService.TallyVotesForMatches(matchIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	rows := ComputeMotmStandings(matches, votesByMatch)
 
 	currentMembers, err := s.currentMemberIDs(groupID)
 	if err != nil {
@@ -98,8 +139,11 @@ func (s *StandingsService) GetSeasons(groupID uuid.UUID) ([]string, error) {
 // GetPlayerProfile returns one player's record across every group they belong
 // to. Overall and PerGroup are computed from the same matches, so they always
 // agree: each group's matches are loaded and season-filtered exactly like the
-// group-scoped standings endpoints do, then ComputePointsStandings runs once
-// per group for PerGroup and once over the concatenation for Overall.
+// group-scoped standings endpoints do, then ComputePointsStandings/
+// ComputeMotmStandings each run once per group for PerGroup and once over the
+// concatenation for Overall — the same "load once, compute at two scopes"
+// shape GetMotmStandings itself uses, just repeated per group here instead of
+// once for a single one.
 //
 // A group the player is a member of but has never played a match in still
 // gets a PerGroup entry, zeroed — being in the group is what puts the row
@@ -122,33 +166,52 @@ func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (
 	}
 
 	profile := &models.PlayerProfileStats{
-		Overall:  zeroRow,
+		Overall:  models.PlayerOverallStanding{PointsStandingRow: zeroRow},
 		PerGroup: make([]models.PlayerGroupStanding, 0, len(groups)),
 	}
 
 	var allMatches []models.MatchWithDetails
+	// Match ids are globally unique, so merging each group's votesByMatch
+	// into one combined map for the Overall computation below can never
+	// collide two different groups' entries under the same key.
+	allVotesByMatch := make(map[uuid.UUID][]models.MatchVoteTally)
 	for _, group := range groups {
 		matches, err := s.MatchService.GetMatchesDetails(group.ID, "")
 		if err != nil {
 			return nil, err
 		}
-		matches = FilterMatchesBySeason(matches, season)
+		matches = FilterCompletedMatches(FilterMatchesBySeason(matches, season), time.Now())
 		allMatches = append(allMatches, matches...)
 
 		row := zeroRow
 		if found := findPointsRow(ComputePointsStandings(matches), playerID); found != nil {
 			row = *found
 		}
+
+		matchIDs := make([]uuid.UUID, len(matches))
+		for i, match := range matches {
+			matchIDs[i] = match.ID
+		}
+		votesByMatch, err := s.VoteService.TallyVotesForMatches(matchIDs)
+		if err != nil {
+			return nil, err
+		}
+		for id, tally := range votesByMatch {
+			allVotesByMatch[id] = tally
+		}
+
 		profile.PerGroup = append(profile.PerGroup, models.PlayerGroupStanding{
 			PointsStandingRow: row,
 			GroupID:           group.ID,
 			GroupName:         group.Name,
+			MotmAwards:        findMotmAwards(ComputeMotmStandings(matches, votesByMatch), playerID),
 		})
 	}
 
 	if found := findPointsRow(ComputePointsStandings(allMatches), playerID); found != nil {
-		profile.Overall = *found
+		profile.Overall.PointsStandingRow = *found
 	}
+	profile.Overall.MotmAwards = findMotmAwards(ComputeMotmStandings(allMatches, allVotesByMatch), playerID)
 	return profile, nil
 }
 
@@ -162,6 +225,18 @@ func findPointsRow(rows []models.PointsStandingRow, playerID uuid.UUID) *models.
 	return nil
 }
 
+// findMotmAwards picks one player's award count out of a computed Man of the
+// Match leaderboard, defaulting to 0 — a player with no awards is simply
+// absent from the computed rows, not an error.
+func findMotmAwards(rows []models.MotmStandingRow, playerID uuid.UUID) int {
+	for _, row := range rows {
+		if row.PlayerID == playerID {
+			return row.Awards
+		}
+	}
+	return 0
+}
+
 // FilterMatchesBySeason keeps only the matches belonging to season (a label as
 // produced by models.SeasonOf). An empty season means "no filtering", so
 // callers that don't scope by season keep the previous behaviour.
@@ -172,6 +247,40 @@ func FilterMatchesBySeason(matches []models.MatchWithDetails, season string) []m
 	filtered := make([]models.MatchWithDetails, 0, len(matches))
 	for _, match := range matches {
 		if models.SeasonOf(match.Date) == season {
+			filtered = append(filtered, match)
+		}
+	}
+	return filtered
+}
+
+// IsMatchCompleted mirrors the frontend's matchStatus (MatchesPanel.vue/
+// MatchDetails.vue) exactly: a match is "Completed" starting midnight the
+// day *after* it was played, and still "Upcoming" for every instant up to
+// and including its own match day — independent of goals recorded, roster
+// composition, or scheduling. Real feedback: an admin can compose a
+// scheduled match's roster (via "Fill teams from sign-ups") before its own
+// kick-off, and a Man of the Match vote can be cast the moment that roster
+// exists too, so "both teams have players" (ComputePointsStandings'/
+// ComputeScorers' own check) and "somebody voted" (ComputeMotmStandings')
+// are both satisfiable well before the match has actually happened —
+// without this, an upcoming match built ahead of time would count in the
+// standings the instant its teams were set, not once it was actually played.
+func IsMatchCompleted(match models.MatchWithDetails, now time.Time) bool {
+	deadline := time.Time(match.Date).AddDate(0, 0, 1)
+	return !now.Before(deadline)
+}
+
+// FilterCompletedMatches keeps only the matches IsMatchCompleted reports true
+// for at instant now. Applied in every StandingsService method that feeds a
+// Compute* aggregator (GetPointsStandings, GetScorers, GetMotmStandings,
+// GetPlayerProfile) — deliberately not in GetSeasons/ComputeSeasons, whose
+// season list is documented to include an unplayed scheduled match on
+// purpose (see CLAUDE.md's "Seasons" section), a different, unrelated
+// decision this one must not disturb.
+func FilterCompletedMatches(matches []models.MatchWithDetails, now time.Time) []models.MatchWithDetails {
+	filtered := make([]models.MatchWithDetails, 0, len(matches))
+	for _, match := range matches {
+		if IsMatchCompleted(match, now) {
 			filtered = append(filtered, match)
 		}
 	}
@@ -330,6 +439,63 @@ func ComputeScorers(matches []models.MatchWithDetails) []models.ScorerRow {
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].Goals != rows[j].Goals {
 			return rows[i].Goals > rows[j].Goals
+		}
+		return rows[i].Name < rows[j].Name
+	})
+	return rows
+}
+
+// ComputeMotmStandings ranks players by how many matches' Man of the Match
+// award they have won, over an already-loaded set of matches and their vote
+// tallies keyed by match id (as produced by
+// MatchVoteService.TallyVotesForMatches). Like ComputePointsStandings/
+// ComputeScorers, it is a pure function of its inputs — which matches and
+// which votes to consider is entirely the caller's concern, so scoping (by
+// group, by season) never has to touch this logic.
+//
+// A tie for the most votes in a match is not resolved here either: every
+// player ComputeMotmWinners returns for that match has their award count
+// incremented, so a three-way tie in one match increments three rows rather
+// than picking a winner.
+func ComputeMotmStandings(matches []models.MatchWithDetails, votesByMatch map[uuid.UUID][]models.MatchVoteTally) []models.MotmStandingRow {
+	type acc struct {
+		name   string
+		awards int
+	}
+	stats := make(map[uuid.UUID]*acc)
+
+	for _, match := range matches {
+		tally := votesByMatch[match.ID]
+		if len(tally) == 0 {
+			continue
+		}
+
+		// Names come from the tally itself (players.name, resolved at query
+		// time) rather than from the match roster: a tally entry only exists
+		// for a player who actually received a vote.
+		nameByID := make(map[uuid.UUID]string, len(tally))
+		for _, candidate := range tally {
+			nameByID[candidate.PlayerID] = candidate.Name
+		}
+
+		for _, winner := range ComputeMotmWinners(tally) {
+			row, ok := stats[winner]
+			if !ok {
+				row = &acc{name: nameByID[winner]}
+				stats[winner] = row
+			}
+			row.awards++
+		}
+	}
+
+	rows := make([]models.MotmStandingRow, 0, len(stats))
+	for id, row := range stats {
+		rows = append(rows, models.MotmStandingRow{PlayerID: id, Name: row.name, Awards: row.awards})
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Awards != rows[j].Awards {
+			return rows[i].Awards > rows[j].Awards
 		}
 		return rows[i].Name < rows[j].Name
 	})

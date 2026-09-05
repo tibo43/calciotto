@@ -59,6 +59,21 @@ func (h *StandingsHandler) GetSeasons(c *gin.Context) {
 	c.JSON(http.StatusOK, seasons)
 }
 
+// GetMotmStandings returns the resolved group's Man of the Match leaderboard,
+// following the same shape as GetPointsStandings/GetScorers above.
+func (h *StandingsHandler) GetMotmStandings(c *gin.Context) {
+	groupID, ok := resolveGroupID(c, h.MembershipService)
+	if !ok {
+		return
+	}
+	rows, err := h.Service.GetMotmStandings(groupID, c.Query("season"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, rows)
+}
+
 // GetPlayerProfile returns the authenticated caller's own stats across every
 // group they belong to. The player is read from the JWT, never from the URL:
 // which groups a player belongs to is itself privileged information, so a

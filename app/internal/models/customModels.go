@@ -48,10 +48,19 @@ type TeamWithPlayers struct {
 // the four StandingsService calls that have no caller identity to give, for
 // something only the detail page needs — and GET /matches/:id/registrations
 // already tells it.
+//
+// CreatedAt is not omitempty, unlike the scheduling fields: every match, past
+// or future, has one, so there is no "unscheduled match" case to keep byte-
+// identical here the way there is for ScheduledAt et al. It exists on this DTO
+// so the frontend can compute the Man of the Match voting window's own anchor
+// for a match with no kick-off at all (see matchRegistration.js's
+// votingWindowError/MatchVoteService.VotingWindowError on the Go side) without
+// a second request.
 type MatchWithDetails struct {
 	ID                    uuid.UUID         `json:"ID"`
 	GroupID               uuid.UUID         `json:"GroupID"`
 	Date                  Date              `json:"Date"`
+	CreatedAt             time.Time         `json:"CreatedAt"`
 	ScheduledAt           *time.Time        `json:"ScheduledAt,omitempty"`
 	RegistrationOpensAt   *time.Time        `json:"RegistrationOpensAt,omitempty"`
 	RegistrationsClosedAt *time.Time        `json:"RegistrationsClosedAt,omitempty"`
@@ -79,6 +88,7 @@ type RowsMatchDetails struct {
 	MatchID                    uuid.UUID
 	MatchGroupID               uuid.UUID
 	MatchDate                  Date
+	MatchCreatedAt             time.Time
 	MatchScheduledAt           *time.Time
 	MatchRegistrationOpensAt   *time.Time
 	MatchRegistrationsClosedAt *time.Time
@@ -112,6 +122,44 @@ type MatchRegistrationEntry struct {
 	Position     int       `json:"Position"`
 	IsWaiting    bool      `json:"IsWaiting"`
 	RegisteredAt time.Time `json:"RegisteredAt"`
+}
+
+// MatchVoteTally is one candidate's line in a match's Man of the Match tally,
+// part of MatchVoteSummary below. PascalCase JSON, matching the other
+// match-scoped DTOs (MatchRegistrationEntry) rather than the group/player
+// DTOs' lowercase convention — see CLAUDE.md's "API payload field casing"
+// note.
+type MatchVoteTally struct {
+	PlayerID uuid.UUID `json:"PlayerID"`
+	Name     string    `json:"Name"`
+	Votes    int       `json:"Votes"`
+}
+
+// MatchVoteSummary is GET /matches/:id/votes' whole response: the tally
+// (every candidate with at least one vote, ordered by vote count desc then
+// name asc) plus which player, if any, the caller has voted for.
+//
+// MyVoteFor is a *uuid.UUID with omitempty rather than a plain uuid.UUID, the
+// same reasoning as MatchWithDetails.RegistrationCount: "the caller has not
+// voted" (nil, key absent) has to stay distinguishable from a real player id,
+// and uuid.Nil is a value a genuine vote could never hold anyway but a zero
+// value would be an ambiguous way to say so.
+type MatchVoteSummary struct {
+	Tally     []MatchVoteTally `json:"Tally"`
+	MyVoteFor *uuid.UUID       `json:"MyVoteFor,omitempty"`
+}
+
+// MotmStandingRow is one player's row in the season-long Man of the Match
+// leaderboard: how many matches' MOTM award they have won. A match tied
+// between several players counts as an award for each of them (see
+// ComputeMotmWinners), so Awards summed across a row is not the same as the
+// number of matches played. IsMember is tagged the same post-processing way
+// as PointsStandingRow/ScorerRow — see their comment.
+type MotmStandingRow struct {
+	PlayerID uuid.UUID `json:"PlayerID"`
+	Name     string    `json:"Name"`
+	Awards   int       `json:"Awards"`
+	IsMember bool      `json:"IsMember"`
 }
 
 // GroupWithRole is a Group tagged with the role the *requesting* player holds
@@ -174,16 +222,29 @@ type ScorerRow struct {
 // tagged with the group it belongs to. The cross-group player profile needs
 // the same shape as PointsStandingRow repeated once per group, so it embeds
 // the row rather than restating its eight fields (the JSON stays flat).
+// MotmAwards rides alongside rather than living on PointsStandingRow itself,
+// since that type is also GET /standings/points' own row shape and has no
+// business carrying a Man of the Match count.
 type PlayerGroupStanding struct {
 	PointsStandingRow
-	GroupID   uuid.UUID `json:"GroupID"`
-	GroupName string    `json:"GroupName"`
+	GroupID    uuid.UUID `json:"GroupID"`
+	GroupName  string    `json:"GroupName"`
+	MotmAwards int       `json:"MotmAwards"`
+}
+
+// PlayerOverallStanding is the profile's Overall row: the same shape as
+// PointsStandingRow across every group combined, plus MotmAwards for the
+// same reason PlayerGroupStanding carries its own copy rather than
+// PointsStandingRow growing the field.
+type PlayerOverallStanding struct {
+	PointsStandingRow
+	MotmAwards int `json:"MotmAwards"`
 }
 
 // PlayerProfileStats is one player's record across every group they belong
 // to: Overall counts all of those groups' matches together, PerGroup breaks
 // the same period down group by group.
 type PlayerProfileStats struct {
-	Overall  PointsStandingRow     `json:"Overall"`
+	Overall  PlayerOverallStanding `json:"Overall"`
 	PerGroup []PlayerGroupStanding `json:"PerGroup"`
 }

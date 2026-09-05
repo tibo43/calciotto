@@ -129,7 +129,7 @@ func applySchema(db *gorm.DB) error {
 	// "this match was never scheduled" state every pre-existing match is in —
 	// unlike GroupMembership.IsFavorite below, whose non-null default(false)
 	// broke an invariant and had to be repaired.
-	if err := db.AutoMigrate(&models.Group{}, &models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{}, &models.MatchRegistration{}, &models.GroupMembership{}, &models.PasswordResetToken{}); err != nil {
+	if err := db.AutoMigrate(&models.Group{}, &models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{}, &models.MatchRegistration{}, &models.MatchVote{}, &models.GroupMembership{}, &models.PasswordResetToken{}); err != nil {
 		return err
 	}
 
@@ -169,7 +169,7 @@ func applySchema(db *gorm.DB) error {
 	// (DISTINCT ON ... ORDER BY player_id, created_at picks exactly that row
 	// per player). Idempotent — after the first run every player already has a
 	// favorite, so the NOT EXISTS guard makes this a no-op on every later start.
-	return db.Exec(`
+	if err := db.Exec(`
 		UPDATE group_memberships gm
 		SET is_favorite = true
 		FROM (
@@ -182,7 +182,24 @@ func applySchema(db *gorm.DB) error {
 			SELECT 1 FROM group_memberships gm2
 			WHERE gm2.player_id = gm.player_id AND gm2.is_favorite = true
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+
+	// Match.CreatedAt is new too, and — unlike the four scheduling columns
+	// added alongside it originally — genuinely can't be left NULL: it is a
+	// plain time.Time, not a pointer, and GORM errors scanning a NULL column
+	// into one on every later read of a pre-existing match. AutoMigrate adds
+	// the column with no default, so every row that existed before this
+	// backfill runs needs one filled in by hand. Date (the calendar day the
+	// match was already recorded for) is the closest available stand-in for
+	// "when this row was created" — it isn't the real creation instant, but
+	// the Man of the Match voting window this field feeds only cares whether
+	// 24 hours have passed, and a match that's been sitting in the database
+	// since before this column existed is, for every one of them, already
+	// long past that regardless of which of the two timestamps is used.
+	// Idempotent — after the first run no NULL is left to update.
+	return db.Exec(`UPDATE matches SET created_at = date::timestamptz WHERE created_at IS NULL`).Error
 }
 
 func InitDB() (*gorm.DB, error) {

@@ -112,8 +112,10 @@ func TestMatchesDetails_Integration_SchedulingOnTheWire(t *testing.T) {
 		return rec.Body.Bytes()
 	}
 
-	// The pre-feature key set, and the five keys added on top of it.
-	baseKeys := []string{"ID", "GroupID", "Date", "Teams"}
+	// The pre-feature key set (plus CreatedAt, added for the Man of the Match
+	// voting window and always present, scheduled or not), and the five
+	// scheduling keys added on top of it.
+	baseKeys := []string{"ID", "GroupID", "Date", "CreatedAt", "Teams"}
 	scheduleKeys := []string{"ScheduledAt", "RegistrationOpensAt", "MaxPlayers", "RegistrationCount"}
 
 	assertPlain := func(source string, raw map[string]json.RawMessage) {

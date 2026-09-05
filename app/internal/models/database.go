@@ -110,7 +110,20 @@ type Match struct {
 	RegistrationOpensAt   *time.Time    `gorm:"type:timestamptz" json:"registration_opens_at,omitempty"`
 	RegistrationsClosedAt *time.Time    `gorm:"type:timestamptz" json:"registrations_closed_at,omitempty"`
 	MaxPlayers            *int          `json:"max_players,omitempty"`
-	TeamCompositions      []MatchPlayer `gorm:"foreignKey:MatchID"`
+	// CreatedAt is the moment this row was logged — GORM's usual
+	// auto-populate-on-create convention, like MatchRegistration.CreatedAt and
+	// MatchVote.CreatedAt. It was originally added as the Man of the Match
+	// voting window's anchor for an unscheduled match (no kick-off to anchor
+	// on instead) — MatchVoteService.VotingWindowError has since moved to a
+	// simpler, Date-based rule that needs neither this nor ScheduledAt, so
+	// this field is currently plain metadata with no reader in this codebase.
+	// Left in place rather than removed: it required a real backfill to add
+	// (see connect.go) and remains a reasonable thing to have on a match row
+	// regardless. Added after `matches` already had rows, unlike the two
+	// structs above — see connect.go's backfill for why that mattered here
+	// and didn't for RegistrationOpensAt.
+	CreatedAt        time.Time     `json:"created_at"`
+	TeamCompositions []MatchPlayer `gorm:"foreignKey:MatchID"`
 }
 
 // IsScheduled reports whether this is a scheduled match — one with a kick-off
@@ -144,6 +157,31 @@ type MatchRegistration struct {
 	MatchID   uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_match_registration_match_player" json:"match_id"`
 	PlayerID  uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_match_registration_match_player" json:"player_id"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// MatchVote is one group member's vote for who they think deserves the Man
+// of the Match award for a match with a composed roster (either an ordinary
+// already-recorded match, or a scheduled one once teams have been filled in).
+//
+// Unlike MatchRegistration.Register (a one-shot action that rejects a
+// duplicate with ErrAlreadyRegistered), casting a vote is deliberately an
+// upsert: a player changing their mind about who deserves MOTM is the normal
+// case, not a mistake to refuse — see MatchVoteService.Vote. The composite
+// unique index on (match_id, voter_id) is therefore not "at most one sign-up"
+// the way MatchRegistration's is, but "exactly one *current* vote per voter
+// per match", enforced the same way.
+//
+// There is no award or "winner" column anywhere: the MOTM award for a match
+// is derived, never stored, by tallying VotedForID per match and taking
+// whoever has the most votes — ties included, with no arbitrary tie-break
+// (see MatchVoteService.ComputeMotmWinners). That mirrors the waiting list's
+// own "derive it, don't store it" choice on MatchRegistration.
+type MatchVote struct {
+	BaseModel
+	MatchID    uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_match_vote_match_voter" json:"match_id"`
+	VoterID    uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_match_vote_match_voter" json:"voter_id"`
+	VotedForID uuid.UUID `gorm:"type:uuid" json:"voted_for_id"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // MatchPlayer représente la composition d'une équipe pour un match.

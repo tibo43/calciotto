@@ -122,11 +122,13 @@ func TestPlayerProfile_Integration(t *testing.T) {
 		{groupA.ID, teamsA, models.Date(time.Date(2024, time.September, 1, 0, 0, 0, 0, time.UTC)), bobID, 0, 1},
 		{groupB.ID, teamsB, models.Date(time.Date(2024, time.August, 15, 0, 0, 0, 0, time.UTC)), carolID, 1, 1},
 	}
-	for _, f := range fixtures {
+	matchIDs := make([]uuid.UUID, len(fixtures))
+	for i, f := range fixtures {
 		matchID, err := matchService.CreateMatch(services.MatchSpec{Date: f.date}, f.groupID)
 		if err != nil {
 			t.Fatalf("failed to create match on %s: %v", f.date, err)
 		}
+		matchIDs[i] = matchID
 		if err := matchService.UpdateMatch(models.MatchWithDetails{
 			ID: matchID,
 			Teams: []models.TeamWithPlayers{
@@ -136,6 +138,19 @@ func TestPlayerProfile_Integration(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("UpdateMatch on %s returned error: %v", f.date, err)
 		}
+	}
+
+	// Bob votes for Alice as Man of the Match in group A's old-season win —
+	// the only vote cast anywhere in this test — so the profile's MotmAwards
+	// can be checked at both scopes (group A and overall) and both season
+	// filters (present in seasonOld, absent in seasonNew) the same way the
+	// points/goals assertions already are above. Inserted directly rather
+	// than through MatchVoteService.Vote: that match is dated 2024-08-31,
+	// long past the real Date-based voting window by the time this test
+	// actually runs — this test is about GetPlayerProfile's aggregation, not
+	// about VotingWindowError, so the row is seeded straight into the table.
+	if err := tx.Create(&models.MatchVote{MatchID: matchIDs[0], VoterID: bobID, VotedForID: aliceID}).Error; err != nil {
+		t.Fatalf("failed to cast Bob's MOTM vote for Alice: %v", err)
 	}
 
 	router := newProfileTestRouter(tx, authService, membershipService)
@@ -185,9 +200,13 @@ func TestPlayerProfile_Integration(t *testing.T) {
 		profile := getProfile(t, "/players/me/stats")
 
 		// 1 win + 1 draw + 1 loss across two groups = 4 points, 3 goals.
-		checkRow(t, "overall", profile.Overall, want{played: 3, won: 1, drawn: 1, lost: 1, goalsFor: 3, points: 4})
+		checkRow(t, "overall", profile.Overall.PointsStandingRow, want{played: 3, won: 1, drawn: 1, lost: 1, goalsFor: 3, points: 4})
 		if profile.Overall.Name != "Zzz Integration Profile Alice" {
 			t.Errorf("overall Name = %q, want alice's name", profile.Overall.Name)
+		}
+		// The one vote cast anywhere in this test, for Alice, in group A.
+		if profile.Overall.MotmAwards != 1 {
+			t.Errorf("overall MotmAwards = %d, want 1", profile.Overall.MotmAwards)
 		}
 
 		if len(profile.PerGroup) != 3 {
@@ -199,8 +218,15 @@ func TestPlayerProfile_Integration(t *testing.T) {
 		if rowA.GroupName != groupA.Name {
 			t.Errorf("group A GroupName = %q, want %q", rowA.GroupName, groupA.Name)
 		}
+		if rowA.MotmAwards != 1 {
+			t.Errorf("group A MotmAwards = %d, want 1", rowA.MotmAwards)
+		}
 
-		checkRow(t, "group B", groupRow(t, profile, groupB.ID).PointsStandingRow, want{played: 1, drawn: 1, goalsFor: 1, points: 1})
+		rowB := groupRow(t, profile, groupB.ID)
+		checkRow(t, "group B", rowB.PointsStandingRow, want{played: 1, drawn: 1, goalsFor: 1, points: 1})
+		if rowB.MotmAwards != 0 {
+			t.Errorf("group B MotmAwards = %d, want 0 (no votes cast there)", rowB.MotmAwards)
+		}
 
 		// Alice belongs to group C but never played there: the entry must
 		// still be present, zeroed — omitting it would hide the membership.
@@ -210,17 +236,33 @@ func TestPlayerProfile_Integration(t *testing.T) {
 	t.Run("season filter applies to overall and per group", func(t *testing.T) {
 		profile := getProfile(t, "/players/me/stats?season="+seasonOld)
 
-		checkRow(t, "overall "+seasonOld, profile.Overall, want{played: 2, won: 1, drawn: 1, goalsFor: 3, points: 4})
+		checkRow(t, "overall "+seasonOld, profile.Overall.PointsStandingRow, want{played: 2, won: 1, drawn: 1, goalsFor: 3, points: 4})
 		checkRow(t, "group A "+seasonOld, groupRow(t, profile, groupA.ID).PointsStandingRow, want{played: 1, won: 1, goalsFor: 2, points: 3})
 		checkRow(t, "group B "+seasonOld, groupRow(t, profile, groupB.ID).PointsStandingRow, want{played: 1, drawn: 1, goalsFor: 1, points: 1})
 		checkRow(t, "group C "+seasonOld, groupRow(t, profile, groupC.ID).PointsStandingRow, want{})
+		// The voted-for match falls in seasonOld — both scopes still see it.
+		if profile.Overall.MotmAwards != 1 {
+			t.Errorf("overall %s MotmAwards = %d, want 1", seasonOld, profile.Overall.MotmAwards)
+		}
+		if got := groupRow(t, profile, groupA.ID).MotmAwards; got != 1 {
+			t.Errorf("group A %s MotmAwards = %d, want 1", seasonOld, got)
+		}
 
 		// The new season only has group A's loss — group B drops to zero
 		// rather than disappearing, and so does the overall win/draw record.
 		profile = getProfile(t, "/players/me/stats?season="+seasonNew)
-		checkRow(t, "overall "+seasonNew, profile.Overall, want{played: 1, lost: 1})
+		checkRow(t, "overall "+seasonNew, profile.Overall.PointsStandingRow, want{played: 1, lost: 1})
 		checkRow(t, "group A "+seasonNew, groupRow(t, profile, groupA.ID).PointsStandingRow, want{played: 1, lost: 1})
 		checkRow(t, "group B "+seasonNew, groupRow(t, profile, groupB.ID).PointsStandingRow, want{})
+		// The vote was cast on the old-season match, so the new season's
+		// filter must drop it from both scopes, the same way it drops the
+		// win/draw record above.
+		if profile.Overall.MotmAwards != 0 {
+			t.Errorf("overall %s MotmAwards = %d, want 0", seasonNew, profile.Overall.MotmAwards)
+		}
+		if got := groupRow(t, profile, groupA.ID).MotmAwards; got != 0 {
+			t.Errorf("group A %s MotmAwards = %d, want 0", seasonNew, got)
+		}
 	})
 
 	t.Run("requires authentication", func(t *testing.T) {
