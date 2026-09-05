@@ -37,6 +37,9 @@
 //                       (check the failure screenshot — it may show the app
 //                       already past signup), raise this rather than
 //                       assuming the app is broken.
+//   PARTICIPATE_TIMEOUT_MS  same idea, for the Participate click (default 30000) —
+//                       a real run has already shown this can legitimately
+//                       need more than a shorter deadline too.
 //
 // A failure's `error` field always names what actually happened (a visible
 // `.error-message`/`.signup-inline-message.error` if one appeared, or "no
@@ -62,6 +65,12 @@ const EMAIL_DOMAIN = process.env.EMAIL_DOMAIN || 'perfload.test';
 const HEADLESS = process.env.HEADLESS !== 'false';
 const REPORT_DIR = process.env.REPORT_DIR || path.join(__dirname, 'reports');
 const SIGNUP_TIMEOUT_MS = parseInt(process.env.SIGNUP_TIMEOUT_MS || '60000', 10);
+// Same reasoning as SIGNUP_TIMEOUT_MS: registering for the match is a second
+// write under concurrent load (not bcrypt-bound, but still competing for the
+// same limited Koyeb instance/DB connections), and a real run has already
+// shown it can resolve just past a shorter deadline — see the README's
+// "no navigation and no error message" note.
+const PARTICIPATE_TIMEOUT_MS = parseInt(process.env.PARTICIPATE_TIMEOUT_MS || '30000', 10);
 const PASSWORD = 'PerfLoad!2026';
 
 if (!INVITE_CODE) {
@@ -171,7 +180,7 @@ async function runOneUser(browser, index) {
     const participateOutcome = await waitForOutcome(page, {
       successCheck: () => signupPanel.locator('.signup-inline-message.success').isVisible(),
       errorSelector: '.signup-inline-message.error',
-      timeoutMs: 15_000,
+      timeoutMs: PARTICIPATE_TIMEOUT_MS,
     });
     if (!participateOutcome.ok) {
       const shot = await saveFailureScreenshot(page, index, 'participate');
