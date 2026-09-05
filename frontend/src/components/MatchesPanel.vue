@@ -408,7 +408,7 @@
                           <button v-if="player.ID" type="button"
                             class="motm-star-btn"
                             :class="{ 'is-voted': isMyMotmVote(player.ID), 'is-self': player.ID === currentPlayerId }"
-                            :disabled="isUpdatingMotmVote || !motmVotingOpen || player.ID === currentPlayerId"
+                            :disabled="isUpdatingMotmVote || !motmVotingOpen || !viewerOnMotmRoster || player.ID === currentPlayerId"
                             :title="motmStarTitle(player)"
                             :aria-label="motmStarTitle(player)" @click="toggleMotmVote(player.ID)">
                             <svg viewBox="0 0 24 24" :fill="isMyMotmVote(player.ID) ? 'currentColor' : 'none'"
@@ -480,6 +480,7 @@ import {
   registrationsAreOpen,
   registrationStateLabel,
   teamsAreComposed,
+  isPlayerOnRoster,
   REGISTRATION_OPEN,
   REGISTRATION_NOT_OPEN_YET,
   REGISTRATION_CLOSED_BY_ADMIN,
@@ -740,6 +741,18 @@ export default {
     // regardless; this only lets a star grey out with a tooltip before a 409.
     motmVotingOpen() {
       return isMotmVotingOpen(this.selectedMatch, this.nowMs);
+    },
+
+    // Whether the *viewer themselves* (currentPlayerId, not the row's own
+    // player) has a MatchPlayer row on selectedMatch's composed roster.
+    // Reversed product decision, new explicit feedback (see CLAUDE.md's "Man
+    // of the Match voting" section): only someone who actually played in a
+    // given match may vote on who was its best player, mirroring the
+    // backend's own MatchVoteService.Vote roster check (ErrVoterNotOnRoster).
+    // A viewer who fails this can still see the tally/vote counts — only the
+    // star's interactivity is gated on it, same as motmVotingOpen above.
+    viewerOnMotmRoster() {
+      return isPlayerOnRoster(this.selectedMatch, this.currentPlayerId);
     },
 
     // Whether the toggle button (and therefore the collapse behaviour
@@ -1147,10 +1160,16 @@ export default {
       return !!entry && entry.Votes === maxVotes;
     },
 
-    // The star's tooltip/aria-label: the voting-window wording takes
-    // priority over vote/change-vote wording, since it explains why the
-    // star is disabled rather than what clicking it used to do.
+    // The star's tooltip/aria-label. Checked in order from most to least
+    // fundamental: whether the viewer themselves is even eligible to vote at
+    // all (not on this match's roster — a reversed product decision, see
+    // CLAUDE.md), then the self-vote rule, then the voting window, since
+    // each explains why the star is disabled rather than what clicking it
+    // used to do.
     motmStarTitle(player) {
+      if (!this.viewerOnMotmRoster) {
+        return 'Only players who took part in this match can vote for Man of the Match';
+      }
       if (player.ID === this.currentPlayerId) {
         return 'You can\'t vote for yourself as Man of the Match';
       }
@@ -1168,7 +1187,7 @@ export default {
     // there is no separate "already voted" conflict to handle here, unlike
     // participate() above.
     async toggleMotmVote(playerId) {
-      if (this.isUpdatingMotmVote || !this.motmVotingOpen) return;
+      if (this.isUpdatingMotmVote || !this.motmVotingOpen || !this.viewerOnMotmRoster) return;
       this.isUpdatingMotmVote = true;
       const removing = this.isMyMotmVote(playerId);
       try {

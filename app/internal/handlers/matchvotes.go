@@ -15,10 +15,13 @@ import (
 // Like MatchRegistrationHandler, every route is authorized by
 // RequireGroupMembershipByMatchPathParam: the group is derived from the match
 // named in the path, never supplied by the caller (see matchscope.go). Unlike
-// the sign-up feature, there is no admin-only route here at all — voter
-// eligibility is deliberately broader than "played in the match" (any group
-// member can judge), and there is no close/reopen concept for voting, so
-// nothing in this feature needs RequireGroupAdminByMatchPathParam.
+// the sign-up feature, there is no admin-only route here at all — but that's
+// about *who may act at all* (any group member, no admin-only close/reopen
+// concept), not about voter eligibility itself: MatchVoteService.Vote now
+// additionally requires the voter to have actually played in this specific
+// match (ErrVoterNotOnRoster), so nothing here needs
+// RequireGroupAdminByMatchPathParam, it just isn't the whole eligibility
+// story any more.
 type MatchVoteHandler struct {
 	Service *services.MatchVoteService
 }
@@ -128,7 +131,8 @@ func respondMatchVoteError(c *gin.Context, err error) {
 	case errors.Is(err, services.ErrMatchNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrCannotVoteForSelf),
-		errors.Is(err, services.ErrVotedForPlayerNotOnRoster):
+		errors.Is(err, services.ErrVotedForPlayerNotOnRoster),
+		errors.Is(err, services.ErrVoterNotOnRoster):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrVotingClosed):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})

@@ -312,7 +312,22 @@ func generateRecentComposedMatch(
 	// depending on the time of day the script runs.
 	recentKickoff := time.Now().AddDate(0, 0, -1)
 	recentMatchID, composed := createComposedScheduledMatch(matchService, matchPlayerService, group.ID, teams, roster, recentKickoff, true)
-	castRandomVotes(voteService, recentMatchID, roster, composed)
+	// Man of the Match voting now requires the voter to actually be on this
+	// match's roster (see CLAUDE.md's "Man of the Match voting" section) —
+	// composed is only a subset of the group's whole roster (capped at
+	// maxPlayers), so voters must be filtered down to it too, or most casts
+	// would just fail with ErrVoterNotOnRoster.
+	composedSet := make(map[uuid.UUID]bool, len(composed))
+	for _, id := range composed {
+		composedSet[id] = true
+	}
+	var eligibleVoters []models.Player
+	for _, p := range roster {
+		if composedSet[p.ID] {
+			eligibleVoters = append(eligibleVoters, p)
+		}
+	}
+	castRandomVotes(voteService, recentMatchID, eligibleVoters, composed)
 	log.Printf("group %q: recreated the recently-played composed match with votes", group.Name)
 }
 

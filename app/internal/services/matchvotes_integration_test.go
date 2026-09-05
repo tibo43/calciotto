@@ -252,27 +252,29 @@ func TestUnvote_Integration_RemovesTheVote(t *testing.T) {
 // TestListVotes_Integration_TallyOrderedByCountThenName checks the ordering
 // contract: most votes first, alphabetical name as the tie-break.
 func TestListVotes_Integration_TallyOrderedByCountThenName(t *testing.T) {
-	env := newVoteEnv(t, "TallyOrder", 3, 0)
-	alice, bob, carol := env.roster[0], env.roster[1], env.roster[2]
+	// rosterSize is 4 rather than 3: voting is now roster-gated (see
+	// ErrVoterNotOnRoster), so the 4 distinct voters this test needs — a
+	// voter can cast only one vote per match — must themselves be on the
+	// roster too, and there's no other pool of eligible voters to draw from
+	// (unlike before this change, when an arbitrary uuid.New() could stand
+	// in for "some voter"). The 4th roster player (dave) exists purely to be
+	// an eligible voter; nobody votes for dave, so dave never appears in the
+	// tally.
+	env := newVoteEnv(t, "TallyOrder", 4, 0)
+	alice, bob, carol, dave := env.roster[0], env.roster[1], env.roster[2], env.roster[3]
 
-	// bob gets 2 votes, alice and carol get 1 each — but distinct voters are
-	// needed since a voter can cast only one vote per match. Use bench
-	// players purely as voters here (voter eligibility is not this service's
-	// concern — see its own doc comment).
-	voter1, voter2, voter3 := uuid.New(), uuid.New(), uuid.New()
-	// voter ids must be real players only insofar as ListVotes' MyVoteFor
-	// lookup does not require it, and Vote never checks the voter's own
-	// identity against any table — it only rejects voter == votedFor.
-	if err := env.votes.Vote(env.matchID, voter1, bob); err != nil {
+	// bob gets 2 votes, alice and carol get 1 each — each from a distinct
+	// roster player who isn't voting for themselves.
+	if err := env.votes.Vote(env.matchID, alice, bob); err != nil {
 		t.Fatalf("Vote 1 returned error: %v", err)
 	}
-	if err := env.votes.Vote(env.matchID, voter2, bob); err != nil {
+	if err := env.votes.Vote(env.matchID, carol, bob); err != nil {
 		t.Fatalf("Vote 2 returned error: %v", err)
 	}
-	if err := env.votes.Vote(env.matchID, voter3, alice); err != nil {
+	if err := env.votes.Vote(env.matchID, dave, alice); err != nil {
 		t.Fatalf("Vote 3 returned error: %v", err)
 	}
-	if err := env.votes.Vote(env.matchID, uuid.New(), carol); err != nil {
+	if err := env.votes.Vote(env.matchID, bob, carol); err != nil {
 		t.Fatalf("Vote 4 returned error: %v", err)
 	}
 
@@ -488,7 +490,22 @@ func TestTallyVotesForMatches_Integration_GroupsPerMatch(t *testing.T) {
 	matchA, playerA := newMatchWithRoster("A")
 	matchB, _ := newMatchWithRoster("B")
 
-	if err := voteService.Vote(matchA, uuid.New(), playerA); err != nil {
+	// The voter must also be on match A's roster now (see
+	// ErrVoterNotOnRoster), so a second roster player is added to match A
+	// purely to serve as an eligible voter for playerA — an arbitrary
+	// uuid.New() no longer qualifies.
+	voterA, err := playerService.CreatePlayer("Zzz Vote TallyMatches VoterA " + uuid.NewString())
+	if err != nil {
+		t.Fatalf("failed to create voter for match A: %v", err)
+	}
+	if err := matchService.UpdateMatch(models.MatchWithDetails{
+		ID:    matchA,
+		Teams: []models.TeamWithPlayers{{ID: black.ID, Players: []models.PlayerCustom{{ID: playerA}, {ID: voterA}}}},
+	}); err != nil {
+		t.Fatalf("failed to add voterA to match A's roster: %v", err)
+	}
+
+	if err := voteService.Vote(matchA, voterA, playerA); err != nil {
 		t.Fatalf("Vote on match A returned error: %v", err)
 	}
 
