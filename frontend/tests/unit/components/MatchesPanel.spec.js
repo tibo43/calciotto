@@ -927,7 +927,13 @@ describe("MatchesPanel.vue card's registration state badge", () => {
   });
 
   it('labels it "Completed" the day after the match, with no admin close needed at all', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01+02:00'));
+    // No explicit offset: matchStatus() builds its own day-after boundary
+    // with `new Date(year, month, day)` (the runtime's local time zone), so
+    // the fake "now" has to be local too, or a CI runner in a different zone
+    // (this suite runs in UTC there, not the +02:00 this was first written
+    // against) can land on the wrong side of the boundary by a couple of
+    // hours and flip this to "upcoming".
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01'));
     getMatchesDetails.mockResolvedValue([scheduled()]);
     const wrapper = await mountPanel();
 
@@ -973,7 +979,10 @@ describe("MatchesPanel.vue unscheduled match's card status", () => {
   });
 
   it('shows "Completed" the day after, even with goals already recorded — the ordinary historical-match case', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01+02:00'));
+    // See the identical comment above: no explicit offset, so this lines up
+    // with matchStatus()'s own local-time boundary regardless of the
+    // runtime's actual zone.
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01'));
     const played = unscheduled();
     played.Teams[0].Score = 3;
     played.Teams[1].Score = 2;
@@ -986,7 +995,7 @@ describe("MatchesPanel.vue unscheduled match's card status", () => {
   });
 
   it('shows "Completed" the day after even with no roster at all — the status no longer depends on composition', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01+02:00'));
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01'));
     getMatchesDetails.mockResolvedValue([unscheduled()]);
     const wrapper = await mountPanel();
 

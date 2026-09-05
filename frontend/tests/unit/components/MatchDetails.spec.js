@@ -52,7 +52,13 @@ const KICKOFF = '2026-09-06T20:30:00+02:00';
 const DURING_SIGNUPS = Date.parse('2026-09-04T09:00:00+02:00');
 const BEFORE_SIGNUPS = Date.parse('2026-08-30T09:00:00+02:00');
 const AFTER_KICKOFF = Date.parse('2026-09-06T22:00:00+02:00');
-const DAY_AFTER_MATCH = Date.parse('2026-09-07T00:00:01+02:00');
+// No explicit offset here, unlike the constants above: getMatchStatus()
+// builds its own day-after boundary with `new Date(year, month, day)` (the
+// runtime's local time zone), so this fake "now" has to be local too, or a
+// CI runner in a different zone (UTC there, not the +02:00 this was first
+// written against) can land on the wrong side of the boundary by a couple
+// of hours and flip the badge to "upcoming".
+const DAY_AFTER_MATCH = Date.parse('2026-09-07T00:00:01');
 
 const teams = () => [
   { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: [] },
