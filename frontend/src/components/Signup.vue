@@ -44,7 +44,7 @@
 </template>
 
 <script>
-import { signup } from '@/services/api';
+import { signup, setToken } from '@/services/api';
 
 export default {
   name: 'SignupPage',
@@ -81,8 +81,13 @@ export default {
       }
       this.isSubmitting = true;
       try {
-        await signup(this.name, this.email, this.password, this.inviteCode);
-        this.$router.push('/login');
+        // POST /auth/signup now returns a ready-to-use token alongside the
+        // player id — the same shape as Login — so signing up logs the
+        // player straight in, the same way Login.vue does, instead of
+        // bouncing them to /login to re-enter the password they just typed.
+        const { token } = await signup(this.name, this.email, this.password, this.inviteCode);
+        setToken(token);
+        this.$router.push('/');
       } catch (err) {
         this.error = err.response?.data?.error || 'Signup failed. Please try again.';
       } finally {

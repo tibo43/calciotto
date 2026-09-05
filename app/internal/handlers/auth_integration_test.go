@@ -115,6 +115,62 @@ func TestAuthEndpoints_Integration_SignupThenLogin(t *testing.T) {
 	}
 }
 
+// TestAuthHandler_Integration_SignupReturnsUsableToken covers the newer
+// behavior: signup itself hands back a ready-to-use JWT, so the caller never
+// has to make a second POST /auth/login round trip (with the password sent a
+// second time) right after creating the account. Deliberately does NOT call
+// /auth/login at all — that's the whole point of this test.
+func TestAuthHandler_Integration_SignupReturnsUsableToken(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testAuthJWTSecret)
+	router := newAuthTestRouter(authService)
+	inviteCode := newSignupInviteCode(t, tx)
+
+	signupBody, _ := json.Marshal(map[string]string{
+		"name":        "Zzz Integration Handler Steve",
+		"email":       "steve@example.com",
+		"password":    "s3cret-pass",
+		"invite_code": inviteCode,
+	})
+	signupReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(signupBody))
+	signupReq.Header.Set("Content-Type", "application/json")
+	signupRec := httptest.NewRecorder()
+	router.ServeHTTP(signupRec, signupReq)
+	if signupRec.Code != http.StatusOK {
+		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())
+	}
+
+	var signupResp struct {
+		ID    string `json:"id"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(signupRec.Body.Bytes(), &signupResp); err != nil {
+		t.Fatalf("failed to decode signup response: %v", err)
+	}
+	if signupResp.Token == "" {
+		t.Fatal("signup response has an empty token")
+	}
+
+	protectedReq := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	protectedReq.Header.Set("Authorization", "Bearer "+signupResp.Token)
+	protectedRec := httptest.NewRecorder()
+	router.ServeHTTP(protectedRec, protectedReq)
+	if protectedRec.Code != http.StatusOK {
+		t.Fatalf("protected route with the signup token returned status %d, body: %s", protectedRec.Code, protectedRec.Body.String())
+	}
+	var protectedResp struct {
+		PlayerID string `json:"player_id"`
+	}
+	if err := json.Unmarshal(protectedRec.Body.Bytes(), &protectedResp); err != nil {
+		t.Fatalf("failed to decode protected response: %v", err)
+	}
+	if protectedResp.PlayerID != signupResp.ID {
+		t.Errorf("protected route injected player_id = %q, want %q", protectedResp.PlayerID, signupResp.ID)
+	}
+}
+
 func TestAuthMiddleware_Integration_RejectsMissingAndInvalidTokens(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)

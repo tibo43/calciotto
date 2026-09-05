@@ -224,7 +224,7 @@ func (s *AuthService) Login(email, password string) (string, error) {
 		return "", ErrInvalidCredentials
 	}
 
-	return s.generateToken(player.ID)
+	return s.GenerateToken(player.ID)
 }
 
 // ForgotPassword issues a single-use reset link for the account registered
@@ -407,7 +407,12 @@ func (s *AuthService) ParseToken(tokenString string) (uuid.UUID, error) {
 	return claims.PlayerID, nil
 }
 
-func (s *AuthService) generateToken(playerID uuid.UUID) (string, error) {
+// GenerateToken signs a fresh JWT for playerID. Exported (unlike the rest of
+// this file's internals) so AuthHandler.Signup can hand the caller a usable
+// token straight away — signing up and logging in are, from the caller's
+// point of view, one action, not two round trips that both need the
+// password.
+func (s *AuthService) GenerateToken(playerID uuid.UUID) (string, error) {
 	now := time.Now()
 	claims := playerClaims{
 		PlayerID: playerID,
