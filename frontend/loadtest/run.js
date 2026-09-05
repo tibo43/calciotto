@@ -26,6 +26,19 @@
 //   EMAIL_DOMAIN domain for the throwaway accounts      (default perfload.test — reserved TLD, never emailed)
 //   HEADLESS     "false" to watch the browsers          (default true)
 //   REPORT_DIR   where to write the report files        (default loadtest/reports, relative to this file)
+//
+// A failure's `error` field always names what actually happened (a visible
+// `.error-message`/`.signup-inline-message.error` if one appeared, or "no
+// error shown, just no navigation" if none did) rather than a bare
+// "Timeout 30000ms exceeded" — the three most likely real causes when
+// EVERY user fails at the signup step are: (1) the signup rate limit
+// wasn't actually raised before this run (see README.md step 0) and every
+// request got a 429; (2) this is a re-run reusing the same
+// perfload+uN@<EMAIL_DOMAIN> emails from an earlier attempt, so the backend
+// rejects them as already-registered — bump EMAIL_DOMAIN or clean up first
+// (devops/perf-cleanup.sql); (3) BASE_URL/INVITE_CODE is wrong (e.g. left at
+// the localhost default) and the request never reaches the intended group.
+// A screenshot is saved alongside the report for every failure too.
 
 const fs = require('fs');
 const path = require('path');
@@ -61,6 +74,43 @@ function stepTimer() {
   };
 }
 
+// Polls for either a success condition or a visible error element, instead
+// of a bare waitForURL — a rejected request (rate limit, duplicate email, a
+// validation error) never navigates, so waitForURL alone only ever reports
+// "Timeout 30000ms exceeded" with no hint of why. Whichever condition is
+// true first wins; after timeoutMs with neither true, reports that too.
+async function waitForOutcome(page, { successCheck, errorSelector, timeoutMs = 30_000, pollMs = 250 }) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await successCheck()) return { ok: true };
+    if (errorSelector) {
+      const text = await page.locator(errorSelector).first().textContent().catch(() => null);
+      if (text && text.trim()) return { ok: false, error: text.trim() };
+    }
+    await page.waitForTimeout(pollMs);
+  }
+  return { ok: false, error: 'timeout: no navigation and no error message shown within ' + timeoutMs + 'ms' };
+}
+
+function urlPathIs(page, wantedPath) {
+  try {
+    return new URL(page.url()).pathname === wantedPath;
+  } catch {
+    return false;
+  }
+}
+
+async function saveFailureScreenshot(page, index, stepName) {
+  try {
+    fs.mkdirSync(path.join(REPORT_DIR, 'failures'), { recursive: true });
+    const shotPath = path.join(REPORT_DIR, 'failures', `user${index}-${stepName}.png`);
+    await page.screenshot({ path: shotPath });
+    return shotPath;
+  } catch {
+    return null;
+  }
+}
+
 async function runOneUser(browser, index) {
   const name = `Perf User ${index}`;
   const email = `perfload+u${index}@${EMAIL_DOMAIN}`;
@@ -68,6 +118,7 @@ async function runOneUser(browser, index) {
   const timer = stepTimer();
   const context = await browser.newContext();
   const page = await context.newPage();
+  let currentStep = 'signup';
 
   try {
     // --- Sign up (auto-logs in and redirects to `/` on success) ---
@@ -79,11 +130,20 @@ async function runOneUser(browser, index) {
     // defensively in case that behavior ever regresses.
     await page.locator('#invite-code').fill(INVITE_CODE);
     await page.getByRole('button', { name: 'Sign up' }).click();
-    await page.waitForURL((url) => url.pathname === '/', { timeout: 30_000 });
+
+    const signupOutcome = await waitForOutcome(page, {
+      successCheck: () => urlPathIs(page, '/'),
+      errorSelector: '.error-message',
+    });
+    if (!signupOutcome.ok) {
+      const shot = await saveFailureScreenshot(page, index, 'signup');
+      throw new Error(`signup: ${signupOutcome.error}${shot ? ` (screenshot: ${shot})` : ''}`);
+    }
     await page.locator('.nav-menu').waitFor({ state: 'visible', timeout: 30_000 });
     timer.mark('signup');
 
     // --- Sign up for the match ---
+    currentStep = 'participate';
     // The group has exactly one match (created by cmd/perfsetup), and
     // MatchesPanel auto-selects the newest one on load, so it should already
     // be showing the inline sign-up panel; click the card defensively in
@@ -94,12 +154,20 @@ async function runOneUser(browser, index) {
       await signupPanel.waitFor({ state: 'visible', timeout: 15_000 });
     }
     await signupPanel.getByRole('button', { name: 'Participate' }).click();
-    // No confirmation toast to key off reliably — the count badge or state
-    // label updating is the observable effect; give it a moment to settle.
-    await page.waitForTimeout(1000);
+
+    const participateOutcome = await waitForOutcome(page, {
+      successCheck: () => signupPanel.locator('.signup-inline-message.success').isVisible(),
+      errorSelector: '.signup-inline-message.error',
+      timeoutMs: 15_000,
+    });
+    if (!participateOutcome.ok) {
+      const shot = await saveFailureScreenshot(page, index, 'participate');
+      throw new Error(`participate: ${participateOutcome.error}${shot ? ` (screenshot: ${shot})` : ''}`);
+    }
     timer.mark('participate');
 
     // --- Profile: open the group card to view the roster ---
+    currentStep = 'view_roster';
     await page.goto(`${BASE_URL}/profile`);
     await page.locator('.group-card-horizontal').first().click();
     await page.locator('.roster-panel-container').waitFor({ state: 'visible', timeout: 15_000 });
@@ -107,12 +175,16 @@ async function runOneUser(browser, index) {
     timer.mark('view_roster');
 
     // --- Log out ---
+    currentStep = 'logout';
     await page.getByRole('button', { name: 'Log out' }).click();
     await page.waitForURL((url) => url.pathname === '/login', { timeout: 15_000 });
     timer.mark('logout');
 
     return { index, email, ok: true, ms: Date.now() - startedAt, steps: timer.steps };
   } catch (err) {
+    if (!err.message.includes('screenshot:')) {
+      await saveFailureScreenshot(page, index, currentStep);
+    }
     return { index, email, ok: false, ms: Date.now() - startedAt, steps: timer.steps, error: err.message };
   } finally {
     await context.close();
