@@ -398,6 +398,11 @@ jobs:
       - name: Inject the API base URL into the build environment
         env:
           VUE_APP_API_BASE_URL: ${{ vars.VUE_APP_API_BASE_URL }}
+          # Optional — see api.js's apiTimeoutMs. Normally unset, so the
+          # bundle keeps today's hardcoded 10000ms default; only set this
+          # (temporarily) to push a deliberate load test past that ceiling
+          # and see the backend's real response time under concurrent load.
+          VUE_APP_API_TIMEOUT_MS: ${{ vars.VUE_APP_API_TIMEOUT_MS }}
         run: |
           set -euo pipefail
 
@@ -416,6 +421,10 @@ jobs:
           # (see resolveClientEnv.js), which is why the name matters.
           mkdir -p .vercel
           printf '\nVUE_APP_API_BASE_URL=%s\n' "$VUE_APP_API_BASE_URL" >> .vercel/.env.production.local
+
+          if [ -n "$VUE_APP_API_TIMEOUT_MS" ]; then
+            printf '\nVUE_APP_API_TIMEOUT_MS=%s\n' "$VUE_APP_API_TIMEOUT_MS" >> .vercel/.env.production.local
+          fi
 
       - name: Build
         run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
