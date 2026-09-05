@@ -60,20 +60,18 @@
           <div class="groups-card card-base card-large">
             <div class="groups-section-header">
               <h2 class="section-title">Your groups</h2>
-              <!-- Create/join used to live behind a navbar selector that only
-                   ever scoped the Matches page — switching moved there
-                   (same level as its season selector), and these two,
-                   onboarding-only actions moved here instead, next to the
-                   stats they'll eventually produce. -->
+              <!-- Create/join are a temporary, reversible business decision:
+                   disabled rather than removed — see the disabled buttons
+                   below. -->
               <div class="groups-header-actions">
-                <button class="icon-action-btn" @click="showJoinModal = true" aria-label="Join a group">
+                <button class="icon-action-btn" disabled title="Bientôt disponible" aria-label="Join a group">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
                     <polyline points="10 17 15 12 10 7" />
                     <line x1="15" y1="12" x2="3" y2="12" />
                   </svg>
                 </button>
-                <button class="icon-action-btn" @click="showCreateModal = true" aria-label="Create a group">
+                <button class="icon-action-btn" disabled title="Bientôt disponible" aria-label="Create a group">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="12" y1="5" x2="12" y2="19" />
                     <line x1="5" y1="12" x2="19" y2="12" />
@@ -85,7 +83,7 @@
             <div v-if="perGroup.length === 0" class="empty-state">
               <div class="empty-content">
                 <h3 class="empty-title">No group yet</h3>
-                <p class="empty-description">Use the + and join buttons above to create one or join an existing one with its invite code.</p>
+                <p class="empty-description">Demandez à un administrateur de vous inviter — la création et l'ajout de groupe ne sont pas encore disponibles.</p>
               </div>
             </div>
 
@@ -171,17 +169,13 @@
                         </div>
 
                         <div class="member-actions">
-                          <button v-if="isGroupAdmin(selectedGroupId) && !member.email && inviteFormFor !== member.id"
-                            class="btn-base btn-cancel btn-small" @click="openInviteForm(member)">
-                            Invite
-                          </button>
-
                           <template v-if="isGroupAdmin(selectedGroupId) && member.id !== currentPlayerId">
-                            <!-- A ghost player (no email/account, see the
-                                 "No account yet" badge above) can't log in
-                                 to actually use admin privileges — offering
-                                 to promote one is a dead end until they've
-                                 claimed the account via Invite. -->
+                            <!-- A ghost player (no email/account — a legacy or
+                                 seeded state; there is no longer any way to
+                                 create one, or to attach credentials to an
+                                 existing one) can't log in to actually use
+                                 admin privileges, so promoting one is a dead
+                                 end. -->
                             <button v-if="member.email" class="btn-base btn-cancel btn-small"
                               :disabled="memberActionLoading[member.id]" @click="toggleMemberRole(member)">
                               {{ member.role === 'admin' ? 'Demote' : 'Promote' }}
@@ -194,22 +188,6 @@
                         </div>
                       </div>
 
-                      <div v-if="inviteFormFor === member.id" class="invite-form">
-                        <input v-model="inviteEmailInput" class="form-input invite-email-input" type="email"
-                          placeholder="their@email.com" :disabled="inviteLoading[member.id]">
-                        <button class="btn-base btn-primary btn-small"
-                          :disabled="inviteLoading[member.id] || !inviteEmailInput.trim()"
-                          @click="sendInvite(member)">
-                          {{ inviteLoading[member.id] ? 'Sending...' : 'Send invite' }}
-                        </button>
-                        <button class="btn-base btn-cancel btn-small" :disabled="inviteLoading[member.id]"
-                          @click="closeInviteForm">
-                          Cancel
-                        </button>
-                      </div>
-
-                      <p v-if="inviteErrors[member.id]" class="error-message">{{ inviteErrors[member.id] }}</p>
-                      <p v-if="inviteSuccess[member.id]" class="success-message">{{ inviteSuccess[member.id] }}</p>
                       <p v-if="memberActionErrors[member.id]" class="error-message">{{ memberActionErrors[member.id] }}</p>
                     </li>
                   </ul>
@@ -223,19 +201,15 @@
 
     <GroupSettingsModal v-if="settingsForGroup" :group-id="settingsForGroup.id" :group-name="settingsForGroup.name"
       @close="settingsForGroup = null" />
-    <CreateGroupModal v-if="showCreateModal" @close="showCreateModal = false" />
-    <JoinGroupModal v-if="showJoinModal" @close="showJoinModal = false" />
   </div>
 </template>
 
 <script>
 import {
   getPlayerProfile, getMyGroups, getGroupMembers,
-  updateMemberRole, removeMember, invitePlayer, setFavoriteGroup, updateMyName, getToken
+  updateMemberRole, removeMember, setFavoriteGroup, updateMyName, getToken
 } from '@/services/api';
 import GroupSettingsModal from '@/components/GroupSettingsModal.vue';
-import CreateGroupModal from '@/components/CreateGroupModal.vue';
-import JoinGroupModal from '@/components/JoinGroupModal.vue';
 
 // The JWT's own player_id claim is the only place the caller's player id is
 // available on this page (there's no "who am I" endpoint) — decoded locally,
@@ -258,7 +232,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'PlayerProfile',
-  components: { GroupSettingsModal, CreateGroupModal, JoinGroupModal },
+  components: { GroupSettingsModal },
   data() {
     return {
       overall: { Name: '', Played: 0, Won: 0, Drawn: 0, Lost: 0, GoalsFor: 0, Points: 0, MotmAwards: 0 },
@@ -267,8 +241,8 @@ export default {
       loadFailed: false,
 
       // Inline "edit your display name" form on the overall card — a
-      // separate concern from favoriteError/inviteErrors below, so it gets
-      // its own local error field rather than reusing one of those.
+      // separate concern from favoriteError below, so it gets its own local
+      // error field rather than reusing that one.
       isEditingName: false,
       nameEditInput: '',
       nameEditLoading: false,
@@ -282,11 +256,6 @@ export default {
       favoriteLoading: {},
       favoriteError: '',
 
-      // Create/join dialogs — the onboarding actions that used to live
-      // behind the navbar's group selector.
-      showCreateModal: false,
-      showJoinModal: false,
-
       // The one group whose roster is currently expanded, plus a
       // fetch-on-demand cache per group (switching between two groups you
       // already opened this session re-uses the cached roster).
@@ -297,13 +266,6 @@ export default {
       memberActionLoading: {},
       memberActionErrors: {},
       currentPlayerId: '',
-
-      // Ghost-player invite — at most one row's form open at a time.
-      inviteFormFor: '',
-      inviteEmailInput: '',
-      inviteLoading: {},
-      inviteErrors: {},
-      inviteSuccess: {},
 
       // Non-null while the invite-code/teams dialog for one group is open.
       settingsForGroup: null
@@ -460,38 +422,6 @@ export default {
         this.memberActionErrors[member.id] = this.backendMessage(error, 'Failed to remove member.');
       } finally {
         this.memberActionLoading[member.id] = false;
-      }
-    },
-    openInviteForm(member) {
-      this.inviteFormFor = member.id;
-      this.inviteEmailInput = '';
-      this.inviteErrors[member.id] = '';
-      this.inviteSuccess[member.id] = '';
-    },
-    closeInviteForm() {
-      this.inviteFormFor = '';
-      this.inviteEmailInput = '';
-    },
-    async sendInvite(member) {
-      const groupId = this.selectedGroupId;
-      const email = this.inviteEmailInput.trim();
-      if (!email) {
-        return;
-      }
-      this.inviteLoading[member.id] = true;
-      this.inviteErrors[member.id] = '';
-      try {
-        await invitePlayer(groupId, member.id, email);
-        this.inviteSuccess[member.id] = `Invite sent to ${email}. There is no email delivery configured yet in this environment — the link is logged on the server.`;
-        this.inviteFormFor = '';
-        this.inviteEmailInput = '';
-        // Re-fetch so member.email reflects the claim and the "Invite"
-        // action disappears for this row.
-        await this.loadMembers(groupId);
-      } catch (error) {
-        this.inviteErrors[member.id] = this.backendMessage(error, 'Failed to send the invite.');
-      } finally {
-        this.inviteLoading[member.id] = false;
       }
     },
     startEditName() {
@@ -684,6 +614,16 @@ export default {
 .icon-action-btn:hover {
   border-color: var(--primary-color);
   color: var(--primary-color);
+}
+
+/* Group creation/joining is temporarily disabled (a reversible business
+   decision, not a permanent removal) — greyed out rather than hidden, with
+   a title tooltip explaining why. */
+.icon-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: var(--border-color);
+  color: var(--text-secondary);
 }
 
 .icon-action-btn svg {

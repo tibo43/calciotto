@@ -20,7 +20,7 @@ const testUpdateMyNameJWTSecret = "zzz-integration-test-update-my-name-secret"
 func newUpdateMyNameTestRouter(playerService *services.PlayerService, authService *services.AuthService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	playerHandler := handlers.NewPlayerHandler(playerService, nil, nil)
+	playerHandler := handlers.NewPlayerHandler(playerService)
 	router.PATCH("/players/me", handlers.AuthMiddleware(authService), playerHandler.UpdateMyName)
 	return router
 }

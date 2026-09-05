@@ -24,8 +24,8 @@
         <div class="form-group">
           <label for="invite-code">Invite code</label>
           <input id="invite-code" v-model="inviteCode" type="text" class="form-input" placeholder="e.g. AB2N7TQR"
-            autocapitalize="characters" />
-          <p class="field-hint">Optional — join a group right away if you have an invite code.</p>
+            autocapitalize="characters" required />
+          <p class="field-hint">Required — ask your group admin for the invite code.</p>
         </div>
 
         <p v-if="error" class="error-message">{{ error }}</p>
@@ -58,9 +58,27 @@ export default {
       isSubmitting: false,
     };
   },
+  created() {
+    // Prefills from an admin's shared invite link (/signup?invite=CODE, see
+    // GroupSettingsModal.vue's WhatsApp invite button) so a new player never
+    // has to type the code by hand.
+    const invite = this.$route.query.invite;
+    if (typeof invite === 'string' && invite) {
+      this.inviteCode = invite;
+    }
+  },
   methods: {
     async submit() {
       this.error = '';
+      // Self-service group creation/joining is disabled, so signup is now
+      // the only way into a group — an empty code would leave a player
+      // stranded with no group, so this is checked client-side before ever
+      // reaching the network (the backend rejects it too, with the same
+      // message, via ErrInviteCodeRequired).
+      if (!this.inviteCode.trim()) {
+        this.error = 'Invite code is required.';
+        return;
+      }
       this.isSubmitting = true;
       try {
         await signup(this.name, this.email, this.password, this.inviteCode);

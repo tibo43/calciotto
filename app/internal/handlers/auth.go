@@ -41,6 +41,7 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 			errors.Is(err, services.ErrEmailRequired),
 			errors.Is(err, services.ErrPasswordRequired),
 			errors.Is(err, services.ErrEmailAlreadyUsed),
+			errors.Is(err, services.ErrInviteCodeRequired),
 			errors.Is(err, services.ErrInviteCodeNotFound):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		default:

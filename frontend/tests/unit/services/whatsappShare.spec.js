@@ -1,4 +1,4 @@
-import { buildWhatsAppShareText, buildWhatsAppShareUrl } from '@/services/whatsappShare';
+import { buildWhatsAppShareText, buildWhatsAppShareUrl, buildGroupInviteShareText } from '@/services/whatsappShare';
 
 describe('buildWhatsAppShareText', () => {
   it('includes the kick-off and the match link, with no emoji WhatsApp might not render', () => {
@@ -69,5 +69,27 @@ describe('buildWhatsAppShareUrl', () => {
 
     expect(url).toBe('https://wa.me/?text=' + encodeURIComponent('line one\nline two & more'));
     expect(url).not.toContain('\n');
+  });
+});
+
+describe('buildGroupInviteShareText', () => {
+  it('includes the invite URL on its own line', () => {
+    const text = buildGroupInviteShareText({
+      inviteUrl: 'https://calciotto.app/signup?invite=AB2N7TQR',
+      groupInviteCode: 'AB2N7TQR'
+    });
+
+    const lines = text.split('\n');
+    expect(lines).toContain('https://calciotto.app/signup?invite=AB2N7TQR');
+  });
+
+  it('includes a "Group code: X" line, even though the code also rides along in the URL', () => {
+    const text = buildGroupInviteShareText({
+      inviteUrl: 'https://calciotto.app/signup?invite=AB2N7TQR',
+      groupInviteCode: 'AB2N7TQR'
+    });
+
+    const lines = text.split('\n');
+    expect(lines[lines.length - 1]).toBe('Group code: AB2N7TQR');
   });
 });

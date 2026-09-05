@@ -42,25 +42,17 @@ func TestGetMyGroups_Integration_IncludesCallerRole(t *testing.T) {
 	tx := testutil.BeginTx(t, db)
 	env := newBootstrapEnv(t, tx)
 
-	_, creatorToken := env.newAuthenticatedPlayer(t,
+	creatorID, creatorToken := env.newAuthenticatedPlayer(t,
 		"Zzz My Groups Role Creator", "my-groups-role-creator@example.com")
 	joinerID, joinerToken := env.newAuthenticatedPlayer(t,
 		"Zzz My Groups Role Joiner", "my-groups-role-joiner@example.com")
 
-	createRec := env.do(http.MethodPost, "/groups", creatorToken, createGroupBody("Zzz My Groups Role Group"))
-	if createRec.Code != http.StatusOK {
-		t.Fatalf("POST /groups returned status %d, body: %s", createRec.Code, createRec.Body.String())
-	}
-	groupID := decodeGroupID(t, createRec)
+	groupID := env.createGroupDirect(t, "Zzz My Groups Role Group", creatorID).ID
 
 	// A second group the joiner creates, so the joiner's list mixes both
 	// roles and a wrong query (e.g. one dropping the per-player filter on the
 	// membership row) can't accidentally pass.
-	joinerOwnRec := env.do(http.MethodPost, "/groups", joinerToken, createGroupBody("Zzz My Groups Role Own Group"))
-	if joinerOwnRec.Code != http.StatusOK {
-		t.Fatalf("POST /groups returned status %d, body: %s", joinerOwnRec.Code, joinerOwnRec.Body.String())
-	}
-	joinerOwnID := decodeGroupID(t, joinerOwnRec)
+	joinerOwnID := env.createGroupDirect(t, "Zzz My Groups Role Own Group", joinerID).ID
 
 	if err := env.memberships.AddPlayerToGroup(groupID, joinerID); err != nil {
 		t.Fatalf("failed to add joiner to the creator's group: %v", err)

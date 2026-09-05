@@ -20,7 +20,7 @@
                   <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
                 </select>
               </template>
-              <span v-else class="no-group-hint">No group yet — join or create one from your Profile.</span>
+              <span v-else class="no-group-hint">No group yet — ask an admin to invite you (creating or joining a group yourself isn't available yet).</span>
             </div>
 
             <div class="context-field">

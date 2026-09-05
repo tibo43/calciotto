@@ -40,3 +40,21 @@ export function buildWhatsAppShareText({ kickoffLabel, matchUrl, groupInviteCode
 export function buildWhatsAppShareUrl(text) {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
+
+// "Invite people to a group" — GroupSettingsModal.vue's admin-only WhatsApp
+// button, built the same way the match-share text above is: no emoji, the
+// URL on its own line so WhatsApp auto-linkifies it (see the header comment
+// above for why there's no custom-text link syntax to hide it behind).
+// Unlike groupInviteCode above, the code here is never optional — it's
+// always spelled out on its own line even though inviteUrl already carries
+// it as a query param (?invite=CODE): the link alone only works if the
+// recipient can click it, but someone who has to type the code by hand
+// (a copy-paste that dropped the query string, a link that didn't survive
+// a forward) still needs it spelled out in plain text.
+export function buildGroupInviteShareText({ inviteUrl, groupInviteCode }) {
+  return [
+    'Join our Calciotto group:',
+    inviteUrl,
+    `Group code: ${groupInviteCode}`
+  ].join('\n');
+}
