@@ -248,3 +248,20 @@ type PlayerProfileStats struct {
 	Overall  PlayerOverallStanding `json:"Overall"`
 	PerGroup []PlayerGroupStanding `json:"PerGroup"`
 }
+
+// EloStandingRow is one player's row in a group's continuous, derive-fresh
+// Elo rating table — see internal/services/elo.go's ComputeEloStandings and
+// CLAUDE.md's "Elo rating" section for the full rules. Rating is a float64
+// because the update itself is fractional (K * (actual - expected)); it's
+// only rounded for display, by cmd/elo, never in computation. IsMember is
+// tagged the same post-processing way as PointsStandingRow/ScorerRow/
+// MotmStandingRow — see their comments. This DTO is not returned by any HTTP
+// handler today: it exists purely for StandingsService.GetEloStandings,
+// consumed only by cmd/elo — a deliberate, CLI-only scope, not an oversight.
+type EloStandingRow struct {
+	PlayerID    uuid.UUID `json:"PlayerID"`
+	Name        string    `json:"Name"`
+	Rating      float64   `json:"Rating"`
+	GamesPlayed int       `json:"GamesPlayed"`
+	IsMember    bool      `json:"IsMember"`
+}
