@@ -152,6 +152,54 @@ func (h *MatchRegistrationHandler) ReopenRegistrations(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"reopened": true})
 }
 
+// SetMaxPlayers changes how many sign-ups count as confirmed on a scheduled
+// match, rolling the tail of the list onto the waiting list (or promoting the
+// head of it back) in sign-up order.
+//
+// It answers with the recomputed sign-up list rather than a bare
+// {"updated": true}, for the same reason Register answers with the caller's
+// entry: the new confirmed/waiting split *is* the result of this action, and
+// re-deriving it client-side from the cap is exactly what
+// ComputeRegistrationPositions exists to prevent.
+func (h *MatchRegistrationHandler) SetMaxPlayers(c *gin.Context) {
+	matchID, groupID, ok := matchAndAuthorizedGroup(c)
+	if !ok {
+		return
+	}
+
+	// A pointer, not a plain int with binding:"required": the value this
+	// endpoint must reject (0) is also Go's zero value, so "required" would
+	// conflate "omitted" with "explicitly zero" and answer the wrong error for
+	// the one input worth being precise about.
+	var req struct {
+		MaxPlayers *int `json:"max_players"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.MaxPlayers == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "max_players is required"})
+		return
+	}
+
+	if err := h.Service.SetMaxPlayers(matchID, groupID, *req.MaxPlayers); err != nil {
+		respondMatchRegistrationError(c, err)
+		return
+	}
+
+	entries, err := h.Service.ListRegistrations(matchID)
+	if err != nil {
+		respondMatchRegistrationError(c, err)
+		return
+	}
+	if entries == nil {
+		entries = []models.MatchRegistrationEntry{}
+	}
+
+	c.JSON(http.StatusOK, entries)
+}
+
 // matchIDFromPath parses the :id path param, answering 400 before any service
 // call — the same discipline every handler in this package applies to an id
 // read from the URL.
@@ -164,8 +212,8 @@ func matchIDFromPath(c *gin.Context) (uuid.UUID, bool) {
 	return id, true
 }
 
-// matchAndAuthorizedGroup serves the two admin actions, which are scoped to a
-// group as well as a match. The group is taken from the context, where
+// matchAndAuthorizedGroup serves the three admin actions, which are scoped to
+// a group as well as a match. The group is taken from the context, where
 // RequireGroupAdminByMatchPathParam put the one it authorized — deliberately
 // not re-resolved here, so the handler cannot possibly act on a different
 // group than the one the caller was checked against.
@@ -197,7 +245,8 @@ func respondMatchRegistrationError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrMatchNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	case errors.Is(err, services.ErrMatchNotScheduled):
+	case errors.Is(err, services.ErrMatchNotScheduled),
+		errors.Is(err, services.ErrInvalidMaxPlayers):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrRegistrationsNotOpenYet),
 		errors.Is(err, services.ErrRegistrationsClosed),

@@ -132,6 +132,23 @@
               {{ isUpdatingRegistrationState ? 'Reopening...' : 'Reopen sign-ups' }}
             </button>
 
+            <!-- Admin-only, and deliberately offered whether sign-ups are open or
+                 closed: dropping the cap is typically what an admin does right
+                 after closing the list, in order to compose the teams (16 asked
+                 for, 12 signed up, so 10 play and 2 are reserves). The split it
+                 produces is server-derived like everything else about this list
+                 — the response is the recomputed list, not a local guess. -->
+            <form v-if="isAdmin" class="max-players-editor" @submit.prevent="updateMaxPlayers">
+              <label class="max-players-label" for="max-players-input">Confirmed places</label>
+              <input id="max-players-input" v-model="maxPlayersInput" type="number" min="1" step="1"
+                class="max-players-input" :disabled="isUpdatingMaxPlayers" />
+              <button type="submit" class="btn-base btn-cancel btn-small"
+                :disabled="isUpdatingMaxPlayers || !canUpdateMaxPlayers">
+                <div v-if="isUpdatingMaxPlayers" class="loading-spinner-small"></div>
+                {{ isUpdatingMaxPlayers ? 'Updating...' : 'Update' }}
+              </button>
+            </form>
+
             <!-- A plain wa.me link, not a click handler: it's a URL WhatsApp
                  itself publishes, opened in a new tab like any other outbound
                  link. With no phone number, WhatsApp prompts the admin to pick
@@ -179,7 +196,7 @@
             <div class="signup-list">
               <h4 class="signup-list-title">
                 Confirmed
-                <span class="count-badge">{{ confirmedRegistrations.length }} / {{ match.MaxPlayers }}</span>
+                <span class="count-badge">{{ confirmedRegistrations.length }} / {{ maxPlayers }}</span>
               </h4>
               <ul class="signup-entries">
                 <li v-for="entry in confirmedRegistrations" :key="entry.PlayerID" class="signup-entry"
@@ -579,6 +596,7 @@ import {
   unregisterFromMatch,
   closeMatchRegistrations,
   reopenMatchRegistrations,
+  setMatchMaxPlayers,
   getInviteCode,
   getToken
 } from '@/services/api';
@@ -666,6 +684,14 @@ export default {
       // refreshed too, silently swallow real unsaved goal edits. Seeded from
       // the match on load, then owned here.
       registrationsClosedAt: null,
+      // The cap, kept out of `match` for exactly the same reason as
+      // registrationsClosedAt above: an admin changing it must not make the
+      // match look dirty against matchSnapshot. maxPlayers is what the server
+      // last confirmed (and what the counts render); maxPlayersInput is the
+      // editable draft, so a half-typed value never re-splits the list.
+      maxPlayers: null,
+      maxPlayersInput: '',
+      isUpdatingMaxPlayers: false,
       // Sampled ONCE, in created(). There is deliberately no polling timer and
       // no reactive clock: this app has no reactive store and re-reads its data
       // on navigation, so a player who had this page open from before sign-ups
@@ -769,7 +795,17 @@ export default {
     // `registrations` list this page already loads, rather than
     // match.RegistrationCount, which nothing here ever refreshes locally.
     signupCountLabel() {
-      return `${this.registrations.length} / ${this.match.MaxPlayers} signed up`;
+      return `${this.registrations.length} / ${this.maxPlayers} signed up`;
+    },
+
+    // A cap that is unchanged, empty or non-positive has nothing to send: the
+    // backend refuses a non-positive one (ErrInvalidMaxPlayers) and treats an
+    // unchanged one as a no-op, so the button is disabled rather than round-
+    // tripping to be told so.
+    canUpdateMaxPlayers() {
+      const parsed = Number(this.maxPlayersInput);
+      if (!Number.isInteger(parsed) || parsed < 1) return false;
+      return parsed !== this.maxPlayers;
     },
 
     // The full /matches/:id/edit URL reads badly in a chat next to "Join
@@ -911,6 +947,7 @@ export default {
         // Snapshot the closed flag out of the match and into local state, so
         // Close/Reopen never touch `match` (and so never make it look dirty).
         this.registrationsClosedAt = (this.match && this.match.RegistrationsClosedAt) || null;
+      this.setMaxPlayersState((this.match && this.match.MaxPlayers) || null);
       } catch (error) {
         console.error('Error fetching match:', error);
         this.showMessage('Error loading match details', 'error');
@@ -1026,6 +1063,38 @@ export default {
       } finally {
         this.isUpdatingRegistrationState = false;
       }
+    },
+
+    // Answers with the recomputed sign-up list, so the confirmed/waiting split
+    // is adopted straight from the server rather than re-derived here from the
+    // new cap — the same rule the rest of this panel follows. On failure the
+    // list is reloaded anyway, since a rejection usually means this page's view
+    // of it is stale.
+    async updateMaxPlayers() {
+      if (this.isUpdatingMaxPlayers || !this.canUpdateMaxPlayers) return;
+      const requested = Number(this.maxPlayersInput);
+      this.isUpdatingMaxPlayers = true;
+      try {
+        const entries = await setMatchMaxPlayers(this.match.ID, requested);
+        this.registrations = Array.isArray(entries) ? entries : this.registrations;
+        this.setMaxPlayersState(requested);
+        const benched = this.registrations.filter(entry => entry.IsWaiting).length;
+        const benchNote = benched > 0 ? ` ${benched} player(s) moved to the waiting list.` : '';
+        this.showMessage(`Confirmed places set to ${requested}.${benchNote}`, 'success');
+      } catch (error) {
+        console.error('Error updating max players:', error);
+        this.showMessage(this.registrationErrorMessage(error, 'Error updating the number of confirmed places.'), 'error');
+        await this.loadRegistrations();
+      } finally {
+        this.isUpdatingMaxPlayers = false;
+      }
+    },
+
+    // The confirmed cap and its editable draft always move together: the input
+    // is a draft of this value, never a second source of truth for it.
+    setMaxPlayersState(value) {
+      this.maxPlayers = value;
+      this.maxPlayersInput = value === null || value === undefined ? '' : String(value);
     },
 
     registrationErrorMessage(error, fallback) {
@@ -1810,6 +1879,34 @@ export default {
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1rem;
+}
+
+/* Sits in the same row as Close/Reopen, as one unit: label, field and button
+   are one action, so they keep a tighter gap than .signup-actions' own. */
+.max-players-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.max-players-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.max-players-input {
+  width: 4.5rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.max-players-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
 }
 
 /* Marked out from Close/Reopen next to it: this is the one button in the panel

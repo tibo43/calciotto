@@ -288,3 +288,41 @@ func (s *MatchRegistrationService) findMatchInGroup(matchID, groupID uuid.UUID) 
 	}
 	return &match, nil
 }
+
+// SetMaxPlayers changes how many of a scheduled match's sign-ups count as
+// confirmed, the rest of the list becoming the waiting list. It is the admin
+// action for the case the derived design already makes trivial: 12 players
+// signed up for a 16-a-side match, so the admin drops the cap to 10 and the
+// last two roll onto the bench — in sign-up order, with no row rewritten (see
+// ComputeRegistrationPositions).
+//
+// Deliberately *not* gated on RegistrationWindowError, unlike Register and
+// Unregister: adjusting the split is exactly what an admin does after closing
+// sign-ups in order to compose the teams, so refusing it on a closed list
+// would block the main use case. Raising the cap on a closed list promotes the
+// head of the waiting list for the same reason lowering it demotes the tail.
+//
+// Setting the cap a match already has is a successful no-op, the same
+// reasoning as CloseRegistrations/ReopenRegistrations: a retried request must
+// not fail for nothing.
+func (s *MatchRegistrationService) SetMaxPlayers(matchID, groupID uuid.UUID, maxPlayers int) error {
+	match, err := s.findMatchInGroup(matchID, groupID)
+	if err != nil {
+		return err
+	}
+	if !match.IsScheduled() {
+		return ErrMatchNotScheduled
+	}
+	// Shared with MatchSpec.validate rather than a sentinel of its own: a
+	// non-positive cap benches every single sign-up, which is as meaningless
+	// set after the fact as it is at creation.
+	if maxPlayers <= 0 {
+		return ErrInvalidMaxPlayers
+	}
+	if match.MaxPlayers != nil && *match.MaxPlayers == maxPlayers {
+		return nil
+	}
+
+	return s.DB.Model(&models.Match{}).Where("id = ?", match.ID).
+		Updates(map[string]any{"max_players": maxPlayers}).Error
+}

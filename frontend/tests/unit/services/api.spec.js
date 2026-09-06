@@ -84,6 +84,8 @@ describe('the match sign-up calls', () => {
     mockInstance.get.mockResolvedValue({ status: 200, data: [] });
     mockInstance.post.mockResolvedValue({ status: 200, data: {} });
     mockInstance.delete.mockResolvedValue({ status: 200, data: { unregistered: true } });
+    mockInstance.patch.mockReset();
+    mockInstance.patch.mockResolvedValue({ status: 200, data: [] });
   });
 
   it('signs the caller up with no body and no group_id', async () => {
@@ -117,6 +119,21 @@ describe('the match sign-up calls', () => {
 
     await api.reopenMatchRegistrations('match-uuid');
     expect(mockInstance.post).toHaveBeenCalledWith('/matches/match-uuid/registrations/reopen');
+  });
+
+  it('changes the confirmed cap with a PATCH and no group_id', async () => {
+    const recomputed = [{ PlayerID: 'p1', Name: 'marco', Position: 1, IsWaiting: false }];
+    mockInstance.patch.mockResolvedValue({ status: 200, data: recomputed });
+
+    const entries = await api.setMatchMaxPlayers('match-uuid', 10);
+
+    expect(mockInstance.patch).toHaveBeenCalledWith(
+      '/matches/match-uuid/registrations/max-players',
+      { max_players: 10 }
+    );
+    // It answers with the recomputed list, which is what the caller renders —
+    // the confirmed/waiting split is never re-derived client-side.
+    expect(entries).toEqual(recomputed);
   });
 
   it('rethrows so a 409 reaches the caller that has to explain it', async () => {

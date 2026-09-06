@@ -8,6 +8,7 @@ import {
   unregisterFromMatch,
   closeMatchRegistrations,
   reopenMatchRegistrations,
+  setMatchMaxPlayers,
   getGroupMembers,
   getInviteCode,
   getToken
@@ -25,6 +26,7 @@ jest.mock('@/services/api', () => ({
   unregisterFromMatch: jest.fn(),
   closeMatchRegistrations: jest.fn(),
   reopenMatchRegistrations: jest.fn(),
+  setMatchMaxPlayers: jest.fn(),
   getInviteCode: jest.fn(),
   getToken: jest.fn()
 }));
@@ -124,6 +126,7 @@ beforeEach(() => {
   unregisterFromMatch.mockResolvedValue({ unregistered: true });
   closeMatchRegistrations.mockResolvedValue({ closed: true });
   reopenMatchRegistrations.mockResolvedValue({ reopened: true });
+  setMatchMaxPlayers.mockResolvedValue([]);
   getInviteCode.mockResolvedValue({ invite_code: 'ABC23XYZ' });
 });
 
@@ -335,6 +338,128 @@ describe('MatchDetails.vue admin close/reopen', () => {
 
     expect(reopenMatchRegistrations).toHaveBeenCalledWith(MATCH_ID);
     expect(wrapper.vm.registrationState).toBe('open');
+  });
+});
+
+describe('MatchDetails.vue admin editing the number of confirmed places', () => {
+  it('is offered to an admin and hidden from a plain member', async () => {
+    const asAdmin = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+    expect(asAdmin.find('.max-players-editor').exists()).toBe(true);
+
+    const asMember = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList()
+    });
+    expect(asMember.find('.max-players-editor').exists()).toBe(false);
+  });
+
+  // The whole point of the feature: the cap is adjustable *after* the list is
+  // closed, which is when an admin composing the teams decides 12 sign-ups
+  // should be 10 players and 2 reserves.
+  it('stays offered once sign-ups are closed', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch({ RegistrationsClosedAt: '2026-09-05T18:00:00+02:00' }),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    expect(wrapper.find('.max-players-editor').exists()).toBe(true);
+    expect(wrapper.find('.max-players-input').element.value).toBe('3');
+  });
+
+  it('will not submit an unchanged, empty or non-positive cap', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    // Seeded from the match, so nothing to send yet.
+    expect(wrapper.vm.canUpdateMaxPlayers).toBe(false);
+
+    for (const value of ['', '0', '-2', 'abc', '2.5']) {
+      await wrapper.find('.max-players-input').setValue(value);
+      expect(wrapper.vm.canUpdateMaxPlayers).toBe(false);
+    }
+
+    await wrapper.vm.updateMaxPlayers();
+    expect(setMatchMaxPlayers).not.toHaveBeenCalled();
+  });
+
+  // The recomputed list comes back from the server; the split is never
+  // re-derived here from the new cap.
+  it('adopts the server-recomputed confirmed/waiting split', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    const recomputed = registrationList().map((entry, index) => ({
+      ...entry,
+      IsWaiting: index >= 2
+    }));
+    setMatchMaxPlayers.mockResolvedValue(recomputed);
+
+    await wrapper.find('.max-players-input').setValue('2');
+    expect(wrapper.vm.canUpdateMaxPlayers).toBe(true);
+    await wrapper.vm.updateMaxPlayers();
+    await flushPromises();
+
+    expect(setMatchMaxPlayers).toHaveBeenCalledWith(MATCH_ID, 2);
+    expect(wrapper.vm.confirmedRegistrations).toHaveLength(2);
+    expect(wrapper.vm.waitingRegistrations.map(entry => entry.Name)).toEqual(['gigi', 'nico']);
+    // No second fetch: the response *is* the list.
+    expect(getMatchRegistrations).toHaveBeenCalledTimes(1);
+  });
+
+  // Same reasoning as close/reopen: writing the cap back into `match` would
+  // make the page look dirty against its snapshot and pop the leave-without-
+  // saving prompt.
+  it('keeps the cap out of the match, so no unsaved-changes prompt appears', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+    setMatchMaxPlayers.mockResolvedValue(
+      registrationList().map((entry, index) => ({ ...entry, IsWaiting: index >= 2 }))
+    );
+
+    await wrapper.find('.max-players-input').setValue('2');
+    await wrapper.vm.updateMaxPlayers();
+    await flushPromises();
+
+    expect(wrapper.vm.maxPlayers).toBe(2);
+    expect(wrapper.vm.match.MaxPlayers).toBe(3);
+    expect(wrapper.vm.hasUnsavedChanges()).toBe(false);
+    expect(wrapper.vm.signupCountLabel).toBe('4 / 2 signed up');
+  });
+
+  it('reloads the list and surfaces the backend message when the update is refused', async () => {
+    const wrapper = await mountDetails({
+      match: scheduledMatch(),
+      registrations: registrationList(),
+      isAdmin: true
+    });
+
+    setMatchMaxPlayers.mockRejectedValue({
+      response: { status: 400, data: { error: 'maximum number of players must be greater than zero' } }
+    });
+
+    await wrapper.find('.max-players-input').setValue('9');
+    await wrapper.vm.updateMaxPlayers();
+    await flushPromises();
+
+    expect(wrapper.vm.message).toBe('maximum number of players must be greater than zero');
+    expect(wrapper.vm.messageType).toBe('error');
+    // The cap is unchanged, and the list was re-read rather than left stale.
+    expect(wrapper.vm.maxPlayers).toBe(3);
+    expect(getMatchRegistrations).toHaveBeenCalledTimes(2);
   });
 });
 
