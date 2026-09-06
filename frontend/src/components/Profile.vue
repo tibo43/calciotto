@@ -920,9 +920,18 @@ export default {
   color: var(--primary-color);
 }
 
-.member-action-btn.is-danger:hover:not(:disabled) {
+/* Red at rest, not only on hover: with no text label left on the button, the
+   colour is the only thing that says "this one destroys something" before the
+   click — and hover doesn't exist on the phone this row was tightened for. */
+.member-action-btn.is-danger {
   border-color: var(--danger-color);
   color: var(--danger-color);
+}
+
+.member-action-btn.is-danger:hover:not(:disabled) {
+  border-color: var(--danger-hover);
+  background-color: var(--danger-color);
+  color: white;
 }
 
 .member-action-btn:disabled {
