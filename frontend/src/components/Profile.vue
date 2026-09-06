@@ -176,13 +176,29 @@
                                  existing one) can't log in to actually use
                                  admin privileges, so promoting one is a dead
                                  end. -->
-                            <button v-if="member.email" class="btn-base btn-cancel btn-small"
-                              :disabled="memberActionLoading[member.id]" @click="toggleMemberRole(member)">
-                              {{ member.role === 'admin' ? 'Demote' : 'Promote' }}
+                            <!-- Icon-only, no text labels: two labelled
+                                 buttons plus a name did not fit one line on a
+                                 phone, so the row wrapped and each member cost
+                                 two lines. The arrow's shaft is the same either
+                                 way, only its head flips — up promotes, down
+                                 demotes — so it's one <svg> with a bound
+                                 polyline rather than two v-if'd icons. -->
+                            <button v-if="member.email" class="member-action-btn"
+                              :disabled="memberActionLoading[member.id]" @click="toggleMemberRole(member)"
+                              :title="member.role === 'admin' ? 'Demote to member' : 'Promote to admin'"
+                              :aria-label="member.role === 'admin' ? 'Demote to member' : 'Promote to admin'">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <polyline :points="member.role === 'admin' ? '19 12 12 19 5 12' : '5 12 12 5 19 12'" />
+                              </svg>
                             </button>
-                            <button class="btn-base btn-danger btn-small" :disabled="memberActionLoading[member.id]"
-                              @click="confirmRemoveMember(member)">
-                              Remove
+                            <button class="member-action-btn is-danger" :disabled="memberActionLoading[member.id]"
+                              @click="confirmRemoveMember(member)" title="Remove from group"
+                              aria-label="Remove from group">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                              </svg>
                             </button>
                           </template>
                         </div>
@@ -819,9 +835,13 @@ export default {
   border-radius: var(--border-radius);
 }
 
+/* Deliberately does not wrap: the actions are icon-only (see the template)
+   precisely so they stay on the name's own line at phone width, and letting
+   them wrap again would undo that. It's the name that gives way instead —
+   .member-identity shrinks and the name ellipsises. */
 .member-row-main {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
@@ -831,11 +851,18 @@ export default {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  /* A flex item's default min-width: auto is "at least my content's width",
+     which would push the actions off the row instead of truncating a long
+     name — the same rule that broke the sub-tabs in MatchesAndStandings.vue. */
+  min-width: 0;
 }
 
 .member-name {
   font-weight: 500;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Ghost (no account yet) and admin used to be separate pill badges next to
@@ -866,15 +893,46 @@ export default {
 
 .member-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.375rem;
+  flex-shrink: 0;
 }
 
-/* Tighter than .btn-small on its own: three of these can sit in one row on
-   a narrow roster card, so a bit more compact than the default small
-   button size fits better here specifically. */
-.member-actions .btn-base {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.8rem;
+/* Same round icon-button shape as .icon-action-btn above, one size down:
+   these sit inside a member row rather than a card header, and two of them
+   have to fit next to a name on a phone. */
+.member-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.member-action-btn:hover:not(:disabled) {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.member-action-btn.is-danger:hover:not(:disabled) {
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+}
+
+.member-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.member-action-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .invite-form {

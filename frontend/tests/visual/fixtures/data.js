@@ -190,10 +190,51 @@ const motmVotes = {
 // GET /groups/:id/players — PlayerWithRole, so lowercase keys with `role`
 // alongside. The credential-less entry is the admin-created "ghost player" the
 // roster shows an "Invite" action for.
+// GET /players/me/stats — the cross-group profile Profile.vue renders. One
+// entry per group in `groups` above, so the two cards line up with the roles
+// GET /groups/me reports (admin here, member there): the roster panel's
+// action buttons are gated per group, so a fixture with only an admin group
+// couldn't photograph both branches. The long name on the second card is
+// deliberate — it is what exercises the member row's name truncation.
+const playerStats = {
+  Overall: {
+    PlayerID: CURRENT_PLAYER_ID,
+    Name: 'Thibaut Fabre',
+    Played: 24, Won: 13, Drawn: 4, Lost: 7,
+    GoalsFor: 19, Points: 43, IsMember: true, MotmAwards: 5,
+  },
+  PerGroup: [
+    {
+      GroupID: GROUP_ID, GroupName: 'Calciotto Milano',
+      PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre',
+      Played: 18, Won: 10, Drawn: 3, Lost: 5,
+      GoalsFor: 14, Points: 33, IsMember: true, MotmAwards: 4,
+    },
+    {
+      GroupID: OTHER_GROUP_ID, GroupName: 'Sunday League',
+      PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre',
+      Played: 6, Won: 3, Drawn: 1, Lost: 2,
+      GoalsFor: 5, Points: 10, IsMember: true, MotmAwards: 1,
+    },
+  ],
+};
+
 const groupMembers = [
   { id: CURRENT_PLAYER_ID, name: 'Thibaut Fabre', email: 'thibaut@example.com', role: 'admin' },
   { id: 'e1', name: 'Andrea Conti', email: 'andrea@example.com', role: 'member' },
   { id: 'e2', name: 'Marco Rossi', role: 'member' },
+];
+
+// Same roster, with one deliberately over-long name. Used only by
+// profile.spec.js: the roster's admin actions are icon-only so they stay on
+// the member's own line at phone width, which only holds if the *name* is
+// what gives way — this is the row that photographs that. Kept as its own
+// fixture rather than a fourth entry in `groupMembers` above, which every
+// match-details baseline also renders through the Add Player list.
+const groupMembersLongName = [
+  groupMembers[0],
+  { id: 'e3', name: 'Alessandro Bartolomeo Della Fontana', email: 'ale@example.com', role: 'member' },
+  ...groupMembers.slice(1),
 ];
 
 // GET /groups/:id/invite-code — fetched by MatchDetails.vue for an admin
@@ -216,5 +257,7 @@ module.exports = {
   motmStandings,
   motmVotes,
   groupMembers,
+  groupMembersLongName,
+  playerStats,
   inviteCode,
 };
