@@ -194,7 +194,7 @@ export const deleteMatch = async (matchId, groupId) => {
 
 // Sign-ups on a scheduled match.
 //
-// None of these five takes a group_id, unlike every other match call above:
+// None of these six takes a group_id, unlike every other match call above:
 // the backend resolves the group from the match named in the path and
 // authorizes against *that* (requireGroupMemberByMatchID /
 // requireGroupAdminByMatchID in main.go). Passing one would be the hole that
@@ -287,7 +287,32 @@ export const reopenMatchRegistrations = async (matchId) => {
   }
 };
 
-// Man of the Match voting. Like the five sign-up calls above, none of these
+// Admin-only: changes how many sign-ups count as confirmed. The rest of the
+// list becomes the waiting list, in sign-up order — no sign-up is deleted and
+// nobody is re-registered, which is why this answers with the recomputed list
+// (the same shape getMatchRegistrations returns) rather than a flat success:
+// the new confirmed/waiting split is the whole result of the call, and it stays
+// server-derived here exactly as it is everywhere else.
+//
+// Unlike registering and withdrawing, this is *not* gated on the sign-up
+// window: closing the list is usually what precedes adjusting the cap, since
+// both are steps of composing the teams.
+export const setMatchMaxPlayers = async (matchId, maxPlayers) => {
+  try {
+    const response = await api.patch(`/matches/${matchId}/registrations/max-players`, {
+      max_players: maxPlayers
+    });
+    if (response.status !== 200) {
+      throw new Error('Failed to update the maximum number of players');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error updating match max players:', error);
+    throw error;
+  }
+};
+
+// Man of the Match voting. Like the six sign-up calls above, none of these
 // three carry a group_id: the backend derives the group from the match named
 // in the path (RequireGroupMembershipByMatchPathParam), so sending one would
 // be the same hole that design already closes.

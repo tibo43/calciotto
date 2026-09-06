@@ -140,7 +140,7 @@ func main() {
 	// does in the handler itself.
 	r.DELETE("/matches/:id", authRequired, requireGroupAdmin, matchHandler.DeleteMatch)
 
-	// Sign-ups for a scheduled match. All five are gated by the match-scoped
+	// Sign-ups for a scheduled match. All six are gated by the match-scoped
 	// middlewares: the path carries a match id, so the group is derived from
 	// the match itself — a member of another group gets 404, not 403, so match
 	// ids stay unenumerable (see matchscope.go).
@@ -156,6 +156,14 @@ func main() {
 	// mis-clicked close are admin actions, like every other write on a match.
 	r.POST("/matches/:id/registrations/close", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.CloseRegistrations)
 	r.POST("/matches/:id/registrations/reopen", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.ReopenRegistrations)
+	// Changing how many sign-ups count as confirmed — the rest of the list
+	// becomes the waiting list, in sign-up order, with no row rewritten. It
+	// lives under /registrations because the cap is only ever read as that
+	// list's confirmed/waiting boundary (see ComputeRegistrationPositions),
+	// and it is deliberately *not* gated on the registration window: dropping
+	// the cap is typically what an admin does right after closing sign-ups, in
+	// order to compose the teams.
+	r.PATCH("/matches/:id/registrations/max-players", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.SetMaxPlayers)
 
 	// Man of the Match voting. Same match-scoped middleware pair as the
 	// sign-up routes above, but every route is open to any member: voting has

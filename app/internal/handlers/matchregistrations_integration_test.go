@@ -59,6 +59,7 @@ func newRegistrationEnv(t *testing.T, tx *gorm.DB) *registrationEnv {
 	router.GET("/matches/:id/registrations", authRequired, requireGroupMemberByMatchID, registrationHandler.ListRegistrations)
 	router.POST("/matches/:id/registrations/close", authRequired, requireGroupAdminByMatchID, registrationHandler.CloseRegistrations)
 	router.POST("/matches/:id/registrations/reopen", authRequired, requireGroupAdminByMatchID, registrationHandler.ReopenRegistrations)
+	router.PATCH("/matches/:id/registrations/max-players", authRequired, requireGroupAdminByMatchID, registrationHandler.SetMaxPlayers)
 
 	return &registrationEnv{
 		groups:        services.NewGroupService(tx),
@@ -311,6 +312,7 @@ func TestMatchRegistrations_Integration_OtherGroupGets404(t *testing.T) {
 		{http.MethodGet, base},
 		{http.MethodPost, base + "/close"},
 		{http.MethodPost, base + "/reopen"},
+		{http.MethodPatch, base + "/max-players"},
 	}
 
 	for _, tc := range cases {
@@ -385,6 +387,135 @@ func TestMatchRegistrations_Integration_MemberCannotCloseOrReopen(t *testing.T) 
 	// Reopening really restored the window, rather than just answering 200.
 	if rec := env.do(http.MethodPost, base, group.memberToken, nil); rec.Code != http.StatusOK {
 		t.Errorf("POST registrations after reopen returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestSetMaxPlayers_Integration_LoweringCapMovesTailToWaitingList is the core
+// of this endpoint's contract, and the case that motivated it: 12 players have
+// signed up for a 16-a-side match, so the admin drops the cap to 10 and the two
+// most recent sign-ups roll onto the bench — in sign-up order, with nobody
+// re-registered and no row rewritten.
+func TestSetMaxPlayers_Integration_LoweringCapMovesTailToWaitingList(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newRegistrationEnv(t, tx)
+
+	group := env.newGroup(t, "maxplayers")
+	matchID := env.scheduledMatch(t, group.id, 16)
+
+	// Registered through the service directly rather than over HTTP: this test
+	// is about what the PATCH answers, and twelve bcrypt-backed logins would
+	// only make it slow (same shortcut as TestRegister_Integration_SurplusSignUpWaits).
+	signedUp := make([]uuid.UUID, 0, 12)
+	for i := 0; i < 12; i++ {
+		player, err := env.players.CreatePlayer(fmt.Sprintf("Zzz Reg MaxPlayers Player %02d", i))
+		if err != nil {
+			t.Fatalf("failed to create player %d: %v", i, err)
+		}
+		if err := env.memberships.AddPlayerToGroup(group.id, player); err != nil {
+			t.Fatalf("failed to add player %d to the group: %v", i, err)
+		}
+		if err := env.registrations.Register(matchID, player); err != nil {
+			t.Fatalf("failed to register player %d: %v", i, err)
+		}
+		signedUp = append(signedUp, player)
+	}
+
+	rec := env.do(http.MethodPatch, "/matches/"+matchID.String()+"/registrations/max-players",
+		group.adminToken, map[string]any{"max_players": 10})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin PATCH max-players returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+
+	// The response is the recomputed list, so a client never has to re-derive
+	// the confirmed/waiting split from the cap itself.
+	var entries []models.MatchRegistrationEntry
+	if err := json.Unmarshal(rec.Body.Bytes(), &entries); err != nil {
+		t.Fatalf("failed to unmarshal registrations from %s: %v", rec.Body.String(), err)
+	}
+	if len(entries) != 12 {
+		t.Fatalf("PATCH max-players answered with %d entries, want 12 — lowering the cap must not delete a sign-up", len(entries))
+	}
+	for i, entry := range entries {
+		wantWaiting := i >= 10
+		if entry.IsWaiting != wantWaiting {
+			t.Errorf("entry %d (position %d) IsWaiting = %t, want %t", i, entry.Position, entry.IsWaiting, wantWaiting)
+		}
+		if entry.PlayerID != signedUp[i] {
+			t.Errorf("entry %d is player %s, want %s — the sign-up order must be untouched", i, entry.PlayerID, signedUp[i])
+		}
+	}
+
+	// Raising the cap back promotes the same two players, since nothing about
+	// their rows changed in the first place.
+	rec = env.do(http.MethodPatch, "/matches/"+matchID.String()+"/registrations/max-players",
+		group.adminToken, map[string]any{"max_players": 16})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin PATCH max-players (raising) returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+	entries = nil
+	if err := json.Unmarshal(rec.Body.Bytes(), &entries); err != nil {
+		t.Fatalf("failed to unmarshal registrations from %s: %v", rec.Body.String(), err)
+	}
+	for _, entry := range entries {
+		if entry.IsWaiting {
+			t.Errorf("player at position %d is still waiting after raising the cap back to 16", entry.Position)
+		}
+	}
+}
+
+// TestSetMaxPlayers_Integration_AuthorizationAndValidation covers the three
+// refusals, plus the one state this action deliberately does *not* refuse: a
+// closed sign-up list, which is exactly when an admin composing the teams
+// adjusts the cap.
+func TestSetMaxPlayers_Integration_AuthorizationAndValidation(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newRegistrationEnv(t, tx)
+
+	group := env.newGroup(t, "maxplayersguard")
+	matchID := env.scheduledMatch(t, group.id, 16)
+	path := "/matches/" + matchID.String() + "/registrations/max-players"
+
+	// A member of the right group already knows the match exists, so this is an
+	// honest 403 rather than the 404 an outsider gets.
+	if rec := env.do(http.MethodPatch, path, group.memberToken, map[string]any{"max_players": 10}); rec.Code != http.StatusForbidden {
+		t.Errorf("plain member PATCH max-players returned status %d, want 403, body: %s", rec.Code, rec.Body.String())
+	}
+
+	// A non-positive cap would bench every single sign-up, so it is refused the
+	// same way CreateMatch refuses it.
+	if rec := env.do(http.MethodPatch, path, group.adminToken, map[string]any{"max_players": 0}); rec.Code != http.StatusBadRequest {
+		t.Errorf("PATCH max-players with 0 returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
+	}
+
+	// An omitted value is a 400 too, and must not be read as the zero one.
+	if rec := env.do(http.MethodPatch, path, group.adminToken, map[string]any{}); rec.Code != http.StatusBadRequest {
+		t.Errorf("PATCH max-players with no max_players returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
+	}
+
+	// An unscheduled match has no sign-up list at all, so there is no cap to set.
+	unscheduledID := env.createMatch(t, group.id, services.MatchSpec{Date: models.DateOf(time.Now())})
+	unscheduledPath := "/matches/" + unscheduledID.String() + "/registrations/max-players"
+	if rec := env.do(http.MethodPatch, unscheduledPath, group.adminToken, map[string]any{"max_players": 10}); rec.Code != http.StatusBadRequest {
+		t.Errorf("PATCH max-players on an unscheduled match returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
+	}
+
+	// Closing sign-ups does not close this: it is the moment the cap is most
+	// likely to be adjusted.
+	if rec := env.do(http.MethodPost, "/matches/"+matchID.String()+"/registrations/close", group.adminToken, nil); rec.Code != http.StatusOK {
+		t.Fatalf("admin POST close returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+	if rec := env.do(http.MethodPatch, path, group.adminToken, map[string]any{"max_players": 10}); rec.Code != http.StatusOK {
+		t.Errorf("PATCH max-players on a closed list returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+
+	var match models.Match
+	if err := tx.Where("id = ?", matchID).First(&match).Error; err != nil {
+		t.Fatalf("failed to reload the match: %v", err)
+	}
+	if match.MaxPlayers == nil || *match.MaxPlayers != 10 {
+		t.Errorf("stored MaxPlayers = %v, want 10", match.MaxPlayers)
 	}
 }
 
