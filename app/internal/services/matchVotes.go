@@ -18,10 +18,21 @@ var (
 
 	// ErrVotedForPlayerNotOnRoster rejects a vote for a player with no
 	// MatchPlayer row for this match, on either team. This is what scopes
-	// voting to actual participants — the voter can be anyone in the group
-	// (see MatchVoteService.Vote's own comment), but the candidate must have
-	// actually played.
+	// voting to actual participants — the candidate must have actually
+	// played, held to the exact same standard as the voter now is (see
+	// ErrVoterNotOnRoster).
 	ErrVotedForPlayerNotOnRoster = errors.New("the player voted for is not on this match's roster")
+
+	// ErrVoterNotOnRoster is the voter-side mirror of
+	// ErrVotedForPlayerNotOnRoster: it rejects a vote cast by a player with no
+	// MatchPlayer row for this match, on either team. This reverses an
+	// earlier, deliberate product decision (see MatchVoteService.Vote's own
+	// comment, and CLAUDE.md's "Man of the Match voting" section) that any
+	// group member could judge a match regardless of whether they played in
+	// it — new explicit product feedback narrowed that: only someone who
+	// actually took part in this specific match may vote on who was its best
+	// player.
+	ErrVoterNotOnRoster = errors.New("only players on this match's roster can vote for man of the match")
 
 	// ErrVotingClosed is returned once the voting window (see
 	// VotingWindowError) has passed for this match. Casting, changing and
@@ -66,7 +77,9 @@ func VotingWindowError(match models.Match, now time.Time) error {
 // derived from them. Like MatchRegistrationService, it deliberately does not
 // check that the voter belongs to the match's group — that is authorization,
 // enforced one layer up by RequireGroupMembershipByMatchPathParam on the
-// route.
+// route. It does, however, check that the voter actually played in this
+// specific match (see Vote's own comment and ErrVoterNotOnRoster) — that is
+// eligibility, not group authorization, and is this service's own concern.
 //
 // There is no admin close/reopen concept here, unlike MatchRegistrationService:
 // voting is always open for any match with a composed roster, for as long as
@@ -93,13 +106,14 @@ func NewMatchVoteService(db *gorm.DB) *MatchVoteService {
 // guarantee under a race; the transaction below is what makes the visible
 // behaviour update-in-place rather than a rejection.
 //
-// Voter eligibility is deliberately broader than "played in the match": any
-// group member can judge who the best player was, including a sub who did
-// not get on or a member who only watched — enforced by the route's
-// membership check, not by this service. The candidate, on the other hand,
-// must actually be on the roster (ErrVotedForPlayerNotOnRoster) — that is
-// what keeps "who was the best player" scoped to people who could plausibly
-// have been.
+// Voter and candidate are now held to the identical eligibility standard:
+// both must have an actual MatchPlayer row for this match, on either team,
+// checked by the same playerOnRoster helper. This used to be asymmetric —
+// any group member could judge who the best player was, including a sub who
+// did not get on or a member who only watched, with only the candidate held
+// to the roster requirement — but new explicit product feedback reversed
+// that: only someone who actually played in this specific match may vote on
+// it. See ErrVoterNotOnRoster for the voter-side sentinel this added.
 func (s *MatchVoteService) Vote(matchID, voterID, votedForID uuid.UUID) error {
 	match, err := s.findMatch(matchID)
 	if err != nil {
@@ -108,6 +122,15 @@ func (s *MatchVoteService) Vote(matchID, voterID, votedForID uuid.UUID) error {
 	if err := VotingWindowError(*match, time.Now()); err != nil {
 		return err
 	}
+
+	voterOnRoster, err := s.playerOnRoster(matchID, voterID)
+	if err != nil {
+		return err
+	}
+	if !voterOnRoster {
+		return ErrVoterNotOnRoster
+	}
+
 	if voterID == votedForID {
 		return ErrCannotVoteForSelf
 	}

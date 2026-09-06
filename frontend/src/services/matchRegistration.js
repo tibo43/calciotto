@@ -217,3 +217,15 @@ export const teamsAreComposed = (match) => Boolean(
   && Array.isArray(match.Teams)
   && match.Teams.some(team => Array.isArray(team.Players) && team.Players.length > 0)
 );
+
+// Whether playerId has an actual roster spot on match — a MatchPlayer row,
+// on either team — mirroring MatchVoteService.playerOnRoster on the Go side.
+// Added alongside the reversal of Man of the Match voting's own eligibility
+// rule (see CLAUDE.md's "Man of the Match voting" section): only a player who
+// actually played in a given match may now cast a vote for it, so the
+// frontend needs the same "is this player on this match's roster" check the
+// backend already enforces, to grey out voting for a viewer who wasn't.
+export const isPlayerOnRoster = (match, playerId) => {
+  if (!match || !playerId) return false;
+  return (match.Teams || []).some(team => (team.Players || []).some(p => p.ID === playerId));
+};

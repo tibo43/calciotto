@@ -104,9 +104,9 @@ func (e *voteEnv) do(method, path, token string, body any) *httptest.ResponseRec
 }
 
 // voteGroup is a group with an admin, two plain members, and a match whose
-// roster is the admin plus the first member — leaving the second member as a
-// non-playing voter, exactly the "watched but did not play" case voter
-// eligibility is meant to cover.
+// roster is the admin plus the first member — leaving the second member off
+// the roster entirely, exactly the "watched but did not play" case that
+// ErrVoterNotOnRoster now rejects a vote attempt from.
 type voteGroup struct {
 	id           uuid.UUID
 	adminID      uuid.UUID
@@ -175,10 +175,13 @@ func decodeVoteSummary(t *testing.T, rec *httptest.ResponseRecorder) models.Matc
 	return summary
 }
 
-// TestVote_Integration_NonPlayingMemberCanVoteForARosterPlayer is the central
-// eligibility divergence from sign-ups: member2 never played, but can still
-// judge who did.
-func TestVote_Integration_NonPlayingMemberCanVoteForARosterPlayer(t *testing.T) {
+// TestVote_Integration_NonPlayingMemberRejected pins the reversed eligibility
+// rule: member2 never played in this match, so their vote is now rejected
+// with ErrVoterNotOnRoster (400) rather than accepted. This used to be the
+// central eligibility divergence from sign-ups (a non-playing member could
+// judge who did play) — new explicit product feedback closed that gap, and
+// the voter is now held to the exact same roster standard as the candidate.
+func TestVote_Integration_NonPlayingMemberRejected(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 	env := newVoteEnv(t, tx)
@@ -187,8 +190,35 @@ func TestVote_Integration_NonPlayingMemberCanVoteForARosterPlayer(t *testing.T) 
 	path := "/matches/" + group.matchID.String() + "/votes"
 
 	rec := env.do(http.MethodPost, path, group.member2Token, map[string]string{"voted_for_id": group.adminID.String()})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("non-playing member's vote returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
+	}
+
+	summary, err := env.votes.ListVotes(group.matchID, group.adminID)
+	if err != nil {
+		t.Fatalf("ListVotes returned error: %v", err)
+	}
+	if len(summary.Tally) != 0 {
+		t.Errorf("tally = %+v after a rejected non-playing vote, want empty", summary.Tally)
+	}
+}
+
+// TestVote_Integration_RosterPlayerCanVote is the positive counterpart of
+// TestVote_Integration_NonPlayingMemberRejected: a player who actually has a
+// MatchPlayer row for this match — member1, on the black team alongside the
+// admin — can still cast a vote exactly as before. Only a non-participant's
+// vote is newly rejected; nothing changed for an eligible voter.
+func TestVote_Integration_RosterPlayerCanVote(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newVoteEnv(t, tx)
+
+	group := env.newGroupWithComposedMatch(t, "rosterok")
+	path := "/matches/" + group.matchID.String() + "/votes"
+
+	rec := env.do(http.MethodPost, path, group.member1Token, map[string]string{"voted_for_id": group.adminID.String()})
 	if rec.Code != http.StatusOK {
-		t.Fatalf("non-playing member's vote returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
+		t.Fatalf("roster player's vote returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
 	}
 	summary := decodeVoteSummary(t, rec)
 	if len(summary.Tally) != 1 || summary.Tally[0].PlayerID != group.adminID || summary.Tally[0].Votes != 1 {
@@ -232,7 +262,10 @@ func TestVote_Integration_NotOnRosterRejected(t *testing.T) {
 
 // TestVote_Integration_UpsertOverHTTP: a second POST from the same voter
 // changes their vote rather than being refused, unlike the sign-up route's
-// ErrAlreadyRegistered/409.
+// ErrAlreadyRegistered/409. The voter here must be a roster player (member1)
+// now that voting is roster-gated; member2 is additionally added to the
+// roster (on the other team) purely so member1 has a second, distinct
+// eligible candidate to change their vote to.
 func TestVote_Integration_UpsertOverHTTP(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -241,18 +274,32 @@ func TestVote_Integration_UpsertOverHTTP(t *testing.T) {
 	group := env.newGroupWithComposedMatch(t, "upsert")
 	path := "/matches/" + group.matchID.String() + "/votes"
 
-	firstRec := env.do(http.MethodPost, path, group.member2Token, map[string]string{"voted_for_id": group.adminID.String()})
+	teams, err := env.teams.GetTeamsByGroupID(group.id)
+	if err != nil {
+		t.Fatalf("failed to load teams: %v", err)
+	}
+	white := teams[1]
+	if err := env.matches.UpdateMatch(models.MatchWithDetails{
+		ID: group.matchID,
+		Teams: []models.TeamWithPlayers{
+			{ID: white.ID, Players: []models.PlayerCustom{{ID: group.member2ID}}},
+		},
+	}); err != nil {
+		t.Fatalf("failed to add member2 to the roster: %v", err)
+	}
+
+	firstRec := env.do(http.MethodPost, path, group.member1Token, map[string]string{"voted_for_id": group.adminID.String()})
 	if firstRec.Code != http.StatusOK {
 		t.Fatalf("first vote returned status %d, want 200, body: %s", firstRec.Code, firstRec.Body.String())
 	}
 
-	secondRec := env.do(http.MethodPost, path, group.member2Token, map[string]string{"voted_for_id": group.member1ID.String()})
+	secondRec := env.do(http.MethodPost, path, group.member1Token, map[string]string{"voted_for_id": group.member2ID.String()})
 	if secondRec.Code != http.StatusOK {
 		t.Fatalf("changed vote returned status %d, want 200 (an upsert, not a conflict), body: %s", secondRec.Code, secondRec.Body.String())
 	}
 	summary := decodeVoteSummary(t, secondRec)
-	if summary.MyVoteFor == nil || *summary.MyVoteFor != group.member1ID {
-		t.Fatalf("MyVoteFor after changing = %v, want %s", summary.MyVoteFor, group.member1ID)
+	if summary.MyVoteFor == nil || *summary.MyVoteFor != group.member2ID {
+		t.Fatalf("MyVoteFor after changing = %v, want %s", summary.MyVoteFor, group.member2ID)
 	}
 	total := 0
 	for _, c := range summary.Tally {
@@ -265,7 +312,12 @@ func TestVote_Integration_UpsertOverHTTP(t *testing.T) {
 
 // TestUnvote_Integration_NoOpSuccess: DELETE with no existing vote is 200,
 // never 404 — the same "must not fail for nothing" contract as
-// ReopenRegistrations.
+// ReopenRegistrations. The initial no-op DELETE deliberately uses member2,
+// who is not on the match roster at all: Unvote was not given a roster check
+// (only Vote was — see the "Background" reasoning in CLAUDE.md), so a
+// non-participant's no-op removal must keep succeeding exactly as before.
+// The subsequent cast-then-remove flow needs an actual vote to exist first,
+// so it switches to member1 (on the roster) to cast it.
 func TestUnvote_Integration_NoOpSuccess(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -286,14 +338,15 @@ func TestUnvote_Integration_NoOpSuccess(t *testing.T) {
 		t.Errorf("unvote response = %v, want {\"unvoted\": true}", body)
 	}
 
-	// Cast, then remove: the tally must return to empty.
-	if rec := env.do(http.MethodPost, path, group.member2Token, map[string]string{"voted_for_id": group.adminID.String()}); rec.Code != http.StatusOK {
+	// Cast, then remove: the tally must return to empty. The voter must be on
+	// the roster (member1) since casting a vote is now roster-gated.
+	if rec := env.do(http.MethodPost, path, group.member1Token, map[string]string{"voted_for_id": group.adminID.String()}); rec.Code != http.StatusOK {
 		t.Fatalf("vote returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
 	}
-	if rec := env.do(http.MethodDelete, path, group.member2Token, nil); rec.Code != http.StatusOK {
+	if rec := env.do(http.MethodDelete, path, group.member1Token, nil); rec.Code != http.StatusOK {
 		t.Fatalf("DELETE votes returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
 	}
-	listRec := env.do(http.MethodGet, path, group.member2Token, nil)
+	listRec := env.do(http.MethodGet, path, group.member1Token, nil)
 	summary := decodeVoteSummary(t, listRec)
 	if len(summary.Tally) != 0 {
 		t.Errorf("tally = %+v after the only vote was withdrawn, want empty", summary.Tally)
@@ -303,7 +356,11 @@ func TestUnvote_Integration_NoOpSuccess(t *testing.T) {
 // TestMatchVotes_Integration_WindowClosedIs409 checks the HTTP mapping for
 // ErrVotingClosed: once the match is backdated (its Date, not CreatedAt) past
 // the Date+2 window, both POST and DELETE answer 409, while GET keeps
-// serving the tally unchanged.
+// serving the tally unchanged. The initial cast and the fresh post-window
+// POST both use member1 (on the roster) now that casting is roster-gated;
+// the post-window DELETE deliberately uses member2 (off the roster) to show
+// the window check applies to Unvote regardless of roster standing — Unvote
+// itself still carries no roster check of its own.
 func TestMatchVotes_Integration_WindowClosedIs409(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -313,7 +370,7 @@ func TestMatchVotes_Integration_WindowClosedIs409(t *testing.T) {
 	path := "/matches/" + group.matchID.String() + "/votes"
 
 	// Cast a vote while the window is open, then backdate the match.
-	if rec := env.do(http.MethodPost, path, group.member2Token, map[string]string{"voted_for_id": group.adminID.String()}); rec.Code != http.StatusOK {
+	if rec := env.do(http.MethodPost, path, group.member1Token, map[string]string{"voted_for_id": group.adminID.String()}); rec.Code != http.StatusOK {
 		t.Fatalf("initial vote returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
 	}
 	if err := tx.Model(&models.Match{}).Where("id = ?", group.matchID).

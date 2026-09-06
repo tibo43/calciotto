@@ -29,6 +29,7 @@ const OFFSET_MINUTES = -120;
 
 const ME = '11111111-1111-1111-1111-111111111111';
 const SOMEONE_ELSE = '22222222-2222-2222-2222-222222222222';
+const NON_PARTICIPANT = '33333333-3333-3333-3333-333333333333';
 
 // Same shape as MatchDetails.spec.js's own helper — an unsigned token with a
 // real base64url payload is enough, since currentPlayerIdFromToken never
@@ -781,6 +782,55 @@ describe('MatchesPanel.vue Man of the Match voting', () => {
     await star.trigger('click');
     await flushPromises();
     expect(voteForMotm).not.toHaveBeenCalled();
+  });
+
+  // Reversed product decision (see CLAUDE.md's "Man of the Match voting"
+  // section): only a player who actually played in this specific match may
+  // vote, so a viewer with no MatchPlayer row on it — NON_PARTICIPANT, on
+  // neither team of composedMatch() — must see every star disabled with an
+  // explanatory tooltip, even though the tally itself is still readable.
+  it('disables every star and explains why when the viewer did not play in this match', async () => {
+    withinWindow();
+    getToken.mockReturnValue(tokenFor(NON_PARTICIPANT));
+    getMatchesDetails.mockResolvedValue([composedMatch()]);
+    getMatchVotes.mockResolvedValue({
+      Tally: [{ PlayerID: SOMEONE_ELSE, Name: 'marco', Votes: 2 }],
+      MyVoteFor: null
+    });
+    const wrapper = await mountPanel();
+
+    const stars = wrapper.findAll('.motm-star-btn');
+    expect(stars.length).toBe(2);
+    stars.forEach(star => {
+      expect(star.attributes('disabled')).toBeDefined();
+      expect(star.attributes('title')).toBe(
+        'Only players who took part in this match can vote for Man of the Match'
+      );
+    });
+
+    // Reading the tally is unaffected — only the star's interactivity is.
+    expect(wrapper.find('.motm-vote-count').text()).toBe('2 votes');
+
+    await stars[0].trigger('click');
+    await flushPromises();
+    expect(voteForMotm).not.toHaveBeenCalled();
+    expect(removeMotmVote).not.toHaveBeenCalled();
+  });
+
+  // The positive counterpart: a viewer who IS on the roster (the default ME
+  // fixture, on team-a alongside SOMEONE_ELSE in every other test in this
+  // block) keeps voting exactly as before — nothing here should regress.
+  it('still lets a viewer who played in the match cast a vote', async () => {
+    withinWindow();
+    getMatchesDetails.mockResolvedValue([composedMatch()]);
+    const wrapper = await mountPanel();
+
+    const otherStar = wrapper.find('.motm-star-btn:not(.is-self)');
+    expect(otherStar.attributes('disabled')).toBeUndefined();
+
+    await otherStar.trigger('click');
+    await flushPromises();
+    expect(voteForMotm).toHaveBeenCalledWith('played-uuid', SOMEONE_ELSE);
   });
 
   it('offers no star at all before any player has been placed on a team', async () => {

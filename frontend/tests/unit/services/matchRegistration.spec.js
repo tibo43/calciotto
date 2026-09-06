@@ -5,6 +5,7 @@ import {
   registrationStateLabel,
   fillTeamsFromRegistrations,
   teamsAreComposed,
+  isPlayerOnRoster,
   REGISTRATION_UNSCHEDULED,
   REGISTRATION_NOT_OPEN_YET,
   REGISTRATION_OPEN,
@@ -281,6 +282,42 @@ describe('teamsAreComposed', () => {
 
   it('tolerates a team with no Players array rather than throwing', () => {
     expect(teamsAreComposed({ Teams: [{ ID: 'a' }, { ID: 'b', Players: [] }] })).toBe(false);
+  });
+});
+
+describe('isPlayerOnRoster', () => {
+  const teams = (playersA, playersB) => [
+    { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: playersA },
+    { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: playersB }
+  ];
+
+  it('is true for a player on team A', () => {
+    const match = { Teams: teams([{ ID: 'p1', Name: 'marco', GoalNumber: 0 }], []) };
+    expect(isPlayerOnRoster(match, 'p1')).toBe(true);
+  });
+
+  it('is true for a player on team B', () => {
+    const match = { Teams: teams([], [{ ID: 'p2', Name: 'luca', GoalNumber: 0 }]) };
+    expect(isPlayerOnRoster(match, 'p2')).toBe(true);
+  });
+
+  it('is false for a real group member who is on neither team', () => {
+    const match = {
+      Teams: teams([{ ID: 'p1', Name: 'marco', GoalNumber: 0 }], [{ ID: 'p2', Name: 'luca', GoalNumber: 0 }])
+    };
+    expect(isPlayerOnRoster(match, 'p3')).toBe(false);
+  });
+
+  it('is false for a null/undefined match rather than throwing', () => {
+    expect(isPlayerOnRoster(null, 'p1')).toBe(false);
+    expect(isPlayerOnRoster(undefined, 'p1')).toBe(false);
+  });
+
+  it('is false for a null/undefined/empty playerId rather than throwing', () => {
+    const match = { Teams: teams([{ ID: 'p1', Name: 'marco', GoalNumber: 0 }], []) };
+    expect(isPlayerOnRoster(match, null)).toBe(false);
+    expect(isPlayerOnRoster(match, undefined)).toBe(false);
+    expect(isPlayerOnRoster(match, '')).toBe(false);
   });
 });
 
