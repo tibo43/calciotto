@@ -386,6 +386,206 @@ func TestLogin_Integration_TokenContainsPlayerID(t *testing.T) {
 	}
 }
 
+// TestDeleteAccount_Integration_WrongPasswordFails pins DeleteAccount's
+// safety confirmation: a wrong password must refuse the whole deletion, and
+// leave the account exactly as it was (still able to log in).
+func TestDeleteAccount_Integration_WrongPasswordFails(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+	group, err := services.NewGroupService(tx).CreateGroup("Zzz Delete Account Wrong Password Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("CreateGroup returned error: %v", err)
+	}
+
+	playerID, err := authService.SignupNewPlayer("Zzz Integration Auth Oscar", "oscar@example.com", "correct-pass", group.InviteCode)
+	if err != nil {
+		t.Fatalf("SignupNewPlayer returned error: %v", err)
+	}
+
+	if err := authService.DeleteAccount(playerID, "wrong-pass"); !errors.Is(err, services.ErrInvalidCredentials) {
+		t.Errorf("DeleteAccount with wrong password error = %v, want ErrInvalidCredentials", err)
+	}
+
+	if _, err := authService.Login("oscar@example.com", "correct-pass"); err != nil {
+		t.Errorf("Login after a refused DeleteAccount returned error: %v, account must be untouched", err)
+	}
+}
+
+// TestDeleteAccount_Integration_EmptyPasswordFails pins the same up-front
+// guard Signup/ResetPassword already share for an empty password.
+func TestDeleteAccount_Integration_EmptyPasswordFails(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+	group, err := services.NewGroupService(tx).CreateGroup("Zzz Delete Account Empty Password Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("CreateGroup returned error: %v", err)
+	}
+
+	playerID, err := authService.SignupNewPlayer("Zzz Integration Auth Paul", "paul@example.com", "s3cret-pass", group.InviteCode)
+	if err != nil {
+		t.Fatalf("SignupNewPlayer returned error: %v", err)
+	}
+
+	if err := authService.DeleteAccount(playerID, ""); !errors.Is(err, services.ErrPasswordRequired) {
+		t.Errorf("DeleteAccount with an empty password error = %v, want ErrPasswordRequired", err)
+	}
+}
+
+// TestDeleteAccount_Integration_AnonymizesAndCleansUp is the main happy-path
+// test: it covers the account itself (anonymized, not erased, and no longer
+// usable to log in), the admin-successor rule (mirroring
+// GroupMembershipService.LeaveGroup) when the deleted player was a group's
+// last admin, and the asymmetric handling of match-related rows — votes CAST
+// by the deleted player are gone, but a vote FOR them (a historical fact
+// about a match that already happened) survives untouched.
+func TestDeleteAccount_Integration_AnonymizesAndCleansUp(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+	membershipService := services.NewGroupMembershipService(tx)
+	matchService := services.NewMatchService(tx)
+
+	group, err := services.NewGroupService(tx).CreateGroup("Zzz Delete Account Cleanup Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("CreateGroup returned error: %v", err)
+	}
+
+	deletingPlayerID, err := authService.SignupNewPlayer("Zzz Integration Auth Quinn", "quinn@example.com", "s3cret-pass", group.InviteCode)
+	if err != nil {
+		t.Fatalf("SignupNewPlayer for the deleting player returned error: %v", err)
+	}
+	// SignupNewPlayer always joins as a plain member (see CLAUDE.md), and
+	// CreateGroup itself assigns no admin at all (see GroupService.CreateGroup)
+	// — promote Quinn to admin directly so they end up the group's *only*
+	// admin, the case the successor rule exists for.
+	if err := tx.Model(&models.GroupMembership{}).
+		Where("group_id = ? AND player_id = ?", group.ID, deletingPlayerID).
+		Update("role", models.RoleAdmin).Error; err != nil {
+		t.Fatalf("failed to promote Quinn to admin directly: %v", err)
+	}
+
+	survivorID, err := authService.SignupNewPlayer("Zzz Integration Auth Rita", "rita@example.com", "s3cret-pass", group.InviteCode)
+	if err != nil {
+		t.Fatalf("SignupNewPlayer for the survivor returned error: %v", err)
+	}
+
+	matchID, err := matchService.CreateMatch(services.MatchSpec{Date: models.DateOf(time.Now())}, group.ID)
+	if err != nil {
+		t.Fatalf("CreateMatch returned error: %v", err)
+	}
+	if err := tx.Create(&models.MatchRegistration{MatchID: matchID, PlayerID: deletingPlayerID}).Error; err != nil {
+		t.Fatalf("failed to create match registration: %v", err)
+	}
+	// Quinn votes for Rita (must be deleted along with Quinn's account) and
+	// Rita votes for Quinn (must survive — a historical fact about the match).
+	if err := tx.Create(&models.MatchVote{MatchID: matchID, VoterID: deletingPlayerID, VotedForID: survivorID}).Error; err != nil {
+		t.Fatalf("failed to create Quinn's vote: %v", err)
+	}
+	if err := tx.Create(&models.MatchVote{MatchID: matchID, VoterID: survivorID, VotedForID: deletingPlayerID}).Error; err != nil {
+		t.Fatalf("failed to create Rita's vote: %v", err)
+	}
+
+	if err := authService.DeleteAccount(deletingPlayerID, "s3cret-pass"); err != nil {
+		t.Fatalf("DeleteAccount returned error: %v", err)
+	}
+
+	// The membership is gone outright, and Rita — the group's only remaining
+	// member — was promoted to admin so the group isn't left adminless.
+	isMember, err := membershipService.IsMember(group.ID, deletingPlayerID)
+	if err != nil {
+		t.Fatalf("IsMember returned error: %v", err)
+	}
+	if isMember {
+		t.Error("deleted player is still a member of the group")
+	}
+	survivorRole, err := membershipService.GetRole(group.ID, survivorID)
+	if err != nil {
+		t.Fatalf("GetRole for the survivor returned error: %v", err)
+	}
+	if survivorRole != models.RoleAdmin {
+		t.Errorf("survivor role = %q, want %q (successor promotion)", survivorRole, models.RoleAdmin)
+	}
+
+	var registrationCount int64
+	if err := tx.Model(&models.MatchRegistration{}).Where("player_id = ?", deletingPlayerID).Count(&registrationCount).Error; err != nil {
+		t.Fatalf("failed to count match registrations: %v", err)
+	}
+	if registrationCount != 0 {
+		t.Errorf("match registration count for deleted player = %d, want 0", registrationCount)
+	}
+
+	var castVoteCount int64
+	if err := tx.Model(&models.MatchVote{}).Where("voter_id = ?", deletingPlayerID).Count(&castVoteCount).Error; err != nil {
+		t.Fatalf("failed to count votes cast by deleted player: %v", err)
+	}
+	if castVoteCount != 0 {
+		t.Errorf("votes cast by deleted player = %d, want 0", castVoteCount)
+	}
+
+	var voteForDeletedPlayer models.MatchVote
+	if err := tx.Where("voter_id = ? AND voted_for_id = ?", survivorID, deletingPlayerID).First(&voteForDeletedPlayer).Error; err != nil {
+		t.Errorf("vote FOR the deleted player was removed, want it kept as historical record: %v", err)
+	}
+
+	var player models.Player
+	if err := tx.First(&player, "id = ?", deletingPlayerID).Error; err != nil {
+		t.Fatalf("failed to reload deleted player: %v", err)
+	}
+	if player.Name != "Deleted account" {
+		t.Errorf("player name after deletion = %q, want %q", player.Name, "Deleted account")
+	}
+	if player.Email != nil {
+		t.Errorf("player email after deletion = %q, want nil", *player.Email)
+	}
+	if player.PasswordHash != "" {
+		t.Error("player password hash after deletion is not empty")
+	}
+
+	if _, err := authService.Login("quinn@example.com", "s3cret-pass"); !errors.Is(err, services.ErrInvalidCredentials) {
+		t.Errorf("Login with the deleted account's old email error = %v, want ErrInvalidCredentials", err)
+	}
+}
+
+// TestDeleteAccount_Integration_SoleGroupMemberLeavesGroupEmpty pins the one
+// deliberate divergence from GroupMembershipService.LeaveGroup: leaving
+// voluntarily refuses when the departing player is a group's only member
+// (ErrLastMember), since there's no one to hand the group off to — but
+// deleting the account outright cannot be refused the same way, so the group
+// is simply left with no members at all.
+func TestDeleteAccount_Integration_SoleGroupMemberLeavesGroupEmpty(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+
+	group, err := services.NewGroupService(tx).CreateGroup("Zzz Delete Account Sole Member Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("CreateGroup returned error: %v", err)
+	}
+
+	playerID, err := authService.SignupNewPlayer("Zzz Integration Auth Sam", "sam@example.com", "s3cret-pass", group.InviteCode)
+	if err != nil {
+		t.Fatalf("SignupNewPlayer returned error: %v", err)
+	}
+
+	if err := authService.DeleteAccount(playerID, "s3cret-pass"); err != nil {
+		t.Fatalf("DeleteAccount for a group's sole member returned error: %v, want nil", err)
+	}
+
+	var memberCount int64
+	if err := tx.Model(&models.GroupMembership{}).Where("group_id = ?", group.ID).Count(&memberCount).Error; err != nil {
+		t.Fatalf("failed to count memberships: %v", err)
+	}
+	if memberCount != 0 {
+		t.Errorf("group membership count after its sole member deleted their account = %d, want 0", memberCount)
+	}
+}
+
 func TestParseToken_Integration_RejectsInvalidAndExpiredTokens(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)

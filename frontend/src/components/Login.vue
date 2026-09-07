@@ -4,6 +4,7 @@
       <h1 class="page-title">Log in</h1>
 
       <p v-if="resetConfirmed" class="auth-notice">Your password has been updated. Log in with it below.</p>
+      <p v-if="accountDeleted" class="auth-notice">Your account has been deleted.</p>
 
       <form @submit.prevent="submit">
         <div class="form-group">
@@ -54,6 +55,14 @@ export default {
     // successful reset.
     resetConfirmed() {
       return this.$route.query.reset === 'success';
+    },
+    // Set by DeleteAccountModal.vue after a successful self-service account
+    // deletion — a plain query param rather than router-passed state, since
+    // that redirect is a hard `window.location.href` navigation (the app's
+    // own session is over at that point, so there's no Vue router instance
+    // left to carry state through).
+    accountDeleted() {
+      return this.$route.query.accountDeleted === 'success';
     },
   },
   methods: {

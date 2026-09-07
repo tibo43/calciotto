@@ -211,12 +211,26 @@
               </transition>
             </template>
           </div>
+
+          <!-- Danger zone: kept in its own card, visually separated from
+               everything above, so an irreversible action doesn't sit next
+               to routine ones (favoriting a group, viewing a roster). -->
+          <div class="danger-zone-card card-base card-large">
+            <h2 class="section-title danger-zone-title">Danger zone</h2>
+            <p class="danger-zone-description">
+              Permanently delete your account. This cannot be undone.
+            </p>
+            <button class="btn-base btn-danger" @click="showDeleteAccountModal = true">
+              Delete my account
+            </button>
+          </div>
         </div>
       </div>
     </section>
 
     <GroupSettingsModal v-if="settingsForGroup" :group-id="settingsForGroup.id" :group-name="settingsForGroup.name"
       @close="settingsForGroup = null" />
+    <DeleteAccountModal v-if="showDeleteAccountModal" @close="showDeleteAccountModal = false" />
   </div>
 </template>
 
@@ -226,6 +240,7 @@ import {
   updateMemberRole, removeMember, setFavoriteGroup, updateMyName, getToken
 } from '@/services/api';
 import GroupSettingsModal from '@/components/GroupSettingsModal.vue';
+import DeleteAccountModal from '@/components/DeleteAccountModal.vue';
 
 // The JWT's own player_id claim is the only place the caller's player id is
 // available on this page (there's no "who am I" endpoint) — decoded locally,
@@ -248,7 +263,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'PlayerProfile',
-  components: { GroupSettingsModal },
+  components: { GroupSettingsModal, DeleteAccountModal },
   data() {
     return {
       overall: { Name: '', Played: 0, Won: 0, Drawn: 0, Lost: 0, GoalsFor: 0, Points: 0, MotmAwards: 0 },
@@ -284,7 +299,8 @@ export default {
       currentPlayerId: '',
 
       // Non-null while the invite-code/teams dialog for one group is open.
-      settingsForGroup: null
+      settingsForGroup: null,
+      showDeleteAccountModal: false
     };
   },
   computed: {
@@ -966,6 +982,23 @@ export default {
 /* Table — same rules as PointsStandingsTable.vue's ranking */
 .standings-table-container {
   overflow-x: auto;
+}
+
+/* Danger zone: a red-bordered card, deliberately the last thing on the page
+   and visually distinct from the cards above (which cover routine, harmless
+   actions) — an irreversible action shouldn't blend in next to them. */
+.danger-zone-card {
+  border: 1px solid var(--danger-color);
+}
+
+.danger-zone-title {
+  color: var(--danger-color);
+}
+
+.danger-zone-description {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0.25rem 0 1rem;
 }
 
 /* Responsive */
