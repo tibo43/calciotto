@@ -136,3 +136,44 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "password updated"})
 }
+
+// DeleteAccount lets the authenticated player permanently delete their own
+// account (DELETE /players/me). The current password is required in the body
+// as a safety confirmation. See AuthService.DeleteAccount for what actually
+// happens (the account is anonymized, not erased) and why.
+//
+// A wrong password answers 400, not 401 the way Login answers a rejected
+// login attempt: the frontend's single axios instance treats *any* 401,
+// system-wide, as "this session is no longer valid" and force-logs-out the
+// caller (see api.js's response interceptor) — appropriate for a token the
+// backend itself rejected, but a real bug here, since the caller is already
+// authenticated and simply mistyped a confirmation password. 400 keeps that
+// global interceptor from firing over what is a validation failure, not a
+// session one.
+func (h *AuthHandler) DeleteAccount(c *gin.Context) {
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.Service.DeleteAccount(playerID, req.Password); err != nil {
+		switch {
+		case errors.Is(err, services.ErrPasswordRequired), errors.Is(err, services.ErrInvalidCredentials):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}

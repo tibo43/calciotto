@@ -36,6 +36,7 @@ func newAuthTestRouter(authService *services.AuthService) *gin.Engine {
 	authHandler := handlers.NewAuthHandler(authService)
 	router.POST("/auth/signup", authHandler.Signup)
 	router.POST("/auth/login", authHandler.Login)
+	router.DELETE("/players/me", handlers.AuthMiddleware(authService), authHandler.DeleteAccount)
 	router.GET("/protected", handlers.AuthMiddleware(authService), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"player_id": c.MustGet("player_id")})
 	})
@@ -342,5 +343,91 @@ func TestAuthHandler_Integration_LoginWrongPasswordReturns401(t *testing.T) {
 	router.ServeHTTP(loginRec, loginReq)
 	if loginRec.Code != http.StatusUnauthorized {
 		t.Errorf("login with wrong password returned status %d, want 401, body: %s", loginRec.Code, loginRec.Body.String())
+	}
+}
+
+// TestAuthHandler_Integration_DeleteAccount covers the route wiring around
+// AuthService.DeleteAccount: missing/empty password -> 400, wrong password ->
+// 400 (not 401 — see DeleteAccount's own doc comment for why) with the
+// account still usable, and a correct password -> 200 with the account no
+// longer usable to log in. The service's own test suite
+// (auth_integration_test.go in internal/services) covers the anonymization
+// and cleanup behavior in depth; this just pins the HTTP status mapping.
+func TestAuthHandler_Integration_DeleteAccount(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testAuthJWTSecret)
+	router := newAuthTestRouter(authService)
+	inviteCode := newSignupInviteCode(t, tx)
+
+	signupBody, _ := json.Marshal(map[string]string{
+		"name":        "Zzz Integration Handler Tara",
+		"email":       "tara@example.com",
+		"password":    "s3cret-pass",
+		"invite_code": inviteCode,
+	})
+	signupReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(signupBody))
+	signupReq.Header.Set("Content-Type", "application/json")
+	signupRec := httptest.NewRecorder()
+	router.ServeHTTP(signupRec, signupReq)
+	if signupRec.Code != http.StatusOK {
+		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())
+	}
+	var signupResp struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(signupRec.Body.Bytes(), &signupResp); err != nil {
+		t.Fatalf("failed to decode signup response: %v", err)
+	}
+
+	// Missing password -> 400, account untouched.
+	emptyBodyReq := httptest.NewRequest(http.MethodDelete, "/players/me", bytes.NewReader([]byte("{}")))
+	emptyBodyReq.Header.Set("Content-Type", "application/json")
+	emptyBodyReq.Header.Set("Authorization", "Bearer "+signupResp.Token)
+	emptyBodyRec := httptest.NewRecorder()
+	router.ServeHTTP(emptyBodyRec, emptyBodyReq)
+	if emptyBodyRec.Code != http.StatusBadRequest {
+		t.Errorf("DELETE /players/me with no password returned status %d, want 400, body: %s", emptyBodyRec.Code, emptyBodyRec.Body.String())
+	}
+
+	// Wrong password -> 400 (not 401 — see DeleteAccount's own doc comment),
+	// account untouched.
+	wrongPasswordBody, _ := json.Marshal(map[string]string{"password": "wrong-pass"})
+	wrongPasswordReq := httptest.NewRequest(http.MethodDelete, "/players/me", bytes.NewReader(wrongPasswordBody))
+	wrongPasswordReq.Header.Set("Content-Type", "application/json")
+	wrongPasswordReq.Header.Set("Authorization", "Bearer "+signupResp.Token)
+	wrongPasswordRec := httptest.NewRecorder()
+	router.ServeHTTP(wrongPasswordRec, wrongPasswordReq)
+	if wrongPasswordRec.Code != http.StatusBadRequest {
+		t.Errorf("DELETE /players/me with wrong password returned status %d, want 400, body: %s", wrongPasswordRec.Code, wrongPasswordRec.Body.String())
+	}
+
+	loginBody, _ := json.Marshal(map[string]string{"email": "tara@example.com", "password": "s3cret-pass"})
+	loginReq := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(loginBody))
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginRec := httptest.NewRecorder()
+	router.ServeHTTP(loginRec, loginReq)
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login after a refused deletion returned status %d, want 200 (account must be untouched), body: %s", loginRec.Code, loginRec.Body.String())
+	}
+
+	// Correct password -> 200.
+	deleteBody, _ := json.Marshal(map[string]string{"password": "s3cret-pass"})
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/players/me", bytes.NewReader(deleteBody))
+	deleteReq.Header.Set("Content-Type", "application/json")
+	deleteReq.Header.Set("Authorization", "Bearer "+signupResp.Token)
+	deleteRec := httptest.NewRecorder()
+	router.ServeHTTP(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("DELETE /players/me with the correct password returned status %d, want 200, body: %s", deleteRec.Code, deleteRec.Body.String())
+	}
+
+	postDeleteLoginReq := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(loginBody))
+	postDeleteLoginReq.Header.Set("Content-Type", "application/json")
+	postDeleteLoginRec := httptest.NewRecorder()
+	router.ServeHTTP(postDeleteLoginRec, postDeleteLoginReq)
+	if postDeleteLoginRec.Code != http.StatusUnauthorized {
+		t.Errorf("login with the deleted account's old email/password returned status %d, want 401", postDeleteLoginRec.Code)
 	}
 }

@@ -336,6 +336,124 @@ func (s *AuthService) ResetPassword(token, newPassword string) error {
 	})
 }
 
+// deletedAccountName is what Player.Name is replaced with when the player
+// deletes their own account (DeleteAccount) — the account is anonymized, not
+// erased: MatchPlayer and MatchVote both hold a real foreign key to
+// players(id) with no ON DELETE CASCADE (the same kind of FK
+// MatchService.DeleteMatch already has to work around for matches(id) — see
+// CLAUDE.md), so a genuine row delete would either fail outright or, if
+// forced first, corrupt every other player's shared match history (goals
+// scored, Man of the Match awards) in every match this player ever took part
+// in. Stripping the name/email/password instead is what actually satisfies
+// "this account no longer exists" without touching a single match record.
+const deletedAccountName = "Deleted account"
+
+// DeleteAccount lets a player permanently delete their own account (DELETE
+// /players/me). The current password is required as a safety confirmation —
+// this is the one truly irreversible self-service action in the whole app,
+// unlike e.g. reopening sign-ups or demoting an admin, both of which can be
+// undone — verified with the same bcrypt.CompareHashAndPassword Login uses.
+// A wrong password and an unknown player both collapse into
+// ErrInvalidCredentials, the same "don't tell the caller which check failed"
+// posture Login already takes with its own two failure modes; in practice
+// only "wrong password" is reachable through the route, since the player
+// always comes from an already-validated JWT.
+//
+// The Player row itself is never deleted, only anonymized — see
+// deletedAccountName's own comment for why a hard delete isn't an option.
+// What *is* deleted outright, all inside one transaction:
+//   - Every GroupMembership. If this player was a group's only admin and the
+//     group still has other members, the oldest remaining member is promoted
+//     first — the same successor rule GroupMembershipService.LeaveGroup
+//     applies — except a group where this player was the *only* member is
+//     deliberately left with none, rather than refused the way LeaveGroup's
+//     own ErrLastMember would refuse a voluntary departure: there is no
+//     "hand the group off" option left once the account itself is gone.
+//   - Every PasswordResetToken (nothing left to reset a password on).
+//   - Every MatchRegistration (future sign-ups this player will no longer
+//     attend — safe to drop, unlike a MatchPlayer row, which is historical
+//     record rather than a pending action).
+//   - Every MatchVote *cast by* this player. Votes *for* this player as Man
+//     of the Match are deliberately left alone: like a MatchPlayer's goals,
+//     they're a fact about a match that already happened, not something tied
+//     to the voter's account still existing.
+func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
+	if password == "" {
+		return ErrPasswordRequired
+	}
+
+	var player models.Player
+	if err := s.DB.First(&player, "id = ?", playerID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrInvalidCredentials
+		}
+		return err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(player.PasswordHash), []byte(password)); err != nil {
+		return ErrInvalidCredentials
+	}
+
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		var memberships []models.GroupMembership
+		if err := tx.Where("player_id = ?", playerID).Find(&memberships).Error; err != nil {
+			return err
+		}
+
+		for _, membership := range memberships {
+			if membership.Role != models.RoleAdmin {
+				continue
+			}
+
+			var otherAdmins int64
+			if err := tx.Model(&models.GroupMembership{}).
+				Where("group_id = ? AND player_id <> ? AND role = ?", membership.GroupID, playerID, models.RoleAdmin).
+				Count(&otherAdmins).Error; err != nil {
+				return err
+			}
+			if otherAdmins > 0 {
+				continue
+			}
+
+			var successor models.GroupMembership
+			err := tx.Where("group_id = ? AND player_id <> ?", membership.GroupID, playerID).
+				Order("created_at ASC").
+				First(&successor).Error
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					continue // this player was the group's only member
+				}
+				return err
+			}
+			if err := tx.Model(&models.GroupMembership{}).
+				Where("id = ?", successor.ID).
+				Update("role", models.RoleAdmin).Error; err != nil {
+				return err
+			}
+		}
+
+		if err := tx.Where("player_id = ?", playerID).Delete(&models.GroupMembership{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("player_id = ?", playerID).Delete(&models.PasswordResetToken{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("player_id = ?", playerID).Delete(&models.MatchRegistration{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("voter_id = ?", playerID).Delete(&models.MatchVote{}).Error; err != nil {
+			return err
+		}
+
+		return tx.Model(&models.Player{}).
+			Where("id = ?", playerID).
+			Updates(map[string]interface{}{
+				"name":          deletedAccountName,
+				"email":         nil,
+				"password_hash": "",
+			}).Error
+	})
+}
+
 // generateResetToken returns the raw token that goes into the emailed link and
 // the SHA-256 hex digest that goes into the database — only the digest is ever
 // persisted. The raw token is base64 URL-safe without padding so it can sit in

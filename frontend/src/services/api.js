@@ -445,6 +445,17 @@ export const updateMyName = async (name) => {
   return response.data;
 };
 
+// Self-service "delete my account". The backend anonymizes the account
+// rather than erasing it (see AuthService.DeleteAccount) so every other
+// player's shared match history stays intact — but from this app's point of
+// view the account is gone: the caller should clear their token and navigate
+// away immediately after this resolves, the same way a failed 401 anywhere
+// else in this file already forces a logout.
+export const deleteMyAccount = async (password) => {
+  const response = await api.delete('/players/me', { data: { password } });
+  return response.data;
+};
+
 // Groups
 // Only /groups/me is scoped to the caller — the plain GET /groups is public
 // and lists every group in the system, which is never what this app wants.

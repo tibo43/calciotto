@@ -82,6 +82,13 @@ func main() {
 	// Same reasoning as /players/me/stats: this only ever acts on the JWT's
 	// own player id, so no group-scoping middleware is needed.
 	r.PATCH("/players/me", authRequired, playerHandler.UpdateMyName)
+	// Self-service "delete my account" — the current password is required in
+	// the body as a safety confirmation. Lives on AuthHandler rather than
+	// PlayerHandler since it's fundamentally a credential-lifecycle action,
+	// the same reasoning Login/Signup/ResetPassword already live there — see
+	// AuthService.DeleteAccount for what actually happens (anonymize, not
+	// erase) and why.
+	r.DELETE("/players/me", authRequired, authHandler.DeleteAccount)
 
 	// Groups
 	// POST /groups and POST /groups/join are temporarily disabled (both

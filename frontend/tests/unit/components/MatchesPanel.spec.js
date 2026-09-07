@@ -364,6 +364,23 @@ describe('MatchesPanel.vue scheduled match cards', () => {
 // confirmed/waiting roster with names stays on the match page, which is why
 // these tests never assert on a roster list here.
 describe('MatchesPanel.vue inline sign-up panel', () => {
+  // "Now" is pinned inside the fixture's sign-up window (opens
+  // 2026-09-01T12:00, kicks off 2026-09-06T20:30) rather than left to the
+  // real clock: the suite otherwise drifts past the fixture's own kickoff as
+  // real time passes, which flips matchStatus from "upcoming" to "completed"
+  // and turns every "Sign-ups open"/Participate assertion below into
+  // "Completed" with no sign-up section at all — the same fixed-clock
+  // convention the other describe blocks in this file already use, just
+  // applied at the block level here since every test in it shares one clock
+  // assumption.
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-02T09:00:00+02:00'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   // Factories, not shared consts: participate()/withdraw() mutate
   // selectedMatch.RegistrationCount in place (see the component), and a
   // shared object literal would carry that mutation from one test into the

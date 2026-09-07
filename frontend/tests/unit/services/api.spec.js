@@ -144,6 +144,27 @@ describe('the match sign-up calls', () => {
   });
 });
 
+describe('deleteMyAccount', () => {
+  beforeEach(() => {
+    mockInstance.delete.mockReset();
+    mockInstance.delete.mockResolvedValue({ status: 200, data: { deleted: true } });
+  });
+
+  it('sends the password as the DELETE request body', async () => {
+    await expect(api.deleteMyAccount('s3cret-pass')).resolves.toEqual({ deleted: true });
+
+    // axios only accepts a body on DELETE via the config's `data` key.
+    expect(mockInstance.delete).toHaveBeenCalledWith('/players/me', { data: { password: 's3cret-pass' } });
+  });
+
+  it('rethrows so a wrong-password 400 reaches the caller', async () => {
+    const rejection = { response: { status: 400, data: { error: 'invalid email or password' } } };
+    mockInstance.delete.mockRejectedValue(rejection);
+
+    await expect(api.deleteMyAccount('wrong-pass')).rejects.toBe(rejection);
+  });
+});
+
 // Same reasoning as the sign-up calls above: the group is derived from the
 // match named in the path, so none of these three carry a group_id either.
 describe('the Man of the Match vote calls', () => {
