@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"app/internal/models"
 
@@ -22,8 +23,17 @@ import (
 )
 
 var (
-	ErrEmailRequired        = errors.New("email must not be empty")
-	ErrPasswordRequired     = errors.New("password must not be empty")
+	ErrEmailRequired    = errors.New("email must not be empty")
+	ErrPasswordRequired = errors.New("password must not be empty")
+	// ErrPasswordTooShort rejects a password shorter than
+	// minPasswordLength when one is being *chosen* — signing up, or resetting
+	// a forgotten one. It is deliberately separate from
+	// ErrPasswordRequired rather than folded into it: "you left it blank" and
+	// "it needs to be longer" are different things to tell a caller, and the
+	// second one has to name the length to be actionable.
+	// The message is built from minPasswordLength rather than restating "8",
+	// so raising the floor can never leave the wording behind.
+	ErrPasswordTooShort     = fmt.Errorf("password must be at least %d characters long", minPasswordLength)
 	ErrPlayerNotFound       = errors.New("player not found")
 	ErrPlayerAlreadyClaimed = errors.New("player already has an account")
 	ErrEmailAlreadyUsed     = errors.New("email already in use")
@@ -43,6 +53,39 @@ var (
 )
 
 const tokenTTL = 7 * 24 * time.Hour
+
+// minPasswordLength is the floor for a password the caller is *choosing*.
+// Eight characters is the common baseline (NIST SP 800-63B's own minimum for a
+// user-chosen secret); before this, the only rule anywhere was "not empty", so
+// a one-character password was accepted throughout. It matters more here than
+// it would in an app with account lockout or 2FA: neither exists (see
+// CLAUDE.md), and the per-IP rate limiter on /auth/login only bounds how fast
+// *one IP* can guess.
+const minPasswordLength = 8
+
+// validateNewPassword is the whole policy, in the one place both paths that
+// let a caller choose a password go through (SignupNewPlayer and
+// ResetPassword). Length is counted in *runes*, not bytes: a passphrase in a
+// non-ASCII script would otherwise clear the bar on byte count alone while
+// being shorter than it looks.
+//
+// Login is deliberately not a caller — it must only ever compare a hash, never
+// judge the format of what it was given, or tightening this policy later would
+// lock out every account whose password predates it. AuthService.Signup
+// (attach credentials to an existing player) isn't one either: it is wired to
+// no route and is only used by test/seed fixtures, so a policy there would buy
+// nothing and break setup code that has no user behind it. DeleteAccount is
+// the same case as Login — the password it takes is a confirmation of an
+// existing one, not a new choice.
+func validateNewPassword(password string) error {
+	if password == "" {
+		return ErrPasswordRequired
+	}
+	if utf8.RuneCountInString(password) < minPasswordLength {
+		return ErrPasswordTooShort
+	}
+	return nil
+}
 
 const (
 	// passwordResetTTL : durée de validité d'un lien de reset.
@@ -162,8 +205,8 @@ func (s *AuthService) SignupNewPlayer(name, email, password, inviteCode string) 
 	if email == "" {
 		return uuid.Nil, ErrEmailRequired
 	}
-	if password == "" {
-		return uuid.Nil, ErrPasswordRequired
+	if err := validateNewPassword(password); err != nil {
+		return uuid.Nil, err
 	}
 
 	normalizedInviteCode := normalizeInviteCode(inviteCode)
@@ -291,8 +334,8 @@ func issuePasswordResetToken(db *gorm.DB, playerID uuid.UUID) (string, error) {
 // A successful reset also burns every other outstanding link for that player:
 // requesting a second reset email must not leave the first one usable.
 func (s *AuthService) ResetPassword(token, newPassword string) error {
-	if newPassword == "" {
-		return ErrPasswordRequired
+	if err := validateNewPassword(newPassword); err != nil {
+		return err
 	}
 
 	var resetToken models.PasswordResetToken

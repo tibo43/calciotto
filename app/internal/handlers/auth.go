@@ -48,6 +48,11 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		case errors.Is(err, services.ErrEmptyPlayerName),
 			errors.Is(err, services.ErrEmailRequired),
 			errors.Is(err, services.ErrPasswordRequired),
+			// Mapped alongside ErrPasswordRequired: both are the client's own
+			// input failing validation, and ErrPasswordTooShort's message
+			// already names the required length, so passing it through is what
+			// makes the 400 actionable.
+			errors.Is(err, services.ErrPasswordTooShort),
 			errors.Is(err, services.ErrEmailAlreadyUsed),
 			errors.Is(err, services.ErrInviteCodeRequired),
 			errors.Is(err, services.ErrInviteCodeNotFound):
@@ -126,7 +131,8 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		// ErrInvalidResetToken's own message is already generic (it covers
 		// unknown/expired/used alike), so passing it through leaks nothing.
 		case errors.Is(err, services.ErrInvalidResetToken),
-			errors.Is(err, services.ErrPasswordRequired):
+			errors.Is(err, services.ErrPasswordRequired),
+			errors.Is(err, services.ErrPasswordTooShort):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
