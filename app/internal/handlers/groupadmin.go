@@ -29,7 +29,7 @@ func RequireGroupAdmin(membershipService *services.GroupMembershipService) gin.H
 			return
 		}
 
-		groupID, ok := resolveGroupIDForMembership(c, membershipService, playerID)
+		groupID, ok := resolveGroupIDForMembership(c, membershipService)
 		if !ok {
 			return
 		}
