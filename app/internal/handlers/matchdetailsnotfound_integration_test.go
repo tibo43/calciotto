@@ -69,11 +69,8 @@ func TestGetMatchDetailsByID_Integration_CrossGroupReturns404(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create match in group A: %v", err)
 	}
-	if err := matchService.UpdateMatch(models.MatchWithDetails{
-		ID: matchAID,
-		Teams: []models.TeamWithPlayers{
-			{ID: teamsA[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 1}}},
-		},
+	if err := matchService.UpdateMatch(matchAID, groupA.ID, []models.TeamWithPlayers{
+		{ID: teamsA[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 1}}},
 	}); err != nil {
 		t.Fatalf("UpdateMatch (group A) returned error: %v", err)
 	}

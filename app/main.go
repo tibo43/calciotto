@@ -132,15 +132,21 @@ func main() {
 	r.PATCH("/groups/:id/members/:playerId/role", authRequired, requireGroupAdminByPathID, groupHandler.UpdateMemberRole)
 
 	// Matches
-	// Creating a match and editing its scores are admin-only
-	// (requireGroupAdmin); reading them stays open to any member
-	// (requireGroupMember). Both write routes carry the group_id in the body,
-	// not the path, hence the body/query-resolving middleware rather than the
-	// ByPathID one.
+	// Creating a match and editing its scores are admin-only; reading them
+	// stays open to any member (requireGroupMember). POST /matches carries the
+	// group_id in the body and has no match to derive it from — it is creating
+	// one — hence the body/query-resolving requireGroupAdmin.
 	r.POST("/matches", authRequired, requireGroupAdmin, matchHandler.CreateMatch)
 	r.GET("/matches/details", authRequired, requireGroupMember, matchHandler.GetMatchesDetails)
 	r.GET("/matches/:id/details", authRequired, requireGroupMember, matchHandler.GetMatchDetailsByID)
-	r.PUT("/matches/:id", authRequired, requireGroupAdmin, matchHandler.UpdateMatch)
+	// PUT /matches/:id uses the *match-scoped* admin middleware, unlike POST
+	// above: the path already names the match, so the group must be derived
+	// from it rather than from the body. It used to use requireGroupAdmin,
+	// which authorized against a group the caller supplied — letting an admin
+	// of group A pass their own group_id together with the ID of a match in
+	// group B and rewrite that match's roster and scores (see
+	// MatchHandler.UpdateMatch / MatchService.UpdateMatch).
+	r.PUT("/matches/:id", authRequired, requireGroupAdminByMatchID, matchHandler.UpdateMatch)
 	// Deleting a match is admin-only too — group_id travels in the query
 	// string (a DELETE has no body), which requireGroupAdmin's
 	// resolveGroupIDForMembership already handles the same way resolveGroupID
