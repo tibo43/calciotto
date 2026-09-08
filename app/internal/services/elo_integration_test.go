@@ -88,12 +88,9 @@ func TestGetEloStandings_Integration_ReplaysHistoryChronologicallyAndTagsMembers
 	if err != nil {
 		t.Fatalf("failed to create early match: %v", err)
 	}
-	if err := matchService.UpdateMatch(models.MatchWithDetails{
-		ID: earlyMatchID,
-		Teams: []models.TeamWithPlayers{
-			{ID: black.ID, Players: []models.PlayerCustom{{ID: carol, GoalsScored: 0}}},
-			{ID: white.ID, Players: []models.PlayerCustom{{ID: dave, GoalsScored: 2}}},
-		},
+	if err := matchService.UpdateMatch(earlyMatchID, group.ID, []models.TeamWithPlayers{
+		{ID: black.ID, Players: []models.PlayerCustom{{ID: carol, GoalsScored: 0}}},
+		{ID: white.ID, Players: []models.PlayerCustom{{ID: dave, GoalsScored: 2}}},
 	}); err != nil {
 		t.Fatalf("failed to compose early match roster: %v", err)
 	}
@@ -103,12 +100,9 @@ func TestGetEloStandings_Integration_ReplaysHistoryChronologicallyAndTagsMembers
 	if err != nil {
 		t.Fatalf("failed to create match 1: %v", err)
 	}
-	if err := matchService.UpdateMatch(models.MatchWithDetails{
-		ID: match1ID,
-		Teams: []models.TeamWithPlayers{
-			{ID: black.ID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: 1}}},
-			{ID: white.ID, Players: []models.PlayerCustom{{ID: bob, GoalsScored: 0}}},
-		},
+	if err := matchService.UpdateMatch(match1ID, group.ID, []models.TeamWithPlayers{
+		{ID: black.ID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: 1}}},
+		{ID: white.ID, Players: []models.PlayerCustom{{ID: bob, GoalsScored: 0}}},
 	}); err != nil {
 		t.Fatalf("failed to compose match 1 roster: %v", err)
 	}
@@ -118,12 +112,9 @@ func TestGetEloStandings_Integration_ReplaysHistoryChronologicallyAndTagsMembers
 	if err != nil {
 		t.Fatalf("failed to create match 2: %v", err)
 	}
-	if err := matchService.UpdateMatch(models.MatchWithDetails{
-		ID: match2ID,
-		Teams: []models.TeamWithPlayers{
-			{ID: black.ID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: 1}}},
-			{ID: white.ID, Players: []models.PlayerCustom{{ID: bob, GoalsScored: 1}}},
-		},
+	if err := matchService.UpdateMatch(match2ID, group.ID, []models.TeamWithPlayers{
+		{ID: black.ID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: 1}}},
+		{ID: white.ID, Players: []models.PlayerCustom{{ID: bob, GoalsScored: 1}}},
 	}); err != nil {
 		t.Fatalf("failed to compose match 2 roster: %v", err)
 	}

@@ -47,12 +47,9 @@ func TestDeleteMatch_Integration_Success(t *testing.T) {
 		t.Fatalf("failed to create match: %v", err)
 	}
 
-	if err := matchService.UpdateMatch(models.MatchWithDetails{
-		ID: matchID,
-		Teams: []models.TeamWithPlayers{
-			{ID: teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
-			{ID: teams[1].ID, Players: []models.PlayerCustom{}},
-		},
+	if err := matchService.UpdateMatch(matchID, group.ID, []models.TeamWithPlayers{
+		{ID: teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
+		{ID: teams[1].ID, Players: []models.PlayerCustom{}},
 	}); err != nil {
 		t.Fatalf("failed to populate match roster: %v", err)
 	}

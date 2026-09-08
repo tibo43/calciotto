@@ -149,11 +149,8 @@ func (e *voteEnv) newGroupWithComposedMatch(t *testing.T, label string) voteGrou
 	if err != nil {
 		t.Fatalf("failed to create match: %v", err)
 	}
-	if err := e.matches.UpdateMatch(models.MatchWithDetails{
-		ID: matchID,
-		Teams: []models.TeamWithPlayers{
-			{ID: black.ID, Players: []models.PlayerCustom{{ID: adminID}, {ID: member1ID}}},
-		},
+	if err := e.matches.UpdateMatch(matchID, group.ID, []models.TeamWithPlayers{
+		{ID: black.ID, Players: []models.PlayerCustom{{ID: adminID}, {ID: member1ID}}},
 	}); err != nil {
 		t.Fatalf("failed to compose roster: %v", err)
 	}
@@ -279,11 +276,8 @@ func TestVote_Integration_UpsertOverHTTP(t *testing.T) {
 		t.Fatalf("failed to load teams: %v", err)
 	}
 	white := teams[1]
-	if err := env.matches.UpdateMatch(models.MatchWithDetails{
-		ID: group.matchID,
-		Teams: []models.TeamWithPlayers{
-			{ID: white.ID, Players: []models.PlayerCustom{{ID: group.member2ID}}},
-		},
+	if err := env.matches.UpdateMatch(group.matchID, group.id, []models.TeamWithPlayers{
+		{ID: white.ID, Players: []models.PlayerCustom{{ID: group.member2ID}}},
 	}); err != nil {
 		t.Fatalf("failed to add member2 to the roster: %v", err)
 	}

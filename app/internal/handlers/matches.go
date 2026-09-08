@@ -177,17 +177,53 @@ func (h *MatchHandler) DeleteMatch(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
+// UpdateMatch is wired with requireGroupAdminByMatchID (see main.go), the
+// match-scoped middleware pair from matchscope.go — not the body/query-resolving
+// requireGroupAdmin it used to use. The path names a *match*, so the group has
+// to be derived from that match and never from the body: with the old wiring an
+// admin of group A could send their own group_id (which is what the admin check
+// ran against) alongside the ID of a match in group B, and the service, reading
+// the match id off the body, rewrote group B's roster and scores. The two ids
+// this handler passes down are therefore the URL's match id and the group the
+// middleware already authorized — the body's own ID/GroupID fields are ignored
+// entirely.
 func (h *MatchHandler) UpdateMatch(c *gin.Context) {
+	matchID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		return
+	}
+	// A missing authorized group means the route was wired without the
+	// match-scoped middleware — a programming error, not a client one, hence
+	// 500 (same contract as the registration/vote handlers).
+	groupID, ok := authorizedGroupIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved for this match"})
+		return
+	}
+
 	var match models.MatchWithDetails
 	if err := c.ShouldBindJSON(&match); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if err := h.Service.UpdateMatch(match); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := h.Service.UpdateMatch(matchID, groupID, match.Teams); err != nil {
+		switch {
+		case errors.Is(err, services.ErrMatchNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, services.ErrTeamNotInGroup):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 
+	// The response echoes the payload as it always did, but with both ids
+	// overwritten by the authoritative ones: a client must never read back its
+	// own body's ID/GroupID as though the server had accepted them.
+	match.ID = matchID
+	match.GroupID = groupID
 	c.JSON(http.StatusOK, match)
 }
