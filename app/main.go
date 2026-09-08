@@ -28,6 +28,16 @@ func main() {
 	// Initialize Gin router
 	r := gin.Default()
 
+	// Decide whose X-Forwarded-For to believe *before* any route is served:
+	// gin trusts every caller by default, which made c.ClientIP() — and
+	// therefore the per-IP rate limiters on the four /auth/* routes below —
+	// take its value from a header the client itself could set. See
+	// handlers.ConfigureTrustedProxies for the policy and the TRUSTED_PROXIES
+	// env var that overrides it.
+	if err := handlers.ConfigureTrustedProxies(r); err != nil {
+		log.Fatalf("invalid %s: %v", "TRUSTED_PROXIES", err)
+	}
+
 	// Configuration CORS
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     allowedOrigins(),
