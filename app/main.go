@@ -125,7 +125,15 @@ func main() {
 	// and invite routes above; TeamService.UpdateTeam additionally scopes the
 	// lookup to :id so :teamId can't reach into another group.
 	r.PATCH("/groups/:id/teams/:teamId", authRequired, requireGroupAdminByPathID, teamHandler.UpdateTeam)
-	r.POST("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.AddPlayerToGroup)
+	// Adding another player to a group is **admin-only**: the body names an
+	// arbitrary player id, so under plain membership any member could enrol
+	// anyone they knew the id of, with no invite code and no admin rights —
+	// which contradicts the invite-only model the rest of this file enforces
+	// (POST /groups and POST /groups/join are disabled precisely so that the
+	// only way in is an admin's invite link). No frontend code calls this
+	// route today; it is kept, gated, rather than removed, since it is the
+	// only server-side way an admin can enrol an existing player directly.
+	r.POST("/groups/:id/players", authRequired, requireGroupAdminByPathID, groupHandler.AddPlayerToGroup)
 	r.GET("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupMembers)
 	// Self-service "leave a group" — the caller can only ever remove their own
 	// membership (from the JWT), never someone else's; removing another
