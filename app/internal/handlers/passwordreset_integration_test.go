@@ -169,3 +169,32 @@ func TestPasswordResetEndpoints_Integration_EmptyPasswordReturns400(t *testing.T
 		t.Errorf("reset-password with an empty password returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// TestPasswordResetEndpoints_Integration_TooShortPasswordReturns400 is the
+// reset-side mirror of the empty-password case above: a 7-character new
+// password is rejected with 400 and the message naming the minimum, not the
+// default 500 an unmapped sentinel would produce. The token is deliberately a
+// dummy — the length check runs before the token is even looked up, so this
+// pins the mapping without needing a real reset link.
+func TestPasswordResetEndpoints_Integration_TooShortPasswordReturns400(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testAuthJWTSecret)
+	router := newPasswordResetTestRouter(authService)
+
+	rec := postJSON(t, router, "/auth/reset-password", map[string]string{
+		"token":        "whatever",
+		"new_password": "7chars!",
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("reset-password with a 7-character password returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
+	}
+	var errBody map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &errBody); err != nil {
+		t.Fatalf("failed to unmarshal the error body: %v", err)
+	}
+	if errBody["error"] != services.ErrPasswordTooShort.Error() {
+		t.Errorf("error body = %q, want %q", errBody["error"], services.ErrPasswordTooShort.Error())
+	}
+}
