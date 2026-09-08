@@ -195,4 +195,63 @@ async function expectNoHorizontalOverflow(page) {
   expect(scrollWidth, 'page.documentElement.scrollWidth should never exceed clientWidth').toBeLessThanOrEqual(clientWidth);
 }
 
-module.exports = { gotoApp, expectEverythingStubbed, expectNoHorizontalOverflow, data };
+/**
+ * Waits for a horizontal carousel's own scroll position to stop moving, so the
+ * screenshot that follows can't catch it mid-scroll.
+ *
+ * Playwright auto-scrolls a click target into view before clicking, and
+ * `gotoApp` already forces `scroll-behavior: auto` globally so that scroll
+ * jumps rather than animates — but "jumped" is not "settled": the compositor
+ * can be a frame behind under the parallel load `run-in-docker.sh` and CI both
+ * use. Two consecutive equal reads of `scrollLeft` are what prove it stopped,
+ * whatever the reason it hadn't.
+ *
+ * `carouselSelector` is the scrolling container (`.matches-bar` on the home
+ * page, `.groups-bar` on the profile), not the card — the container's
+ * scrollLeft is what has to be stable.
+ */
+async function waitForCarouselToSettle(page, carouselSelector) {
+  const scrollLeft = () => page.locator(carouselSelector).evaluate((el) => el.scrollLeft);
+  let previous = await scrollLeft();
+  for (let i = 0; i < 20; i += 1) {
+    await page.waitForTimeout(50);
+    const current = await scrollLeft();
+    if (current === previous) return;
+    previous = current;
+  }
+}
+
+/**
+ * Parks a horizontal carousel at one of its two end stops and waits for that
+ * to hold, so a baseline covering the carousel cannot depend on where a
+ * click-time auto-scroll happened to leave it.
+ *
+ * This is stronger than waiting for the scroll to settle, and the difference
+ * matters: a CI run failed `profile-roster-member-mobile.png` by ~610 pixels,
+ * all of them inside the carousel, while Playwright reported "captured a
+ * stable screenshot" — i.e. the scroll had finished, it had simply finished
+ * somewhere a pixel or two away from where the baseline was recorded. No
+ * amount of waiting fixes a resting position that isn't reproducible; an end
+ * stop is exact (0, or the layout-derived maximum the browser clamps to) and
+ * therefore is.
+ *
+ * Deliberately *not* `scrollIntoView` on the card: that lands the carousel
+ * somewhere different again from Playwright's own auto-scroll, which is what
+ * recorded the baselines — trying it failed the profile baseline 6 runs out
+ * of 6.
+ */
+async function pinCarouselScroll(page, carouselSelector, position) {
+  await page.locator(carouselSelector).evaluate((el, where) => {
+    el.scrollLeft = where === 'end' ? el.scrollWidth : 0;
+  }, position);
+  await waitForCarouselToSettle(page, carouselSelector);
+}
+
+module.exports = {
+  gotoApp,
+  expectEverythingStubbed,
+  expectNoHorizontalOverflow,
+  waitForCarouselToSettle,
+  pinCarouselScroll,
+  data,
+};
