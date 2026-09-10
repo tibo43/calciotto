@@ -27,7 +27,7 @@
             </button>
             <div v-else class="invite-code-box">
               <code class="invite-code">{{ inviteCode }}</code>
-              <button class="btn-base btn-primary btn-small" @click="copyInviteCode">
+              <button class="btn-base btn-primary btn-small copy-invite-btn" @click="copyInviteCode">
                 {{ copied ? 'Copied!' : 'Copy' }}
               </button>
               <!-- A plain <a>, not a click handler — it's genuinely just a
@@ -289,6 +289,17 @@ export default {
    comment above) rather than shared, since there's no component library
    here to put a single copy in. */
 @media (max-width: 768px) {
+  /* Undoes global-styles.css's .btn-base { width: 100% } (aimed at modal
+     footers, not this row) — without it Copy would claim the whole row
+     width and push Invite via WhatsApp onto a line of its own, even though
+     invite-code-box lays them out side by side. height: 3rem matches
+     whatsapp-share-btn's own explicit height so the two sit at the same
+     level instead of Copy floating taller/shorter next to it. */
+  .copy-invite-btn {
+    width: auto;
+    height: 3rem;
+  }
+
   .whatsapp-share-label {
     display: none;
   }
