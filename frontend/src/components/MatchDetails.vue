@@ -120,17 +120,43 @@
           <p class="signup-state-detail">{{ registrationStateDetail }}</p>
 
           <div class="signup-actions">
+            <!-- Close/Reopen and Share on WhatsApp sit next to each other
+                 deliberately (rather than Share trailing after the
+                 max-players form, further down the DOM): both are things an
+                 admin does about the sign-up window itself, so they read as
+                 one pair — and it's what puts them on the same wrapped line
+                 on a narrow screen, not just on desktop where there was
+                 always room to spare. -->
             <button v-if="canCloseRegistrations" @click="closeRegistrations" :disabled="isUpdatingRegistrationState"
-              class="btn-base btn-cancel btn-small">
+              class="btn-base btn-cancel btn-small registration-toggle-btn">
               <div v-if="isUpdatingRegistrationState" class="loading-spinner-small"></div>
               {{ isUpdatingRegistrationState ? 'Closing...' : 'Close sign-ups' }}
             </button>
 
             <button v-if="canReopenRegistrations" @click="reopenRegistrations" :disabled="isUpdatingRegistrationState"
-              class="btn-base btn-cancel btn-small">
+              class="btn-base btn-cancel btn-small registration-toggle-btn">
               <div v-if="isUpdatingRegistrationState" class="loading-spinner-small"></div>
               {{ isUpdatingRegistrationState ? 'Reopening...' : 'Reopen sign-ups' }}
             </button>
+
+            <!-- A plain wa.me link, not a click handler: it's a URL WhatsApp
+                 itself publishes, opened in a new tab like any other outbound
+                 link. With no phone number, WhatsApp prompts the admin to pick
+                 who to send it to — any contact or group they're already in —
+                 so posting into a WhatsApp group needs nothing from this app
+                 beyond building the message text. Only offered while sign-ups
+                 are actually open: there's nothing to invite people to once
+                 the list is closed. -->
+            <a v-if="isAdmin && registrationsOpen" :href="whatsappShareUrl" target="_blank" rel="noopener"
+              class="btn-base btn-cancel btn-small whatsapp-share-btn" aria-label="Share on WhatsApp">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.472-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.148-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                <path
+                  d="M12.004 2c-5.514 0-9.997 4.483-9.997 9.997 0 1.762.464 3.485 1.346 5.002L2 22l5.14-1.334a9.958 9.958 0 0 0 4.862 1.237h.004c5.514 0 9.997-4.483 9.997-9.997 0-2.67-1.04-5.182-2.928-7.07A9.933 9.933 0 0 0 12.004 2zm0 18.183h-.003a8.19 8.19 0 0 1-4.17-1.142l-.299-.178-3.05.793.814-2.973-.195-.306a8.18 8.18 0 0 1-1.256-4.38c0-4.523 3.68-8.203 8.203-8.203 2.19 0 4.25.853 5.799 2.404a8.146 8.146 0 0 1 2.403 5.803c0 4.523-3.681 8.202-8.246 8.202z" />
+              </svg>
+              <span class="whatsapp-share-label">Share on WhatsApp</span>
+            </a>
 
             <!-- Admin-only, and deliberately offered whether sign-ups are open or
                  closed: dropping the cap is typically what an admin does right
@@ -148,25 +174,6 @@
                 {{ isUpdatingMaxPlayers ? 'Updating...' : 'Update' }}
               </button>
             </form>
-
-            <!-- A plain wa.me link, not a click handler: it's a URL WhatsApp
-                 itself publishes, opened in a new tab like any other outbound
-                 link. With no phone number, WhatsApp prompts the admin to pick
-                 who to send it to — any contact or group they're already in —
-                 so posting into a WhatsApp group needs nothing from this app
-                 beyond building the message text. Only offered while sign-ups
-                 are actually open: there's nothing to invite people to once
-                 the list is closed. -->
-            <a v-if="isAdmin && registrationsOpen" :href="whatsappShareUrl" target="_blank" rel="noopener"
-              class="btn-base btn-cancel btn-small whatsapp-share-btn">
-              <svg viewBox="0 0 24 24" fill="currentColor">
-                <path
-                  d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.472-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.148-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
-                <path
-                  d="M12.004 2c-5.514 0-9.997 4.483-9.997 9.997 0 1.762.464 3.485 1.346 5.002L2 22l5.14-1.334a9.958 9.958 0 0 0 4.862 1.237h.004c5.514 0 9.997-4.483 9.997-9.997 0-2.67-1.04-5.182-2.928-7.07A9.933 9.933 0 0 0 12.004 2zm0 18.183h-.003a8.19 8.19 0 0 1-4.17-1.142l-.299-.178-3.05.793.814-2.973-.195-.306a8.18 8.18 0 0 1-1.256-4.38c0-4.523 3.68-8.203 8.203-8.203 2.19 0 4.25.853 5.799 2.404a8.146 8.146 0 0 1 2.403 5.803c0 4.523-3.681 8.202-8.246 8.202z" />
-              </svg>
-              Share on WhatsApp
-            </a>
 
             <!-- Admin-only, and only once the list is closed: the product flow
                  is "close sign-ups in order to compose the teams", and offering
@@ -234,26 +241,45 @@
                  before the team switcher rather than being grouped with it. -->
             <div class="action-buttons">
               <button v-if="isAdmin" @click="saveChanges" class="btn-base btn-primary btn-small" :disabled="isSaving || !showTeamRoster"
-                :title="showTeamRoster ? '' : 'Nothing to save yet — compose the teams first'">
+                :title="showTeamRoster ? '' : 'Nothing to save yet — compose the teams first'"
+                :aria-label="isSaving ? 'Saving...' : 'Save Changes'">
                 <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                   <polyline points="17,21 17,13 7,13 7,21" />
                   <polyline points="7,3 7,8 15,8" />
                 </svg>
                 <div v-else class="loading-spinner-small"></div>
-                {{ isSaving ? 'Saving...' : 'Save Changes' }}
+                <span class="action-btn-label">{{ isSaving ? 'Saving...' : 'Save Changes' }}</span>
               </button>
               <!-- Clearly separated from Save Changes so a click can't be
                    mistaken between the two destructive/non-destructive actions. -->
               <button v-if="isAdmin" @click="confirmDeleteMatch" class="btn-base btn-danger btn-small delete-match-btn"
-                :disabled="isDeleting">
+                :disabled="isDeleting" :aria-label="isDeleting ? 'Deleting...' : 'Delete Match'">
                 <svg v-if="!isDeleting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="3,6 5,6 21,6" />
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                 </svg>
                 <div v-else class="loading-spinner-small"></div>
-                {{ isDeleting ? 'Deleting...' : 'Delete Match' }}
+                <span class="action-btn-label">{{ isDeleting ? 'Deleting...' : 'Delete Match' }}</span>
               </button>
+              <!-- Sharing the composed roster, admin-only — this page is
+                   already gated to admins by the router guard (canEditMatch),
+                   but the v-if is kept anyway, the same defense-in-depth
+                   every other control here follows. Only offered once
+                   showTeamRoster is true: there is nothing to share before
+                   the teams exist. Placed with the other whole-match actions
+                   rather than the team switcher below, since it applies to
+                   both teams at once, not to whichever tab is active. -->
+              <a v-if="isAdmin && showTeamRoster" :href="teamsShareUrl" target="_blank" rel="noopener"
+                class="btn-base btn-cancel btn-small whatsapp-share-btn" aria-label="Share teams on WhatsApp">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path
+                    d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.472-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.148-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                  <path
+                    d="M12.004 2c-5.514 0-9.997 4.483-9.997 9.997 0 1.762.464 3.485 1.346 5.002L2 22l5.14-1.334a9.958 9.958 0 0 0 4.862 1.237h.004c5.514 0 9.997-4.483 9.997-9.997 0-2.67-1.04-5.182-2.928-7.07A9.933 9.933 0 0 0 12.004 2zm0 18.183h-.003a8.19 8.19 0 0 1-4.17-1.142l-.299-.178-3.05.793.814-2.973-.195-.306a8.18 8.18 0 0 1-1.256-4.38c0-4.523 3.68-8.203 8.203-8.203 2.19 0 4.25.853 5.799 2.404a8.146 8.146 0 0 1 2.403 5.803c0 4.523-3.681 8.202-8.246 8.202z" />
+                </svg>
+                <span class="whatsapp-share-label">Share teams on WhatsApp</span>
+              </a>
             </div>
 
             <!-- Team switcher + "Add player to this team" right next to it —
@@ -614,7 +640,7 @@ import {
   REGISTRATION_CLOSED_BY_ADMIN,
   REGISTRATION_CLOSED_AT_KICKOFF
 } from '@/services/matchRegistration';
-import { buildWhatsAppShareText, buildWhatsAppShareUrl } from '@/services/whatsappShare';
+import { buildWhatsAppShareText, buildWhatsAppShareUrl, buildTeamsShareText } from '@/services/whatsappShare';
 import { encodeMatchId } from '@/services/shortLink';
 
 // Same shape as Profile.vue's own helper — the app has no auth store, and the
@@ -819,6 +845,21 @@ export default {
         groupInviteCode: this.groupInviteCode
       });
       return buildWhatsAppShareUrl(text);
+    },
+
+    // "Share teams on WhatsApp" — only ever rendered once showTeamRoster is
+    // true (see the button's own v-if), so match.Teams is guaranteed
+    // composed here. kickoffLabel needs ScheduledAt, which an unscheduled
+    // match never has, so this falls back to the plain calendar day for one
+    // — the same distinction kickoffLabel/formatDate already draw elsewhere
+    // on this page.
+    teamsShareUrl() {
+      const dateTimeLabel = this.isScheduled ? this.kickoffLabel : this.formatDate(this.match.Date);
+      const teams = this.match.Teams.map(team => ({
+        name: team.Name,
+        players: team.Players.map(player => this.formatPlayerNameForDisplay(player.Name))
+      }));
+      return buildWhatsAppShareUrl(buildTeamsShareText({ dateTimeLabel, teams }));
     },
 
     // Deliberately says nothing about being told when sign-ups open: there is
@@ -2688,23 +2729,90 @@ export default {
     font-size: 0.9rem;
   }
 
-  /* Side by side on one row instead of stacked full-width — each button
-     shares the row equally. */
+  /* Icon-only across the whole row: Save Changes, Delete Match and (once a
+     roster exists) Share teams on WhatsApp all collapse to an equal-sized
+     square icon button on a narrow screen — the icon alone is enough to
+     identify each action, same as add-player-icon-btn's own icon-only
+     convention elsewhere on this page. flex: none replaces the old flex: 1
+     (there is no longer a label to need the extra width, and stretching a
+     bare icon across a wide button just leaves empty space either side of
+     it); centered as a group (justify-content: center on the row) rather
+     than left-aligned, now that they no longer stretch to fill it. Both
+     width and height are explicit and identical (3rem — bigger than
+     add-player-icon-btn's own 2.5rem, since these replace a labelled button
+     rather than sitting next to one) so all three are the same square
+     regardless of their own icon's size, instead of only pinning width and
+     letting height float with each icon/padding combination. */
   .action-buttons {
     flex-wrap: nowrap;
+    justify-content: center;
     gap: 0.5rem;
   }
 
   .action-buttons .btn-base {
-    flex: 1;
+    flex: none;
+    width: 3rem;
+    height: 3rem;
+    padding: 0;
     justify-content: center;
   }
 
-  /* They're already visually separated by sharing the row 50/50 with a
-     gap, so the extra desktop-only margin meant to prevent a misclick
-     would just throw the 50/50 split off here. */
+  .action-btn-label {
+    display: none;
+  }
+
+  /* No longer needed to visually separate this from Save Changes now that
+     both are equal-sized icon squares with their own gap — the extra
+     desktop-only margin would just throw the row's centering off here. */
   .delete-match-btn {
     margin-left: 0;
+  }
+
+  .whatsapp-share-label {
+    display: none;
+  }
+
+  /* Also reached by the sign-up panel's own "Share on WhatsApp" button
+     (.signup-actions, not .action-buttons), which the two rules above don't
+     cover — hence a plain .whatsapp-share-btn rule rather than folding this
+     into .action-buttons .btn-base too. Same 3rem square either way, so the
+     one WhatsApp button looks identical wherever it appears on this page. */
+  .whatsapp-share-btn {
+    padding: 0;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+  }
+
+  /* The WhatsApp glyph is small (16px, .btn-small svg's own default) next to
+     the plain line-icons it now sits alongside at the same square box size —
+     enlarged so it actually reads as the WhatsApp logo at a glance instead
+     of looking like an afterthought. */
+  .whatsapp-share-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* Centers each wrapped line's own content (Close/Reopen + Share on one
+     line, the max-players form on another, Fill teams on its own) instead
+     of the default left alignment — matching .action-buttons' own centered
+     row further down this page. */
+  .signup-actions {
+    justify-content: center;
+  }
+
+  /* Undoes global-styles.css's .btn-base { width: 100% } (aimed at modal
+     footers, not this row) — without it Close/Reopen sign-ups would claim
+     the whole row width and push whatsapp-share-btn onto a line of its own,
+     even though the template now places them right next to each other (see
+     .signup-actions above). height: 3rem matches whatsapp-share-btn's own
+     explicit height exactly — relying on .signup-actions' default
+     align-items: stretch instead came within a couple of px (this button's
+     natural content height is very slightly taller than 3rem, so stretch,
+     which only ever grows the *shorter* item, left them visibly mismatched). */
+  .registration-toggle-btn {
+    width: auto;
+    height: 3rem;
   }
 
   /* Roster row: player name rendered as an <h4> with no font-size of its

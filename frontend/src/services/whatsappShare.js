@@ -58,3 +58,34 @@ export function buildGroupInviteShareText({ inviteUrl, groupInviteCode }) {
     `Group code: ${groupInviteCode}`
   ].join('\n');
 }
+
+// "Share the teams" — MatchDetails.vue's admin-only action bar, once a
+// match's roster is actually composed. Unlike the two builders above there
+// is no link at all here: the point isn't to bring someone back into the
+// app, it's to hand a WhatsApp group the exact same lineup this app is
+// already showing (kick-off, then one team per block, each player on its own
+// line), so whoever isn't looking at the app still knows the two things that
+// matter — when, and which side they're on. Admin-only (product decision,
+// not a technical one — a non-admin never sees this page at all, since
+// /matches/:id/edit is already gated by the router's own canEditMatch guard).
+//
+// `teams` is an already-formatted `[{ name, players }]` — player names come
+// in pre-formatted (formatPlayerNameForDisplay has already run on each one),
+// the same convention buildWhatsAppShareText's own kickoffLabel/matchUrl
+// follow: this function only assembles strings, it never derives them.
+// An empty team prints "No players yet" rather than a bare header with
+// nothing under it, mirroring the app's own .empty-slot copy.
+export function buildTeamsShareText({ dateTimeLabel, teams }) {
+  const lines = [`Match: ${dateTimeLabel}`];
+  for (const team of teams) {
+    lines.push('', team.name);
+    if (team.players.length === 0) {
+      lines.push('No players yet');
+    } else {
+      for (const player of team.players) {
+        lines.push(`- ${player}`);
+      }
+    }
+  }
+  return lines.join('\n');
+}
