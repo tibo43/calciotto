@@ -2723,25 +2723,30 @@ export default {
   }
 
   /* Icon-only across the whole row: Save Changes, Delete Match and (once a
-     roster exists) Share teams on WhatsApp all collapse to a small square
-     icon button on a narrow screen — the icon alone is enough to identify
-     each action, same as add-player-icon-btn's own icon-only convention
-     elsewhere on this page. flex: none replaces the old flex: 1 (there is
-     no longer a label to need the extra width, and stretching a bare icon
-     across a wide button just leaves empty space either side of it); the
-     width is explicit (2.5rem, matching add-player-icon-btn) rather than
-     left to flex-basis: auto to size from content — a flex item that's
-     itself a flex container, sized purely from content, rendered far wider
-     than its actual content in testing. */
+     roster exists) Share teams on WhatsApp all collapse to an equal-sized
+     square icon button on a narrow screen — the icon alone is enough to
+     identify each action, same as add-player-icon-btn's own icon-only
+     convention elsewhere on this page. flex: none replaces the old flex: 1
+     (there is no longer a label to need the extra width, and stretching a
+     bare icon across a wide button just leaves empty space either side of
+     it); centered as a group (justify-content: center on the row) rather
+     than left-aligned, now that they no longer stretch to fill it. Both
+     width and height are explicit and identical (3rem — bigger than
+     add-player-icon-btn's own 2.5rem, since these replace a labelled button
+     rather than sitting next to one) so all three are the same square
+     regardless of their own icon's size, instead of only pinning width and
+     letting height float with each icon/padding combination. */
   .action-buttons {
     flex-wrap: nowrap;
+    justify-content: center;
     gap: 0.5rem;
   }
 
   .action-buttons .btn-base {
     flex: none;
-    width: 2.5rem;
-    padding: 0.6rem;
+    width: 3rem;
+    height: 3rem;
+    padding: 0;
     justify-content: center;
   }
 
@@ -2751,7 +2756,7 @@ export default {
 
   /* No longer needed to visually separate this from Save Changes now that
      both are equal-sized icon squares with their own gap — the extra
-     desktop-only margin would just throw the row's spacing off here. */
+     desktop-only margin would just throw the row's centering off here. */
   .delete-match-btn {
     margin-left: 0;
   }
@@ -2763,20 +2768,22 @@ export default {
   /* Also reached by the sign-up panel's own "Share on WhatsApp" button
      (.signup-actions, not .action-buttons), which the two rules above don't
      cover — hence a plain .whatsapp-share-btn rule rather than folding this
-     into .action-buttons .btn-base too. */
+     into .action-buttons .btn-base too. Same 3rem square either way, so the
+     one WhatsApp button looks identical wherever it appears on this page. */
   .whatsapp-share-btn {
-    padding: 0.6rem;
+    padding: 0;
     justify-content: center;
-    width: 2.5rem;
+    width: 3rem;
+    height: 3rem;
   }
 
   /* The WhatsApp glyph is small (16px, .btn-small svg's own default) next to
-     the plain line-icons it now sits alongside at the same 2.5rem box size —
+     the plain line-icons it now sits alongside at the same square box size —
      enlarged so it actually reads as the WhatsApp logo at a glance instead
      of looking like an afterthought. */
   .whatsapp-share-btn svg {
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
   }
 
   /* Roster row: player name rendered as an <h4> with no font-size of its
