@@ -2793,6 +2793,14 @@ export default {
     height: 24px;
   }
 
+  /* Centers each wrapped line's own content (Close/Reopen + Share on one
+     line, the max-players form on another, Fill teams on its own) instead
+     of the default left alignment — matching .action-buttons' own centered
+     row further down this page. */
+  .signup-actions {
+    justify-content: center;
+  }
+
   /* Undoes global-styles.css's .btn-base { width: 100% } (aimed at modal
      footers, not this row) — without it Close/Reopen sign-ups would claim
      the whole row width and push whatsapp-share-btn onto a line of its own,
