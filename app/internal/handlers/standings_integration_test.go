@@ -96,12 +96,9 @@ func TestStandingsSeasons_Integration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create match on %s: %v", m.date, err)
 		}
-		if err := matchService.UpdateMatch(models.MatchWithDetails{
-			ID: matchID,
-			Teams: []models.TeamWithPlayers{
-				{ID: teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: m.aliceGoals}}},
-				{ID: teams[1].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: m.bobGoals}}},
-			},
+		if err := matchService.UpdateMatch(matchID, group.ID, []models.TeamWithPlayers{
+			{ID: teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: m.aliceGoals}}},
+			{ID: teams[1].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: m.bobGoals}}},
 		}); err != nil {
 			t.Fatalf("UpdateMatch on %s returned error: %v", m.date, err)
 		}

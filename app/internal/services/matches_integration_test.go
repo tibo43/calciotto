@@ -59,14 +59,11 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 	}
 
 	// Step 1: only black has a roster so far — white should still show up, empty.
-	step1 := models.MatchWithDetails{
-		ID: matchID,
-		Teams: []models.TeamWithPlayers{
-			{ID: black.ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
-			{ID: white.ID, Players: []models.PlayerCustom{}},
-		},
+	step1 := []models.TeamWithPlayers{
+		{ID: black.ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
+		{ID: white.ID, Players: []models.PlayerCustom{}},
 	}
-	if err := matchService.UpdateMatch(step1); err != nil {
+	if err := matchService.UpdateMatch(matchID, group.ID, step1); err != nil {
 		t.Fatalf("UpdateMatch (step 1) returned error: %v", err)
 	}
 
@@ -99,14 +96,11 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 	}
 
 	// Step 2: white gets a player, black's player's goal tally is updated.
-	step2 := models.MatchWithDetails{
-		ID: matchID,
-		Teams: []models.TeamWithPlayers{
-			{ID: black.ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 3}}},
-			{ID: white.ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 1}}},
-		},
+	step2 := []models.TeamWithPlayers{
+		{ID: black.ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 3}}},
+		{ID: white.ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 1}}},
 	}
-	if err := matchService.UpdateMatch(step2); err != nil {
+	if err := matchService.UpdateMatch(matchID, group.ID, step2); err != nil {
 		t.Fatalf("UpdateMatch (step 2) returned error: %v", err)
 	}
 
@@ -145,14 +139,11 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 	}
 
 	// Step 3: bob is removed from white — the match_player row must actually be deleted.
-	step3 := models.MatchWithDetails{
-		ID: matchID,
-		Teams: []models.TeamWithPlayers{
-			{ID: black.ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 3}}},
-			{ID: white.ID, Players: []models.PlayerCustom{}},
-		},
+	step3 := []models.TeamWithPlayers{
+		{ID: black.ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 3}}},
+		{ID: white.ID, Players: []models.PlayerCustom{}},
 	}
-	if err := matchService.UpdateMatch(step3); err != nil {
+	if err := matchService.UpdateMatch(matchID, group.ID, step3); err != nil {
 		t.Fatalf("UpdateMatch (step 3) returned error: %v", err)
 	}
 
@@ -258,12 +249,9 @@ func TestGetPointsStandings_Integration_ExcludesUpcomingComposedMatch(t *testing
 	}
 
 	// Composed ahead of kick-off, same as "Fill teams from sign-ups" would do.
-	if err := matchService.UpdateMatch(models.MatchWithDetails{
-		ID: matchID,
-		Teams: []models.TeamWithPlayers{
-			{ID: black.ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
-			{ID: white.ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 1}}},
-		},
+	if err := matchService.UpdateMatch(matchID, group.ID, []models.TeamWithPlayers{
+		{ID: black.ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
+		{ID: white.ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 1}}},
 	}); err != nil {
 		t.Fatalf("failed to compose the roster: %v", err)
 	}
@@ -335,4 +323,96 @@ func scorerRowByID(rows []models.ScorerRow, id uuid.UUID) *models.ScorerRow {
 		}
 	}
 	return nil
+}
+
+// TestUpdateMatch_Integration_ScopedToGroup pins the two checks UpdateMatch
+// gained alongside its explicit (matchID, groupID) parameters — the service
+// half of the cross-tenant hole PUT /matches/:id used to have, where both ids
+// came from the request body:
+//
+//   - a match that exists but belongs to another group is ErrMatchNotFound,
+//     the same "absent, not forbidden" answer GetMatchDetailsByID and
+//     DeleteMatch already give;
+//   - a team from another group is ErrTeamNotInGroup, even when the match
+//     itself is the caller's own — otherwise an admin could still attach
+//     their own team to someone else's match, which is the same corruption
+//     by a different route.
+//
+// Both must also leave match_players untouched: rejecting the call after
+// having written half the diff would be no better than accepting it.
+func TestUpdateMatch_Integration_ScopedToGroup(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+	teamService := services.NewTeamService(tx)
+	playerService := services.NewPlayerService(tx)
+	matchService := services.NewMatchService(tx)
+
+	groupA, err := groupService.CreateGroup("Zzz Update Scope A", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group A: %v", err)
+	}
+	groupB, err := groupService.CreateGroup("Zzz Update Scope B", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group B: %v", err)
+	}
+	teamsA, err := teamService.GetTeamsByGroupID(groupA.ID)
+	if err != nil {
+		t.Fatalf("failed to load group A's teams: %v", err)
+	}
+	teamsB, err := teamService.GetTeamsByGroupID(groupB.ID)
+	if err != nil {
+		t.Fatalf("failed to load group B's teams: %v", err)
+	}
+
+	playerID, err := playerService.CreatePlayer("Zzz Update Scope Player")
+	if err != nil {
+		t.Fatalf("failed to create player: %v", err)
+	}
+	matchAID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now())}, groupA.ID)
+	if err != nil {
+		t.Fatalf("failed to create group A's match: %v", err)
+	}
+
+	rosterA := []models.TeamWithPlayers{{
+		ID:      teamsA[0].ID,
+		Players: []models.PlayerCustom{{ID: playerID, GoalsScored: 2}},
+	}}
+	rosterB := []models.TeamWithPlayers{{
+		ID:      teamsB[0].ID,
+		Players: []models.PlayerCustom{{ID: playerID, GoalsScored: 2}},
+	}}
+
+	countRows := func() int64 {
+		t.Helper()
+		var rows int64
+		if err := tx.Model(&models.MatchPlayer{}).Where("match_id = ?", matchAID).Count(&rows).Error; err != nil {
+			t.Fatalf("counting match_players returned error: %v", err)
+		}
+		return rows
+	}
+
+	if err := matchService.UpdateMatch(matchAID, groupB.ID, rosterB); !errors.Is(err, services.ErrMatchNotFound) {
+		t.Errorf("UpdateMatch(group A's match, under group B) error = %v, want services.ErrMatchNotFound", err)
+	}
+	if rows := countRows(); rows != 0 {
+		t.Errorf("a rejected cross-group UpdateMatch wrote %d match_player row(s)", rows)
+	}
+
+	if err := matchService.UpdateMatch(matchAID, groupA.ID, rosterB); !errors.Is(err, services.ErrTeamNotInGroup) {
+		t.Errorf("UpdateMatch(group A's match, with group B's team) error = %v, want services.ErrTeamNotInGroup", err)
+	}
+	if rows := countRows(); rows != 0 {
+		t.Errorf("a rejected foreign-team UpdateMatch wrote %d match_player row(s)", rows)
+	}
+
+	// The legitimate call still works, so the two checks above reject the
+	// forged shapes rather than the operation itself.
+	if err := matchService.UpdateMatch(matchAID, groupA.ID, rosterA); err != nil {
+		t.Fatalf("UpdateMatch(group A's own match and team) returned error: %v", err)
+	}
+	if rows := countRows(); rows != 1 {
+		t.Errorf("after a legitimate UpdateMatch the match has %d match_player row(s), want 1", rows)
+	}
 }

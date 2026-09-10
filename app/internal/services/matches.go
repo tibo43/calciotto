@@ -18,6 +18,13 @@ import (
 // distinct "forbidden" signal.
 var ErrMatchNotFound = errors.New("match not found")
 
+// ErrTeamNotInGroup is returned by UpdateMatch when the payload names a team
+// that belongs to a different group than the match being edited. It is a
+// client mistake rather than a missing resource — the match was found, the
+// request is simply incoherent — so handlers map it to 400, unlike
+// ErrMatchNotFound's 404.
+var ErrTeamNotInGroup = errors.New("team does not belong to this group")
+
 // The three sentinels below reject an incoherent *schedule* at creation time.
 // A match with no scheduling at all stays perfectly valid — see MatchSpec.
 var (
@@ -561,13 +568,51 @@ func (s *MatchService) DeleteMatch(matchID, groupID uuid.UUID) error {
 	})
 }
 
-func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
+// UpdateMatch rewrites the roster and goal counts of one match, as a diff
+// against what is currently stored (rows created, updated or deleted per
+// team).
+//
+// matchID and groupID are separate parameters rather than fields read off the
+// payload, and that is the whole point: the caller — MatchHandler.UpdateMatch
+// — takes them from the URL and from the group its middleware already
+// authorized (see matchscope.go), never from the request body. A body-supplied
+// match id was a genuine cross-tenant hole: an admin of group A could send
+// their own group_id (satisfying the admin check) together with the id of a
+// match belonging to group B, and this method would happily rewrite group B's
+// scores and roster. That is why the DTO is no longer accepted whole: only
+// teams is content, and both ids are the caller's authority.
+//
+// Both are then re-verified here rather than trusted, the same defence-in-depth
+// DeleteMatch already applies:
+//
+//   - the match itself is loaded by (id, group_id), so a match from another
+//     group reads as ErrMatchNotFound exactly as it does for every read path
+//     (GetMatchDetailsByID) and for DeleteMatch — absent, not forbidden;
+//   - every team id in the payload must belong to that same group, else
+//     ErrTeamNotInGroup. Without that second check an admin could still attach
+//     one of their *own* group's teams to another group's match, which is the
+//     same corruption by a different route — and it mirrors what
+//     TeamService.UpdateTeam already does by scoping its lookup to
+//     (team_id, group_id).
+func (s *MatchService) UpdateMatch(matchID, groupID uuid.UUID, teams []models.TeamWithPlayers) error {
+	var match models.Match
+	if err := s.DB.Where("id = ? AND group_id = ?", matchID, groupID).First(&match).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrMatchNotFound
+		}
+		return err
+	}
+
+	if err := s.assertTeamsInGroup(teams, groupID); err != nil {
+		return err
+	}
+
 	return s.DB.Transaction(func(tx *gorm.DB) error {
 		var dbMatchPlayers []models.MatchPlayer
 
-		for i := range match.Teams {
-			team := &match.Teams[i]
-			result := tx.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Find(&dbMatchPlayers)
+		for i := range teams {
+			team := &teams[i]
+			result := tx.Where("match_id = ?", matchID).Where("team_id = ?", team.ID).Find(&dbMatchPlayers)
 			if result.Error != nil {
 				return result.Error
 			}
@@ -584,7 +629,7 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 				if !exists {
 					// Create a new team composition if it doesn't exist
 					newMatchPlayer := models.MatchPlayer{
-						MatchID:     match.ID,
+						MatchID:     matchID,
 						TeamID:      team.ID,
 						PlayerID:    player.ID,
 						GoalsScored: player.GoalsScored,
@@ -602,7 +647,7 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 					player := &team.Players[j]
 					if dbMatchPlayer.PlayerID == player.ID {
 						toDelete = false
-						result := tx.Model(&models.MatchPlayer{}).Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", player.ID).Update("goals_scored", player.GoalsScored)
+						result := tx.Model(&models.MatchPlayer{}).Where("match_id = ?", matchID).Where("team_id = ?", team.ID).Where("player_id = ?", player.ID).Update("goals_scored", player.GoalsScored)
 						if result.Error != nil {
 							return result.Error
 						}
@@ -610,7 +655,7 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 					}
 				}
 				if toDelete {
-					result := tx.Where("match_id = ?", match.ID).Where("team_id = ?", team.ID).Where("player_id = ?", dbMatchPlayer.PlayerID).Delete(&models.MatchPlayer{})
+					result := tx.Where("match_id = ?", matchID).Where("team_id = ?", team.ID).Where("player_id = ?", dbMatchPlayer.PlayerID).Delete(&models.MatchPlayer{})
 					if result.Error != nil {
 						return result.Error
 					}
@@ -619,4 +664,31 @@ func (s *MatchService) UpdateMatch(match models.MatchWithDetails) error {
 		}
 		return nil
 	})
+}
+
+// assertTeamsInGroup rejects a payload naming a team that is not one of
+// groupID's own. The group's teams are fetched once and checked in Go rather
+// than one existence query per team: a group has exactly two teams (see
+// GroupService.CreateGroup), so this is a single, tiny query either way, and
+// the GORM query builder is enough for it — no join, no raw SQL.
+func (s *MatchService) assertTeamsInGroup(teams []models.TeamWithPlayers, groupID uuid.UUID) error {
+	if len(teams) == 0 {
+		return nil
+	}
+
+	var groupTeamIDs []uuid.UUID
+	if err := s.DB.Model(&models.Team{}).Where("group_id = ?", groupID).Pluck("id", &groupTeamIDs).Error; err != nil {
+		return err
+	}
+	inGroup := make(map[uuid.UUID]bool, len(groupTeamIDs))
+	for _, id := range groupTeamIDs {
+		inGroup[id] = true
+	}
+
+	for i := range teams {
+		if !inGroup[teams[i].ID] {
+			return ErrTeamNotInGroup
+		}
+	}
+	return nil
 }

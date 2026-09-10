@@ -243,12 +243,9 @@ func TestMatchesDetails_Integration_SignUpCountDoesNotMultiplyScores(t *testing.
 			t.Fatalf("failed to register player %s: %v", playerID, err)
 		}
 	}
-	if err := env.matches.UpdateMatch(models.MatchWithDetails{
-		ID: matchID,
-		Teams: []models.TeamWithPlayers{
-			{ID: env.teams[0].ID, Players: []models.PlayerCustom{{ID: env.players[0], GoalsScored: 2}}},
-			{ID: env.teams[1].ID, Players: []models.PlayerCustom{{ID: env.players[1], GoalsScored: 1}}},
-		},
+	if err := env.matches.UpdateMatch(matchID, env.groupID, []models.TeamWithPlayers{
+		{ID: env.teams[0].ID, Players: []models.PlayerCustom{{ID: env.players[0], GoalsScored: 2}}},
+		{ID: env.teams[1].ID, Players: []models.PlayerCustom{{ID: env.players[1], GoalsScored: 1}}},
 	}); err != nil {
 		t.Fatalf("UpdateMatch returned error: %v", err)
 	}
@@ -306,12 +303,9 @@ func TestStandings_Integration_ScheduledMatchWithSignUpsIsNotPlayed(t *testing.T
 	if err != nil {
 		t.Fatalf("failed to create the played match: %v", err)
 	}
-	if err := env.matches.UpdateMatch(models.MatchWithDetails{
-		ID: playedID,
-		Teams: []models.TeamWithPlayers{
-			{ID: env.teams[0].ID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: 2}}},
-			{ID: env.teams[1].ID, Players: []models.PlayerCustom{{ID: bob, GoalsScored: 1}}},
-		},
+	if err := env.matches.UpdateMatch(playedID, env.groupID, []models.TeamWithPlayers{
+		{ID: env.teams[0].ID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: 2}}},
+		{ID: env.teams[1].ID, Players: []models.PlayerCustom{{ID: bob, GoalsScored: 1}}},
 	}); err != nil {
 		t.Fatalf("UpdateMatch returned error: %v", err)
 	}

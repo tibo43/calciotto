@@ -12,7 +12,7 @@
 // way.
 
 const { test, expect } = require('@playwright/test');
-const { gotoApp, expectEverythingStubbed, expectNoHorizontalOverflow } = require('./fixtures/app');
+const { gotoApp, expectEverythingStubbed, expectNoHorizontalOverflow, pinCarouselScroll } = require('./fixtures/app');
 const data = require('./fixtures/data');
 
 test.describe('profile page', () => {
@@ -23,6 +23,12 @@ test.describe('profile page', () => {
   test('group roster as an admin on a narrow viewport @mobile', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, '/profile', { groupMembers: data.groupMembersLongName });
     await page.locator('.group-card-horizontal').first().click();
+    // Parked at the carousel's start stop before photographing — see the
+    // member test below for why the scroll position is pinned rather than
+    // inherited from whatever Playwright's click-time auto-scroll left it at.
+    // The first card is already fully visible, so this is where that scroll
+    // leaves it anyway; pinning it just makes that a guarantee.
+    await pinCarouselScroll(page, '.groups-bar', 'start');
     // Waiting on an action button rather than the panel itself: the panel
     // renders before its members have loaded, so this is what proves the
     // roster (and the caller's admin role on this specific group) resolved
@@ -40,6 +46,22 @@ test.describe('profile page', () => {
   test('group roster as a plain member on a narrow viewport @mobile', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, '/profile');
     await page.locator('.group-card-horizontal').nth(1).click();
+    // This is the click that flaked in CI: at phone width the second card is
+    // only partly on screen, so Playwright auto-scrolls the `.groups-bar`
+    // carousel to reach it — and where that scroll comes to rest turned out
+    // not to be reproducible run to run. One CI run photographed this page
+    // with the carousel a pixel or two off and diffed ~610 pixels (all of them
+    // inside the carousel: the selected card's stat row and the clipped
+    // neighbour), while another run of the very same commit passed.
+    //
+    // Notably Playwright itself reported "captured a stable screenshot" on the
+    // failing run, so it was not caught mid-scroll — the resting position
+    // genuinely differed. A settle-wait cannot fix that, so the position is
+    // pinned to the carousel's end stop instead: an exact, layout-derived
+    // maximum that no timing can vary. The cards are fixed-width
+    // (flex: 0 0 200px), so this is the same view the auto-scroll was aiming
+    // at, minus the variance.
+    await pinCarouselScroll(page, '.groups-bar', 'end');
     await expect(page.locator('.member-list')).toBeVisible();
     await expect(page.locator('.member-action-btn')).toHaveCount(0);
     await expect(page).toHaveScreenshot('profile-roster-member-mobile.png', { fullPage: true });

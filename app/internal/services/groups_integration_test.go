@@ -234,12 +234,9 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create match in group A: %v", err)
 	}
-	if err := matchService.UpdateMatch(models.MatchWithDetails{
-		ID: matchAID,
-		Teams: []models.TeamWithPlayers{
-			{ID: teamsA[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
-			{ID: teamsA[1].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 0}}},
-		},
+	if err := matchService.UpdateMatch(matchAID, groupA.ID, []models.TeamWithPlayers{
+		{ID: teamsA[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
+		{ID: teamsA[1].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 0}}},
 	}); err != nil {
 		t.Fatalf("UpdateMatch (group A) returned error: %v", err)
 	}
@@ -252,12 +249,9 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create player carol: %v", err)
 	}
-	if err := matchService.UpdateMatch(models.MatchWithDetails{
-		ID: matchBID,
-		Teams: []models.TeamWithPlayers{
-			{ID: teamsB[0].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 5}}},
-			{ID: teamsB[1].ID, Players: []models.PlayerCustom{{ID: carolID, GoalsScored: 0}}},
-		},
+	if err := matchService.UpdateMatch(matchBID, groupB.ID, []models.TeamWithPlayers{
+		{ID: teamsB[0].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 5}}},
+		{ID: teamsB[1].ID, Players: []models.PlayerCustom{{ID: carolID, GoalsScored: 0}}},
 	}); err != nil {
 		t.Fatalf("UpdateMatch (group B) returned error: %v", err)
 	}
@@ -502,12 +496,9 @@ func TestStandings_Integration_IsMemberAfterRemoval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create match: %v", err)
 	}
-	if err := matchService.UpdateMatch(models.MatchWithDetails{
-		ID: matchID,
-		Teams: []models.TeamWithPlayers{
-			{ID: teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
-			{ID: teams[1].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 1}}},
-		},
+	if err := matchService.UpdateMatch(matchID, group.ID, []models.TeamWithPlayers{
+		{ID: teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
+		{ID: teams[1].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 1}}},
 	}); err != nil {
 		t.Fatalf("UpdateMatch returned error: %v", err)
 	}

@@ -28,6 +28,16 @@ func main() {
 	// Initialize Gin router
 	r := gin.Default()
 
+	// Decide whose X-Forwarded-For to believe *before* any route is served:
+	// gin trusts every caller by default, which made c.ClientIP() — and
+	// therefore the per-IP rate limiters on the four /auth/* routes below —
+	// take its value from a header the client itself could set. See
+	// handlers.ConfigureTrustedProxies for the policy and the TRUSTED_PROXIES
+	// env var that overrides it.
+	if err := handlers.ConfigureTrustedProxies(r); err != nil {
+		log.Fatalf("invalid %s: %v", "TRUSTED_PROXIES", err)
+	}
+
 	// Configuration CORS
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     allowedOrigins(),
@@ -115,7 +125,15 @@ func main() {
 	// and invite routes above; TeamService.UpdateTeam additionally scopes the
 	// lookup to :id so :teamId can't reach into another group.
 	r.PATCH("/groups/:id/teams/:teamId", authRequired, requireGroupAdminByPathID, teamHandler.UpdateTeam)
-	r.POST("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.AddPlayerToGroup)
+	// Adding another player to a group is **admin-only**: the body names an
+	// arbitrary player id, so under plain membership any member could enrol
+	// anyone they knew the id of, with no invite code and no admin rights —
+	// which contradicts the invite-only model the rest of this file enforces
+	// (POST /groups and POST /groups/join are disabled precisely so that the
+	// only way in is an admin's invite link). No frontend code calls this
+	// route today; it is kept, gated, rather than removed, since it is the
+	// only server-side way an admin can enrol an existing player directly.
+	r.POST("/groups/:id/players", authRequired, requireGroupAdminByPathID, groupHandler.AddPlayerToGroup)
 	r.GET("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupMembers)
 	// Self-service "leave a group" — the caller can only ever remove their own
 	// membership (from the JWT), never someone else's; removing another
@@ -132,15 +150,21 @@ func main() {
 	r.PATCH("/groups/:id/members/:playerId/role", authRequired, requireGroupAdminByPathID, groupHandler.UpdateMemberRole)
 
 	// Matches
-	// Creating a match and editing its scores are admin-only
-	// (requireGroupAdmin); reading them stays open to any member
-	// (requireGroupMember). Both write routes carry the group_id in the body,
-	// not the path, hence the body/query-resolving middleware rather than the
-	// ByPathID one.
+	// Creating a match and editing its scores are admin-only; reading them
+	// stays open to any member (requireGroupMember). POST /matches carries the
+	// group_id in the body and has no match to derive it from — it is creating
+	// one — hence the body/query-resolving requireGroupAdmin.
 	r.POST("/matches", authRequired, requireGroupAdmin, matchHandler.CreateMatch)
 	r.GET("/matches/details", authRequired, requireGroupMember, matchHandler.GetMatchesDetails)
 	r.GET("/matches/:id/details", authRequired, requireGroupMember, matchHandler.GetMatchDetailsByID)
-	r.PUT("/matches/:id", authRequired, requireGroupAdmin, matchHandler.UpdateMatch)
+	// PUT /matches/:id uses the *match-scoped* admin middleware, unlike POST
+	// above: the path already names the match, so the group must be derived
+	// from it rather than from the body. It used to use requireGroupAdmin,
+	// which authorized against a group the caller supplied — letting an admin
+	// of group A pass their own group_id together with the ID of a match in
+	// group B and rewrite that match's roster and scores (see
+	// MatchHandler.UpdateMatch / MatchService.UpdateMatch).
+	r.PUT("/matches/:id", authRequired, requireGroupAdminByMatchID, matchHandler.UpdateMatch)
 	// Deleting a match is admin-only too — group_id travels in the query
 	// string (a DELETE has no body), which requireGroupAdmin's
 	// resolveGroupIDForMembership already handles the same way resolveGroupID

@@ -4,27 +4,7 @@
 // in one of them says which.
 
 const { test, expect } = require('@playwright/test');
-const { gotoApp, expectEverythingStubbed, expectNoHorizontalOverflow } = require('./fixtures/app');
-
-// The horizontal match carousel is CSS scroll-behavior: smooth, and clicking
-// a card off-screen makes Playwright auto-scroll it into view before the
-// click lands — an animation that toHaveScreenshot's own animation-disabling
-// doesn't reach, since that only applies once the screenshot call itself
-// starts, well after the click already happened. Waiting for two consecutive
-// reads of scrollLeft to agree is what actually proves the scroll has
-// settled, independent of *why* it hadn't (CSS animation, or just slower
-// compositing under parallel load) — an instant scrollIntoView before the
-// click reduces how often this is needed, but doesn't guarantee it.
-const waitForCarouselToSettle = async (page) => {
-  const scrollLeft = () => page.locator('.matches-bar').evaluate((el) => el.scrollLeft);
-  let previous = await scrollLeft();
-  for (let i = 0; i < 20; i += 1) {
-    await page.waitForTimeout(50);
-    const current = await scrollLeft();
-    if (current === previous) return;
-    previous = current;
-  }
-};
+const { gotoApp, expectEverythingStubbed, expectNoHorizontalOverflow, waitForCarouselToSettle } = require('./fixtures/app');
 
 test.describe('home page', () => {
   test('matches tab', async ({ page }) => {
@@ -111,10 +91,11 @@ test.describe('home page', () => {
     // before Playwright's own click-time auto-scroll would otherwise do it —
     // the carousel is CSS scroll-behavior: smooth, and a smooth scroll still
     // in flight when the screenshot is taken produces a small, intermittent
-    // diff (blurred card text) that only shows up under parallel load.
+    // diff (blurred card text) that only shows up under parallel load. This
+    // baseline was captured with that explicit scroll, so it stays.
     await scheduledCard.evaluate((el) => el.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'nearest' }));
     await scheduledCard.click();
-    await waitForCarouselToSettle(page);
+    await waitForCarouselToSettle(page, '.matches-bar');
     await expect(page.locator('.signup-inline')).toBeVisible();
     await expect(page).toHaveScreenshot('matches-tab-signup-inline.png', { fullPage: true });
     expectEverythingStubbed(unstubbed);
@@ -148,7 +129,7 @@ test.describe('home page', () => {
     // explicitly, with an instant rather than smooth behavior, before clicking.
     await scheduledCard.evaluate((el) => el.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'nearest' }));
     await scheduledCard.click();
-    await waitForCarouselToSettle(page);
+    await waitForCarouselToSettle(page, '.matches-bar');
     await expect(page.locator('.signup-inline')).toBeVisible();
     // 18 sign-ups against a cap of 16: the two extra are the waiting list,
     // which exists only as a consequence of the ordering — worth having in a

@@ -171,6 +171,38 @@ func TestSignupNewPlayer_Integration_EmptyPasswordFails(t *testing.T) {
 	}
 }
 
+// TestSignupNewPlayer_Integration_PasswordPolicy pins the minimum length
+// signup gained: seven characters is refused with ErrPasswordTooShort (and
+// leaves no player row behind, the same atomicity guarantee the invite-code
+// failures have), eight is accepted. Before this the only rule was "not
+// empty", so a one-character password went through.
+func TestSignupNewPlayer_Integration_PasswordPolicy(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+	group, err := services.NewGroupService(tx).CreateGroup("Zzz Signup Password Policy Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("CreateGroup returned error: %v", err)
+	}
+
+	_, err = authService.SignupNewPlayer("Zzz Integration Auth Short", "short-pass@example.com", "7chars!", group.InviteCode)
+	if !errors.Is(err, services.ErrPasswordTooShort) {
+		t.Errorf("SignupNewPlayer with a 7-character password error = %v, want ErrPasswordTooShort", err)
+	}
+	var count int64
+	if err := tx.Model(&models.Player{}).Where("email = ?", "short-pass@example.com").Count(&count).Error; err != nil {
+		t.Fatalf("failed to count players by email: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("player row was created despite the too-short password failing signup (count = %d, want 0)", count)
+	}
+
+	if _, err := authService.SignupNewPlayer("Zzz Integration Auth Eight", "eight-pass@example.com", "8chars!!", group.InviteCode); err != nil {
+		t.Errorf("SignupNewPlayer with an 8-character password returned error: %v", err)
+	}
+}
+
 func TestSignupNewPlayer_Integration_DuplicateEmailFails(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
