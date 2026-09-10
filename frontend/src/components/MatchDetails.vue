@@ -120,34 +120,24 @@
           <p class="signup-state-detail">{{ registrationStateDetail }}</p>
 
           <div class="signup-actions">
+            <!-- Close/Reopen and Share on WhatsApp sit next to each other
+                 deliberately (rather than Share trailing after the
+                 max-players form, further down the DOM): both are things an
+                 admin does about the sign-up window itself, so they read as
+                 one pair — and it's what puts them on the same wrapped line
+                 on a narrow screen, not just on desktop where there was
+                 always room to spare. -->
             <button v-if="canCloseRegistrations" @click="closeRegistrations" :disabled="isUpdatingRegistrationState"
-              class="btn-base btn-cancel btn-small">
+              class="btn-base btn-cancel btn-small registration-toggle-btn">
               <div v-if="isUpdatingRegistrationState" class="loading-spinner-small"></div>
               {{ isUpdatingRegistrationState ? 'Closing...' : 'Close sign-ups' }}
             </button>
 
             <button v-if="canReopenRegistrations" @click="reopenRegistrations" :disabled="isUpdatingRegistrationState"
-              class="btn-base btn-cancel btn-small">
+              class="btn-base btn-cancel btn-small registration-toggle-btn">
               <div v-if="isUpdatingRegistrationState" class="loading-spinner-small"></div>
               {{ isUpdatingRegistrationState ? 'Reopening...' : 'Reopen sign-ups' }}
             </button>
-
-            <!-- Admin-only, and deliberately offered whether sign-ups are open or
-                 closed: dropping the cap is typically what an admin does right
-                 after closing the list, in order to compose the teams (16 asked
-                 for, 12 signed up, so 10 play and 2 are reserves). The split it
-                 produces is server-derived like everything else about this list
-                 — the response is the recomputed list, not a local guess. -->
-            <form v-if="isAdmin" class="max-players-editor" @submit.prevent="updateMaxPlayers">
-              <label class="max-players-label" for="max-players-input">Confirmed places</label>
-              <input id="max-players-input" v-model="maxPlayersInput" type="number" min="1" step="1"
-                class="max-players-input" :disabled="isUpdatingMaxPlayers" />
-              <button type="submit" class="btn-base btn-cancel btn-small"
-                :disabled="isUpdatingMaxPlayers || !canUpdateMaxPlayers">
-                <div v-if="isUpdatingMaxPlayers" class="loading-spinner-small"></div>
-                {{ isUpdatingMaxPlayers ? 'Updating...' : 'Update' }}
-              </button>
-            </form>
 
             <!-- A plain wa.me link, not a click handler: it's a URL WhatsApp
                  itself publishes, opened in a new tab like any other outbound
@@ -167,6 +157,23 @@
               </svg>
               <span class="whatsapp-share-label">Share on WhatsApp</span>
             </a>
+
+            <!-- Admin-only, and deliberately offered whether sign-ups are open or
+                 closed: dropping the cap is typically what an admin does right
+                 after closing the list, in order to compose the teams (16 asked
+                 for, 12 signed up, so 10 play and 2 are reserves). The split it
+                 produces is server-derived like everything else about this list
+                 — the response is the recomputed list, not a local guess. -->
+            <form v-if="isAdmin" class="max-players-editor" @submit.prevent="updateMaxPlayers">
+              <label class="max-players-label" for="max-players-input">Confirmed places</label>
+              <input id="max-players-input" v-model="maxPlayersInput" type="number" min="1" step="1"
+                class="max-players-input" :disabled="isUpdatingMaxPlayers" />
+              <button type="submit" class="btn-base btn-cancel btn-small"
+                :disabled="isUpdatingMaxPlayers || !canUpdateMaxPlayers">
+                <div v-if="isUpdatingMaxPlayers" class="loading-spinner-small"></div>
+                {{ isUpdatingMaxPlayers ? 'Updating...' : 'Update' }}
+              </button>
+            </form>
 
             <!-- Admin-only, and only once the list is closed: the product flow
                  is "close sign-ups in order to compose the teams", and offering
@@ -2784,6 +2791,20 @@ export default {
   .whatsapp-share-btn svg {
     width: 24px;
     height: 24px;
+  }
+
+  /* Undoes global-styles.css's .btn-base { width: 100% } (aimed at modal
+     footers, not this row) — without it Close/Reopen sign-ups would claim
+     the whole row width and push whatsapp-share-btn onto a line of its own,
+     even though the template now places them right next to each other (see
+     .signup-actions above). height: 3rem matches whatsapp-share-btn's own
+     explicit height exactly — relying on .signup-actions' default
+     align-items: stretch instead came within a couple of px (this button's
+     natural content height is very slightly taller than 3rem, so stretch,
+     which only ever grows the *shorter* item, left them visibly mismatched). */
+  .registration-toggle-btn {
+    width: auto;
+    height: 3rem;
   }
 
   /* Roster row: player name rendered as an <h4> with no font-size of its
