@@ -1,4 +1,9 @@
-import { buildWhatsAppShareText, buildWhatsAppShareUrl, buildGroupInviteShareText } from '@/services/whatsappShare';
+import {
+  buildWhatsAppShareText,
+  buildWhatsAppShareUrl,
+  buildGroupInviteShareText,
+  buildTeamsShareText
+} from '@/services/whatsappShare';
 
 describe('buildWhatsAppShareText', () => {
   it('includes the kick-off and the match link, with no emoji WhatsApp might not render', () => {
@@ -91,5 +96,49 @@ describe('buildGroupInviteShareText', () => {
 
     const lines = text.split('\n');
     expect(lines[lines.length - 1]).toBe('Group code: AB2N7TQR');
+  });
+});
+
+describe('buildTeamsShareText', () => {
+  it('lists the kick-off, then each team name followed by its players', () => {
+    const text = buildTeamsShareText({
+      dateTimeLabel: 'Sun, Sep 6, 2026, 8:30 PM',
+      teams: [
+        { name: 'Black', players: ['Marco', 'Luca'] },
+        { name: 'White', players: ['Anna'] }
+      ]
+    });
+
+    expect(text).toBe(
+      'Match: Sun, Sep 6, 2026, 8:30 PM\n'
+      + '\n'
+      + 'Black\n'
+      + '- Marco\n'
+      + '- Luca\n'
+      + '\n'
+      + 'White\n'
+      + '- Anna'
+    );
+  });
+
+  it('prints "No players yet" for a team with no players instead of a bare header', () => {
+    const text = buildTeamsShareText({
+      dateTimeLabel: 'Sun, Sep 6, 2026, 8:30 PM',
+      teams: [
+        { name: 'Black', players: [] },
+        { name: 'White', players: ['Anna'] }
+      ]
+    });
+
+    const lines = text.split('\n');
+    expect(lines).toEqual([
+      'Match: Sun, Sep 6, 2026, 8:30 PM',
+      '',
+      'Black',
+      'No players yet',
+      '',
+      'White',
+      '- Anna'
+    ]);
   });
 });
