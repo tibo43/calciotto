@@ -234,25 +234,26 @@
                  before the team switcher rather than being grouped with it. -->
             <div class="action-buttons">
               <button v-if="isAdmin" @click="saveChanges" class="btn-base btn-primary btn-small" :disabled="isSaving || !showTeamRoster"
-                :title="showTeamRoster ? '' : 'Nothing to save yet — compose the teams first'">
+                :title="showTeamRoster ? '' : 'Nothing to save yet — compose the teams first'"
+                :aria-label="isSaving ? 'Saving...' : 'Save Changes'">
                 <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                   <polyline points="17,21 17,13 7,13 7,21" />
                   <polyline points="7,3 7,8 15,8" />
                 </svg>
                 <div v-else class="loading-spinner-small"></div>
-                {{ isSaving ? 'Saving...' : 'Save Changes' }}
+                <span class="action-btn-label">{{ isSaving ? 'Saving...' : 'Save Changes' }}</span>
               </button>
               <!-- Clearly separated from Save Changes so a click can't be
                    mistaken between the two destructive/non-destructive actions. -->
               <button v-if="isAdmin" @click="confirmDeleteMatch" class="btn-base btn-danger btn-small delete-match-btn"
-                :disabled="isDeleting">
+                :disabled="isDeleting" :aria-label="isDeleting ? 'Deleting...' : 'Delete Match'">
                 <svg v-if="!isDeleting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="3,6 5,6 21,6" />
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                 </svg>
                 <div v-else class="loading-spinner-small"></div>
-                {{ isDeleting ? 'Deleting...' : 'Delete Match' }}
+                <span class="action-btn-label">{{ isDeleting ? 'Deleting...' : 'Delete Match' }}</span>
               </button>
               <!-- Sharing the composed roster, admin-only — this page is
                    already gated to admins by the router guard (canEditMatch),
@@ -2721,49 +2722,61 @@ export default {
     font-size: 0.9rem;
   }
 
-  /* Side by side on one row instead of stacked full-width — each button
-     shares the row equally. */
+  /* Icon-only across the whole row: Save Changes, Delete Match and (once a
+     roster exists) Share teams on WhatsApp all collapse to a small square
+     icon button on a narrow screen — the icon alone is enough to identify
+     each action, same as add-player-icon-btn's own icon-only convention
+     elsewhere on this page. flex: none replaces the old flex: 1 (there is
+     no longer a label to need the extra width, and stretching a bare icon
+     across a wide button just leaves empty space either side of it); the
+     width is explicit (2.5rem, matching add-player-icon-btn) rather than
+     left to flex-basis: auto to size from content — a flex item that's
+     itself a flex container, sized purely from content, rendered far wider
+     than its actual content in testing. */
   .action-buttons {
     flex-wrap: nowrap;
     gap: 0.5rem;
   }
 
   .action-buttons .btn-base {
-    flex: 1;
+    flex: none;
+    width: 2.5rem;
+    padding: 0.6rem;
     justify-content: center;
   }
 
-  /* They're already visually separated by sharing the row 50/50 with a
-     gap, so the extra desktop-only margin meant to prevent a misclick
-     would just throw the 50/50 split off here. */
+  .action-btn-label {
+    display: none;
+  }
+
+  /* No longer needed to visually separate this from Save Changes now that
+     both are equal-sized icon squares with their own gap — the extra
+     desktop-only margin would just throw the row's spacing off here. */
   .delete-match-btn {
     margin-left: 0;
   }
 
-  /* Icon-only: on a narrow screen there's no room left for the label once
-     this button shares a row with others (Save Changes/Delete Match here,
-     Close/Reopen/Fill teams in .signup-actions) — the WhatsApp glyph alone
-     is enough to identify the action, same as add-player-icon-btn's own
-     icon-only convention elsewhere on this page (2.5rem square, explicit
-     width rather than letting flex-basis: auto size it from content — a
-     flex item that's itself a flex container, sized by content alone,
-     rendered far wider than its actual content in testing, so an explicit
-     width is what actually pins it down). .action-buttons .whatsapp-share-btn
-     overrides .action-buttons .btn-base's own flex: 1 (same two-class
-     specificity, later in the cascade) so this button stops stretching to
-     share the row equally with Save Changes/Delete Match. */
   .whatsapp-share-label {
     display: none;
   }
 
+  /* Also reached by the sign-up panel's own "Share on WhatsApp" button
+     (.signup-actions, not .action-buttons), which the two rules above don't
+     cover — hence a plain .whatsapp-share-btn rule rather than folding this
+     into .action-buttons .btn-base too. */
   .whatsapp-share-btn {
     padding: 0.6rem;
     justify-content: center;
     width: 2.5rem;
   }
 
-  .action-buttons .whatsapp-share-btn {
-    flex: none;
+  /* The WhatsApp glyph is small (16px, .btn-small svg's own default) next to
+     the plain line-icons it now sits alongside at the same 2.5rem box size —
+     enlarged so it actually reads as the WhatsApp logo at a glance instead
+     of looking like an afterthought. */
+  .whatsapp-share-btn svg {
+    width: 22px;
+    height: 22px;
   }
 
   /* Roster row: player name rendered as an <h4> with no font-size of its
