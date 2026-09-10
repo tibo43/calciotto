@@ -65,7 +65,7 @@
                 <input v-model="team.name" class="form-input team-name-input" type="text"
                   placeholder="Team name" :disabled="teamSaving[team.id]">
                 <TeamColourPicker v-model="team.colour" :disabled="teamSaving[team.id]" />
-                <button class="btn-base btn-primary btn-small"
+                <button class="btn-base btn-primary btn-small save-team-btn"
                   :disabled="teamSaving[team.id] || !team.name.trim()"
                   @click="saveTeam(team)">
                   {{ teamSaving[team.id] ? 'Saving...' : 'Save' }}
@@ -309,6 +309,25 @@ export default {
     height: 3rem;
     padding: 0;
     justify-content: center;
+  }
+
+  /* Same global .btn-base { width: 100% } problem as Copy above: without
+     this, Save claims the whole row and drops onto its own line below the
+     team name input and colour swatch instead of sitting on the same line
+     as them. The input's own min-width shrinks a little too (10rem left no
+     room for Save next to it at a phone width), and the row's gap tightens
+     to match — the swatch is a fixed 40px regardless. */
+  .team-edit-row {
+    gap: 0.4rem;
+  }
+
+  .team-name-input {
+    min-width: 7rem;
+  }
+
+  .save-team-btn {
+    width: auto;
+    flex-shrink: 0;
   }
 
   .whatsapp-share-btn svg {
