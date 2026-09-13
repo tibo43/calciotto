@@ -311,6 +311,50 @@ func TestAuthHandler_Integration_SignupErrors(t *testing.T) {
 	}
 }
 
+// TestAuthHandler_Integration_SignupPasswordTooShort pins the HTTP mapping of
+// the new minimum-length rule: ErrPasswordTooShort is a client input error, so
+// it answers 400 (next to ErrPasswordRequired in the handler's switch) rather
+// than falling through to the default 500, and the response carries the
+// message naming the required length. Eight characters still succeeds.
+func TestAuthHandler_Integration_SignupPasswordTooShort(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testAuthJWTSecret)
+	router := newAuthTestRouter(authService)
+	inviteCode := newSignupInviteCode(t, tx)
+
+	signup := func(email, password string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]string{
+			"name":        "Zzz Integration Handler Short",
+			"email":       email,
+			"password":    password,
+			"invite_code": inviteCode,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	shortRec := signup("handler-short-pass@example.com", "7chars!")
+	if shortRec.Code != http.StatusBadRequest {
+		t.Fatalf("signup with a 7-character password returned status %d, want 400, body: %s", shortRec.Code, shortRec.Body.String())
+	}
+	var errBody map[string]string
+	if err := json.Unmarshal(shortRec.Body.Bytes(), &errBody); err != nil {
+		t.Fatalf("failed to unmarshal the error body: %v", err)
+	}
+	if errBody["error"] != services.ErrPasswordTooShort.Error() {
+		t.Errorf("error body = %q, want %q", errBody["error"], services.ErrPasswordTooShort.Error())
+	}
+
+	if okRec := signup("handler-eight-pass@example.com", "8chars!!"); okRec.Code != http.StatusOK {
+		t.Errorf("signup with an 8-character password returned status %d, want 200, body: %s", okRec.Code, okRec.Body.String())
+	}
+}
+
 func TestAuthHandler_Integration_LoginWrongPasswordReturns401(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)

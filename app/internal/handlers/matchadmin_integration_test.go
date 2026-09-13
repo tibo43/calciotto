@@ -19,11 +19,13 @@ import (
 
 const testMatchAdminJWTSecret = "zzz-integration-test-match-admin-secret"
 
-// matchAdminEnv mirrors main.go's wiring for the three match routes that
-// matter here: creating and updating are admin-only (requireGroupAdmin),
-// reading details stays open to any member (requireGroupMember). Both write
-// routes carry the group id in the body, which is why they use the
-// body/query-resolving middleware rather than the path-param one.
+// matchAdminEnv mirrors main.go's wiring for the match routes that matter
+// here: creating, updating and deleting are admin-only, reading details stays
+// open to any member (requireGroupMember). POST and DELETE carry the group id
+// in the body/query, hence the body/query-resolving requireGroupAdmin; PUT
+// names the match in its path, so it uses the *match-scoped*
+// requireGroupAdminByMatchID exactly as main.go does — the group must come
+// from the match being edited, not from anything the caller supplies.
 type matchAdminEnv struct {
 	memberships *services.GroupMembershipService
 	players     *services.PlayerService
@@ -44,11 +46,12 @@ func newMatchAdminEnv(t *testing.T, tx *gorm.DB) *matchAdminEnv {
 	authRequired := handlers.AuthMiddleware(authService)
 	requireGroupMember := handlers.RequireGroupMembership(membershipService)
 	requireGroupAdmin := handlers.RequireGroupAdmin(membershipService)
+	requireGroupAdminByMatchID := handlers.RequireGroupAdminByMatchPathParam(matchService, membershipService, "id")
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.POST("/matches", authRequired, requireGroupAdmin, matchHandler.CreateMatch)
-	router.PUT("/matches/:id", authRequired, requireGroupAdmin, matchHandler.UpdateMatch)
+	router.PUT("/matches/:id", authRequired, requireGroupAdminByMatchID, matchHandler.UpdateMatch)
 	router.DELETE("/matches/:id", authRequired, requireGroupAdmin, matchHandler.DeleteMatch)
 	router.GET("/matches/details", authRequired, requireGroupMember, matchHandler.GetMatchesDetails)
 	router.GET("/matches/:id/details", authRequired, requireGroupMember, matchHandler.GetMatchDetailsByID)
@@ -322,5 +325,96 @@ func TestDeleteMatch_Integration_AdminOnly(t *testing.T) {
 	getRec := env.do(http.MethodGet, "/matches/"+matchID.String()+"/details?group_id="+groupID.String(), adminToken, nil)
 	if getRec.Code != http.StatusNotFound {
 		t.Errorf("GET .../details after delete returned status %d, want 404, body: %s", getRec.Code, getRec.Body.String())
+	}
+}
+
+// TestUpdateMatch_Integration_CannotForgeAnotherGroupsMatch is the regression
+// test for the cross-tenant hole PUT /matches/:id used to have.
+//
+// The route used to be gated by requireGroupAdmin, which resolves the group
+// from the request *body* — so an admin of group A could send GroupID = A (a
+// group they legitimately administer, satisfying the admin check) together
+// with ID = a match belonging to group B, and MatchService.UpdateMatch, which
+// read the match id off that same body, rewrote group B's roster and scores.
+// Group B's real members then saw the forged result.
+//
+// The body still carries both fields here — a real attacker's would — so what
+// this pins is that they are now ignored entirely: the group comes from the
+// match named in the path, group A's admin is not a member of that group, and
+// the answer is the same 404 an unknown match id gets (never 403, which would
+// confirm the match exists — see matchscope.go).
+func TestUpdateMatch_Integration_CannotForgeAnotherGroupsMatch(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newMatchAdminEnv(t, tx)
+
+	groupAID, adminAToken, _ := env.matchAdminGroup(t, tx,
+		"Zzz Match Forge A", "match-forge-a-admin@example.com", "match-forge-a-member@example.com")
+	groupBID, _, _ := env.matchAdminGroup(t, tx,
+		"Zzz Match Forge B", "match-forge-b-admin@example.com", "match-forge-b-member@example.com")
+
+	teamsA, err := env.teams.GetTeamsByGroupID(groupAID)
+	if err != nil {
+		t.Fatalf("failed to load group A's teams: %v", err)
+	}
+	teamsB, err := env.teams.GetTeamsByGroupID(groupBID)
+	if err != nil {
+		t.Fatalf("failed to load group B's teams: %v", err)
+	}
+
+	// Group B's own match, with a roster already recorded: the forged request
+	// must leave it byte-for-byte as it is.
+	victimID, err := env.players.CreatePlayer("Zzz Match Forge Victim")
+	if err != nil {
+		t.Fatalf("failed to create group B's player: %v", err)
+	}
+	if err := env.memberships.AddPlayerToGroup(groupBID, victimID); err != nil {
+		t.Fatalf("failed to add group B's player: %v", err)
+	}
+	matchBID, err := env.matches.CreateMatch(services.MatchSpec{Date: models.Date{}}, groupBID)
+	if err != nil {
+		t.Fatalf("failed to create group B's match: %v", err)
+	}
+	if err := env.matches.UpdateMatch(matchBID, groupBID, []models.TeamWithPlayers{{
+		ID:      teamsB[0].ID,
+		Players: []models.PlayerCustom{{ID: victimID, GoalsScored: 1}},
+	}}); err != nil {
+		t.Fatalf("failed to compose group B's roster: %v", err)
+	}
+
+	// The forged payload: group A's own group id and one of group A's own
+	// teams, aimed at group B's match.
+	intruderID, err := env.players.CreatePlayer("Zzz Match Forge Intruder")
+	if err != nil {
+		t.Fatalf("failed to create group A's player: %v", err)
+	}
+	if err := env.memberships.AddPlayerToGroup(groupAID, intruderID); err != nil {
+		t.Fatalf("failed to add group A's player: %v", err)
+	}
+	forged := models.MatchWithDetails{
+		ID:      matchBID,
+		GroupID: groupAID,
+		Teams: []models.TeamWithPlayers{{
+			ID:      teamsA[0].ID,
+			Players: []models.PlayerCustom{{ID: intruderID, GoalsScored: 99}},
+		}},
+	}
+
+	rec := env.do(http.MethodPut, "/matches/"+matchBID.String(), adminAToken, forged)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("admin of group A PUT on group B's match returned status %d, want 404, body: %s", rec.Code, rec.Body.String())
+	}
+
+	// Nothing of group B's match was touched: still exactly the one row it
+	// had, still one goal, and no row for group A's team or player.
+	var rows []models.MatchPlayer
+	if err := tx.Where("match_id = ?", matchBID).Find(&rows).Error; err != nil {
+		t.Fatalf("loading group B's match_players returned error: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("group B's match has %d match_player row(s) after the forged PUT, want 1: %+v", len(rows), rows)
+	}
+	if rows[0].PlayerID != victimID || rows[0].TeamID != teamsB[0].ID || rows[0].GoalsScored != 1 {
+		t.Errorf("group B's match_player row = %+v, want player %s on team %s with 1 goal", rows[0], victimID, teamsB[0].ID)
 	}
 }

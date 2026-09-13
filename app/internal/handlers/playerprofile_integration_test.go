@@ -129,12 +129,9 @@ func TestPlayerProfile_Integration(t *testing.T) {
 			t.Fatalf("failed to create match on %s: %v", f.date, err)
 		}
 		matchIDs[i] = matchID
-		if err := matchService.UpdateMatch(models.MatchWithDetails{
-			ID: matchID,
-			Teams: []models.TeamWithPlayers{
-				{ID: f.teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: f.aliceGoals}}},
-				{ID: f.teams[1].ID, Players: []models.PlayerCustom{{ID: f.opponentID, GoalsScored: f.rivalGoals}}},
-			},
+		if err := matchService.UpdateMatch(matchID, f.groupID, []models.TeamWithPlayers{
+			{ID: f.teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: f.aliceGoals}}},
+			{ID: f.teams[1].ID, Players: []models.PlayerCustom{{ID: f.opponentID, GoalsScored: f.rivalGoals}}},
 		}); err != nil {
 			t.Fatalf("UpdateMatch on %s returned error: %v", f.date, err)
 		}

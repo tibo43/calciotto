@@ -54,12 +54,9 @@ func TestStandings_Integration_ScopedPerSeason(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create the old-season match: %v", err)
 	}
-	if err := matchService.UpdateMatch(models.MatchWithDetails{
-		ID: oldMatchID,
-		Teams: []models.TeamWithPlayers{
-			{ID: teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 3}}},
-			{ID: teams[1].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 0}}},
-		},
+	if err := matchService.UpdateMatch(oldMatchID, group.ID, []models.TeamWithPlayers{
+		{ID: teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 3}}},
+		{ID: teams[1].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 0}}},
 	}); err != nil {
 		t.Fatalf("UpdateMatch (old season) returned error: %v", err)
 	}
@@ -68,12 +65,9 @@ func TestStandings_Integration_ScopedPerSeason(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create the new-season match: %v", err)
 	}
-	if err := matchService.UpdateMatch(models.MatchWithDetails{
-		ID: newMatchID,
-		Teams: []models.TeamWithPlayers{
-			{ID: teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 0}}},
-			{ID: teams[1].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 1}}},
-		},
+	if err := matchService.UpdateMatch(newMatchID, group.ID, []models.TeamWithPlayers{
+		{ID: teams[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 0}}},
+		{ID: teams[1].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 1}}},
 	}); err != nil {
 		t.Fatalf("UpdateMatch (new season) returned error: %v", err)
 	}

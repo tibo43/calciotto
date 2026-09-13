@@ -249,3 +249,32 @@ func TestForgotPassword_Integration_StoresOnlyTheTokenHash(t *testing.T) {
 		t.Errorf("a freshly issued token has UsedAt = %v, want nil", stored.UsedAt)
 	}
 }
+
+// TestResetPassword_Integration_PasswordPolicy is the reset half of the
+// minimum-length rule: a 7-character new password is ErrPasswordTooShort and
+// leaves the old password (and the token) usable, an 8-character one goes
+// through. The token must survive the rejection — burning it on a validation
+// error would force the player to request a whole new email over a typo.
+func TestResetPassword_Integration_PasswordPolicy(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+	newClaimedPlayer(t, tx, "Zzz Integration Reset Short", "reset-short@example.com", "old-pass")
+
+	token := requestResetToken(t, authService, "reset-short@example.com")
+
+	if err := authService.ResetPassword(token, "7chars!"); !errors.Is(err, services.ErrPasswordTooShort) {
+		t.Errorf("ResetPassword with a 7-character password error = %v, want ErrPasswordTooShort", err)
+	}
+	if _, err := authService.Login("reset-short@example.com", "old-pass"); err != nil {
+		t.Errorf("the old password stopped working after a rejected reset: %v", err)
+	}
+
+	if err := authService.ResetPassword(token, "8chars!!"); err != nil {
+		t.Fatalf("ResetPassword with an 8-character password returned error: %v", err)
+	}
+	if _, err := authService.Login("reset-short@example.com", "8chars!!"); err != nil {
+		t.Errorf("login with the new 8-character password returned error: %v", err)
+	}
+}

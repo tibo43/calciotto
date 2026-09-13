@@ -35,8 +35,11 @@ func signupAndLoginRole(t *testing.T, authService *services.AuthService, playerI
 }
 
 // TestAddPlayerToGroup_Integration_AddedPlayerBecomesMember covers POST
-// /groups/:id/players: an existing member adding another player must assign
-// that player RoleMember, never RoleAdmin.
+// /groups/:id/players: an admin adding another player must assign that player
+// RoleMember, never RoleAdmin. The route is wired with
+// requireGroupAdminByPathID exactly as main.go does — see
+// TestAddPlayerToGroup_Integration_AdminOnly below for why plain membership
+// wasn't enough.
 func TestAddPlayerToGroup_Integration_AddedPlayerBecomesMember(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -66,10 +69,10 @@ func TestAddPlayerToGroup_Integration_AddedPlayerBecomesMember(t *testing.T) {
 		t.Fatalf("failed to create added player: %v", err)
 	}
 
-	requireGroupMemberByPathID := handlers.RequireGroupMembershipByPathParam(membershipService, "id")
+	requireGroupAdminByPathID := handlers.RequireGroupAdminByPathParam(membershipService, "id")
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.POST("/groups/:id/players", handlers.AuthMiddleware(authService), requireGroupMemberByPathID, groupHandler.AddPlayerToGroup)
+	router.POST("/groups/:id/players", handlers.AuthMiddleware(authService), requireGroupAdminByPathID, groupHandler.AddPlayerToGroup)
 
 	body := []byte(`{"player_id":"` + addedID.String() + `"}`)
 	req := httptest.NewRequest(http.MethodPost, "/groups/"+group.ID.String()+"/players", bytes.NewReader(body))
@@ -87,6 +90,95 @@ func TestAddPlayerToGroup_Integration_AddedPlayerBecomesMember(t *testing.T) {
 	}
 	if role != models.RoleMember {
 		t.Errorf("added player role = %q, want %q", role, models.RoleMember)
+	}
+}
+
+// TestAddPlayerToGroup_Integration_AdminOnly is the regression test for the
+// missing admin gate on POST /groups/:id/players. The route used to be wired
+// with requireGroupMemberByPathID, so any plain member could enrol any player
+// whose UUID they knew — no invite code, no admin rights — which contradicts
+// the invite-only model the app otherwise enforces by disabling POST /groups
+// and POST /groups/join outright.
+//
+// A plain member must now get 403, and the player they aimed at must still not
+// be a member afterwards; the group's own admin can still do it.
+func TestAddPlayerToGroup_Integration_AdminOnly(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+	membershipService := services.NewGroupMembershipService(tx)
+	playerService := services.NewPlayerService(tx)
+	authService := services.NewAuthService(tx, testGroupMembershipJWTSecret)
+	groupHandler := handlers.NewGroupHandler(groupService, membershipService)
+
+	group, err := groupService.CreateGroup("Zzz Role AddGate Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group: %v", err)
+	}
+
+	adminID, err := playerService.CreatePlayer("Zzz Role AddGate Admin")
+	if err != nil {
+		t.Fatalf("failed to create admin player: %v", err)
+	}
+	if err := membershipService.AddPlayerToGroupWithRole(group.ID, adminID, models.RoleAdmin); err != nil {
+		t.Fatalf("failed to add admin to group: %v", err)
+	}
+	adminToken := signupAndLoginRole(t, authService, adminID, "role-addgate-admin@example.com")
+
+	memberID, err := playerService.CreatePlayer("Zzz Role AddGate Member")
+	if err != nil {
+		t.Fatalf("failed to create member player: %v", err)
+	}
+	if err := membershipService.AddPlayerToGroup(group.ID, memberID); err != nil {
+		t.Fatalf("failed to add member to group: %v", err)
+	}
+	memberToken := signupAndLoginRole(t, authService, memberID, "role-addgate-member@example.com")
+
+	outsiderID, err := playerService.CreatePlayer("Zzz Role AddGate Outsider")
+	if err != nil {
+		t.Fatalf("failed to create outsider player: %v", err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/groups/:id/players",
+		handlers.AuthMiddleware(authService),
+		handlers.RequireGroupAdminByPathParam(membershipService, "id"),
+		groupHandler.AddPlayerToGroup)
+
+	addPlayer := func(token string) *httptest.ResponseRecorder {
+		body := []byte(`{"player_id":"` + outsiderID.String() + `"}`)
+		req := httptest.NewRequest(http.MethodPost, "/groups/"+group.ID.String()+"/players", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	memberRec := addPlayer(memberToken)
+	if memberRec.Code != http.StatusForbidden {
+		t.Fatalf("plain member POST /groups/:id/players returned status %d, want 403, body: %s", memberRec.Code, memberRec.Body.String())
+	}
+	isMember, err := membershipService.IsMember(group.ID, outsiderID)
+	if err != nil {
+		t.Fatalf("IsMember returned error: %v", err)
+	}
+	if isMember {
+		t.Fatal("a forbidden POST /groups/:id/players still enrolled the player")
+	}
+
+	adminRec := addPlayer(adminToken)
+	if adminRec.Code != http.StatusOK {
+		t.Fatalf("admin POST /groups/:id/players returned status %d, want 200, body: %s", adminRec.Code, adminRec.Body.String())
+	}
+	isMember, err = membershipService.IsMember(group.ID, outsiderID)
+	if err != nil {
+		t.Fatalf("IsMember returned error: %v", err)
+	}
+	if !isMember {
+		t.Error("the admin's POST /groups/:id/players did not enrol the player")
 	}
 }
 

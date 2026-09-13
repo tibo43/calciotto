@@ -29,7 +29,7 @@ func RequireGroupMembership(membershipService *services.GroupMembershipService) 
 			return
 		}
 
-		groupID, ok := resolveGroupIDForMembership(c, membershipService, playerID)
+		groupID, ok := resolveGroupIDForMembership(c, membershipService)
 		if !ok {
 			return
 		}
@@ -99,33 +99,27 @@ func authorizedGroupIDFromContext(c *gin.Context) (uuid.UUID, bool) {
 	return id, ok
 }
 
-// resolveGroupIDForMembership mirrors resolveGroupID's query-param-or-own-group
-// fallback, but also checks the JSON body in between — needed because
-// POST /matches and PUT /matches/:id carry group_id in the body, not the
-// query string, under two different JSON keys (models.Match uses "group_id",
-// models.MatchWithDetails uses "GroupID"). See resolveGroupID for why this
-// deliberately never falls back to the old sort-by-random-UUID default
-// (GroupService.GetDefaultGroup, since removed).
-func resolveGroupIDForMembership(c *gin.Context, membershipService *services.GroupMembershipService, playerID uuid.UUID) (uuid.UUID, bool) {
-	if raw := c.Query("group_id"); raw != "" {
-		parsed, err := uuid.Parse(raw)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid group_id"})
-			return uuid.Nil, false
-		}
-		return parsed, true
-	}
-
-	if id, ok := peekGroupIDFromBody(c); ok {
-		return id, true
-	}
-
-	group, err := membershipService.GetFirstGroupForPlayer(playerID)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "authenticated player does not belong to any group"})
+// resolveGroupIDForMembership is the middleware-side entry point: exactly the
+// same resolution resolveGroupID performs (resolveScopedGroupID, in
+// groupscope.go — one implementation, not a second copy that happens to
+// agree), plus the JSON body checked in between the query string and the
+// caller's own first group. The body step is needed because POST /matches
+// carries group_id there rather than in the query string, under two different
+// JSON keys (models.Match uses "group_id", models.MatchWithDetails uses
+// "GroupID").
+//
+// The only other difference is how a failure is reported: this runs as
+// middleware, so it aborts the chain rather than writing a response the next
+// handler would then append to. See resolveScopedGroupID for the ordering, and
+// for why this deliberately never falls back to the old sort-by-random-UUID
+// default (GroupService.GetDefaultGroup, since removed).
+func resolveGroupIDForMembership(c *gin.Context, membershipService *services.GroupMembershipService) (uuid.UUID, bool) {
+	groupID, failure := resolveScopedGroupID(c, membershipService, peekGroupIDFromBody)
+	if failure != nil {
+		c.AbortWithStatusJSON(failure.status, gin.H{"error": failure.message})
 		return uuid.Nil, false
 	}
-	return group.ID, true
+	return groupID, true
 }
 
 // peekGroupIDFromBody reads the request body to look for a group_id, then
