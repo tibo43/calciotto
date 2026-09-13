@@ -1,5 +1,14 @@
 -- One-off cleanup for the perf load test (cmd/perfsetup + frontend/loadtest/run.js).
--- Run with: psql "$DATABASE_URL" -v group_id="'<the group id printed by perfsetup>'" -f devops/perf-cleanup.sql
+-- Run with:
+--   psql "$DATABASE_URL" \
+--     -v group_id="'<the group id printed by perfsetup>'" \
+--     -v real_player_id="'<the -existing-player-id you passed to perfsetup, if any>'" \
+--     -f devops/perf-cleanup.sql
+-- real_player_id is deliberately not defaulted in this file — see the
+-- "belt and suspenders" paragraph below for what it protects, and pass any
+-- syntactically valid placeholder uuid (e.g. '00000000-0000-0000-0000-000000000000')
+-- if perfsetup was run without -existing-player-id, so there is no real
+-- account to exclude.
 --
 -- Deletes, in FK-safe order (MatchPlayer/MatchRegistration/MatchVote have no
 -- ON DELETE CASCADE to matches — see CLAUDE.md's MatchService.DeleteMatch
@@ -20,8 +29,6 @@
 -- group_memberships still removes *that* player's membership in this one
 -- throwaway group (the group itself is being deleted, so the row would be
 -- meaningless left behind), but never the player row.
-
-\set real_player_id '''995079fd-05b5-4333-bbb5-e342b805ef86'''
 
 \echo 'Target group id:' :group_id
 \echo 'Test account email pattern: perfload%@perfload.test'

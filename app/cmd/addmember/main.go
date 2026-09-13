@@ -17,8 +17,8 @@
 // Run against production the same way as cmd/perfsetup:
 //
 //	DATABASE_URL="postgres://...neon.tech/..." go run ./cmd/addmember \
-//	  -player-id b939bdc7-7e7f-45bb-81a1-7d11d0e2ea3e \
-//	  -group-id a9fc8c47-0b76-42f6-9ff5-1e2b0f094ea0
+//	  -player-id <the player's uuid, from the players table> \
+//	  -group-id <the target group's uuid, from the groups table>
 package main
 
 import (
