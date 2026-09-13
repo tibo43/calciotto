@@ -106,10 +106,10 @@ type Match struct {
 	// ScheduledAt is the kick-off date *and time* (unlike Date, which is a
 	// calendar day only), hence timestamptz: a 21:00 Paris kick-off has to
 	// survive a round-trip through a server running in another zone.
-	ScheduledAt           *time.Time    `gorm:"type:timestamptz" json:"scheduled_at,omitempty"`
-	RegistrationOpensAt   *time.Time    `gorm:"type:timestamptz" json:"registration_opens_at,omitempty"`
-	RegistrationsClosedAt *time.Time    `gorm:"type:timestamptz" json:"registrations_closed_at,omitempty"`
-	MaxPlayers            *int          `json:"max_players,omitempty"`
+	ScheduledAt           *time.Time `gorm:"type:timestamptz" json:"scheduled_at,omitempty"`
+	RegistrationOpensAt   *time.Time `gorm:"type:timestamptz" json:"registration_opens_at,omitempty"`
+	RegistrationsClosedAt *time.Time `gorm:"type:timestamptz" json:"registrations_closed_at,omitempty"`
+	MaxPlayers            *int       `json:"max_players,omitempty"`
 	// CreatedAt is the moment this row was logged — GORM's usual
 	// auto-populate-on-create convention, like MatchRegistration.CreatedAt and
 	// MatchVote.CreatedAt. It was originally added as the Man of the Match

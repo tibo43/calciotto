@@ -77,9 +77,42 @@ jobs:
         working-directory: app
         run: go build ./...
 
+      # gofmt is the Go half of what `npm run lint` does for the frontend, and
+      # until now nothing checked it: `internal/models/database.go` had drifted
+      # (struct-tag alignment in Match) and no build ever noticed. `gofmt -l`
+      # prints the offending files and exits 0 either way, hence the explicit
+      # test — a bare `gofmt -l .` would pass while reporting problems. `-l`
+      # rather than `-w`: CI reports, the author fixes, so a formatting change
+      # always lands in a commit someone reviewed.
+      - name: Format
+        working-directory: app
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt: not formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: Vet
         working-directory: app
         run: go vet ./...
+
+      # staticcheck catches what `go vet` deliberately doesn't: unused code,
+      # simplifiable constructs, misuse of stdlib APIs. Pinned rather than
+      # @latest for two reasons — a floating version turns an upstream release
+      # into a surprise red build on an unrelated PR, and staticcheck v0.8+
+      # requires Go 1.26, which would make `go run` download a second toolchain
+      # on every run. v0.7.0 is the newest that builds against this module's own
+      # Go version. The module is clean under it as of this commit; adopting it
+      # later, with a backlog, is what makes a linter never get adopted.
+      - name: Staticcheck
+        working-directory: app
+        env:
+          # Fail loudly if the pin ever stops matching go.mod's Go version,
+          # rather than silently downloading another toolchain to paper over it.
+          GOTOOLCHAIN: local
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
 
       - name: Test
         working-directory: app
@@ -115,14 +148,30 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          # `npm ci` was the single longest step in this job (20s of a 41s run)
+          # with nothing cached. `cache-dependency-path` is required because the
+          # lockfile is not at the repo root — without it the action looks for
+          # ./package-lock.json, finds nothing, and silently caches nothing.
+          # (`setup-go` needs no equivalent: it caches the module and build
+          # cache by default, which is why its own setup step costs 8s.)
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
 
+      # `--no-fix` is the whole point of running this in CI. `vue-cli-service
+      # lint` *fixes* by default, so without it an auto-fixable violation is
+      # repaired in the runner's throwaway checkout, the job exits 0, and the
+      # violation stays in the repo — CI reporting green on the one class of
+      # problem it was added to catch. Only non-fixable rules (no-unused-vars
+      # and friends) ever failed the build. The tree is clean under `--no-fix`
+      # as of this commit, so adopting it costs nothing today; it only gets
+      # more expensive to adopt later.
       - name: Lint
         working-directory: frontend
-        run: npm run lint
+        run: npm run lint -- --no-fix
 
       - name: Unit test
         working-directory: frontend
