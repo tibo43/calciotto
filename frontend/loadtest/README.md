@@ -87,10 +87,15 @@ happens" run.
 
 Fill in the group id from step 1 into `devops/perf-cleanup.sql`'s
 verification queries, review the counts, then uncomment and run the `DELETE`
-transaction:
+transaction. `real_player_id` has no default in the script — pass the id you
+gave `perfsetup -existing-player-id`, or any placeholder uuid if you ran it
+without that flag:
 
 ```bash
-psql "<production DATABASE_URL>" -v group_id="'<group id from step 1>'" -f ../devops/perf-cleanup.sql
+psql "<production DATABASE_URL>" \
+  -v group_id="'<group id from step 1>'" \
+  -v real_player_id="'<the -existing-player-id you passed to perfsetup, if any>'" \
+  -f ../devops/perf-cleanup.sql
 ```
 
 This removes the throwaway group, its teams, the match and its
