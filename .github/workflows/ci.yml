@@ -1,37 +1,43 @@
 name: CI
 
-# `push` is deliberately narrowed to master rather than dropped: it is what
-# gates deploy-backend/deploy-frontend (see their own `if:` below), so removing
-# it entirely would mean master never deploys again. Every other branch is
-# covered by `pull_request` alone.
+# The build/test half of CI, and the only half a pull request ever sees: three
+# jobs, no deployment. That split is what keeps a PR's check list down to what
+# it can actually act on — a job whose `if:` is false is still *reported*, as a
+# skipped check, so leaving the deploy jobs here meant every PR listing two
+# permanently-skipped entries that read like something went wrong.
 #
-# Before this narrowing, a push to a branch with an open PR fired *both* events
-# for the same commit. The concurrency group below collapsed them, so the older
-# of the two was cancelled rather than run twice — correct, but it left a
-# cancelled run's jobs attached to the commit, which GitHub reports as failed
-# checks and which shows on the PR as a red X next to the green one and a
-# mergeable_state of UNSTABLE. Narrowing the trigger removes the duplicate at
-# the source instead of cleaning up after it.
+# `push` is deliberately absent. Deployment lives in deploy.yml, triggered on a
+# push to master, and it *calls this workflow* (`workflow_call` below) before
+# deploying anything — so master still runs these exact three jobs, from this
+# one definition, and `needs:` remains a real gate rather than the "fires on
+# completion, not on success" guarantee a `workflow_run` trigger would give.
+# The practical trade-off of PR-only triggering: pushing a branch with no PR
+# open runs no CI at all. A draft PR is enough to start it.
 #
-# The trade-off, stated plainly: pushing a branch with no PR open now runs no
-# CI at all. Open the PR (draft is enough — `pull_request` fires on drafts) to
-# get checks on it.
+# The three `outputs` exist so deploy.yml can gate on each job separately
+# rather than on this workflow as a whole — specifically so a visual diff still
+# blocks a frontend deploy without blocking a backend one. See the deployment
+# comment in deploy.yml.
 on:
-  push:
-    branches: [master]
   pull_request:
+  workflow_call:
+    outputs:
+      backend:
+        description: "'success' when the Go build/vet/test job passed, empty otherwise"
+        value: ${{ jobs.backend.outputs.result }}
+      frontend:
+        description: "'success' when the lint/unit-test/build job passed, empty otherwise"
+        value: ${{ jobs.frontend.outputs.result }}
+      visual:
+        description: "'success' when the Playwright visual job passed, empty otherwise"
+        value: ${{ jobs.visual.outputs.result }}
 
-# Successive pushes to a PR's branch still fire a `synchronize` event each, so
-# this keeps the newer run cancelling the older — the duplicate-event case it
-# also used to cover is gone with the trigger narrowing above. `head_ref` is
-# only set on a pull_request event (the PR's source branch) and `ref_name` is
-# the *short* branch name push events carry (unlike `ref`, which is the full
-# `refs/heads/...`).
-#
-# `cancel-in-progress` is false on master specifically: cutting a deploy run
-# off mid-flight could leave a Docker push or a Vercel deploy half-done. A PR
-# run has no such job (`github.ref` is `refs/pull/N/merge` there, never
-# `refs/heads/master`), so cancelling freely is safe.
+# Successive pushes to a PR's branch each fire their own `synchronize` event, so
+# this keeps the newer run cancelling the older. `head_ref` is only set on a
+# pull_request event (the PR's source branch); when deploy.yml calls this
+# workflow on a master push it is empty and `ref_name` (`master`) is used
+# instead, which is also why `cancel-in-progress` is false there — cutting that
+# run off would take the deploy that needs it down with it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
@@ -39,6 +45,8 @@ concurrency:
 jobs:
   backend:
     name: Backend (Go)
+    outputs:
+      result: ${{ steps.result.outputs.value }}
     runs-on: ubuntu-latest
 
     services:
@@ -84,8 +92,19 @@ jobs:
           JWT_SECRET: ci-placeholder-jwt-secret
         run: go test ./... -count=1
 
+      # Last step, and deliberately without an `if:` — a step defaults to
+      # `success()`, so this is reached only when every step above passed. The
+      # deploy workflow reads these three outputs to gate on each job
+      # individually (see .github/workflows/deploy.yml); a job that failed
+      # leaves its output empty rather than 'success'.
+      - name: Record result
+        id: result
+        run: echo "value=success" >> "$GITHUB_OUTPUT"
+
   frontend:
     name: Frontend (Vue)
+    outputs:
+      result: ${{ steps.result.outputs.value }}
     runs-on: ubuntu-latest
 
     steps:
@@ -113,8 +132,19 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      # Last step, and deliberately without an `if:` — a step defaults to
+      # `success()`, so this is reached only when every step above passed. The
+      # deploy workflow reads these three outputs to gate on each job
+      # individually (see .github/workflows/deploy.yml); a job that failed
+      # leaves its output empty rather than 'success'.
+      - name: Record result
+        id: result
+        run: echo "value=success" >> "$GITHUB_OUTPUT"
+
   visual:
     name: Frontend visual regression
+    outputs:
+      result: ${{ steps.result.outputs.value }}
     runs-on: ubuntu-latest
     # Runs *inside* the Playwright image rather than installing browsers onto
     # the runner, and the tag is pinned to the @playwright/test version in
@@ -171,279 +201,11 @@ jobs:
           path: frontend/playwright-report
           retention-days: 7
 
-  # ---------------------------------------------------------------------------
-  # Deployment. Both jobs are part of this workflow rather than separate ones so
-  # that `needs: [...]` is a real gate: a failing Go test, Jest test or visual
-  # diff makes deployment impossible, which a `workflow_run` trigger in another
-  # file cannot guarantee (it fires on completion, not on success). They only run
-  # on a direct push to master — never on a pull request, whose fork variant has
-  # no access to the production environment's secrets anyway.
-  #
-  # deploy-frontend additionally needs `visual`: a visual regression is a
-  # frontend-only concern, so it gates deploy-frontend but not deploy-backend —
-  # there's no reason a screenshot diff should block a backend rollout that has
-  # nothing to do with it.
-  # ---------------------------------------------------------------------------
-
-  deploy-backend:
-    name: Deploy backend (Koyeb)
-    runs-on: ubuntu-latest
-    needs: [backend, frontend]
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    environment: production
-
-    env:
-      KOYEB_APP: calciotto
-      KOYEB_SERVICE: backend
-      KOYEB_REGION: fra
-      KOYEB_INSTANCE_TYPE: free
-      # The container listens here; Koyeb routes public traffic to it.
-      SERVICE_PORT: "8080"
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          # Repo root: the Dockerfile needs app/, and .dockerignore keeps the
-          # context small. Explicit rather than relying on the action's default
-          # remote-Git context, so what gets built is what got checked out.
-          context: .
-          file: ./devops/Dockerfile.prod.backend
-          # Koyeb instances are amd64. Building arm64 too would mean emulating
-          # the whole Go toolchain under QEMU for an image nothing pulls.
-          platforms: linux/amd64
-          push: true
-          # The commit SHA is the tag actually deployed below: :latest alone is
-          # ambiguous (no rollback target, and Koyeb cannot tell one push from
-          # the next). :latest is kept only as a human-facing pointer.
-          tags: |
-            ${{ vars.DOCKERHUB_IMAGE }}:${{ github.sha }}
-            ${{ vars.DOCKERHUB_IMAGE }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Install the Koyeb CLI
-        uses: koyeb-community/koyeb-actions@v2
-        with:
-          api_token: ${{ secrets.KOYEB_API_TOKEN }}
-
-      - name: Sync secrets to Koyeb
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
-          SIGNUP_RATE_LIMIT_PER_HOUR: ${{ secrets.SIGNUP_RATE_LIMIT_PER_HOUR }}
-          SIGNUP_RATE_LIMIT_BURST: ${{ secrets.SIGNUP_RATE_LIMIT_BURST }}
-        run: |
-          set -euo pipefail
-
-          # GitHub is the source of truth; Koyeb needs its own copy because the
-          # values are read at every container start, not just at deploy time.
-          # --value-from-stdin keeps them out of the process argument list.
-          # There is no upsert in the CLI, hence update-then-create.
-          sync_secret() {
-            local name="$1" value="$2"
-            if [ -z "$value" ]; then
-              echo "::error::secret $name is empty — set it in the 'production' environment"
-              exit 1
-            fi
-            if printf '%s' "$value" | koyeb secrets update "$name" --value-from-stdin >/dev/null 2>&1; then
-              echo "updated secret $name"
-            else
-              printf '%s' "$value" | koyeb secrets create "$name" --value-from-stdin >/dev/null
-              echo "created secret $name"
-            fi
-          }
-
-          sync_secret DATABASE_URL "$DATABASE_URL"
-          sync_secret DATABASE_URL_UNPOOLED "$DATABASE_URL_UNPOOLED"
-          sync_secret JWT_SECRET "$JWT_SECRET"
-
-          # Brevo is optional: with no API key the app keeps logging reset links
-          # instead of emailing them (see services/mailer.go), which is a
-          # degraded but working state rather than a startup failure.
-          if [ -n "$BREVO_API_KEY" ]; then
-            sync_secret BREVO_API_KEY "$BREVO_API_KEY"
-          else
-            echo "::warning::BREVO_API_KEY is not set — password-reset and invite emails will only be written to the Koyeb logs"
-          fi
-
-          # Signup rate-limit override is optional and normally unset: only
-          # needed to loosen the default 5/hour, burst 5 for the duration of a
-          # deliberate load test (see main.go's envIntOrDefault). Left unset,
-          # the app falls back to its hardcoded default with no warning here —
-          # unlike Brevo, there is no degraded-but-working state to call out.
-          if [ -n "$SIGNUP_RATE_LIMIT_PER_HOUR" ]; then
-            sync_secret SIGNUP_RATE_LIMIT_PER_HOUR "$SIGNUP_RATE_LIMIT_PER_HOUR"
-          fi
-          if [ -n "$SIGNUP_RATE_LIMIT_BURST" ]; then
-            sync_secret SIGNUP_RATE_LIMIT_BURST "$SIGNUP_RATE_LIMIT_BURST"
-          fi
-
-      - name: Deploy to Koyeb
-        env:
-          IMAGE: ${{ vars.DOCKERHUB_IMAGE }}:${{ github.sha }}
-          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
-          FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
-          BREVO_SENDER_EMAIL: ${{ vars.BREVO_SENDER_EMAIL }}
-          BREVO_SENDER_NAME: ${{ vars.BREVO_SENDER_NAME }}
-          HAS_BREVO_KEY: ${{ secrets.BREVO_API_KEY != '' }}
-          HAS_SIGNUP_RATE_LIMIT_PER_HOUR: ${{ secrets.SIGNUP_RATE_LIMIT_PER_HOUR != '' }}
-          HAS_SIGNUP_RATE_LIMIT_BURST: ${{ secrets.SIGNUP_RATE_LIMIT_BURST != '' }}
-        run: |
-          set -euo pipefail
-
-          if koyeb apps get "$KOYEB_APP" >/dev/null 2>&1; then
-            # The app can be left PAUSED by an earlier experiment, in which
-            # case a service deployed into it never starts. Resuming an app
-            # that is already running is a no-op.
-            koyeb apps resume "$KOYEB_APP" >/dev/null 2>&1 || true
-          else
-            koyeb apps create "$KOYEB_APP"
-          fi
-
-          # Shared between the update and create paths so a service that already
-          # exists and one being created for the first time get the same config.
-          args=(
-            --docker "$IMAGE"
-            --instance-type "$KOYEB_INSTANCE_TYPE"
-            --regions "$KOYEB_REGION"
-            --ports "$SERVICE_PORT:http"
-            # Root path, not /api: Koyeb passes the route path through
-            # unchanged, so a /api prefix would reach Gin as /api/auth/login and
-            # match none of its routes. The frontend is on its own domain, so
-            # there is nothing to share the path space with anyway.
-            --routes "/:$SERVICE_PORT"
-            --checks "$SERVICE_PORT:http:/health"
-            --env "PORT=$SERVICE_PORT"
-            --env GIN_MODE=release
-            # @NAME resolves to the Koyeb secret synced in the previous step.
-            --env DATABASE_URL=@DATABASE_URL
-            --env DATABASE_URL_UNPOOLED=@DATABASE_URL_UNPOOLED
-            --env JWT_SECRET=@JWT_SECRET
-            --env "CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS"
-            --env "FRONTEND_BASE_URL=$FRONTEND_BASE_URL"
-            --wait
-          )
-
-          if [ "$HAS_BREVO_KEY" = "true" ]; then
-            args+=(
-              --env BREVO_API_KEY=@BREVO_API_KEY
-              --env "BREVO_SENDER_EMAIL=$BREVO_SENDER_EMAIL"
-              --env "BREVO_SENDER_NAME=$BREVO_SENDER_NAME"
-            )
-          fi
-
-          # Signup rate-limit override — see the "Sync secrets to Koyeb" step
-          # above. Omitted entirely when unset, so the app's own
-          # envIntOrDefault fallback (5/hour, burst 5) applies, exactly as
-          # before this override existed.
-          if [ "$HAS_SIGNUP_RATE_LIMIT_PER_HOUR" = "true" ]; then
-            args+=(--env SIGNUP_RATE_LIMIT_PER_HOUR=@SIGNUP_RATE_LIMIT_PER_HOUR)
-          fi
-          if [ "$HAS_SIGNUP_RATE_LIMIT_BURST" = "true" ]; then
-            args+=(--env SIGNUP_RATE_LIMIT_BURST=@SIGNUP_RATE_LIMIT_BURST)
-          fi
-
-          koyeb services update "$KOYEB_APP/$KOYEB_SERVICE" "${args[@]}" \
-            || koyeb services create "$KOYEB_SERVICE" --app "$KOYEB_APP" --type web "${args[@]}"
-
-  deploy-frontend:
-    name: Deploy frontend (Vercel)
-    runs-on: ubuntu-latest
-    needs: [backend, frontend, visual]
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    environment: production
-
-    env:
-      # The Vercel CLI reads these two from the environment to know which
-      # project it is acting on, instead of an interactive `vercel link`.
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Install the Vercel CLI
-        run: npm install --global vercel@latest
-
-      - name: Pull Vercel project settings
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          # An empty secret is indistinguishable from a wrong one in the CLI's
-          # own error message ("missing a value" only shows up once the flag is
-          # already expanded), and a masked empty value looks identical to a
-          # masked real one in the log. Fail with the actual cause instead.
-          if [ -z "$VERCEL_TOKEN" ]; then
-            echo "::error::VERCEL_TOKEN is empty — set it with: gh secret set VERCEL_TOKEN --repo ${{ github.repository }}"
-            exit 1
-          fi
-
-          # Diagnostic before the real call: "Could not retrieve Project
-          # Settings" is what the CLI says both for a token scoped to the wrong
-          # account and for a token whose stored value is corrupted, and the
-          # log masks the value either way. Listing the teams the token can
-          # actually see separates the two. Team names are not secret.
-          echo "Teams visible to this token:"
-          vercel teams ls --token="$VERCEL_TOKEN" || echo "(teams ls failed — the token is not usable at all)"
-
-          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-
-      - name: Inject the API base URL into the build environment
-        env:
-          VUE_APP_API_BASE_URL: ${{ vars.VUE_APP_API_BASE_URL }}
-          # Optional — see api.js's apiTimeoutMs. Normally unset, so the
-          # bundle keeps today's hardcoded 10000ms default; only set this
-          # (temporarily) to push a deliberate load test past that ceiling
-          # and see the backend's real response time under concurrent load.
-          VUE_APP_API_TIMEOUT_MS: ${{ vars.VUE_APP_API_TIMEOUT_MS }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "$VUE_APP_API_BASE_URL" ]; then
-            echo "::error::VUE_APP_API_BASE_URL is not set — the bundle would fall back to http://127.0.0.1:8080 and every visitor's browser would call their own machine"
-            exit 1
-          fi
-
-          # `vercel build` runs the framework build with the environment from
-          # .vercel/.env.production.local (what `vercel pull` just wrote), not
-          # with this job's arbitrary env vars — so the value is appended there
-          # rather than exported. This keeps GitHub the single source of truth
-          # instead of duplicating the setting in the Vercel dashboard.
-          #
-          # Vue CLI only inlines variables prefixed VUE_APP_ into the bundle
-          # (see resolveClientEnv.js), which is why the name matters.
-          mkdir -p .vercel
-          printf '\nVUE_APP_API_BASE_URL=%s\n' "$VUE_APP_API_BASE_URL" >> .vercel/.env.production.local
-
-          if [ -n "$VUE_APP_API_TIMEOUT_MS" ]; then
-            printf '\nVUE_APP_API_TIMEOUT_MS=%s\n' "$VUE_APP_API_TIMEOUT_MS" >> .vercel/.env.production.local
-          fi
-
-      - name: Build
-        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
-
-      - name: Deploy
-        run: vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"
+      # Last step, and deliberately without an `if:` — a step defaults to
+      # `success()`, so this is reached only when every step above passed. The
+      # deploy workflow reads these three outputs to gate on each job
+      # individually (see .github/workflows/deploy.yml); a job that failed
+      # leaves its output empty rather than 'success'.
+      - name: Record result
+        id: result
+        run: echo "value=success" >> "$GITHUB_OUTPUT"
