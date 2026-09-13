@@ -99,10 +99,14 @@ const (
 )
 
 // playerClaims is the JWT payload used by AuthService — it carries the
-// claimed Player's ID so the middleware can identify the caller without a
-// DB round trip.
+// claimed Player's ID and, as of TokenVersion, the value of Player.TokenVersion
+// at the moment this token was signed. ParseToken re-checks the latter against
+// the database on every call, which is what makes revocation possible at all:
+// identifying the caller still needs no DB round trip up front (the token
+// itself carries player_id), but *trusting* the token now does.
 type playerClaims struct {
-	PlayerID uuid.UUID `json:"player_id"`
+	PlayerID     uuid.UUID `json:"player_id"`
+	TokenVersion int       `json:"token_version"`
 	jwt.RegisteredClaims
 }
 
@@ -333,6 +337,14 @@ func issuePasswordResetToken(db *gorm.DB, playerID uuid.UUID) (string, error) {
 // ErrInvalidResetToken, so the caller learns nothing about which links exist.
 // A successful reset also burns every other outstanding link for that player:
 // requesting a second reset email must not leave the first one usable.
+//
+// It also bumps TokenVersion, which is the actual point of resetting a
+// password after a suspected compromise: without this, every JWT already
+// issued to this player — including one an attacker stole — would stay valid
+// for the rest of its 7-day life regardless of the password changing under
+// it. The increment is expressed as a SQL expression (token_version + 1)
+// rather than read-then-write, so two concurrent resets can't race and lose
+// one of the bumps.
 func (s *AuthService) ResetPassword(token, newPassword string) error {
 	if err := validateNewPassword(newPassword); err != nil {
 		return err
@@ -367,7 +379,10 @@ func (s *AuthService) ResetPassword(token, newPassword string) error {
 	return s.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&models.Player{}).
 			Where("id = ?", player.ID).
-			Update("password_hash", string(hash)).Error; err != nil {
+			Updates(map[string]interface{}{
+				"password_hash": string(hash),
+				"token_version": gorm.Expr("token_version + 1"),
+			}).Error; err != nil {
 			return err
 		}
 		// One statement marks the token just used *and* every other unused
@@ -420,6 +435,13 @@ const deletedAccountName = "Deleted account"
 //     of the Match are deliberately left alone: like a MatchPlayer's goals,
 //     they're a fact about a match that already happened, not something tied
 //     to the voter's account still existing.
+//
+// TokenVersion is also bumped, in the same statement as the anonymization
+// update below — without it, a JWT issued before the deletion would still
+// pass ParseToken (nothing about player_id, the only claim it checked before
+// TokenVersion existed, becomes invalid just because the row was anonymized)
+// and could keep reading/acting through routes that only need a valid token,
+// for the rest of its 7-day life.
 func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 	if password == "" {
 		return ErrPasswordRequired
@@ -493,6 +515,7 @@ func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 				"name":          deletedAccountName,
 				"email":         nil,
 				"password_hash": "",
+				"token_version": gorm.Expr("token_version + 1"),
 			}).Error
 	})
 }
@@ -552,8 +575,19 @@ func sendPasswordResetLink(email, rawToken string) {
 	}
 }
 
-// ParseToken validates a JWT and returns the player_id claim it carries. Used
-// by the auth middleware.
+// ParseToken validates a JWT, returns the player_id claim it carries, and
+// enforces revocation: the claim's token_version must still match
+// Player.TokenVersion in the database, or the token is rejected the same as
+// a forged or expired one (ErrInvalidToken — this deliberately doesn't
+// distinguish "revoked" from "malformed" any more than ErrInvalidCredentials
+// distinguishes "unknown email" from "wrong password").
+//
+// This is the one place a valid-looking token can still fail, and it costs
+// exactly one indexed primary-key lookup per authenticated request — the
+// trade-off revocation requires, since a stateless JWT alone (checked purely
+// by signature) can never be invalidated before it expires on its own. A
+// player row that no longer exists rejects the token the same way a version
+// mismatch does; there is nothing left to compare against.
 func (s *AuthService) ParseToken(tokenString string) (uuid.UUID, error) {
 	claims := &playerClaims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
@@ -565,18 +599,42 @@ func (s *AuthService) ParseToken(tokenString string) (uuid.UUID, error) {
 	if err != nil || !token.Valid {
 		return uuid.Nil, ErrInvalidToken
 	}
+
+	var player models.Player
+	if err := s.DB.Select("token_version").First(&player, "id = ?", claims.PlayerID).Error; err != nil {
+		return uuid.Nil, ErrInvalidToken
+	}
+	if player.TokenVersion != claims.TokenVersion {
+		return uuid.Nil, ErrInvalidToken
+	}
+
 	return claims.PlayerID, nil
 }
 
-// GenerateToken signs a fresh JWT for playerID. Exported (unlike the rest of
-// this file's internals) so AuthHandler.Signup can hand the caller a usable
-// token straight away — signing up and logging in are, from the caller's
-// point of view, one action, not two round trips that both need the
-// password.
+// GenerateToken signs a fresh JWT for playerID, stamped with that player's
+// *current* TokenVersion so ParseToken can later tell this token apart from
+// one issued before a revoking event (password reset, account deletion).
+// Exported (unlike the rest of this file's internals) so AuthHandler.Signup
+// can hand the caller a usable token straight away — signing up and logging
+// in are, from the caller's point of view, one action, not two round trips
+// that both need the password.
+//
+// Loading TokenVersion here rather than asking every caller to supply it is
+// deliberate: Login already has the row in hand, but SignupNewPlayer only
+// returns an id, and a caller that forgot to pass the right version would
+// silently mint a token ParseToken immediately rejects. One extra indexed
+// lookup at issuance time (rare — login/signup only) removes that whole class
+// of mistake.
 func (s *AuthService) GenerateToken(playerID uuid.UUID) (string, error) {
+	var player models.Player
+	if err := s.DB.Select("token_version").First(&player, "id = ?", playerID).Error; err != nil {
+		return "", err
+	}
+
 	now := time.Now()
 	claims := playerClaims{
-		PlayerID: playerID,
+		PlayerID:     playerID,
+		TokenVersion: player.TokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(tokenTTL)),

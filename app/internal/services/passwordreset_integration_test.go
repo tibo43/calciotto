@@ -121,6 +121,46 @@ func TestResetPassword_Integration_ChangesThePassword(t *testing.T) {
 	}
 }
 
+// TestResetPassword_Integration_InvalidatesExistingTokens pins the actual
+// point of bumping TokenVersion on a successful reset: a JWT issued *before*
+// the reset must stop authenticating afterwards, the same way it would if it
+// had simply expired. Without this, a stolen token would survive its
+// victim's own password reset for the rest of its 7-day life.
+func TestResetPassword_Integration_InvalidatesExistingTokens(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+	playerID := newClaimedPlayer(t, tx, "Zzz Integration Reset Mira", "mira@example.com", "old-pass")
+
+	tokenBeforeReset, err := authService.Login("mira@example.com", "old-pass")
+	if err != nil {
+		t.Fatalf("Login before reset returned error: %v", err)
+	}
+	if _, err := authService.ParseToken(tokenBeforeReset); err != nil {
+		t.Fatalf("ParseToken on the pre-reset token returned error: %v", err)
+	}
+
+	resetToken := requestResetToken(t, authService, "mira@example.com")
+	if err := authService.ResetPassword(resetToken, "new-pass"); err != nil {
+		t.Fatalf("ResetPassword returned error: %v", err)
+	}
+
+	if _, err := authService.ParseToken(tokenBeforeReset); !errors.Is(err, services.ErrInvalidToken) {
+		t.Errorf("ParseToken on the pre-reset token after a reset error = %v, want ErrInvalidToken", err)
+	}
+
+	tokenAfterReset, err := authService.Login("mira@example.com", "new-pass")
+	if err != nil {
+		t.Fatalf("Login after reset returned error: %v", err)
+	}
+	if gotID, err := authService.ParseToken(tokenAfterReset); err != nil {
+		t.Errorf("ParseToken on the post-reset token returned error: %v", err)
+	} else if gotID != playerID {
+		t.Errorf("ParseToken on the post-reset token = %s, want %s", gotID, playerID)
+	}
+}
+
 func TestResetPassword_Integration_TokenIsSingleUse(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
