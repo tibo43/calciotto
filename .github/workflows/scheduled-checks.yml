@@ -1,0 +1,284 @@
+name: Scheduled checks
+
+# The checks that deliberately do *not* gate a pull request, run weekly against
+# master instead. Two different reasons for being here rather than in ci.yml:
+#
+#   - `go test -race` is ~10x the cost of a normal test run (3 minutes against
+#     20 seconds, measured), which is a bad trade on every PR for a codebase
+#     that has no data race today. Weekly still catches one within days of it
+#     being introduced, while the change is fresh.
+#   - govulncheck and npm audit fail on data that lives *outside* this repo. An
+#     advisory published on a Tuesday would turn an unrelated Wednesday PR red
+#     through no fault of its author. What actually matters is noticing within
+#     a week, which is exactly what this does.
+#
+# `schedule` only ever runs on the default branch, so "on master" is true by
+# construction rather than by an `if:` someone has to maintain.
+on:
+  schedule:
+    # Monday 06:00 UTC — a fresh report waiting at the start of the week.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  race:
+    name: Race detector
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: calciotto
+          POSTGRES_PASSWORD: calciotto
+          POSTGRES_DB: calciotto
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U calciotto -d calciotto"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+
+      - name: Prepare report directory
+        run: mkdir -p reports
+
+      # The same suite ci.yml runs, under -race. The concurrency worth watching
+      # is real: InitDB's advisory-lock path, and the rate limiter's per-IP map
+      # with the goroutine that sweeps it.
+      - name: Test with the race detector
+        working-directory: app
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: calciotto
+          DB_PASSWORD: calciotto
+          DB_NAME: calciotto
+          JWT_SECRET: ci-placeholder-jwt-secret
+        run: |
+          set -o pipefail
+          go test -race ./... -count=1 2>&1 | tee "$GITHUB_WORKSPACE/reports/race.txt"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-race
+          path: reports/race.txt
+          retention-days: 30
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+
+      - name: Prepare report directory
+        run: mkdir -p reports
+
+      # govulncheck reports only what this code can actually *reach*, not every
+      # advisory present somewhere in the module graph — which is why it is
+      # worth failing on, unlike a raw dependency scan.
+      #
+      # Pinned to v1.1.4, and the pin is load-bearing in a way a version pin
+      # usually isn't. govulncheck evaluates *standard library* advisories
+      # against the toolchain it runs under, and `@latest` (v1.8.0) requires Go
+      # >= 1.26: with the default GOTOOLCHAIN it would quietly download 1.26 and
+      # report the stdlib as clean, while the image this app actually ships from
+      # is golang:1.25-alpine. Measured on this very tree: `@latest` found 0
+      # findings, v1.1.4 under Go 1.25 found 32 — all of them real for the
+      # binary in production. A falsely-green security check is worse than none.
+      #
+      # Only the *tool* is pinned; its advisory database is fetched live from
+      # vuln.go.dev on every run, so new advisories still land here weekly.
+      # GOTOOLCHAIN: local makes any future mismatch fail loudly rather than
+      # papering over it with a download — setup-go has already installed the
+      # exact version go.mod asks for.
+      - name: Run govulncheck
+        working-directory: app
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          set -o pipefail
+          go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./... 2>&1 | tee "$GITHUB_WORKSPACE/reports/govulncheck.txt"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-govulncheck
+          path: reports/govulncheck.txt
+          retention-days: 30
+
+  audit:
+    name: npm audit (runtime dependencies)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Prepare report directory
+        run: mkdir -p reports
+
+      # `--omit=dev` first: the dev tree carries dozens of advisories in Vue
+      # CLI's own build tooling (webpack-dev-server, ws, yaml, ajv) that no
+      # visitor is ever exposed to, and a permanently-red check is a check
+      # everyone learns to ignore.
+      #
+      # Two packages are excluded on top of that, for the same reason rather
+      # than a different one: postcss and nanoid are *build-time* — Vue CLI's
+      # CSS pipeline — and land in the production tree only because that is how
+      # the toolchain declares them. Neither reaches the browser bundle.
+      #
+      # Excluding by package, not by lowering the severity threshold: the axios
+      # advisory that mattered here (GHSA, fixed in 1.18) was `high`, not
+      # `critical`, so a `--audit-level=critical` filter would have stayed
+      # silent about the one finding that genuinely shipped to users.
+      - name: Audit runtime dependencies
+        working-directory: frontend
+        run: |
+          npm audit --omit=dev --json > /tmp/audit.json || true
+          jq -r '
+            (.vulnerabilities // {})
+            | to_entries
+            | map(select(.value.severity == "high" or .value.severity == "critical"))
+            | map(select(.key as $k | (["postcss", "nanoid"] | index($k)) | not))
+            | .[]
+            | "\(.key) (\(.value.severity)) — fix available: \(.value.fixAvailable | if type == "object" then .name + "@" + .version else tostring end)\n" +
+              ((.value.via | map(if type == "object" then "  - " + .title + " " + .url else "  - via " + . end) | join("\n")))
+          ' /tmp/audit.json > "$GITHUB_WORKSPACE/reports/audit.txt"
+
+          if [ -s "$GITHUB_WORKSPACE/reports/audit.txt" ]; then
+            echo "Actionable advisories in the runtime dependency tree:"
+            cat "$GITHUB_WORKSPACE/reports/audit.txt"
+            exit 1
+          fi
+          echo "No actionable advisories (build-chain packages postcss/nanoid excluded by design)."
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-audit
+          path: reports/audit.txt
+          retention-days: 30
+
+  report:
+    name: Open an issue on failure
+    runs-on: ubuntu-latest
+    needs: [race, govulncheck, audit]
+    # `always()` so this is reached even though the jobs it needs have failed —
+    # which is the only case it does anything at all.
+    if: always() && contains(needs.*.result, 'failure')
+
+    steps:
+      - name: Download reports
+        uses: actions/download-artifact@v4
+        with:
+          path: reports
+
+      - name: Open or update the tracking issue
+        uses: actions/github-script@v7
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        with:
+          script: |
+            const fs = require('fs');
+            const needs = JSON.parse(process.env.NEEDS);
+            const LABEL = 'scheduled-checks';
+
+            const checks = [
+              { id: 'race',         title: 'Race detector (`go test -race`)',        file: 'reports/report-race/race.txt' },
+              { id: 'govulncheck',  title: 'govulncheck (Go dependencies)',          file: 'reports/report-govulncheck/govulncheck.txt' },
+              { id: 'audit',        title: 'npm audit (runtime dependencies)',       file: 'reports/report-audit/audit.txt' },
+            ];
+            const failed = checks.filter(c => needs[c.id] && needs[c.id].result === 'failure');
+            if (failed.length === 0) return;
+
+            // Truncated rather than omitted: the first lines of a govulncheck
+            // or race report are the ones that say what to do, and a link to a
+            // log that expires in 90 days is not an explanation.
+            const read = (f) => {
+              try {
+                const t = fs.readFileSync(f, 'utf8').trim();
+                return t.length > 6000 ? t.slice(0, 6000) + '\n\n…truncated, full output in the run artifacts.' : t;
+              } catch (e) {
+                return '(no output captured — see the run log)';
+              }
+            };
+
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `The weekly scheduled checks failed on \`master\`.`,
+              ``,
+              `These run outside the PR pipeline deliberately: the race detector is ~10x the cost of a normal test run, and the two dependency checks fail on advisories published outside this repo, which would otherwise turn unrelated PRs red. Weekly is fast enough to act on, without taxing every push.`,
+              ``,
+              `Run: ${runUrl}`,
+              ``,
+              ...failed.map(c => `## ${c.title}\n\n\`\`\`\n${read(c.file)}\n\`\`\`\n`),
+              `---`,
+              `<sub>Opened automatically by \`.github/workflows/scheduled-checks.yml\`. While this issue is open, later failures are added here as comments rather than opening duplicates — close it once handled, and the next failure opens a fresh one.</sub>`,
+            ].join('\n');
+
+            // The label may not exist yet on a fresh repo; 422 means it already does.
+            try {
+              await github.rest.issues.createLabel({
+                ...context.repo,
+                name: LABEL,
+                color: 'D93F0B',
+                description: 'Opened by the weekly scheduled checks workflow',
+              });
+            } catch (e) {
+              if (e.status !== 422) throw e;
+            }
+
+            const open = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: LABEL, per_page: 1,
+            });
+
+            if (open.data.length > 0) {
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number: open.data[0].number, body,
+              });
+              core.notice(`Commented on existing issue #${open.data[0].number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                ...context.repo,
+                title: `Scheduled checks failing on master: ${failed.map(f => f.id).join(', ')}`,
+                labels: [LABEL],
+                body,
+              });
+              core.notice(`Opened issue #${created.data.number}`);
+            }
