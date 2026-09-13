@@ -110,13 +110,24 @@ func main() {
 	// invite code on POST /auth/signup — see CLAUDE.md.
 	r.POST("/groups", authRequired, groupHandler.CreateGroup)
 	r.POST("/groups/join", authRequired, groupHandler.JoinGroup)
-	r.GET("/groups", groupHandler.GetGroups)
+	// GET /groups and GET /groups/:id used to be unauthenticated: they carry
+	// no invite code (Group.InviteCode is json:"-") and no per-caller cost, so
+	// there was nothing per se dangerous in the response body. But unscoped
+	// and public, they let anyone on the internet enumerate the name of every
+	// group in the system with a single unauthenticated request — never
+	// something this app wants, and never something the frontend actually
+	// relies on (it only ever calls GET /groups/me). authRequired doesn't
+	// narrow the result to the caller's own groups — it still lists every
+	// group that exists — but it closes off anonymous, at-scale enumeration
+	// down to "any registered player," which is the same trust boundary every
+	// other read in this app already assumes.
+	r.GET("/groups", authRequired, groupHandler.GetGroups)
 	// "My groups" — authRequired only, same reasoning as /players/me/stats:
 	// no single group to authorize against, and the answer is derived from
-	// the JWT's own player. Must stay distinct from the public GET /groups,
-	// which lists every group in the system.
+	// the JWT's own player. Must stay distinct from GET /groups, which lists
+	// every group in the system regardless of caller.
 	r.GET("/groups/me", authRequired, groupHandler.GetMyGroups)
-	r.GET("/groups/:id", groupHandler.GetGroupByID)
+	r.GET("/groups/:id", authRequired, groupHandler.GetGroupByID)
 	// The invite code is a shared secret, so it gets its own member-only
 	// route rather than riding along in the (public) group JSON.
 	r.GET("/groups/:id/invite-code", authRequired, requireGroupMemberByPathID, groupHandler.GetInviteCode)

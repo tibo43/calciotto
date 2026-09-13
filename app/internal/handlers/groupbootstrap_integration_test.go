@@ -51,9 +51,9 @@ func newBootstrapEnv(t *testing.T, tx *gorm.DB) *bootstrapEnv {
 	router := gin.New()
 	router.POST("/groups", authRequired, groupHandler.CreateGroup)
 	router.POST("/groups/join", authRequired, groupHandler.JoinGroup)
-	router.GET("/groups", groupHandler.GetGroups)
+	router.GET("/groups", authRequired, groupHandler.GetGroups)
 	router.GET("/groups/me", authRequired, groupHandler.GetMyGroups)
-	router.GET("/groups/:id", groupHandler.GetGroupByID)
+	router.GET("/groups/:id", authRequired, groupHandler.GetGroupByID)
 	router.GET("/groups/:id/invite-code", authRequired, requireGroupMemberByPathID, groupHandler.GetInviteCode)
 	router.GET("/matches/details", authRequired, requireGroupMember, matchHandler.GetMatchesDetails)
 
@@ -251,9 +251,10 @@ func TestGetInviteCode_Integration_MembersOnly(t *testing.T) {
 }
 
 // TestGroupJSON_Integration_NeverExposesInviteCode is the counterpart of the
-// SearchPlayer email-leak test: GET /groups and GET /groups/:id are public, so
-// the invite code must never ride along in their JSON — not even for a member,
-// who has GET /groups/:id/invite-code for that.
+// SearchPlayer email-leak test: GET /groups and GET /groups/:id require a
+// valid token but still list every group in the system regardless of the
+// caller's own membership, so the invite code must never ride along in their
+// JSON — not even for a member, who has GET /groups/:id/invite-code for that.
 func TestGroupJSON_Integration_NeverExposesInviteCode(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -273,9 +274,7 @@ func TestGroupJSON_Integration_NeverExposesInviteCode(t *testing.T) {
 		path  string
 		token string
 	}{
-		{"GET /groups anonymous", "/groups", ""},
 		{"GET /groups as member", "/groups", memberToken},
-		{"GET /groups/:id anonymous", "/groups/" + groupID.String(), ""},
 		{"GET /groups/:id as member", "/groups/" + groupID.String(), memberToken},
 	}
 	for _, tc := range cases {
@@ -290,6 +289,40 @@ func TestGroupJSON_Integration_NeverExposesInviteCode(t *testing.T) {
 		if strings.Contains(body, stored.InviteCode) {
 			t.Errorf("%s leaks the invite code %q: %s", tc.name, stored.InviteCode, body)
 		}
+	}
+}
+
+// TestGetGroups_Integration_RequiresAuthentication and its :id sibling pin the
+// fix for the enumeration gap these two routes used to have: unauthenticated,
+// anyone on the internet could list the name of every group in the system in
+// one request. They still return every group regardless of the caller's own
+// membership (see TestGetMyGroups_Integration_ReturnsOnlyTheCallersGroups for
+// the route that actually scopes to the caller) — authRequired only raises
+// the bar from "anonymous, at scale" to "any registered player," the same
+// trust boundary every other read in this app already assumes.
+func TestGetGroups_Integration_RequiresAuthentication(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newBootstrapEnv(t, tx)
+
+	rec := env.do(http.MethodGet, "/groups", "", nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("GET /groups anonymous returned status %d, want 401, body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGetGroupByID_Integration_RequiresAuthentication(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newBootstrapEnv(t, tx)
+
+	memberID, _ := env.newAuthenticatedPlayer(t,
+		"Zzz Bootstrap Auth Gate Member", "bootstrap-auth-gate-member@example.com")
+	stored := env.createGroupDirect(t, "Zzz Bootstrap Auth Gate Group", memberID)
+
+	rec := env.do(http.MethodGet, "/groups/"+stored.ID.String(), "", nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("GET /groups/:id anonymous returned status %d, want 401, body: %s", rec.Code, rec.Body.String())
 	}
 }
 

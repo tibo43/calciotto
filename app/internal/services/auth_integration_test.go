@@ -467,6 +467,44 @@ func TestDeleteAccount_Integration_EmptyPasswordFails(t *testing.T) {
 	}
 }
 
+// TestDeleteAccount_Integration_InvalidatesExistingTokens pins the reason
+// TokenVersion is bumped as part of the anonymization update: a JWT issued
+// before the account was deleted must stop authenticating afterwards.
+// Without this, a still-live token would keep working against every route
+// that only checks for a valid token — nothing about DeleteAccount's own
+// anonymization (name/email/password wiped) would otherwise invalidate it.
+func TestDeleteAccount_Integration_InvalidatesExistingTokens(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+	group, err := services.NewGroupService(tx).CreateGroup("Zzz Delete Account Token Revocation Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("CreateGroup returned error: %v", err)
+	}
+
+	playerID, err := authService.SignupNewPlayer("Zzz Integration Auth Sven", "sven@example.com", "s3cret-pass", group.InviteCode)
+	if err != nil {
+		t.Fatalf("SignupNewPlayer returned error: %v", err)
+	}
+
+	tokenBeforeDeletion, err := authService.Login("sven@example.com", "s3cret-pass")
+	if err != nil {
+		t.Fatalf("Login before deletion returned error: %v", err)
+	}
+	if _, err := authService.ParseToken(tokenBeforeDeletion); err != nil {
+		t.Fatalf("ParseToken on the pre-deletion token returned error: %v", err)
+	}
+
+	if err := authService.DeleteAccount(playerID, "s3cret-pass"); err != nil {
+		t.Fatalf("DeleteAccount returned error: %v", err)
+	}
+
+	if _, err := authService.ParseToken(tokenBeforeDeletion); !errors.Is(err, services.ErrInvalidToken) {
+		t.Errorf("ParseToken on the pre-deletion token after DeleteAccount error = %v, want ErrInvalidToken", err)
+	}
+}
+
 // TestDeleteAccount_Integration_AnonymizesAndCleansUp is the main happy-path
 // test: it covers the account itself (anonymized, not erased, and no longer
 // usable to log in), the admin-successor rule (mirroring

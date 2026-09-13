@@ -21,11 +21,22 @@ func (bm *BaseModel) BeforeCreate(tx *gorm.DB) error {
 // Player représente un joueur. Email/PasswordHash restent nuls tant que le
 // joueur n'a pas "réclamé" son compte via AuthService.Signup — un Player
 // peut donc exister sans jamais être associé à des identifiants de connexion.
+//
+// TokenVersion is the whole JWT revocation mechanism: AuthService.GenerateToken
+// stamps a freshly-issued token with the player's current value, and ParseToken
+// rejects any token whose stamped value no longer matches the row's — see
+// AuthService for where it gets bumped (password reset, account deletion) and
+// why a bare `not null default 0` needs no backfill: every token issued before
+// this column existed carries no token_version claim at all, which decodes as
+// Go's zero value (0), identical to what AutoMigrate backfills every existing
+// row to — so a pre-existing token stays valid exactly as before, and only a
+// bump changes anything.
 type Player struct {
 	BaseModel
 	Name             string        `gorm:"type:string" json:"name"`
 	Email            *string       `gorm:"type:string;uniqueIndex" json:"email,omitempty"`
 	PasswordHash     string        `gorm:"type:string" json:"-"`
+	TokenVersion     int           `gorm:"not null;default:0" json:"-"`
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:PlayerID"`
 }
 
@@ -58,8 +69,10 @@ type PasswordResetToken struct {
 //
 // InviteCode est le secret partagé qui permet à un joueur de rejoindre le
 // groupe (POST /groups/join) : il porte donc `json:"-"` pour ne jamais
-// s'échapper via les routes publiques GET /groups et GET /groups/:id — seul
-// GET /groups/:id/invite-code, réservé aux membres, le renvoie explicitement.
+// s'échapper via GET /groups et GET /groups/:id — ces deux routes exigent un
+// compte authentifié mais listent toujours tous les groupes du système, sans
+// filtrage par appartenance — seul GET /groups/:id/invite-code, réservé aux
+// membres, le renvoie explicitement.
 type Group struct {
 	BaseModel
 	Name       string `gorm:"type:string" json:"name"`
