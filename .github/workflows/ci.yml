@@ -1,21 +1,37 @@
 name: CI
 
+# `push` is deliberately narrowed to master rather than dropped: it is what
+# gates deploy-backend/deploy-frontend (see their own `if:` below), so removing
+# it entirely would mean master never deploys again. Every other branch is
+# covered by `pull_request` alone.
+#
+# Before this narrowing, a push to a branch with an open PR fired *both* events
+# for the same commit. The concurrency group below collapsed them, so the older
+# of the two was cancelled rather than run twice — correct, but it left a
+# cancelled run's jobs attached to the commit, which GitHub reports as failed
+# checks and which shows on the PR as a red X next to the green one and a
+# mergeable_state of UNSTABLE. Narrowing the trigger removes the duplicate at
+# the source instead of cleaning up after it.
+#
+# The trade-off, stated plainly: pushing a branch with no PR open now runs no
+# CI at all. Open the PR (draft is enough — `pull_request` fires on drafts) to
+# get checks on it.
 on:
   push:
+    branches: [master]
   pull_request:
 
-# A push to a branch with an open PR fires both `push` and `pull_request`
-# (synchronize) for the same commit, which without this runs CI — and the
-# Docker/Vercel builds inside it — twice for nothing. `head_ref` is only set on
-# a pull_request event (the PR's source branch) and `ref_name` is the *short*
-# branch name push events carry (unlike `ref`, which is the full
-# `refs/heads/...`); for the same branch the two resolve to the same string, so
-# both events land in one group and the newer run cancels the older.
+# Successive pushes to a PR's branch still fire a `synchronize` event each, so
+# this keeps the newer run cancelling the older — the duplicate-event case it
+# also used to cover is gone with the trigger narrowing above. `head_ref` is
+# only set on a pull_request event (the PR's source branch) and `ref_name` is
+# the *short* branch name push events carry (unlike `ref`, which is the full
+# `refs/heads/...`).
 #
-# `cancel-in-progress` is false on master specifically: `push` there is what
-# gates deploy-backend/deploy-frontend (see their own `if:` below), and cutting
-# one off mid-run could leave a Docker push or a Vercel deploy half-done. A
-# feature branch has no such job, so cancelling freely there is safe.
+# `cancel-in-progress` is false on master specifically: cutting a deploy run
+# off mid-flight could leave a Docker push or a Vercel deploy half-done. A PR
+# run has no such job (`github.ref` is `refs/pull/N/merge` there, never
+# `refs/heads/master`), so cancelling freely is safe.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
