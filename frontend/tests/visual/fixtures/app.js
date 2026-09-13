@@ -239,6 +239,14 @@ async function waitForCarouselToSettle(page, carouselSelector) {
  * somewhere different again from Playwright's own auto-scroll, which is what
  * recorded the baselines — trying it failed the profile baseline 6 runs out
  * of 6.
+ *
+ * Every visual test that clicks a card in a carousel the screenshot then
+ * covers goes through this. `home.spec.js`'s two were briefly an exception,
+ * kept on an instant `scrollIntoView` plus a settle-wait because their
+ * baselines had been recorded that way; CI then failed one of them by 652
+ * pixels on a branch whose entire diff was a workflow comment, which settled
+ * the question. Neither carousel needed its baselines regenerated to adopt
+ * this, so the end stop is where the auto-scroll was aiming in both cases.
  */
 async function pinCarouselScroll(page, carouselSelector, position) {
   await page.locator(carouselSelector).evaluate((el, where) => {
