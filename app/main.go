@@ -208,10 +208,17 @@ func main() {
 	r.PATCH("/matches/:id/registrations/max-players", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.SetMaxPlayers)
 
 	// Man of the Match voting. Same match-scoped middleware pair as the
-	// sign-up routes above, but every route is open to any member: voting has
-	// no admin-only action at all, since eligibility to vote is deliberately
-	// broader than "played in the match" and there is no close/reopen concept
-	// for it (see MatchVoteService).
+	// sign-up routes above, and every route is open to any member — there is
+	// no admin-only action anywhere in this feature, and no close/reopen
+	// concept either (a fixed window closes voting on its own, see
+	// MatchVoteService.VotingWindowError).
+	//
+	// Plain membership is the *route's* requirement, not the whole rule: only
+	// a player who actually played in this match may cast a vote, which
+	// MatchVoteService.Vote enforces itself (ErrVoterNotOnRoster). It lives
+	// there rather than in a stricter guard here because "is a member of the
+	// group" and "is on this match's roster" are different questions, and
+	// reading the tally (GET) is deliberately open to the former.
 	r.POST("/matches/:id/votes", authRequired, requireGroupMemberByMatchID, matchVoteHandler.Vote)
 	r.DELETE("/matches/:id/votes", authRequired, requireGroupMemberByMatchID, matchVoteHandler.Unvote)
 	r.GET("/matches/:id/votes", authRequired, requireGroupMemberByMatchID, matchVoteHandler.ListVotes)

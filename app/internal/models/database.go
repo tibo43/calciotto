@@ -172,9 +172,13 @@ type MatchRegistration struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// MatchVote is one group member's vote for who they think deserves the Man
-// of the Match award for a match with a composed roster (either an ordinary
-// already-recorded match, or a scheduled one once teams have been filled in).
+// MatchVote is one match participant's vote for who they think deserves the
+// Man of the Match award for a match with a composed roster (either an
+// ordinary already-recorded match, or a scheduled one once teams have been
+// filled in). Voter and candidate are held to the same standard: both must
+// have a MatchPlayer row for this match — being a member of the group is not
+// enough to judge a game you did not play in (MatchVoteService.Vote, via
+// playerOnRoster).
 //
 // Unlike MatchRegistration.Register (a one-shot action that rejects a
 // duplicate with ErrAlreadyRegistered), casting a vote is deliberately an
