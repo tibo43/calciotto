@@ -74,3 +74,27 @@ pnpm-debug.log*
 # Perf load-test reports (frontend/loadtest/run.js) — one JSON+txt pair per
 # run, against a moving target (production), never meant to be committed.
 /frontend/loadtest/reports
+
+# CodeGraph index — a ~10MB SQLite graph of this repo plus the indexing
+# daemon's pid/socket/log, rebuilt from the source on demand and entirely
+# per-developer. Nothing in it is authored, it churns on every edit, and
+# whether to index at all is each developer's own choice.
+/.codegraph
+
+# Claude Code agent worktrees — throwaway checkouts an agent creates to work
+# on an isolated copy of the tree, plus whatever build output it leaves
+# behind (a stray node_modules/package-lock.json outlives the worktree once
+# `git worktree remove` has detached it). Already excluded on this machine by
+# .git/info/exclude, which the agent harness writes — but that file is local
+# to one clone and never travels, so the rule is restated here to hold for
+# every checkout of this repo.
+/.claude/worktrees
+
+# Claude Code per-developer settings — `settings.local.json` is the local
+# half of the agent's config (today: a personal list of pre-approved tool
+# permissions), deliberately distinct from a shared `.claude/settings.json`,
+# which is not ignored and can be committed if this project ever wants one.
+# Currently ignored only by a *global* gitignore on one machine, so the same
+# reasoning as .claude/worktrees above applies: restated here to hold for
+# every checkout rather than for whoever happens to have that global config.
+/.claude/settings.local.json
