@@ -52,6 +52,15 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: app/go.mod
+          # Not optional, and for exactly the reason `cache-dependency-path` is
+          # spelled out for setup-node below: this module lives in app/, not at
+          # the repo root, so the action's default lookup finds nothing, logs
+          # "Restore cache failed: Dependencies file is not found", and silently
+          # caches nothing — every run re-downloading the whole module graph.
+          # It failed that way from the day this workflow was written; the
+          # warning only became visible once the node20 deprecation noise
+          # around it was cleared.
+          cache-dependency-path: app/go.sum
 
       - name: Prepare report directory
         run: mkdir -p reports
@@ -92,6 +101,15 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: app/go.mod
+          # Not optional, and for exactly the reason `cache-dependency-path` is
+          # spelled out for setup-node below: this module lives in app/, not at
+          # the repo root, so the action's default lookup finds nothing, logs
+          # "Restore cache failed: Dependencies file is not found", and silently
+          # caches nothing — every run re-downloading the whole module graph.
+          # It failed that way from the day this workflow was written; the
+          # warning only became visible once the node20 deprecation noise
+          # around it was cleared.
+          cache-dependency-path: app/go.sum
 
       - name: Prepare report directory
         run: mkdir -p reports
