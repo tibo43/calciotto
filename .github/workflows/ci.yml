@@ -66,12 +66,21 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: app/go.mod
+          # Not optional, and for exactly the reason `cache-dependency-path` is
+          # spelled out for setup-node below: this module lives in app/, not at
+          # the repo root, so the action's default lookup finds nothing, logs
+          # "Restore cache failed: Dependencies file is not found", and silently
+          # caches nothing — every run re-downloading the whole module graph.
+          # It failed that way from the day this workflow was written; the
+          # warning only became visible once the node20 deprecation noise
+          # around it was cleared.
+          cache-dependency-path: app/go.sum
 
       - name: Build
         working-directory: app
@@ -142,18 +151,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           # `npm ci` was the single longest step in this job (20s of a 41s run)
           # with nothing cached. `cache-dependency-path` is required because the
           # lockfile is not at the repo root — without it the action looks for
           # ./package-lock.json, finds nothing, and silently caches nothing.
-          # (`setup-go` needs no equivalent: it caches the module and build
-          # cache by default, which is why its own setup step costs 8s.)
+          # `setup-go` needs the exact same treatment, and for a long time
+          # did not get it — see its own `cache-dependency-path` above. Its
+          # caching is on by default, which is what made the omission look
+          # harmless: the step still succeeded, it just restored nothing.
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -213,7 +224,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # No actions/setup-node: the image ships its own Node, and pulling a
       # different one in would change nothing about the rendering while adding a
@@ -244,7 +255,7 @@ jobs:
       # even be evaluated without it.
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: frontend/playwright-report

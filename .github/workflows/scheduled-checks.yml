@@ -46,12 +46,21 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: app/go.mod
+          # Not optional, and for exactly the reason `cache-dependency-path` is
+          # spelled out for setup-node below: this module lives in app/, not at
+          # the repo root, so the action's default lookup finds nothing, logs
+          # "Restore cache failed: Dependencies file is not found", and silently
+          # caches nothing — every run re-downloading the whole module graph.
+          # It failed that way from the day this workflow was written; the
+          # warning only became visible once the node20 deprecation noise
+          # around it was cleared.
+          cache-dependency-path: app/go.sum
 
       - name: Prepare report directory
         run: mkdir -p reports
@@ -74,7 +83,7 @@ jobs:
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-race
           path: reports/race.txt
@@ -86,12 +95,21 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: app/go.mod
+          # Not optional, and for exactly the reason `cache-dependency-path` is
+          # spelled out for setup-node below: this module lives in app/, not at
+          # the repo root, so the action's default lookup finds nothing, logs
+          # "Restore cache failed: Dependencies file is not found", and silently
+          # caches nothing — every run re-downloading the whole module graph.
+          # It failed that way from the day this workflow was written; the
+          # warning only became visible once the node20 deprecation noise
+          # around it was cleared.
+          cache-dependency-path: app/go.sum
 
       - name: Prepare report directory
         run: mkdir -p reports
@@ -124,7 +142,7 @@ jobs:
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-govulncheck
           path: reports/govulncheck.txt
@@ -136,10 +154,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -189,7 +207,7 @@ jobs:
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-audit
           path: reports/audit.txt
@@ -205,12 +223,12 @@ jobs:
 
     steps:
       - name: Download reports
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: reports
 
       - name: Open or update the tracking issue
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           NEEDS: ${{ toJSON(needs) }}
         with:
