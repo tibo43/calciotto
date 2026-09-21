@@ -87,14 +87,12 @@ test.describe('home page', () => {
   test('matches tab, scheduled match selected, inline sign-up panel', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, '/');
     await page.locator('.match-card-horizontal.scheduled').first().click();
-    // Parked at the carousel's end stop, not merely waited on. An explicit
-    // instant scrollIntoView plus a settle-wait used to stand here, and it was
-    // not enough: CI failed this baseline by 652 pixels — all of them inside
-    // this carousel's selected card — while reporting "captured a stable
-    // screenshot", i.e. the scroll had finished somewhere a pixel or so from
-    // where the baseline was recorded. See pinCarouselScroll.
-    await pinCarouselScroll(page, '.matches-bar', 'end');
+    // The inline panel fetching its list can still expand the page after the
+    // click (and change the carousel's max scroll by a pixel). Wait for it
+    // *before* pinning, so the end stop is computed against the layout the
+    // screenshot will actually see. See pinCarouselScroll.
     await expect(page.locator('.signup-inline')).toBeVisible();
+    await pinCarouselScroll(page, '.matches-bar', 'end');
     await expect(page).toHaveScreenshot('matches-tab-signup-inline.png', { fullPage: true });
     expectEverythingStubbed(unstubbed);
   });
@@ -124,10 +122,10 @@ test.describe('home page', () => {
     });
     await page.locator('.match-card-horizontal.scheduled').first().click();
     // See the admin-role test above for why the carousel is pinned to an end
-    // stop rather than left wherever the click-time auto-scroll landed it.
-    // This is the baseline that actually failed in CI.
-    await pinCarouselScroll(page, '.matches-bar', 'end');
+    // stop rather than left wherever the click-time auto-scroll landed it,
+    // and why the pin waits until the inline panel is visible first.
     await expect(page.locator('.signup-inline')).toBeVisible();
+    await pinCarouselScroll(page, '.matches-bar', 'end');
     // 18 sign-ups against a cap of 16: the two extra are the waiting list,
     // which exists only as a consequence of the ordering — worth having in a
     // baseline, and specifically absent from the admin-role baseline above.

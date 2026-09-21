@@ -249,9 +249,28 @@ async function waitForCarouselToSettle(page, carouselSelector) {
  * this, so the end stop is where the auto-scroll was aiming in both cases.
  */
 async function pinCarouselScroll(page, carouselSelector, position) {
-  await page.locator(carouselSelector).evaluate((el, where) => {
-    el.scrollLeft = where === 'end' ? el.scrollWidth : 0;
+  const pin = () => page.locator(carouselSelector).evaluate((el, where) => {
+    // Force a layout read so scrollWidth/clientWidth aren't a frame behind
+    // under the parallel load CI uses. Assigning scrollWidth itself (and
+    // relying on the browser to clamp) is what the first version did; the
+    // explicit max is the same number, just not dependent on clamp rounding
+    // a too-large value onto a fractional scrollLeft.
+    void el.offsetWidth;
+    const max = Math.max(0, el.scrollWidth - el.clientWidth);
+    el.scrollLeft = where === 'end' ? max : 0;
   }, position);
+
+  await pin();
+  await waitForCarouselToSettle(page, carouselSelector);
+  // A sibling expanding after the first pin (the inline sign-up panel
+  // finishing its fetch, a flex reflow) can change the max by a pixel or
+  // two. Pinning again against the *settled* layout is what makes the end
+  // stop the resting position of the screenshot, not of the moment we
+  // first assigned. The 650-pixel `matches-tab-signup-inline.png` failure
+  // on a feature that never touched this page is the reproduction: pin
+  // had already run, Playwright reported a stable screenshot, and every
+  // differing pixel was inside the selected card.
+  await pin();
   await waitForCarouselToSettle(page, carouselSelector);
 }
 

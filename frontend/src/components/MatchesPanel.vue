@@ -85,12 +85,19 @@
                   <p class="schedule-hint">Must be strictly before kick-off.</p>
                 </div>
 
-                <div class="schedule-field">
+				<div class="schedule-field">
                   <label for="schedule-max-players">Maximum players</label>
                   <input id="schedule-max-players" class="form-input schedule-input" type="number" min="1" step="1"
                     v-model="maxPlayers" :disabled="isCreating" />
                   <p class="schedule-hint">A calciotto is 8v8, so 16 by default.</p>
                 </div>
+
+                <label class="schedule-toggle register-creator-toggle">
+                  <input id="schedule-register-creator" type="checkbox" class="schedule-checkbox"
+                    v-model="registerCreator" :disabled="isCreating" />
+                  <span>Sign me up for this match</span>
+                </label>
+                <p class="schedule-hint">Adds you to the sign-up list as soon as the match is created.</p>
               </div>
 
               <p v-if="scheduleError" class="error-message schedule-error">{{ scheduleError }}</p>
@@ -566,6 +573,10 @@ export default {
       kickoffTime: '',
       registrationOpensAt: '',
       maxPlayers: DEFAULT_MAX_PLAYERS,
+      // Opt-in auto-enroll of the creating admin on a scheduled match.
+      // Unchecked by default so the payload stays identical to the
+      // pre-flag one unless they tick the box. Reset by closeModal().
+      registerCreator: false,
       scheduleError: '',
       // Custom Date Picker
       currentMonth: new Date().getMonth(),
@@ -919,7 +930,9 @@ export default {
       }
 
       this.scheduleError = '';
-      return { scheduledAt, registrationOpensAt, maxPlayers };
+      return this.registerCreator
+        ? { scheduledAt, registrationOpensAt, maxPlayers, registerCreator: true }
+        : { scheduledAt, registrationOpensAt, maxPlayers };
     },
 
     closeModal() {
@@ -932,6 +945,7 @@ export default {
       this.kickoffTime = '';
       this.registrationOpensAt = '';
       this.maxPlayers = DEFAULT_MAX_PLAYERS;
+      this.registerCreator = false;
       this.scheduleError = '';
     },
 
@@ -1477,6 +1491,10 @@ export default {
 
 .schedule-error {
   margin-top: 0.75rem;
+}
+
+.register-creator-toggle {
+  margin-top: 0.25rem;
 }
 
 .date-picker-header {

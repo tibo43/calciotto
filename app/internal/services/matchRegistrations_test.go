@@ -207,6 +207,35 @@ func TestMatchSpecValidate(t *testing.T) {
 			},
 			want: nil,
 		},
+		{
+			name: "auto-register on a fully scheduled match is accepted",
+			spec: MatchSpec{
+				ScheduledAt:         &kickOff,
+				RegistrationOpensAt: &opensAt,
+				MaxPlayers:          intPtr(10),
+				RegisterCreatorID:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			},
+			want: nil,
+		},
+		{
+			name: "auto-register on an unscheduled match is refused",
+			spec: MatchSpec{
+				Date:              models.DateOf(kickOff),
+				RegisterCreatorID: uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			},
+			want: ErrRegisterCreatorOnUnscheduledMatch,
+		},
+		{
+			// Incomplete schedule still wins: the all-or-nothing rule is the
+			// more immediate problem, and a half-filled spec has no list to
+			// enroll anyone on.
+			name: "auto-register does not hide an incomplete schedule",
+			spec: MatchSpec{
+				ScheduledAt:       &kickOff,
+				RegisterCreatorID: uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			},
+			want: ErrIncompleteSchedule,
+		},
 	}
 
 	for _, tt := range tests {

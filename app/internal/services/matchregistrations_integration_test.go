@@ -502,6 +502,126 @@ func TestCreateMatch_Integration_ScheduleValidationRejected(t *testing.T) {
 	}
 }
 
+// TestCreateMatch_Integration_RegistersCreator is the service-level half of
+// the create-time auto-enroll: a scheduled spec carrying RegisterCreatorID
+// writes a MatchRegistration for that player in the same call, even when the
+// sign-up window has not opened yet (the list is being born, not joined).
+func TestCreateMatch_Integration_RegistersCreator(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	group, err := services.NewGroupService(tx).CreateGroup("Zzz Register Creator Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group: %v", err)
+	}
+	creatorID, err := services.NewPlayerService(tx).CreatePlayer("Zzz Register Creator")
+	if err != nil {
+		t.Fatalf("failed to create player: %v", err)
+	}
+
+	kickOff := time.Now().Add(7 * 24 * time.Hour)
+	opensAt := time.Now().Add(48 * time.Hour) // still in the future
+	max := 16
+	matchService := services.NewMatchService(tx)
+
+	matchID, err := matchService.CreateMatch(services.MatchSpec{
+		ScheduledAt:         &kickOff,
+		RegistrationOpensAt: &opensAt,
+		MaxPlayers:          &max,
+		RegisterCreatorID:   creatorID,
+	}, group.ID)
+	if err != nil {
+		t.Fatalf("CreateMatch returned error: %v", err)
+	}
+
+	var rows []models.MatchRegistration
+	if err := tx.Where("match_id = ?", matchID).Find(&rows).Error; err != nil {
+		t.Fatalf("failed to load registrations: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("got %d MatchRegistration rows, want 1", len(rows))
+	}
+	if rows[0].PlayerID != creatorID {
+		t.Errorf("registered player = %s, want the creator %s", rows[0].PlayerID, creatorID)
+	}
+
+	// The window is still closed to a normal Participate — proof this write
+	// did not go through RegistrationWindowError.
+	if err := services.NewMatchRegistrationService(tx).Register(matchID, creatorID); !errors.Is(err, services.ErrRegistrationsNotOpenYet) {
+		t.Errorf("Register while the window is still closed = %v, want ErrRegistrationsNotOpenYet", err)
+	}
+}
+
+// TestCreateMatch_Integration_DoesNotRegisterByDefault pins the opt-in: a
+// scheduled match created without RegisterCreatorID still has an empty list,
+// which is what every existing caller (seed, tests, an admin who didn't tick
+// the checkbox) relies on.
+func TestCreateMatch_Integration_DoesNotRegisterByDefault(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	group, err := services.NewGroupService(tx).CreateGroup("Zzz No Auto Register Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group: %v", err)
+	}
+	kickOff := time.Now().Add(24 * time.Hour)
+	opensAt := time.Now().Add(-time.Hour)
+	max := 16
+
+	matchID, err := services.NewMatchService(tx).CreateMatch(services.MatchSpec{
+		ScheduledAt:         &kickOff,
+		RegistrationOpensAt: &opensAt,
+		MaxPlayers:          &max,
+	}, group.ID)
+	if err != nil {
+		t.Fatalf("CreateMatch returned error: %v", err)
+	}
+
+	var count int64
+	if err := tx.Model(&models.MatchRegistration{}).Where("match_id = ?", matchID).Count(&count).Error; err != nil {
+		t.Fatalf("failed to count registrations: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("got %d MatchRegistration rows on a match created without RegisterCreatorID, want 0", count)
+	}
+}
+
+// TestCreateMatch_Integration_RegisterCreatorUnscheduledRejected: the flag on
+// an unscheduled spec is a 400-shaped refusal, and nothing is written — same
+// "nothing lands on invalid input" contract as TestCreateMatch_Integration_ScheduleValidationRejected.
+func TestCreateMatch_Integration_RegisterCreatorUnscheduledRejected(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	group, err := services.NewGroupService(tx).CreateGroup("Zzz Unscheduled Auto Register Group", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group: %v", err)
+	}
+	creatorID, err := services.NewPlayerService(tx).CreatePlayer("Zzz Unscheduled Auto Register")
+	if err != nil {
+		t.Fatalf("failed to create player: %v", err)
+	}
+
+	id, err := services.NewMatchService(tx).CreateMatch(services.MatchSpec{
+		Date:              models.Date(time.Now()),
+		RegisterCreatorID: creatorID,
+	}, group.ID)
+	if !errors.Is(err, services.ErrRegisterCreatorOnUnscheduledMatch) {
+		t.Errorf("CreateMatch error = %v, want ErrRegisterCreatorOnUnscheduledMatch", err)
+	}
+	if id != uuid.Nil {
+		t.Errorf("CreateMatch returned id %s on refusal, want uuid.Nil", id)
+	}
+
+	var matches int64
+	if err := tx.Model(&models.Match{}).Where("group_id = ?", group.ID).Count(&matches).Error; err != nil {
+		t.Fatalf("failed to count matches: %v", err)
+	}
+	if matches != 0 {
+		t.Errorf("%d matches were created despite RegisterCreatorID on an unscheduled spec", matches)
+	}
+}
+
 // TestDeleteMatch_Integration_RemovesRegistrations: MatchRegistration rows are
 // not cascaded by the database, so deleting a scheduled match has to take its
 // sign-up list with it — otherwise a re-used match id (or a stats query) would

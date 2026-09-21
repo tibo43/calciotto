@@ -23,17 +23,14 @@ test.describe('profile page', () => {
   test('group roster as an admin on a narrow viewport @mobile', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, '/profile', { groupMembers: data.groupMembersLongName });
     await page.locator('.group-card-horizontal').first().click();
-    // Parked at the carousel's start stop before photographing — see the
-    // member test below for why the scroll position is pinned rather than
-    // inherited from whatever Playwright's click-time auto-scroll left it at.
-    // The first card is already fully visible, so this is where that scroll
-    // leaves it anyway; pinning it just makes that a guarantee.
-    await pinCarouselScroll(page, '.groups-bar', 'start');
     // Waiting on an action button rather than the panel itself: the panel
     // renders before its members have loaded, so this is what proves the
     // roster (and the caller's admin role on this specific group) resolved
-    // before the screenshot.
+    // before the screenshot. Pinning after that wait is what keeps the
+    // carousel's end/start stop computed against the layout the screenshot
+    // will actually see (see pinCarouselScroll).
     await expect(page.locator('.member-action-btn').first()).toBeVisible();
+    await pinCarouselScroll(page, '.groups-bar', 'start');
     await expect(page).toHaveScreenshot('profile-roster-admin-mobile.png', { fullPage: true });
     await expectNoHorizontalOverflow(page);
     expectEverythingStubbed(unstubbed);
@@ -60,10 +57,12 @@ test.describe('profile page', () => {
     // pinned to the carousel's end stop instead: an exact, layout-derived
     // maximum that no timing can vary. The cards are fixed-width
     // (flex: 0 0 200px), so this is the same view the auto-scroll was aiming
-    // at, minus the variance.
-    await pinCarouselScroll(page, '.groups-bar', 'end');
+    // at, minus the variance. The pin runs after the roster is visible so
+    // the max is computed against the final layout, not the one from before
+    // the panel expanded.
     await expect(page.locator('.member-list')).toBeVisible();
     await expect(page.locator('.member-action-btn')).toHaveCount(0);
+    await pinCarouselScroll(page, '.groups-bar', 'end');
     await expect(page).toHaveScreenshot('profile-roster-member-mobile.png', { fullPage: true });
     await expectNoHorizontalOverflow(page);
     expectEverythingStubbed(unstubbed);

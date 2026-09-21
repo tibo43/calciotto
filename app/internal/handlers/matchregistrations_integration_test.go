@@ -875,4 +875,124 @@ func TestCreateMatch_Integration_UnscheduledStillWorks(t *testing.T) {
 	}
 }
 
+// TestCreateMatch_Integration_RegisterCreator covers POST /matches'
+// register_creator flag end to end: checked, the JWT caller lands on the
+// new match's sign-up list as #1 (identical to a later Participate); unchecked
+// or omitted, the list stays empty; set on an unscheduled payload, the
+// request is refused and nothing is written. The player always comes from
+// the token — a body-supplied player_id is ignored.
+func TestCreateMatch_Integration_RegisterCreator(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newRegistrationEnv(t, tx)
+
+	group := env.newGroup(t, "autoreg")
+	paris := time.FixedZone("UTC+2", 2*60*60)
+	scheduledBody := func(registerCreator any) map[string]any {
+		return map[string]any{
+			"group_id":              group.id.String(),
+			"scheduled_at":          time.Now().Add(24 * time.Hour).In(paris).Format(time.RFC3339),
+			"registration_opens_at": time.Now().Add(-time.Hour).In(paris).Format(time.RFC3339),
+			"max_players":           16,
+			"register_creator":      registerCreator,
+		}
+	}
+
+	enrolledRec := env.do(http.MethodPost, "/matches", group.adminToken, scheduledBody(true))
+	if enrolledRec.Code != http.StatusOK {
+		t.Fatalf("POST /matches with register_creator: true returned status %d, want 200, body: %s", enrolledRec.Code, enrolledRec.Body.String())
+	}
+	var enrolledID uuid.UUID
+	if err := json.Unmarshal(enrolledRec.Body.Bytes(), &enrolledID); err != nil {
+		t.Fatalf("failed to unmarshal created match id from %s: %v", enrolledRec.Body.String(), err)
+	}
+
+	listRec := env.do(http.MethodGet, "/matches/"+enrolledID.String()+"/registrations", group.adminToken, nil)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("GET registrations returned status %d, want 200, body: %s", listRec.Code, listRec.Body.String())
+	}
+	var entries []models.MatchRegistrationEntry
+	if err := json.Unmarshal(listRec.Body.Bytes(), &entries); err != nil {
+		t.Fatalf("failed to unmarshal registration list: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("GET registrations returned %d entries, want 1 (the creator), body: %s", len(entries), listRec.Body.String())
+	}
+	if entries[0].PlayerID != group.adminID {
+		t.Errorf("registered player = %s, want the JWT admin %s", entries[0].PlayerID, group.adminID)
+	}
+	if entries[0].Position != 1 || entries[0].IsWaiting {
+		t.Errorf("creator entry Position/IsWaiting = %d/%v, want 1/false", entries[0].Position, entries[0].IsWaiting)
+	}
+
+	// A later Participate from a member still works: the create-time row is
+	// a normal MatchRegistration, so the member lands at #2.
+	memberRec := env.do(http.MethodPost, "/matches/"+enrolledID.String()+"/registrations", group.memberToken, nil)
+	if memberRec.Code != http.StatusOK {
+		t.Errorf("member POST registrations returned status %d, want 200, body: %s", memberRec.Code, memberRec.Body.String())
+	}
+	if got := decodeEntry(t, memberRec); got.Position != 2 {
+		t.Errorf("member sign-up Position = %d, want 2 (creator was already #1)", got.Position)
+	}
+
+	// And a body-supplied player_id must not replace the JWT caller.
+	spoofBody := scheduledBody(true)
+	spoofBody["player_id"] = group.memberID.String()
+	spoofRec := env.do(http.MethodPost, "/matches", group.adminToken, spoofBody)
+	if spoofRec.Code != http.StatusOK {
+		t.Fatalf("POST /matches with a spoofed player_id returned status %d, want 200, body: %s", spoofRec.Code, spoofRec.Body.String())
+	}
+	var spoofID uuid.UUID
+	if err := json.Unmarshal(spoofRec.Body.Bytes(), &spoofID); err != nil {
+		t.Fatalf("failed to unmarshal created match id: %v", err)
+	}
+	spoofList := env.do(http.MethodGet, "/matches/"+spoofID.String()+"/registrations", group.adminToken, nil)
+	var spoofEntries []models.MatchRegistrationEntry
+	if err := json.Unmarshal(spoofList.Body.Bytes(), &spoofEntries); err != nil {
+		t.Fatalf("failed to unmarshal spoofed-create registration list: %v", err)
+	}
+	if len(spoofEntries) != 1 || spoofEntries[0].PlayerID != group.adminID {
+		t.Errorf("spoofed player_id enrolled %v, want only the JWT admin %s", spoofEntries, group.adminID)
+	}
+
+	// Unchecked / omitted: the list stays empty, which is the pre-flag
+	// behaviour every existing caller still sends.
+	for _, body := range []map[string]any{
+		scheduledBody(false),
+		{
+			"group_id":              group.id.String(),
+			"scheduled_at":          time.Now().Add(24 * time.Hour).In(paris).Format(time.RFC3339),
+			"registration_opens_at": time.Now().Add(-time.Hour).In(paris).Format(time.RFC3339),
+			"max_players":           16,
+		},
+	} {
+		rec := env.do(http.MethodPost, "/matches", group.adminToken, body)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /matches without auto-enroll returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
+		}
+		var id uuid.UUID
+		if err := json.Unmarshal(rec.Body.Bytes(), &id); err != nil {
+			t.Fatalf("failed to unmarshal created match id: %v", err)
+		}
+		emptyRec := env.do(http.MethodGet, "/matches/"+id.String()+"/registrations", group.adminToken, nil)
+		var empty []models.MatchRegistrationEntry
+		if err := json.Unmarshal(emptyRec.Body.Bytes(), &empty); err != nil {
+			t.Fatalf("failed to unmarshal empty registration list: %v", err)
+		}
+		if len(empty) != 0 {
+			t.Errorf("a match created without register_creator: true has %d sign-ups, want 0", len(empty))
+		}
+	}
+
+	// The flag on an unscheduled payload is a 400, and no match is stored.
+	unscheduledRec := env.do(http.MethodPost, "/matches", group.adminToken, map[string]any{
+		"date":             "2026-01-04",
+		"group_id":         group.id.String(),
+		"register_creator": true,
+	})
+	if unscheduledRec.Code != http.StatusBadRequest {
+		t.Errorf("POST /matches unscheduled with register_creator: true returned status %d, want 400, body: %s", unscheduledRec.Code, unscheduledRec.Body.String())
+	}
+}
+
 func intPtr(v int) *int { return &v }
