@@ -131,7 +131,10 @@ export const getMatchDetailsByID = async (matchId, groupId) => {
 // treats scheduled_at/registration_opens_at/max_players as all-or-nothing and
 // 400s on one or two of the three. Omitting it entirely creates an ordinary
 // match, exactly as before — the payload is then byte-identical to the
-// unscheduled one, since nothing is spread in.
+// unscheduled one, since nothing is spread in. `register_creator` is a
+// further opt-in on top of that: only sent when the create-modal checkbox
+// was ticked, so a scheduled create that doesn't auto-enroll stays
+// byte-identical to the pre-flag payload.
 //
 // The two timestamps must be RFC3339 carrying the browser's own UTC offset
 // (see services/datetime.js): the backend derives the match's `date` from
@@ -148,6 +151,11 @@ export const createMatch = async (matchData, groupId, scheduling) => {
         registration_opens_at: scheduling.registrationOpensAt,
         max_players: scheduling.maxPlayers,
       };
+      // Opt-in: only spread when the checkbox was ticked, so an ordinary
+      // scheduled create stays byte-identical to the pre-flag payload.
+      if (scheduling.registerCreator) {
+        payload.register_creator = true;
+      }
     }
     const response = await api.post(`/matches`, payload);
     if (response.status !== 200) {

@@ -25,7 +25,7 @@ var ErrMatchNotFound = errors.New("match not found")
 // ErrMatchNotFound's 404.
 var ErrTeamNotInGroup = errors.New("team does not belong to this group")
 
-// The three sentinels below reject an incoherent *schedule* at creation time.
+// The sentinels below reject an incoherent *schedule* at creation time.
 // A match with no scheduling at all stays perfectly valid — see MatchSpec.
 var (
 	// ErrIncompleteSchedule guards the all-or-nothing rule: a scheduled match
@@ -42,6 +42,11 @@ var (
 	// ErrInvalidMaxPlayers rejects a non-positive roster size, which would
 	// put every single sign-up on the waiting list.
 	ErrInvalidMaxPlayers = errors.New("maximum number of players must be greater than zero")
+	// ErrRegisterCreatorOnUnscheduledMatch rejects auto-enrolling the creator
+	// on a match that has no sign-up list at all. An unscheduled match is a
+	// record of a game already played — there is nothing to Participate in —
+	// so the flag is a client mistake rather than something to silently ignore.
+	ErrRegisterCreatorOnUnscheduledMatch = errors.New("cannot auto-register the creator on an unscheduled match")
 )
 
 // MatchSpec is everything CreateMatch needs to know about the match being
@@ -53,11 +58,26 @@ var (
 // three to open the match to sign-ups. Date is only read in the unscheduled
 // case: when ScheduledAt is set, Date is *derived* from it so the calendar day
 // and the kick-off timestamp can never drift apart (see models.Match).
+// RegisterCreatorID is independent of that triple — see its own comment.
 type MatchSpec struct {
 	Date                models.Date
 	ScheduledAt         *time.Time
 	RegistrationOpensAt *time.Time
 	MaxPlayers          *int
+	// RegisterCreatorID, when not uuid.Nil, enrolls that player on the new
+	// match's sign-up list in the same transaction as the match itself. The
+	// resulting MatchRegistration row is identical to one written by a later
+	// Participate (same table, same unique index, waiting list still derived
+	// from CreatedAt vs MaxPlayers). Seed and every caller that doesn't care
+	// leave this at the zero value, which is a no-op.
+	//
+	// Only valid on a scheduled spec: validate() returns
+	// ErrRegisterCreatorOnUnscheduledMatch otherwise. It deliberately does
+	// *not* go through RegistrationWindowError — the list is being born
+	// rather than joined, so a match whose window opens on Friday can still
+	// put its creator at #1 on Wednesday. Subsequent Register/Unregister
+	// calls stay gated on the window as before.
+	RegisterCreatorID uuid.UUID
 }
 
 // IsScheduled mirrors models.Match.IsScheduled: a spec asks for a scheduled
@@ -72,6 +92,9 @@ func (spec MatchSpec) IsScheduled() bool {
 // flow has always accepted any date.
 func (spec MatchSpec) validate() error {
 	if spec.ScheduledAt == nil && spec.RegistrationOpensAt == nil && spec.MaxPlayers == nil {
+		if spec.RegisterCreatorID != uuid.Nil {
+			return ErrRegisterCreatorOnUnscheduledMatch
+		}
 		return nil
 	}
 	if spec.ScheduledAt == nil || spec.RegistrationOpensAt == nil || spec.MaxPlayers == nil {
@@ -103,6 +126,13 @@ func NewMatchService(db *gorm.DB) *MatchService {
 // — a caller able to supply both could store a match dated one day and kicking
 // off on another. models.DateOf does that in the kick-off's own location, so an
 // evening kick-off keeps the day the client meant.
+//
+// When RegisterCreatorID is set, the match and that player's MatchRegistration
+// are written in one transaction, so a failed sign-up cannot leave behind a
+// match the caller thought they were already on. The unscheduled / no-flag
+// path stays a single INSERT — wrapping it in a transaction would change
+// nothing a caller can observe and would make every existing seed/test pay
+// for a savepoint they don't use.
 func (s *MatchService) CreateMatch(spec MatchSpec, groupID uuid.UUID) (uuid.UUID, error) {
 	if err := spec.validate(); err != nil {
 		return uuid.Nil, err
@@ -119,9 +149,25 @@ func (s *MatchService) CreateMatch(spec MatchSpec, groupID uuid.UUID) (uuid.UUID
 		match.Date = models.DateOf(*spec.ScheduledAt)
 	}
 
-	result := s.DB.Create(match)
-	if result.Error != nil {
-		return uuid.Nil, result.Error
+	if spec.RegisterCreatorID == uuid.Nil {
+		result := s.DB.Create(match)
+		if result.Error != nil {
+			return uuid.Nil, result.Error
+		}
+		return match.ID, nil
+	}
+
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(match).Error; err != nil {
+			return err
+		}
+		return tx.Create(&models.MatchRegistration{
+			MatchID:  match.ID,
+			PlayerID: spec.RegisterCreatorID,
+		}).Error
+	})
+	if err != nil {
+		return uuid.Nil, err
 	}
 	return match.ID, nil
 }

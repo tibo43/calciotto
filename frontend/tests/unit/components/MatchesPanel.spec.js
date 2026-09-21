@@ -108,6 +108,8 @@ describe('MatchesPanel.vue create-match modal', () => {
     expect(wrapper.find('#schedule-kickoff-time').exists()).toBe(true);
     expect(wrapper.find('#schedule-registration-opens').exists()).toBe(true);
     expect(wrapper.find('#schedule-max-players').exists()).toBe(true);
+    expect(wrapper.find('#schedule-register-creator').exists()).toBe(true);
+    expect(wrapper.find('#schedule-register-creator').element.checked).toBe(false);
   });
 
   it('defaults the maximum to 16 players', async () => {
@@ -161,6 +163,42 @@ describe('MatchesPanel.vue create-match modal', () => {
     await wrapper.vm.creatingMatch();
 
     expect(createMatch.mock.calls[0][2].maxPlayers).toBe(12);
+  });
+
+  it('sends registerCreator only when the auto-enroll checkbox is ticked', async () => {
+    const wrapper = await mountPanel();
+    await openModalWithDate(wrapper);
+    await wrapper.setData({
+      isScheduled: true,
+      kickoffTime: '20:30',
+      registrationOpensAt: '2026-09-01T12:00',
+      maxPlayers: 16,
+      registerCreator: true
+    });
+
+    await wrapper.vm.creatingMatch();
+
+    expect(createMatch).toHaveBeenCalledWith({ Date: '2026-09-06' }, 'group-uuid', {
+      scheduledAt: '2026-09-06T20:30:00+02:00',
+      registrationOpensAt: '2026-09-01T12:00:00+02:00',
+      maxPlayers: 16,
+      registerCreator: true
+    });
+  });
+
+  it('does not send registerCreator when the checkbox is left unchecked', async () => {
+    const wrapper = await mountPanel();
+    await openModalWithDate(wrapper);
+    await wrapper.setData({
+      isScheduled: true,
+      kickoffTime: '20:30',
+      registrationOpensAt: '2026-09-01T12:00',
+      maxPlayers: 16
+    });
+
+    await wrapper.vm.creatingMatch();
+
+    expect(createMatch.mock.calls[0][2].registerCreator).toBeUndefined();
   });
 
   it('refuses to submit with a missing kick-off time', async () => {
@@ -252,6 +290,7 @@ describe('MatchesPanel.vue create-match modal', () => {
       kickoffTime: '20:30',
       registrationOpensAt: '2026-09-01T12:00',
       maxPlayers: 22,
+      registerCreator: true,
       scheduleError: 'something'
     });
 
@@ -261,6 +300,7 @@ describe('MatchesPanel.vue create-match modal', () => {
     expect(wrapper.vm.kickoffTime).toBe('');
     expect(wrapper.vm.registrationOpensAt).toBe('');
     expect(wrapper.vm.maxPlayers).toBe(16);
+    expect(wrapper.vm.registerCreator).toBe(false);
     expect(wrapper.vm.scheduleError).toBe('');
   });
 });

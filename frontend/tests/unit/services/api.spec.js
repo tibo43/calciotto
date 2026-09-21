@@ -58,6 +58,24 @@ describe('createMatch', () => {
     });
   });
 
+  it('sends register_creator only when the scheduling payload asks for it', async () => {
+    await api.createMatch({ Date: '2026-03-15' }, 'group-uuid', {
+      scheduledAt: '2026-09-06T20:30:00+02:00',
+      registrationOpensAt: '2026-09-01T12:00:00+02:00',
+      maxPlayers: 16,
+      registerCreator: true
+    });
+
+    expect(mockInstance.post).toHaveBeenCalledWith('/matches', {
+      Date: '2026-03-15',
+      group_id: 'group-uuid',
+      scheduled_at: '2026-09-06T20:30:00+02:00',
+      registration_opens_at: '2026-09-01T12:00:00+02:00',
+      max_players: 16,
+      register_creator: true
+    });
+  });
+
   it('returns the bare uuid the backend answers with', async () => {
     await expect(api.createMatch({ Date: '2026-03-15' }, 'group-uuid')).resolves.toBe('match-uuid');
   });

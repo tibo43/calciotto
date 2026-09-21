@@ -46,6 +46,12 @@ type createMatchRequest struct {
 	ScheduledAt         *time.Time  `json:"scheduled_at"`
 	RegistrationOpensAt *time.Time  `json:"registration_opens_at"`
 	MaxPlayers          *int        `json:"max_players"`
+	// RegisterCreator enrolls the JWT caller on the new match's sign-up list
+	// at create time, the same MatchRegistration row a later Participate
+	// would write. Omitted/false is a no-op, which is what every existing
+	// caller sends. The player always comes from the token, never from the
+	// body — there is no "register someone else" capability here either.
+	RegisterCreator bool `json:"register_creator"`
 }
 
 // CreateMatch requires authentication (see main.go), so when the payload
@@ -76,21 +82,33 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 		groupID = group.ID
 	}
 
-	id, err := h.Service.CreateMatch(services.MatchSpec{
+	spec := services.MatchSpec{
 		Date:                req.Date,
 		ScheduledAt:         req.ScheduledAt,
 		RegistrationOpensAt: req.RegistrationOpensAt,
 		MaxPlayers:          req.MaxPlayers,
-	}, groupID)
+	}
+	if req.RegisterCreator {
+		playerID, ok := playerIDFromContext(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+			return
+		}
+		spec.RegisterCreatorID = playerID
+	}
+
+	id, err := h.Service.CreateMatch(spec, groupID)
 	if err != nil {
 		switch {
 		// An incoherent schedule is the client's mistake, not the server's:
-		// half a schedule, a window opening after kick-off, or a roster size
-		// that would bench everyone. Mapped to 400 the way every other handler
+		// half a schedule, a window opening after kick-off, a roster size
+		// that would bench everyone, or asking to auto-enroll on a match
+		// that has no sign-up list. Mapped to 400 the way every other handler
 		// maps its service's validation sentinels.
 		case errors.Is(err, services.ErrIncompleteSchedule),
 			errors.Is(err, services.ErrRegistrationOpensAfterKickoff),
-			errors.Is(err, services.ErrInvalidMaxPlayers):
+			errors.Is(err, services.ErrInvalidMaxPlayers),
+			errors.Is(err, services.ErrRegisterCreatorOnUnscheduledMatch):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
