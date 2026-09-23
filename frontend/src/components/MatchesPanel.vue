@@ -105,9 +105,6 @@
           </div>
 
           <div class="modal-footer">
-            <button class="btn-base btn-cancel" @click="closeModal" :disabled="isCreating">
-              Cancel
-            </button>
             <button class="btn-base btn-primary" @click="creatingMatch" :disabled="!selectedDate || isCreating"
               :class="{ 'loading': isCreating }">
               <div v-if="isCreating" class="loading-spinner-small"></div>
