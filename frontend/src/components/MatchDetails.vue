@@ -334,6 +334,33 @@
                 </button>
               </div>
 
+              <!-- Own goals: credited to this player, but they count toward
+                   the OTHER team's score (see updateOwnGoals/updateTeamScore)
+                   — kept as a second, visually distinct counter rather than
+                   folded into the goal counter above, since a "goal" and an
+                   "own goal" mean opposite things for the score. -->
+              <div class="goal-management own-goal-management">
+                <button v-if="isAdmin" @click="updateOwnGoals(playerIndex, -1)"
+                  :disabled="!player.OwnGoals || player.OwnGoals <= 0" class="goal-btn own-goal-btn decrease"
+                  title="Remove an own goal">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+
+                <span class="goal-count own-goal-count" title="Own goals (count toward the other team)">
+                  {{ player.OwnGoals || 0 }} OG
+                </span>
+
+                <button v-if="isAdmin" @click="updateOwnGoals(playerIndex, 1)" class="goal-btn own-goal-btn increase"
+                  title="Add an own goal">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+              </div>
+
               <button v-if="isAdmin" @click="removePlayer(playerIndex)" class="btn-danger-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -970,13 +997,16 @@ export default {
         // whose GroupID already comes from this response.
         this.match = await getMatchDetailsByID(matchId, this.activeGroupId);
 
-        // Ensure each player has GoalNumber property
+        // Ensure each player has GoalNumber/OwnGoals properties
         if (this.match && this.match.Teams) {
           this.match.Teams.forEach(team => {
             if (team.Players) {
               team.Players.forEach(player => {
                 if (!player.GoalNumber) {
                   player.GoalNumber = 0;
+                }
+                if (!player.OwnGoals) {
+                  player.OwnGoals = 0;
                 }
               });
             }
@@ -1391,7 +1421,8 @@ export default {
           const newPlayer = {
             ID: selectedPlayer.ID,
             Name: selectedPlayer.Name,
-            GoalNumber: selectedPlayer.initialGoals || 0
+            GoalNumber: selectedPlayer.initialGoals || 0,
+            OwnGoals: 0
           };
 
           this.match.Teams[this.activeTeam].Players.push(newPlayer);
@@ -1468,13 +1499,44 @@ export default {
       }
     },
 
-    updateTeamScore() {
+    updateOwnGoals(playerIndex, change) {
       if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        console.error('Invalid team or players data');
         return;
       }
 
-      const team = this.match.Teams[this.activeTeam];
-      team.Score = team.Players.reduce((total, player) => total + (player.GoalNumber || 0), 0);
+      const player = this.match.Teams[this.activeTeam].Players[playerIndex];
+      if (!player) {
+        console.error('Player not found at index:', playerIndex);
+        return;
+      }
+
+      const newOwnGoals = (player.OwnGoals || 0) + change;
+
+      if (newOwnGoals >= 0) {
+        player.OwnGoals = newOwnGoals;
+        this.updateTeamScore();
+      }
+    },
+
+    // Own goals are scored by a team's own player but count toward the
+    // OTHER team's score (mirrors MatchService's scoring in the Go
+    // backend's matches.go), so every team's score has to be recomputed
+    // together here rather than just the team currently being edited.
+    updateTeamScore() {
+      if (!this.match.Teams) {
+        return;
+      }
+
+      const ownGoalsByTeam = this.match.Teams.map((team) =>
+        (team.Players || []).reduce((total, player) => total + (player.OwnGoals || 0), 0)
+      );
+      const totalOwnGoals = ownGoalsByTeam.reduce((total, goals) => total + goals, 0);
+
+      this.match.Teams.forEach((team, index) => {
+        const goalsScored = (team.Players || []).reduce((total, player) => total + (player.GoalNumber || 0), 0);
+        team.Score = goalsScored + (totalOwnGoals - ownGoalsByTeam[index]);
+      });
     },
 
     removePlayer(playerIndex) {
@@ -2274,6 +2336,32 @@ export default {
   color: var(--primary-color);
   min-width: 24px;
   text-align: center;
+}
+
+/* Own goals reuse .goal-btn/.goal-count's shape, recoloured with
+   --danger-color so they read as "against" rather than "for" — the same
+   colour .btn-danger already uses for a destructive action. */
+.own-goal-btn {
+  width: 24px;
+  height: 24px;
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+}
+
+.own-goal-btn:hover:not(:disabled) {
+  background-color: var(--danger-color);
+  color: white;
+}
+
+.own-goal-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.own-goal-count {
+  font-size: 0.85rem;
+  color: var(--danger-color);
+  min-width: 40px;
 }
 
 /* Compose-choice modal — .modal-overlay/.modal-container/.modal-header/

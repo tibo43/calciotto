@@ -218,7 +218,8 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
                matches.max_players as match_max_players,
                teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
-			   match_players.goals_scored as goals_scored
+			   match_players.goals_scored as goals_scored,
+			   match_players.own_goals as own_goals
         FROM matches
         LEFT JOIN match_players ON match_players.match_id = matches.id
         LEFT JOIN teams ON teams.id = match_players.team_id
@@ -306,6 +307,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 			ID:          rowMatches.PlayerID,
 			Name:        rowMatches.PlayerName,
 			GoalsScored: rowMatches.GoalsScored,
+			OwnGoals:    rowMatches.OwnGoals,
 		})
 	}
 
@@ -318,6 +320,20 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 	// Convert the map to a slice
 	var matches []models.MatchWithDetails
 	for _, match := range matchesMap {
+		// Own goals are scored by a team's own player but count toward the
+		// OTHER team's Score (see MatchPlayer.OwnGoals) — sum each team's own
+		// own-goal total first, over every team in this match (not just the
+		// ones that survive the filter below), so it can be credited to
+		// whichever other team(s) remain.
+		ownGoalsByTeam := make(map[uuid.UUID]int)
+		totalOwnGoals := 0
+		for _, team := range match.Teams {
+			for _, player := range team.Players {
+				ownGoalsByTeam[team.ID] += player.OwnGoals
+				totalOwnGoals += player.OwnGoals
+			}
+		}
+
 		// Filter out teams with missing ID or Colour
 		var validTeams []models.TeamWithPlayers
 		for _, team := range match.Teams {
@@ -326,6 +342,8 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 					// Update the team's score based on the number of goals scored by players
 					team.Score += player.GoalsScored
 				}
+				// Credit every other team's own goals to this team's score.
+				team.Score += totalOwnGoals - ownGoalsByTeam[team.ID]
 				validTeams = append(validTeams, team)
 			}
 		}
@@ -397,7 +415,8 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
                matches.max_players as match_max_players,
                teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
-			   match_players.goals_scored as goals_scored
+			   match_players.goals_scored as goals_scored,
+			   match_players.own_goals as own_goals
         FROM matches
         LEFT JOIN match_players ON match_players.match_id = matches.id
         LEFT JOIN teams ON teams.id = match_players.team_id
@@ -471,15 +490,27 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 			ID:          rowMatch.PlayerID,
 			Name:        rowMatch.PlayerName,
 			GoalsScored: rowMatch.GoalsScored,
+			OwnGoals:    rowMatch.OwnGoals,
 		})
 	}
 
-	// Calculez le score pour chaque équipe
+	// Calculez le score pour chaque équipe. Own goals are scored by a team's
+	// own player but count toward the OTHER team's Score — same rule as
+	// GetMatchesDetails above.
+	ownGoalsByTeam := make(map[uuid.UUID]int)
+	totalOwnGoals := 0
+	for _, team := range match.Teams {
+		for _, player := range team.Players {
+			ownGoalsByTeam[team.ID] += player.OwnGoals
+			totalOwnGoals += player.OwnGoals
+		}
+	}
 	for i := range match.Teams {
 		score := 0
 		for _, player := range match.Teams[i].Players {
 			score += player.GoalsScored
 		}
+		score += totalOwnGoals - ownGoalsByTeam[match.Teams[i].ID]
 		match.Teams[i].Score = score
 	}
 
@@ -679,6 +710,7 @@ func (s *MatchService) UpdateMatch(matchID, groupID uuid.UUID, teams []models.Te
 						TeamID:      team.ID,
 						PlayerID:    player.ID,
 						GoalsScored: player.GoalsScored,
+						OwnGoals:    player.OwnGoals,
 					}
 					result := tx.Create(&newMatchPlayer)
 					if result.Error != nil {
@@ -693,7 +725,10 @@ func (s *MatchService) UpdateMatch(matchID, groupID uuid.UUID, teams []models.Te
 					player := &team.Players[j]
 					if dbMatchPlayer.PlayerID == player.ID {
 						toDelete = false
-						result := tx.Model(&models.MatchPlayer{}).Where("match_id = ?", matchID).Where("team_id = ?", team.ID).Where("player_id = ?", player.ID).Update("goals_scored", player.GoalsScored)
+						result := tx.Model(&models.MatchPlayer{}).Where("match_id = ?", matchID).Where("team_id = ?", team.ID).Where("player_id = ?", player.ID).Updates(map[string]any{
+							"goals_scored": player.GoalsScored,
+							"own_goals":    player.OwnGoals,
+						})
 						if result.Error != nil {
 							return result.Error
 						}
