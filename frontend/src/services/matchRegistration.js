@@ -188,7 +188,7 @@ export const fillTeamsFromRegistrations = (registrations, currentRosters) => {
       return;
     }
     const teamIndex = smallerTeamIndex();
-    rosters[teamIndex].push({ ID: entry.PlayerID, Name: entry.Name, GoalNumber: 0 });
+    rosters[teamIndex].push({ ID: entry.PlayerID, Name: entry.Name, GoalNumber: 0, OwnGoals: 0 });
     placed.push({ teamIndex, name: entry.Name });
   });
 

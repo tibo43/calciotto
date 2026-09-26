@@ -223,8 +223,8 @@ describe('fillTeamsFromRegistrations', () => {
   it('starts every newly placed player at 0 goals, like the Add Player path', () => {
     const { rosters } = fillTeamsFromRegistrations(confirmed(2), empty());
 
-    expect(rosters[0][0]).toEqual({ ID: 'p1', Name: 'player1', GoalNumber: 0 });
-    expect(rosters[1][0]).toEqual({ ID: 'p2', Name: 'player2', GoalNumber: 0 });
+    expect(rosters[0][0]).toEqual({ ID: 'p1', Name: 'player1', GoalNumber: 0, OwnGoals: 0 });
+    expect(rosters[1][0]).toEqual({ ID: 'p2', Name: 'player2', GoalNumber: 0, OwnGoals: 0 });
   });
 
   it('never mutates the rosters it was given', () => {

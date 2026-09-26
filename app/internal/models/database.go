@@ -208,6 +208,11 @@ type MatchPlayer struct {
 	TeamID      uuid.UUID `gorm:"type:uuid" json:"team_id"`
 	PlayerID    uuid.UUID `gorm:"type:uuid" json:"player_id"`
 	GoalsScored int       `gorm:"type:int" json:"goals_scored"`
+	// OwnGoals is credited to this player but counts toward the OTHER
+	// team's Team.Score, and is deliberately kept out of GoalsScored so it
+	// never inflates this player's personal scorer/points tallies (see
+	// ComputeScorers/ComputePointsStandings).
+	OwnGoals int `gorm:"type:int" json:"own_goals"`
 }
 
 // GroupMembership est la table de jointure many-to-many entre Player et
