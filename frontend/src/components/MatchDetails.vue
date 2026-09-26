@@ -2913,6 +2913,22 @@ export default {
     font-size: 1rem;
   }
 
+  /* Real feedback: once the own-goal counter shipped alongside the goal
+     counter, .player-info's flex:1 1 auto/min-width:0 (base rule) let the
+     two fixed-size counters plus the remove button squeeze the name down
+     to almost nothing at this width — sometimes past legibility entirely.
+     Wrapping the row and forcing the name onto its own full-width line
+     fixes it directly rather than shrinking the counters further, which
+     would only buy a little room back before the same problem returns
+     the next time something is added to this row. */
+  .player-card {
+    flex-wrap: wrap;
+  }
+
+  .player-card .player-info {
+    flex-basis: 100%;
+  }
+
   .enhanced-multi-player-modal {
     max-width: 95%;
     max-height: 95vh;
