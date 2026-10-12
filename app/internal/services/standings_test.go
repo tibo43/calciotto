@@ -174,6 +174,54 @@ func TestComputeScorers_TieBrokenByName(t *testing.T) {
 	}
 }
 
+// Own goals: ComputePointsStandings/ComputeScorers are pure functions of
+// already-loaded match data, so Team.Score here is what MatchService would
+// have already computed upstream (crediting the own goal to the OTHER
+// team — see matches.go) — these tests exist to pin that these two
+// functions never read PlayerCustom.OwnGoals themselves, so an own goal
+// never inflates the scoring player's own GoalsFor/Goals tally.
+
+func TestComputePointsStandings_OwnGoalsDoNotCountAsPersonalGoals(t *testing.T) {
+	alice, bob := uuid.New(), uuid.New()
+
+	// Alice concedes an own goal (credited to white's Score, hence white
+	// shows 1-0 here) but scores nothing herself.
+	match := newMatch(
+		newTeam(uuid.New(), "black", 0, models.PlayerCustom{ID: alice, Name: "alice", GoalsScored: 0, OwnGoals: 1}),
+		newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 0)),
+	)
+
+	got := pointsRowsByID(ComputePointsStandings([]models.MatchWithDetails{match}))
+
+	if r := got[alice]; r.GoalsFor != 0 || r.Won != 0 || r.Lost != 1 {
+		t.Errorf("alice = %+v, want 0 goals for and a loss (an own goal is not a personal goal)", r)
+	}
+	if r := got[bob]; r.GoalsFor != 0 || r.Won != 1 {
+		t.Errorf("bob = %+v, want 0 personal goals and a win (credited from alice's own goal)", r)
+	}
+}
+
+func TestComputeScorers_OwnGoalsExcludedFromPersonalTally(t *testing.T) {
+	alice, bob := uuid.New(), uuid.New()
+
+	match := newMatch(
+		newTeam(uuid.New(), "black", 0, models.PlayerCustom{ID: alice, Name: "alice", GoalsScored: 0, OwnGoals: 1}),
+		newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 0)),
+	)
+
+	rows := ComputeScorers([]models.MatchWithDetails{match})
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (one per rostered player), got %d: %+v", len(rows), rows)
+	}
+	byID := make(map[uuid.UUID]int, len(rows))
+	for _, r := range rows {
+		byID[r.PlayerID] = r.Goals
+	}
+	if byID[alice] != 0 {
+		t.Errorf("alice's Goals = %d, want 0 (own goal must not count toward the scorers table)", byID[alice])
+	}
+}
+
 // motmRowsByID mirrors pointsRowsByID above, for ComputeMotmStandings' rows.
 func motmRowsByID(rows []models.MotmStandingRow) map[uuid.UUID]models.MotmStandingRow {
 	m := make(map[uuid.UUID]models.MotmStandingRow, len(rows))

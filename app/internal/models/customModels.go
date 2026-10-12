@@ -7,10 +7,16 @@ import (
 )
 
 // Player représente un joueur.
+//
+// OwnGoals is credited to this player but counts toward the OTHER team's
+// Score, kept separate from GoalsScored so it never inflates this player's
+// personal scorer/points tallies (see ComputeScorers/ComputePointsStandings,
+// neither of which reads OwnGoals).
 type PlayerCustom struct {
 	ID          uuid.UUID `json:"ID"`
 	Name        string    `json:"Name"`
 	GoalsScored int       `json:"GoalNumber"`
+	OwnGoals    int       `json:"OwnGoals"`
 }
 
 // TeamWithPlayers représente une équipe avec ses joueurs.
@@ -100,6 +106,7 @@ type RowsMatchDetails struct {
 	PlayerID                   uuid.UUID
 	PlayerName                 string
 	GoalsScored                int
+	OwnGoals                   int
 }
 
 // MatchRegistrationEntry is one player's line in a scheduled match's sign-up
