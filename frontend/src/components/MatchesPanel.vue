@@ -422,6 +422,9 @@
                             </svg>
                           </button>
                         </div>
+                        <span v-if="player.OwnGoals > 0" class="own-goal-badge" title="Own goals">
+                          {{ player.OwnGoals }} OG
+                        </span>
                         <span class="goal-badge">{{ player.GoalNumber || 0 }}</span>
                       </li>
                       <li v-if="!team.Players.length" class="empty-slot">No players yet</li>
@@ -2235,6 +2238,26 @@ export default {
   text-align: center;
 }
 
+/* Read-only own-goal indicator — only rendered when a player actually has
+   one (see the template's v-if), so a roster with none stays exactly as it
+   looked before this existed. Same muted-pill shape as .motm-vote-count,
+   recoloured with --danger-color to read as "against" rather than "for" —
+   the same convention MatchDetails.vue's own own-goal counter already
+   uses. This panel has no edit controls at all (unlike MatchDetails.vue),
+   so there's no +/- here, just the count. */
+.own-goal-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--bg-tertiary);
+  color: var(--danger-color);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
 .team-players-list .empty-slot {
   padding: 0.5rem;
   text-align: center;
@@ -2509,6 +2532,11 @@ export default {
     font-size: 0.75rem;
     padding: 0.1rem 0.4rem;
     min-width: 1.4rem;
+  }
+
+  .own-goal-badge {
+    font-size: 0.65rem;
+    padding: 0.1rem 0.4rem;
   }
 
   /* Touch scrolling already works natively on the horizontal match list —
