@@ -16,6 +16,7 @@
           <th class="rank-col">#</th>
           <th class="player-col">Player</th>
           <th>Matches</th>
+          <th>OG</th>
           <th class="points-col">Goals</th>
         </tr>
       </thead>
@@ -29,6 +30,7 @@
             </div>
           </td>
           <td>{{ row.Played }}</td>
+          <td class="own-goals-col">{{ row.OwnGoals }}</td>
           <td class="points-col">{{ row.Goals }}</td>
         </tr>
       </tbody>
@@ -139,6 +141,16 @@ export default {
   font-weight: 700;
   color: var(--primary-color);
   background-color: var(--bg-tertiary);
+}
+
+/* Same muted-but-recoloured convention own goals already use everywhere
+   else in this app (MatchDetails.vue/MatchesPanel.vue/PointsStandingsTable.vue)
+   — reads as "against" rather than "for". */
+/* .standings-table td (a class + element selector) otherwise outranks a
+   bare .own-goals-col class on specificity alone and silently wins — this
+   needs the same shape to actually override it. */
+.standings-table td.own-goals-col {
+  color: var(--danger-color);
 }
 
 /* Responsive — shrunk enough (no avatar, tighter padding, a capped name

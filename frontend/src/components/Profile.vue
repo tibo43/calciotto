@@ -47,7 +47,7 @@
             </div>
             <div class="overall-stats">
               <div v-for="stat in overallStats" :key="stat.label"
-                :class="['overall-stat', { highlight: stat.highlight }]">
+                :class="['overall-stat', { highlight: stat.highlight, danger: stat.danger }]">
                 <span class="overall-stat-value">{{ stat.value }}</span>
                 <span class="overall-stat-label">{{ stat.label }}</span>
               </div>
@@ -128,6 +128,10 @@
                       <div class="group-card-stat">
                         <span class="group-card-stat-value">{{ row.MotmAwards }}</span>
                         <span class="group-card-stat-label">MOTM</span>
+                      </div>
+                      <div class="group-card-stat">
+                        <span class="group-card-stat-value own-goals-value">{{ row.OwnGoals }}</span>
+                        <span class="group-card-stat-label">OG</span>
                       </div>
                     </div>
                     <!-- Invite code + team management: a separate dialog
@@ -266,7 +270,7 @@ export default {
   components: { GroupSettingsModal, DeleteAccountModal },
   data() {
     return {
-      overall: { Name: '', Played: 0, Won: 0, Drawn: 0, Lost: 0, GoalsFor: 0, Points: 0, MotmAwards: 0 },
+      overall: { Name: '', Played: 0, Won: 0, Drawn: 0, Lost: 0, GoalsFor: 0, OwnGoals: 0, Points: 0, MotmAwards: 0 },
       perGroup: [],
       isLoading: true,
       loadFailed: false,
@@ -312,6 +316,7 @@ export default {
         { label: 'Lost', value: this.overall.Lost },
         { label: 'Goals', value: this.overall.GoalsFor },
         { label: 'MOTM', value: this.overall.MotmAwards },
+        { label: 'Own Goals', value: this.overall.OwnGoals, danger: true },
         { label: 'Points', value: this.overall.Points, highlight: true }
       ];
     },
@@ -599,6 +604,12 @@ export default {
   color: var(--primary-color);
 }
 
+/* Same recoloured convention own goals already use everywhere else in this
+   app — reads as "against" rather than "for". */
+.overall-stat.danger .overall-stat-value {
+  color: var(--danger-color);
+}
+
 .overall-stat-label {
   font-size: 0.75rem;
   font-weight: 600;
@@ -774,6 +785,10 @@ export default {
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.own-goals-value {
+  color: var(--danger-color);
 }
 
 .group-card-stat-label {

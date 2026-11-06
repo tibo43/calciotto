@@ -321,8 +321,8 @@ func ComputeSeasons(matches []models.MatchWithDetails) []string {
 // responsibility, so that scope can change later without touching this logic.
 func ComputePointsStandings(matches []models.MatchWithDetails) []models.PointsStandingRow {
 	type acc struct {
-		name                                    string
-		played, won, drawn, lost, goals, points int
+		name                                              string
+		played, won, drawn, lost, goals, ownGoals, points int
 	}
 	stats := make(map[uuid.UUID]*acc)
 
@@ -340,6 +340,7 @@ func ComputePointsStandings(matches []models.MatchWithDetails) []models.PointsSt
 			row := rowFor(player.ID, player.Name)
 			row.played++
 			row.goals += player.GoalsScored
+			row.ownGoals += player.OwnGoals
 			switch result {
 			case "won":
 				row.won++
@@ -386,6 +387,7 @@ func ComputePointsStandings(matches []models.MatchWithDetails) []models.PointsSt
 			Drawn:    row.drawn,
 			Lost:     row.lost,
 			GoalsFor: row.goals,
+			OwnGoals: row.ownGoals,
 			Points:   row.points,
 		})
 	}
@@ -407,8 +409,8 @@ func ComputePointsStandings(matches []models.MatchWithDetails) []models.PointsSt
 // scoping (e.g. to a group) is the caller's concern, not this function's.
 func ComputeScorers(matches []models.MatchWithDetails) []models.ScorerRow {
 	type acc struct {
-		name          string
-		played, goals int
+		name                    string
+		played, goals, ownGoals int
 	}
 	stats := make(map[uuid.UUID]*acc)
 
@@ -422,6 +424,7 @@ func ComputeScorers(matches []models.MatchWithDetails) []models.ScorerRow {
 				}
 				row.played++
 				row.goals += player.GoalsScored
+				row.ownGoals += player.OwnGoals
 			}
 		}
 	}
@@ -433,6 +436,7 @@ func ComputeScorers(matches []models.MatchWithDetails) []models.ScorerRow {
 			Name:     row.name,
 			Played:   row.played,
 			Goals:    row.goals,
+			OwnGoals: row.ownGoals,
 		})
 	}
 

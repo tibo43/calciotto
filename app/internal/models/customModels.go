@@ -210,8 +210,13 @@ type PointsStandingRow struct {
 	Drawn    int       `json:"Drawn"`
 	Lost     int       `json:"Lost"`
 	GoalsFor int       `json:"GoalsFor"`
-	Points   int       `json:"Points"`
-	IsMember bool      `json:"IsMember"`
+	// OwnGoals is this player's own-goal total across the matches counted
+	// above — reported alongside GoalsFor rather than netted into it, since
+	// an own goal already counts against the player's own team's result
+	// (see MatchPlayer.OwnGoals) without ever inflating GoalsFor itself.
+	OwnGoals int  `json:"OwnGoals"`
+	Points   int  `json:"Points"`
+	IsMember bool `json:"IsMember"`
 }
 
 // ScorerRow is one player's row in the top-scorers ranking. IsMember carries
@@ -222,7 +227,10 @@ type ScorerRow struct {
 	Name     string    `json:"Name"`
 	Played   int       `json:"Played"`
 	Goals    int       `json:"Goals"`
-	IsMember bool      `json:"IsMember"`
+	// OwnGoals mirrors PointsStandingRow.OwnGoals — see its comment. Reported
+	// alongside Goals, never folded into it.
+	OwnGoals int  `json:"OwnGoals"`
+	IsMember bool `json:"IsMember"`
 }
 
 // PlayerGroupStanding is one player's standings row inside a single group,
