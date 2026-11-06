@@ -47,7 +47,7 @@
             </div>
             <div class="overall-stats">
               <div v-for="stat in overallStats" :key="stat.label"
-                :class="['overall-stat', { highlight: stat.highlight, danger: stat.danger }]">
+                :class="['overall-stat', { highlight: stat.highlight }]">
                 <span class="overall-stat-value">{{ stat.value }}</span>
                 <span class="overall-stat-label">{{ stat.label }}</span>
               </div>
@@ -130,7 +130,7 @@
                         <span class="group-card-stat-label">MOTM</span>
                       </div>
                       <div class="group-card-stat">
-                        <span class="group-card-stat-value own-goals-value">{{ row.OwnGoals }}</span>
+                        <span class="group-card-stat-value">{{ row.OwnGoals }}</span>
                         <span class="group-card-stat-label">OG</span>
                       </div>
                     </div>
@@ -308,6 +308,10 @@ export default {
     };
   },
   computed: {
+    // Two explicit rows rather than letting the grid's own column count
+    // decide where an 8th tile wraps to: the match outcome summary on top
+    // (Played/Won/Drawn/Lost), everything else below it (Goals/Own Goals/
+    // MOTM/Points) — see .overall-stats' grid-template-columns.
     overallStats() {
       return [
         { label: 'Played', value: this.overall.Played },
@@ -315,8 +319,8 @@ export default {
         { label: 'Drawn', value: this.overall.Drawn },
         { label: 'Lost', value: this.overall.Lost },
         { label: 'Goals', value: this.overall.GoalsFor },
+        { label: 'Own Goals', value: this.overall.OwnGoals },
         { label: 'MOTM', value: this.overall.MotmAwards },
-        { label: 'Own Goals', value: this.overall.OwnGoals, danger: true },
         { label: 'Points', value: this.overall.Points, highlight: true }
       ];
     },
@@ -578,9 +582,14 @@ export default {
   font-size: 0.85rem;
 }
 
+/* 4 columns, not 8 in one row: with the match-outcome summary (Played/Won/
+   Drawn/Lost) and everything else (Goals/Own Goals/MOTM/Points) each
+   exactly filling a row, the grid's own line-wrapping is what puts them on
+   two deliberate rows — see overallStats' comment for the ordering this
+   depends on. */
 .overall-stats {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 0.75rem;
 }
 
@@ -602,12 +611,6 @@ export default {
 
 .overall-stat.highlight .overall-stat-value {
   color: var(--primary-color);
-}
-
-/* Same recoloured convention own goals already use everywhere else in this
-   app — reads as "against" rather than "for". */
-.overall-stat.danger .overall-stat-value {
-  color: var(--danger-color);
 }
 
 .overall-stat-label {
@@ -785,10 +788,6 @@ export default {
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--text-primary);
-}
-
-.own-goals-value {
-  color: var(--danger-color);
 }
 
 .group-card-stat-label {
@@ -1022,11 +1021,11 @@ export default {
     padding: 1rem;
   }
 
-  /* All 7 stats on one row instead of wrapping to two — shrunk enough
-     (padding, font, letter-spacing) that "PLAYED"/"DRAWN" still fit
-     without wrapping inside their own cell. */
+  /* Same two deliberate rows of 4 as desktop (see .overall-stats above) —
+     just shrunk enough (padding, font, letter-spacing) that "PLAYED"/
+     "DRAWN" still fit without wrapping inside their own cell. */
   .overall-stats {
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 0.3rem;
   }
 

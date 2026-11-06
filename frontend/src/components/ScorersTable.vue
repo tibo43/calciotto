@@ -143,14 +143,12 @@ export default {
   background-color: var(--bg-tertiary);
 }
 
-/* Same muted-but-recoloured convention own goals already use everywhere
-   else in this app (MatchDetails.vue/MatchesPanel.vue/PointsStandingsTable.vue)
-   — reads as "against" rather than "for". */
-/* .standings-table td (a class + element selector) otherwise outranks a
-   bare .own-goals-col class on specificity alone and silently wins — this
-   needs the same shape to actually override it. */
+/* Muted, same as .left-group-tag's own de-emphasis convention. .standings-
+   table td (a class + element selector) otherwise outranks a bare
+   .own-goals-col class on specificity alone and silently wins — this needs
+   the same shape to actually override it. */
 .standings-table td.own-goals-col {
-  color: var(--danger-color);
+  color: var(--text-secondary);
 }
 
 /* Responsive — shrunk enough (no avatar, tighter padding, a capped name

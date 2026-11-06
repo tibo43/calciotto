@@ -2240,17 +2240,15 @@ export default {
 
 /* Read-only own-goal indicator — only rendered when a player actually has
    one (see the template's v-if), so a roster with none stays exactly as it
-   looked before this existed. Same muted-pill shape as .motm-vote-count,
-   recoloured with --danger-color to read as "against" rather than "for" —
-   the same convention MatchDetails.vue's own own-goal counter already
-   uses. This panel has no edit controls at all (unlike MatchDetails.vue),
-   so there's no +/- here, just the count. */
+   looked before this existed. Same muted-pill shape and colour as
+   .motm-vote-count. This panel has no edit controls at all (unlike
+   MatchDetails.vue), so there's no +/- here, just the count. */
 .own-goal-badge {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   background-color: var(--bg-tertiary);
-  color: var(--danger-color);
+  color: var(--text-secondary);
   font-size: 0.7rem;
   font-weight: 600;
   padding: 0.15rem 0.5rem;

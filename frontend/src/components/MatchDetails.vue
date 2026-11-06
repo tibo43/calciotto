@@ -2338,19 +2338,11 @@ export default {
   text-align: center;
 }
 
-/* Own goals reuse .goal-btn/.goal-count's shape, recoloured with
-   --danger-color so they read as "against" rather than "for" — the same
-   colour .btn-danger already uses for a destructive action. */
+/* Own goals reuse .goal-btn/.goal-count's shape and colour — just smaller,
+   since this is a secondary counter next to the main goal count. */
 .own-goal-btn {
   width: 24px;
   height: 24px;
-  border-color: var(--danger-color);
-  color: var(--danger-color);
-}
-
-.own-goal-btn:hover:not(:disabled) {
-  background-color: var(--danger-color);
-  color: white;
 }
 
 .own-goal-btn svg {
@@ -2360,7 +2352,6 @@ export default {
 
 .own-goal-count {
   font-size: 0.85rem;
-  color: var(--danger-color);
   min-width: 40px;
 }
 
