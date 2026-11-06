@@ -16,6 +16,7 @@
           <th class="rank-col">#</th>
           <th class="player-col">Player</th>
           <th>Matches</th>
+          <th>OG</th>
           <th class="points-col">Goals</th>
         </tr>
       </thead>
@@ -29,6 +30,7 @@
             </div>
           </td>
           <td>{{ row.Played }}</td>
+          <td class="own-goals-col">{{ row.OwnGoals }}</td>
           <td class="points-col">{{ row.Goals }}</td>
         </tr>
       </tbody>
@@ -139,6 +141,14 @@ export default {
   font-weight: 700;
   color: var(--primary-color);
   background-color: var(--bg-tertiary);
+}
+
+/* Muted, same as .left-group-tag's own de-emphasis convention. .standings-
+   table td (a class + element selector) otherwise outranks a bare
+   .own-goals-col class on specificity alone and silently wins — this needs
+   the same shape to actually override it. */
+.standings-table td.own-goals-col {
+  color: var(--text-secondary);
 }
 
 /* Responsive — shrunk enough (no avatar, tighter padding, a capped name

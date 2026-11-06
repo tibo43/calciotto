@@ -151,20 +151,20 @@ const registrations = registrationNames.map((name, index) => ({
 // One row with IsMember false on purpose: it is what renders the
 // "(left the group)" tag, a branch no unit test can show visually.
 const pointsStandings = [
-  { PlayerID: 'e1', Name: 'Andrea Conti', Played: 9, Won: 6, Drawn: 2, Lost: 1, GoalsFor: 14, Points: 20, IsMember: true },
-  { PlayerID: 'e2', Name: 'Marco Rossi', Played: 9, Won: 5, Drawn: 2, Lost: 2, GoalsFor: 11, Points: 17, IsMember: true },
-  { PlayerID: 'e3', Name: 'Matteo Ricci', Played: 8, Won: 4, Drawn: 3, Lost: 1, GoalsFor: 9, Points: 15, IsMember: true },
-  { PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', Played: 9, Won: 4, Drawn: 1, Lost: 4, GoalsFor: 7, Points: 13, IsMember: true },
-  { PlayerID: 'e5', Name: 'Luca Bianchi', Played: 7, Won: 3, Drawn: 1, Lost: 3, GoalsFor: 5, Points: 10, IsMember: true },
-  { PlayerID: 'e6', Name: 'Davide Fontana', Played: 6, Won: 2, Drawn: 1, Lost: 3, GoalsFor: 4, Points: 7, IsMember: false },
+  { PlayerID: 'e1', Name: 'Andrea Conti', Played: 9, Won: 6, Drawn: 2, Lost: 1, GoalsFor: 14, OwnGoals: 0, Points: 20, IsMember: true },
+  { PlayerID: 'e2', Name: 'Marco Rossi', Played: 9, Won: 5, Drawn: 2, Lost: 2, GoalsFor: 11, OwnGoals: 1, Points: 17, IsMember: true },
+  { PlayerID: 'e3', Name: 'Matteo Ricci', Played: 8, Won: 4, Drawn: 3, Lost: 1, GoalsFor: 9, OwnGoals: 0, Points: 15, IsMember: true },
+  { PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', Played: 9, Won: 4, Drawn: 1, Lost: 4, GoalsFor: 7, OwnGoals: 2, Points: 13, IsMember: true },
+  { PlayerID: 'e5', Name: 'Luca Bianchi', Played: 7, Won: 3, Drawn: 1, Lost: 3, GoalsFor: 5, OwnGoals: 0, Points: 10, IsMember: true },
+  { PlayerID: 'e6', Name: 'Davide Fontana', Played: 6, Won: 2, Drawn: 1, Lost: 3, GoalsFor: 4, OwnGoals: 0, Points: 7, IsMember: false },
 ];
 
 const topScorers = [
-  { PlayerID: 'e1', Name: 'Andrea Conti', Played: 9, Goals: 14, IsMember: true },
-  { PlayerID: 'e2', Name: 'Marco Rossi', Played: 9, Goals: 11, IsMember: true },
-  { PlayerID: 'e3', Name: 'Matteo Ricci', Played: 8, Goals: 9, IsMember: true },
-  { PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', Played: 9, Goals: 7, IsMember: true },
-  { PlayerID: 'e6', Name: 'Davide Fontana', Played: 6, Goals: 4, IsMember: false },
+  { PlayerID: 'e1', Name: 'Andrea Conti', Played: 9, Goals: 14, OwnGoals: 0, IsMember: true },
+  { PlayerID: 'e2', Name: 'Marco Rossi', Played: 9, Goals: 11, OwnGoals: 1, IsMember: true },
+  { PlayerID: 'e3', Name: 'Matteo Ricci', Played: 8, Goals: 9, OwnGoals: 0, IsMember: true },
+  { PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', Played: 9, Goals: 7, OwnGoals: 2, IsMember: true },
+  { PlayerID: 'e6', Name: 'Davide Fontana', Played: 6, Goals: 4, OwnGoals: 0, IsMember: false },
 ];
 
 // GET /standings/motm — models.MotmStandingRow. Same "one IsMember: false row"
@@ -201,20 +201,20 @@ const playerStats = {
     PlayerID: CURRENT_PLAYER_ID,
     Name: 'Thibaut Fabre',
     Played: 24, Won: 13, Drawn: 4, Lost: 7,
-    GoalsFor: 19, Points: 43, IsMember: true, MotmAwards: 5,
+    GoalsFor: 19, OwnGoals: 2, Points: 43, IsMember: true, MotmAwards: 5,
   },
   PerGroup: [
     {
       GroupID: GROUP_ID, GroupName: 'Calciotto Milano',
       PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre',
       Played: 18, Won: 10, Drawn: 3, Lost: 5,
-      GoalsFor: 14, Points: 33, IsMember: true, MotmAwards: 4,
+      GoalsFor: 14, OwnGoals: 2, Points: 33, IsMember: true, MotmAwards: 4,
     },
     {
       GroupID: OTHER_GROUP_ID, GroupName: 'Sunday League',
       PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre',
       Played: 6, Won: 3, Drawn: 1, Lost: 2,
-      GoalsFor: 5, Points: 10, IsMember: true, MotmAwards: 1,
+      GoalsFor: 5, OwnGoals: 0, Points: 10, IsMember: true, MotmAwards: 1,
     },
   ],
 };
