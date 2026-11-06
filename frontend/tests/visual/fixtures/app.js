@@ -161,7 +161,16 @@ async function gotoApp(page, path, options = {}) {
   // intermittent, diff. Forcing `auto` here, once, up front, is cheaper and
   // more robust than adding a manual settle-wait to every test that clicks
   // anything in the carousel.
-  await page.addStyleTag({ content: '* { scroll-behavior: auto !important; }' });
+  //
+  // -webkit-font-smoothing: antialiased forces grayscale text rendering
+  // instead of Chromium's default subpixel (LCD) rendering. It's here for an
+  // unrelated reason: subpixel rendering is what makes text inside a
+  // scrolled carousel card rasterize slightly differently between otherwise
+  // identical runs (see pinCarouselScroll's own comment) — grayscale AA is
+  // far less sensitive to that sub-pixel positioning. It measurably reduced
+  // the resulting flake rate but did not eliminate it (see
+  // playwright.config.js's maxDiffPixels).
+  await page.addStyleTag({ content: '* { scroll-behavior: auto !important; -webkit-font-smoothing: antialiased !important; }' });
 
   // The app renders a spinner while it resolves the active group; every page
   // under test is past that once the navbar and the main content are both up.
@@ -247,6 +256,20 @@ async function waitForCarouselToSettle(page, carouselSelector) {
  * pixels on a branch whose entire diff was a workflow comment, which settled
  * the question. Neither carousel needed its baselines regenerated to adopt
  * this, so the end stop is where the auto-scroll was aiming in both cases.
+ *
+ * Pinning this way still does not fully eliminate the flake, and a direct CI
+ * diff image is what finally showed why: every differing pixel sits inside
+ * the text of whichever card the carousel is scrolled to — nowhere else on
+ * the page — even though scrollLeft/scrollWidth/clientWidth read back
+ * bit-identical across failing and passing runs (confirmed by instrumenting
+ * this function directly). That rules out the scroll position itself; what's
+ * left is Chromium's own sub-pixel text rendering for *scrolled* content,
+ * which can rasterize a hair differently between otherwise-identical runs
+ * independent of any value this function or the test can read. Forcing
+ * grayscale antialiasing (`gotoApp`'s own style tag) measurably reduced how
+ * often this happens but did not remove it, which is why `maxDiffPixels` in
+ * playwright.config.js carries headroom for it specifically rather than the
+ * flake being chased further here.
  */
 async function pinCarouselScroll(page, carouselSelector, position) {
   const pin = () => page.locator(carouselSelector).evaluate((el, where) => {
