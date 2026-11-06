@@ -193,11 +193,30 @@ func TestComputePointsStandings_OwnGoalsDoNotCountAsPersonalGoals(t *testing.T) 
 
 	got := pointsRowsByID(ComputePointsStandings([]models.MatchWithDetails{match}))
 
-	if r := got[alice]; r.GoalsFor != 0 || r.Won != 0 || r.Lost != 1 {
-		t.Errorf("alice = %+v, want 0 goals for and a loss (an own goal is not a personal goal)", r)
+	if r := got[alice]; r.GoalsFor != 0 || r.Won != 0 || r.Lost != 1 || r.OwnGoals != 1 {
+		t.Errorf("alice = %+v, want 0 goals for, a loss, and OwnGoals 1 (an own goal is not a personal goal, but is still reported)", r)
 	}
-	if r := got[bob]; r.GoalsFor != 0 || r.Won != 1 {
-		t.Errorf("bob = %+v, want 0 personal goals and a win (credited from alice's own goal)", r)
+	if r := got[bob]; r.GoalsFor != 0 || r.Won != 1 || r.OwnGoals != 0 {
+		t.Errorf("bob = %+v, want 0 personal goals, a win (credited from alice's own goal), and no own goals of his own", r)
+	}
+}
+
+func TestComputePointsStandings_OwnGoalsAccumulateAcrossMatches(t *testing.T) {
+	alice := uuid.New()
+
+	match1 := newMatch(
+		newTeam(uuid.New(), "black", 0, models.PlayerCustom{ID: alice, Name: "alice", GoalsScored: 1, OwnGoals: 1}),
+		newTeam(uuid.New(), "white", 1, newPlayer(uuid.New(), "bob", 0)),
+	)
+	match2 := newMatch(
+		newTeam(uuid.New(), "black", 2, models.PlayerCustom{ID: alice, Name: "alice", GoalsScored: 2, OwnGoals: 2}),
+		newTeam(uuid.New(), "white", 0, newPlayer(uuid.New(), "carol", 0)),
+	)
+
+	got := pointsRowsByID(ComputePointsStandings([]models.MatchWithDetails{match1, match2}))
+
+	if r := got[alice]; r.OwnGoals != 3 || r.GoalsFor != 3 {
+		t.Errorf("alice = %+v, want OwnGoals 3 (1+2) and GoalsFor 3 (1+2), tracked independently", r)
 	}
 }
 
@@ -213,12 +232,18 @@ func TestComputeScorers_OwnGoalsExcludedFromPersonalTally(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows (one per rostered player), got %d: %+v", len(rows), rows)
 	}
-	byID := make(map[uuid.UUID]int, len(rows))
+	byID := make(map[uuid.UUID]models.ScorerRow, len(rows))
 	for _, r := range rows {
-		byID[r.PlayerID] = r.Goals
+		byID[r.PlayerID] = r
 	}
-	if byID[alice] != 0 {
-		t.Errorf("alice's Goals = %d, want 0 (own goal must not count toward the scorers table)", byID[alice])
+	if byID[alice].Goals != 0 {
+		t.Errorf("alice's Goals = %d, want 0 (own goal must not count toward the scorers table)", byID[alice].Goals)
+	}
+	if byID[alice].OwnGoals != 1 {
+		t.Errorf("alice's OwnGoals = %d, want 1 (still reported, just not folded into Goals)", byID[alice].OwnGoals)
+	}
+	if byID[bob].OwnGoals != 0 {
+		t.Errorf("bob's OwnGoals = %d, want 0", byID[bob].OwnGoals)
 	}
 }
 
