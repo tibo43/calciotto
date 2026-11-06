@@ -126,12 +126,12 @@
                         <span class="group-card-stat-label">Goals</span>
                       </div>
                       <div class="group-card-stat">
-                        <span class="group-card-stat-value">{{ row.MotmAwards }}</span>
-                        <span class="group-card-stat-label">MOTM</span>
-                      </div>
-                      <div class="group-card-stat">
                         <span class="group-card-stat-value">{{ row.OwnGoals }}</span>
                         <span class="group-card-stat-label">OG</span>
+                      </div>
+                      <div class="group-card-stat">
+                        <span class="group-card-stat-value">{{ row.MotmAwards }}</span>
+                        <span class="group-card-stat-label">MOTM</span>
                       </div>
                     </div>
                     <!-- Invite code + team management: a separate dialog
