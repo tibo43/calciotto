@@ -201,6 +201,32 @@ type MatchVote struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// MatchPrediction is one player's win/draw/loss prediction for a scheduled
+// match, made once its roster is fully composed and locked once kick-off
+// passes (see MatchPredictionService.PredictionWindowError). The composite
+// unique index means "exactly one *current* prediction per player per
+// match" — an upsert, the same meaning MatchVote's own index carries, not
+// MatchRegistration's "at most one sign-up": changing your prediction before
+// kick-off is the ordinary case, not a mistake.
+//
+// PredictedTeamID is nil for a predicted draw — there is no separate "is a
+// draw" boolean, a real team id can never collide with nil.
+//
+// There is deliberately no stake/amount field: every prediction implicitly
+// "plays" exactly one token, so a correct prediction nets (odds-1) and a
+// wrong one nets -1 — no balance to track, nothing that can run out. The
+// odds themselves are never stored here either: they are derived fresh from
+// each team's pre-match Elo rating whenever a prediction is shown or
+// settled (see ComputeMatchOdds/EloRatingsBeforeMatch), the same
+// "derive, don't store" choice the waiting list and MOTM award already make.
+type MatchPrediction struct {
+	BaseModel
+	MatchID         uuid.UUID  `gorm:"type:uuid;uniqueIndex:idx_match_prediction_match_player" json:"match_id"`
+	PlayerID        uuid.UUID  `gorm:"type:uuid;uniqueIndex:idx_match_prediction_match_player" json:"player_id"`
+	PredictedTeamID *uuid.UUID `gorm:"type:uuid" json:"predicted_team_id"`
+	CreatedAt       time.Time  `json:"created_at"`
+}
+
 // MatchPlayer représente la composition d'une équipe pour un match.
 type MatchPlayer struct {
 	BaseModel

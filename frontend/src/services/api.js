@@ -374,6 +374,60 @@ export const getMatchVotes = async (matchId) => {
   }
 };
 
+// Win/draw/loss predictions — same "no groupId, the backend derives it from
+// the match in the path" rule as the vote calls above, and a deliberately
+// separate, unrelated feature: no admin-only action, and any group member
+// may predict a match's outcome whether or not they're playing in it.
+
+// Casts or replaces the caller's own prediction. predictedTeamId is the
+// backed team's id, or null for a predicted draw — an upsert, like
+// voteForMotm: calling this again after already predicting is not an error,
+// it simply replaces the choice. The response (the same shape
+// getMatchPredictions returns) reflects the odds and the new choice.
+export const predictForMatch = async (matchId, predictedTeamId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/predictions`, { predicted_team_id: predictedTeamId });
+    if (response.status !== 200) {
+      throw new Error('Failed to cast prediction');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error casting prediction:', error);
+    throw error;
+  }
+};
+
+// { Entries: [{ PlayerID, Name, PredictedTeamID }], Odds: { TeamAOdds, DrawOdds, TeamBOdds } | null, MyPrediction },
+// open to any member — seeing who predicted what isn't privileged, only
+// predicting is scoped to the caller's own choice. Odds is null until the
+// roster is fully composed on both sides (nothing to derive a rating gap
+// from yet).
+export const getMatchPredictions = async (matchId) => {
+  try {
+    const response = await api.get(`/matches/${matchId}/predictions`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch predictions');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching predictions:', error);
+    throw error;
+  }
+};
+
+export const getPredictionStandings = async (season, groupId) => {
+  try {
+    const response = await api.get(`/standings/predictions${query({ season, group_id: groupId })}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch prediction standings');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching prediction standings:', error);
+    throw error;
+  }
+};
+
 // Standings
 export const getPointsStandings = async (season, groupId) => {
   try {

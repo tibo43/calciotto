@@ -15,14 +15,17 @@ type StandingsService struct {
 	MembershipService *GroupMembershipService
 	PlayerService     *PlayerService
 	VoteService       *MatchVoteService
+	PredictionService *MatchPredictionService
 }
 
 func NewStandingsService(db *gorm.DB, membershipService *GroupMembershipService) *StandingsService {
+	matchService := NewMatchService(db)
 	return &StandingsService{
-		MatchService:      NewMatchService(db),
+		MatchService:      matchService,
 		MembershipService: membershipService,
 		PlayerService:     NewPlayerService(db),
 		VoteService:       NewMatchVoteService(db),
+		PredictionService: NewMatchPredictionService(db, matchService),
 	}
 }
 
@@ -92,6 +95,53 @@ func (s *StandingsService) GetMotmStandings(groupID uuid.UUID, season string) ([
 	}
 
 	rows := ComputeMotmStandings(matches, votesByMatch)
+
+	currentMembers, err := s.currentMemberIDs(groupID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rows[i].IsMember = currentMembers[rows[i].PlayerID]
+	}
+	return rows, nil
+}
+
+// GetPredictionStandings ranks a group's players by their net return on
+// win/draw/loss predictions, following the exact same shape as
+// GetPointsStandings/GetScorers/GetMotmStandings: load the group's matches,
+// season-filter and completed-filter in Go, run a pure Compute* function,
+// then tag IsMember as a post-processing step. Like GetMotmStandings, the
+// extra data source (predictions) is not part of MatchWithDetails at all
+// (see CLAUDE.md's "flatten/reconstruct pattern" — joining match_predictions
+// would multiply rows and corrupt every goal total derived by summing them),
+// so it is loaded separately for every match in the already-filtered result.
+//
+// Unlike the other three, two match slices are threaded through to
+// ComputePredictionStandings: the season-filtered, completed set whose
+// predictions actually count toward this leaderboard, and the group's
+// entire unfiltered history, needed to replay Elo correctly (see
+// EloRatingsBeforeMatch) — Elo is explicitly continuous across a group's
+// whole history and never reset per season (see cmd/elo's own doc comment),
+// so settling a prediction against odds computed from only this season's
+// matches would silently understate every player's true rating the moment a
+// group has played more than one season.
+func (s *StandingsService) GetPredictionStandings(groupID uuid.UUID, season string) ([]models.PredictionStandingRow, error) {
+	allMatches, err := s.MatchService.GetMatchesDetails(groupID, "")
+	if err != nil {
+		return nil, err
+	}
+	counted := FilterCompletedMatches(FilterMatchesBySeason(allMatches, season), time.Now())
+
+	matchIDs := make([]uuid.UUID, len(counted))
+	for i, match := range counted {
+		matchIDs[i] = match.ID
+	}
+	predictionsByMatch, err := s.PredictionService.TallyPredictionsForMatches(matchIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	rows := ComputePredictionStandings(allMatches, counted, predictionsByMatch)
 
 	currentMembers, err := s.currentMemberIDs(groupID)
 	if err != nil {
@@ -504,4 +554,132 @@ func ComputeMotmStandings(matches []models.MatchWithDetails, votesByMatch map[uu
 		return rows[i].Name < rows[j].Name
 	})
 	return rows
+}
+
+// ComputePredictionStandings tallies the season-long prediction leaderboard:
+// for every match in countedMatches that has at least one prediction and a
+// derivable result, it works out what that match's odds *were* right before
+// kick-off and whether each prediction matched the actual outcome,
+// accumulating each player's net return at the one implicit token staked per
+// prediction (see MatchPrediction's own comment for why there is no real
+// stake to multiply against — a correct guess nets odds-1, a wrong one nets
+// -1).
+//
+// Like ComputeMotmStandings, the vote-equivalent data (predictionsByMatch)
+// is taken as an already-loaded input — the caller's concern, not this pure
+// function's. Unlike it, the odds themselves are derived *internally* rather
+// than taken precomputed too: Elo ratings are fully derivable from match
+// data alone (the same chronological replay ComputeEloStandings/cmd/elo
+// already does), so there is nothing a caller could usefully precompute
+// instead.
+//
+// allMatches and countedMatches are deliberately two different slices: only
+// countedMatches' predictions count toward this leaderboard (the caller's
+// own season/completed filtering), but settling them correctly needs each
+// match's *true* pre-match Elo rating, which requires replaying the group's
+// entire history — Elo is explicitly continuous and never reset per season
+// (see cmd/elo's own doc comment) — not just the already-filtered subset.
+// Passing a season-filtered slice to EloRatingsBeforeMatch here would
+// silently understate (or outright reset) every player's true rating the
+// moment a group has played more than one season.
+//
+// This recomputes a full Elo replay once per counted match with at least one
+// prediction (EloRatingsBeforeMatch's own cost) rather than a single
+// combined pass — quadratic in the number of such matches, but for a
+// calciotto group's realistic scale (at most a few hundred matches total,
+// per CLAUDE.md's own Elo section) this stays well within "cheap enough to
+// redo on every request", the same cost/simplicity trade-off
+// ComputeEloStandings itself already makes over a single incremental update.
+func ComputePredictionStandings(allMatches, countedMatches []models.MatchWithDetails, predictionsByMatch map[uuid.UUID][]models.MatchPredictionEntry) []models.PredictionStandingRow {
+	type acc struct {
+		name                 string
+		predictions, correct int
+		points               float64
+	}
+	stats := make(map[uuid.UUID]*acc)
+
+	for _, match := range countedMatches {
+		entries := predictionsByMatch[match.ID]
+		if len(entries) == 0 {
+			continue
+		}
+		// Mirrors ComputePointsStandings' own "both sides have a full
+		// roster" check — a scheduled match with an empty or partial roster
+		// has no derivable result and must not settle anyone's prediction.
+		if len(match.Teams) != 2 {
+			continue
+		}
+		teamA, teamB := match.Teams[0], match.Teams[1]
+		if len(teamA.Players) == 0 || len(teamB.Players) == 0 {
+			continue
+		}
+
+		var actualWinner *uuid.UUID
+		switch {
+		case teamA.Score > teamB.Score:
+			actualWinner = &teamA.ID
+		case teamB.Score > teamA.Score:
+			actualWinner = &teamB.ID
+		}
+
+		ratings := EloRatingsBeforeMatch(allMatches, match.ID)
+		odds := ComputeMatchOdds(teamAverageRating(teamA, ratings), teamAverageRating(teamB, ratings))
+
+		for _, entry := range entries {
+			row, ok := stats[entry.PlayerID]
+			if !ok {
+				row = &acc{name: entry.Name}
+				stats[entry.PlayerID] = row
+			}
+			row.predictions++
+
+			if predictionMatchesResult(entry.PredictedTeamID, actualWinner) {
+				row.correct++
+				row.points += correctPredictionOdds(entry.PredictedTeamID, teamA.ID, odds) - 1
+			} else {
+				row.points--
+			}
+		}
+	}
+
+	rows := make([]models.PredictionStandingRow, 0, len(stats))
+	for id, row := range stats {
+		rows = append(rows, models.PredictionStandingRow{
+			PlayerID:    id,
+			Name:        row.name,
+			Predictions: row.predictions,
+			Correct:     row.correct,
+			Points:      row.points,
+		})
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Points != rows[j].Points {
+			return rows[i].Points > rows[j].Points
+		}
+		return rows[i].Name < rows[j].Name
+	})
+	return rows
+}
+
+// predictionMatchesResult reports whether a prediction (nil = draw) matches
+// a match's actual winner (nil = draw).
+func predictionMatchesResult(predicted, actual *uuid.UUID) bool {
+	if predicted == nil || actual == nil {
+		return predicted == nil && actual == nil
+	}
+	return *predicted == *actual
+}
+
+// correctPredictionOdds picks the multiplier that applied to a *correct*
+// prediction: the draw odds for a predicted draw, otherwise whichever side
+// the predicted team id matches.
+func correctPredictionOdds(predictedTeamID *uuid.UUID, teamAID uuid.UUID, odds models.MatchOdds) float64 {
+	if predictedTeamID == nil {
+		return odds.DrawOdds
+	}
+	if *predictedTeamID == teamAID {
+		return odds.TeamAOdds
+	}
+	return odds.TeamBOdds
 }
