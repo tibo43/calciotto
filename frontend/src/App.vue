@@ -98,6 +98,47 @@
         <main class="main-content">
           <router-view />
         </main>
+
+        <!-- Bottom tab bar — mobile only (see the @media block below;
+             desktop keeps the top nav-menu as its only navigation). Real
+             feedback: a top nav with icon-only, label-less buttons at phone
+             width (see .nav-button-label's own mobile rule above) read as
+             cramped and unfamiliar next to how every native-feeling mobile
+             app places its primary navigation at the thumb, along the
+             bottom edge — so this isn't a duplicate of the top nav, it
+             replaces it as the actual navigation surface on a phone; the
+             top bar keeps only the brand and the actions that aren't really
+             "navigation" (theme, logout). "Prono" doesn't have a page of
+             its own yet — a win/draw/loss predictions feature is landing in
+             a separate PR — so it points at the home page for now, same as
+             "Calendar", rather than a route that doesn't exist. -->
+        <nav v-if="isAuthenticatedRoute" class="bottom-tab-bar">
+          <router-link to="/" :class="['bottom-tab-button', { active: $route.name === 'MatchesAndStandings' }]"
+            aria-label="Calendar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            <span class="bottom-tab-label">Calendar</span>
+          </router-link>
+          <router-link to="/" class="bottom-tab-button" aria-label="Predictions">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+              <polyline points="17 6 23 6 23 12" />
+            </svg>
+            <span class="bottom-tab-label">Prono</span>
+          </router-link>
+          <router-link to="/profile" :class="['bottom-tab-button', { active: $route.name === 'Profile' }]"
+            aria-label="Profile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            <span class="bottom-tab-label">Profile</span>
+          </router-link>
+        </nav>
     </div>
   </div>
 </template>
@@ -355,6 +396,55 @@ export default {
   min-height: calc(100vh - var(--navbar-height));
 }
 
+/* Bottom tab bar — hidden by default (desktop keeps the top nav-menu as its
+   only navigation); shown at the same mobile breakpoint the rest of this
+   file already uses, in the @media block below. */
+.bottom-tab-bar {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  background-color: rgba(248, 250, 252, 0.98);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border-color);
+  /* The home indicator on a notched phone sits in this inset — padding
+     rather than margin so the bar's own background still fills behind it. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.dark-mode .bottom-tab-bar {
+  background-color: rgba(15, 23, 42, 0.98);
+}
+
+.bottom-tab-button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.5rem 0.25rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.bottom-tab-button svg {
+  width: 22px;
+  height: 22px;
+}
+
+.bottom-tab-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.bottom-tab-button.active {
+  color: var(--primary-color);
+}
+
 /* Transitions */
 .app-container-enter-active,
 .app-container-leave-active {
@@ -404,12 +494,26 @@ export default {
     padding: 0.5rem;
   }
 
+  /* The bottom tab bar (below) replaces the top nav-menu as the actual
+     navigation surface on a phone — see its own comment in the template
+     above for why. Only the links move down there; brand/theme/logout
+     stay on the top bar. */
   .nav-menu {
-    gap: 0.25rem;
+    display: none;
   }
 
   .nav-actions {
     gap: 0.25rem;
+  }
+
+  .bottom-tab-bar {
+    display: flex;
+  }
+
+  /* Leaves room for the fixed bottom tab bar so the last bit of page
+     content (e.g. a "Danger zone" card) isn't hidden underneath it. */
+  .main-content {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
