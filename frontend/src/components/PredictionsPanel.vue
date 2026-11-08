@@ -1,87 +1,192 @@
 <template>
-  <section class="predictions-section">
-    <div class="container">
-      <div class="predictions-matches card-base card-large">
-        <h2 class="section-title">Predict a match</h2>
-
+  <div class="matches-panel predictions-panel">
+    <section class="matches-section">
+      <div class="container">
+        <!-- Loading State -->
         <div v-if="isLoadingMatches" class="loading-container">
           <div class="loading-spinner"></div>
           <p class="loading-text">Loading matches...</p>
         </div>
-        <div v-else-if="eligibleMatches.length === 0" class="empty-state">
+
+        <!-- Matches Layout — same carousel + "Selected Match Details" pattern
+             as MatchesPanel.vue, scoped to matches a prediction can be made
+             on (a scheduled match whose roster is fully composed, see
+             rosterFullyComposed in matchPrediction.js) rather than every
+             match in the group. -->
+        <div v-else-if="eligibleMatches.length > 0" class="matches-layout">
+          <div class="matches-bar-container card-base">
+            <div class="matches-bar hide-scrollbar" ref="matchesBar">
+              <div v-for="match in eligibleMatches" :key="match.ID" class="match-card-horizontal scheduled"
+                :class="{ active: selectedMatchId === match.ID }" @click="selectMatch(match.ID)">
+                <div class="match-date-horizontal">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                  <span>{{ formatDateTimeShort(match.ScheduledAt) }}</span>
+                </div>
+
+                <div class="match-prediction-state-horizontal">
+                  <span class="prediction-state-badge" :class="predictionStateLabel(match)">
+                    {{ predictionStateLabel(match) === 'closed' ? 'Predictions closed' : 'Predictions open' }}
+                  </span>
+                </div>
+
+                <div class="teams-horizontal">
+                  <div v-for="(team, index) in match.Teams" :key="team.ID" class="team-horizontal">
+                    <div class="team-info-horizontal">
+                      <div class="team-color-horizontal" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
+                      <span class="team-name-horizontal">{{ team.Name }}</span>
+                    </div>
+                    <div v-if="index < match.Teams.length - 1" class="vs-separator">vs</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Scroll indicators -->
+            <button class="scroll-btn scroll-left" @click="scrollLeft" :disabled="!canScrollLeft">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15,18 9,12 15,6" />
+              </svg>
+            </button>
+            <button class="scroll-btn scroll-right" @click="scrollRight" :disabled="!canScrollRight">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9,18 15,12 9,6" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Selected Match Details -->
+          <transition name="match-details">
+            <div v-if="selectedMatch" class="match-details-container card-base">
+              <div class="details-header">
+                <div class="details-title-section">
+                  <h3>{{ formatDateTimeShort(selectedMatch.ScheduledAt) }} - Match Prediction</h3>
+                </div>
+                <div class="details-divider"></div>
+              </div>
+
+              <!-- The betting widget — state badge + 3-way odds buttons, same
+                   visual language as the sign-up panel's own state badge
+                   elsewhere in this app, duplicated rather than shared. -->
+              <div class="prediction-inline">
+                <div class="prediction-inline-top">
+                  <span class="prediction-state-badge" :class="predictionStateLabel(selectedMatch)">
+                    {{ predictionStateLabel(selectedMatch) === 'closed' ? 'Predictions closed' : 'Predictions open' }}
+                  </span>
+                </div>
+                <p v-if="predictionClosedReason" class="prediction-inline-detail">{{ predictionClosedReason }}</p>
+
+                <div v-if="isLoadingPredictions" class="signup-loading">
+                  <div class="loading-spinner-small"></div>
+                  <span>Loading predictions...</span>
+                </div>
+                <template v-else>
+                  <div class="prediction-picks">
+                    <button type="button" class="prediction-pick-btn" :class="{ selected: isMyPick(selectedMatch.Teams[0].ID) }"
+                      :disabled="!predictionsOpen || isSubmitting" @click="predict(selectedMatch.Teams[0].ID)">
+                      <span class="pick-label">{{ selectedMatch.Teams[0].Name }}</span>
+                      <span v-if="odds" class="pick-odds">{{ formatOdds(odds.TeamAOdds) }}</span>
+                    </button>
+                    <button type="button" class="prediction-pick-btn" :class="{ selected: isMyPick(null) }"
+                      :disabled="!predictionsOpen || isSubmitting" @click="predict(null)">
+                      <span class="pick-label">Draw</span>
+                      <span v-if="odds" class="pick-odds">{{ formatOdds(odds.DrawOdds) }}</span>
+                    </button>
+                    <button type="button" class="prediction-pick-btn" :class="{ selected: isMyPick(selectedMatch.Teams[1].ID) }"
+                      :disabled="!predictionsOpen || isSubmitting" @click="predict(selectedMatch.Teams[1].ID)">
+                      <span class="pick-label">{{ selectedMatch.Teams[1].Name }}</span>
+                      <span v-if="odds" class="pick-odds">{{ formatOdds(odds.TeamBOdds) }}</span>
+                    </button>
+                  </div>
+                  <p v-if="predictionMessage" class="prediction-inline-message" :class="predictionMessageType">{{ predictionMessage }}</p>
+                </template>
+              </div>
+
+              <!-- The composed roster, same two-column layout as the Matches
+                   tab's own team columns — just names, no goals or Man of the
+                   Match star, since neither applies before a match that
+                   hasn't been played. -->
+              <div class="players-section">
+                <div class="teams-columns">
+                  <div v-for="team in selectedMatch.Teams" :key="team.ID" class="team-column">
+                    <div class="team-column-header">
+                      <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
+                      <span class="team-column-name">{{ team.Name }}</span>
+                    </div>
+                    <ul class="team-players-list">
+                      <li v-for="player in team.Players" :key="player.ID || player.Name" class="team-player-row">
+                        <div class="player-info">
+                          <span class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</span>
+                        </div>
+                      </li>
+                      <li v-if="!team.Players.length" class="empty-slot">No players yet</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Everyone else's pick for this match, reusing the sign-up
+                   list's own visual language (title + count badge + list of
+                   rows), the same convention the sign-up panel already uses
+                   for its own confirmed/waiting lists. -->
+              <div v-if="entries.length > 0" class="signup-lists prediction-entries-section">
+                <div class="signup-list">
+                  <h4 class="signup-list-title">
+                    Predictions
+                    <span class="count-badge">{{ entries.length }}</span>
+                  </h4>
+                  <ul class="signup-entries">
+                    <li v-for="entry in entries" :key="entry.PlayerID" class="signup-entry"
+                      :class="{ 'is-me': entry.PlayerID === currentPlayerId }">
+                      <span class="signup-name">{{ formatPlayerNameForDisplay(entry.Name) }}</span>
+                      <span class="prediction-entry-pick">{{ pickLabel(entry.PredictedTeamID) }}</span>
+                      <span v-if="entry.PlayerID === currentPlayerId" class="signup-you">you</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </transition>
+        </div>
+
+        <!-- Empty State -->
+        <div v-else class="empty-state">
           <div class="empty-content">
+            <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="9" />
+              <circle cx="12" cy="12" r="5" />
+              <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+            </svg>
             <h3 class="empty-title">Nothing to predict yet</h3>
             <p class="empty-description">Once a scheduled match's teams are composed, it shows up here to predict before kick-off.</p>
           </div>
         </div>
-        <ul v-else class="match-pick-list">
-          <li v-for="match in eligibleMatches" :key="match.ID" class="match-pick-item"
-            :class="{ active: selectedMatchId === match.ID }" @click="selectMatch(match.ID)">
-            <span class="match-pick-date">{{ formatDateTimeShort(match.ScheduledAt) }}</span>
-            <span class="match-pick-teams">
-              <span class="team-color-small" :style="{ backgroundColor: getTeamColor(match.Teams[0].Colour) }"></span>
-              {{ match.Teams[0].Name }}
-              <span class="match-pick-vs">vs</span>
-              {{ match.Teams[1].Name }}
-              <span class="team-color-small" :style="{ backgroundColor: getTeamColor(match.Teams[1].Colour) }"></span>
-            </span>
-          </li>
-        </ul>
       </div>
+    </section>
 
-      <div v-if="selectedMatch" class="prediction-widget card-base card-large">
-        <h3 class="widget-title">{{ selectedMatch.Teams[0].Name }} vs {{ selectedMatch.Teams[1].Name }}</h3>
-        <p class="widget-kickoff">{{ formatDateTimeShort(selectedMatch.ScheduledAt) }}</p>
-        <p v-if="!predictionsOpen" class="prediction-closed-hint">{{ predictionClosedReason }}</p>
-
-        <div v-if="isLoadingPredictions" class="loading-container">
-          <div class="loading-spinner"></div>
-        </div>
-        <template v-else>
-          <div class="prediction-picks">
-            <button type="button" class="prediction-pick-btn" :class="{ selected: isMyPick(selectedMatch.Teams[0].ID) }"
-              :disabled="!predictionsOpen || isSubmitting" @click="predict(selectedMatch.Teams[0].ID)">
-              <span class="pick-label">{{ selectedMatch.Teams[0].Name }}</span>
-              <span v-if="odds" class="pick-odds">{{ formatOdds(odds.TeamAOdds) }}</span>
-            </button>
-            <button type="button" class="prediction-pick-btn" :class="{ selected: isMyPick(null) }"
-              :disabled="!predictionsOpen || isSubmitting" @click="predict(null)">
-              <span class="pick-label">Draw</span>
-              <span v-if="odds" class="pick-odds">{{ formatOdds(odds.DrawOdds) }}</span>
-            </button>
-            <button type="button" class="prediction-pick-btn" :class="{ selected: isMyPick(selectedMatch.Teams[1].ID) }"
-              :disabled="!predictionsOpen || isSubmitting" @click="predict(selectedMatch.Teams[1].ID)">
-              <span class="pick-label">{{ selectedMatch.Teams[1].Name }}</span>
-              <span v-if="odds" class="pick-odds">{{ formatOdds(odds.TeamBOdds) }}</span>
-            </button>
-          </div>
-
-          <p v-if="predictionMessage" class="prediction-message" :class="predictionMessageType">{{ predictionMessage }}</p>
-
-          <ul v-if="entries.length > 0" class="prediction-entries">
-            <li v-for="entry in entries" :key="entry.PlayerID" class="prediction-entry">
-              <span class="prediction-entry-name">{{ formatPlayerNameForDisplay(entry.Name) }}</span>
-              <span class="prediction-entry-pick">{{ pickLabel(entry.PredictedTeamID) }}</span>
-            </li>
-          </ul>
-        </template>
+    <!-- The season leaderboard — lives inside this page, not as a separate
+         tab/table elsewhere, and shares no data or UI with Man of the Match. -->
+    <section class="standings-section">
+      <div class="container">
+        <PredictionsStandingsTable :rows="standings" :is-loading="isLoadingStandings" />
       </div>
-
-      <PredictionsStandingsTable :rows="standings" :is-loading="isLoadingStandings" />
-    </div>
-  </section>
+    </section>
+  </div>
 </template>
 
 <script>
-// The Predictions sub-tab of MatchesAndStandings.vue: pick a scheduled,
-// fully-composed match, back a win/draw/loss outcome at odds derived from
-// both teams' Elo rating (see ComputeMatchOdds on the backend), and see the
-// season leaderboard. Deliberately its own, self-contained panel rather than
-// another row of the generic standings section the other three sub-tabs
-// share — it owns its own fetching the same way MatchesPanel.vue does,
-// rather than depend on anything the page's own Promise.all standings loader
-// fetches — and it shares no data, component, or UI with Man of the Match,
-// by explicit product direction.
+// The Pronostic page's actual content (see Predictions.vue for the
+// context-bar shell around it): the match carousel, the per-match betting
+// widget, and the season leaderboard. Deliberately mirrors MatchesPanel.vue's
+// own carousel + "Selected Match Details" structure (same card-base/
+// match-card-horizontal/match-details-container classes), so the two pages
+// read as the same app rather than two different ones — the content inside
+// the selected-match card is what actually differs (a betting widget instead
+// of goal editing/Man of the Match voting).
 import {
   getMatchesDetails,
   getMatchPredictions,
@@ -140,6 +245,8 @@ export default {
       predictionMessage: '',
       predictionMessageType: 'info',
       currentPlayerId: '',
+      canScrollLeft: false,
+      canScrollRight: false,
       // Sampled once, like every other clock-dependent view in this app
       // (MatchesPanel.vue's own registrationState/motmVotingOpen) — there is
       // no reactive clock anywhere, a player who had the tab open across
@@ -158,7 +265,7 @@ export default {
       return this.selectedMatch ? predictionsAreOpen(this.selectedMatch, this.nowMs) : false;
     },
     predictionClosedReason() {
-      if (!this.selectedMatch) {
+      if (!this.selectedMatch || this.predictionsOpen) {
         return '';
       }
       return predictionState(this.selectedMatch, this.nowMs) === PREDICTIONS_CLOSED
@@ -173,7 +280,6 @@ export default {
     // react to, the same convention MatchesPanel.vue's own season watch
     // follows.
     season() {
-      this.selectedMatchId = '';
       this.loadMatches();
       this.loadStandings();
     }
@@ -183,8 +289,24 @@ export default {
     this.loadMatches();
     this.loadStandings();
   },
+  mounted() {
+    // loadMatches() (started in created()) is still pending here — see
+    // MatchesPanel.vue's identical comment on its own mounted() hook for why
+    // this call alone can't do anything useful yet, and why
+    // attachScrollListener() is called again once loadMatches() actually
+    // populates the list.
+    this.attachScrollListener();
+  },
+  beforeUnmount() {
+    if (this.$refs.matchesBar) {
+      this.$refs.matchesBar.removeEventListener('scroll', this.updateScrollButtons);
+    }
+  },
   methods: {
     formatDateTimeShort,
+    predictionStateLabel(match) {
+      return predictionState(match, this.nowMs) === PREDICTIONS_CLOSED ? 'closed' : 'open';
+    },
     getTeamColor(colour) {
       if (colour && colour.startsWith('#')) {
         return colour;
@@ -244,17 +366,24 @@ export default {
         return;
       }
       this.isLoadingMatches = true;
+      this.selectedMatchId = '';
       try {
         const data = await getMatchesDetails(this.activeGroupId, this.season);
         this.matches = Array.isArray(data) ? data : [];
-        if (!this.selectedMatchId && this.eligibleMatches.length > 0) {
+        if (this.eligibleMatches.length > 0) {
           await this.selectMatch(this.eligibleMatches[0].ID);
         }
       } catch (error) {
+        console.error('Error fetching matches:', error);
         this.matches = [];
       } finally {
         this.isLoadingMatches = false;
       }
+      // matchesBar only exists in the DOM once eligibleMatches.length > 0 —
+      // (re)attaching here, after the list actually renders, is what makes
+      // the scroll buttons work on first load and after a season change, the
+      // same reasoning MatchesPanel.vue's own loadMatches() follows.
+      this.attachScrollListener();
     },
     async loadStandings() {
       if (!this.activeGroupId) {
@@ -266,6 +395,7 @@ export default {
         const rows = await getPredictionStandings(this.season, this.activeGroupId);
         this.standings = Array.isArray(rows) ? rows : [];
       } catch (error) {
+        console.error('Error fetching prediction standings:', error);
         this.standings = [];
       } finally {
         this.isLoadingStandings = false;
@@ -287,6 +417,7 @@ export default {
         this.odds = summary.Odds || null;
         this.myPrediction = summary.MyPrediction || null;
       } catch (error) {
+        console.error('Error loading predictions:', error);
         this.entries = [];
         this.odds = null;
         this.myPrediction = null;
@@ -306,6 +437,7 @@ export default {
         this.odds = summary.Odds || null;
         this.myPrediction = summary.MyPrediction || null;
       } catch (error) {
+        console.error('Error submitting prediction:', error);
         this.predictionMessage = error?.response?.data?.error || 'Failed to save your prediction. Please try again.';
         this.predictionMessageType = 'error';
         // A rejection here usually means the window just closed or this
@@ -315,103 +447,298 @@ export default {
       } finally {
         this.isSubmitting = false;
       }
+    },
+    scrollLeft() {
+      if (this.$refs.matchesBar) {
+        this.$refs.matchesBar.scrollBy({ left: -300, behavior: 'smooth' });
+      }
+    },
+    scrollRight() {
+      if (this.$refs.matchesBar) {
+        this.$refs.matchesBar.scrollBy({ left: 300, behavior: 'smooth' });
+      }
+    },
+    updateScrollButtons() {
+      if (this.$refs.matchesBar) {
+        const element = this.$refs.matchesBar;
+        this.canScrollLeft = element.scrollLeft > 0;
+        this.canScrollRight = element.scrollLeft < (element.scrollWidth - element.clientWidth);
+      }
+    },
+    attachScrollListener() {
+      this.$nextTick(() => {
+        this.updateScrollButtons();
+        if (this.$refs.matchesBar) {
+          this.$refs.matchesBar.addEventListener('scroll', this.updateScrollButtons);
+        }
+      });
     }
   }
 };
 </script>
 
 <style scoped>
-.predictions-section {
-  padding: 1.5rem 0;
+/* Carousel + selected-match-details layout, duplicated from MatchesPanel.vue
+   rather than shared (this codebase's own convention — see getTeamColor()) —
+   same class names so the two pages genuinely look like the same app. */
+.matches-panel {
+  background-color: var(--bg-secondary);
 }
 
-.predictions-section .container {
+.matches-section {
+  padding: 2rem 0;
+}
+
+.matches-layout {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
-.section-title {
-  margin: 0 0 1rem;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--text-primary);
+.matches-bar-container {
+  position: relative;
+  overflow: hidden;
+  padding: 0.5rem;
 }
 
-.match-pick-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.matches-bar {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+}
+
+.match-card-horizontal {
+  flex: 0 0 220px;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius);
+  padding: 0.65rem;
+  cursor: pointer;
+  transition: all var(--transition-smooth);
+  border: 2px solid transparent;
+}
+
+.match-card-horizontal:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  background-color: var(--bg-primary);
+}
+
+.match-card-horizontal.active {
+  border-color: var(--primary-color);
+  background-color: var(--bg-primary);
+  box-shadow: var(--shadow-lg);
+}
+
+.match-card-horizontal.scheduled {
+  border-left-color: var(--primary-color);
+}
+
+.match-card-horizontal.scheduled .match-date-horizontal {
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.match-date-horizontal {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.match-date-horizontal svg {
+  width: 14px;
+  height: 14px;
+}
+
+.match-prediction-state-horizontal {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+
+.teams-horizontal {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.match-pick-item {
+.team-horizontal {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 0.85rem;
-  border-radius: var(--border-radius);
-  background-color: var(--bg-tertiary);
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  justify-content: space-between;
+  position: relative;
 }
 
-.match-pick-item:hover {
-  background-color: var(--bg-secondary);
-}
-
-.match-pick-item.active {
-  border-color: var(--primary-color);
-}
-
-.match-pick-date {
-  flex-shrink: 0;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  min-width: 110px;
-}
-
-.match-pick-teams {
+.team-info-horizontal {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
+}
+
+.team-color-horizontal {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid white;
+  box-shadow: var(--shadow-sm);
+}
+
+.team-name-horizontal {
   font-weight: 600;
   color: var(--text-primary);
+  text-transform: capitalize;
+  font-size: 0.875rem;
 }
 
-.match-pick-vs {
+.vs-separator {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: -0.25rem;
+  font-size: 0.75rem;
   color: var(--text-light);
-  font-weight: 400;
-  font-size: 0.8rem;
+  font-weight: 500;
 }
 
-.widget-title {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 700;
+.scroll-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-md);
+  z-index: 10;
+}
+
+.scroll-btn:hover:not(:disabled) {
+  background-color: var(--primary-color);
+  color: white;
+  transform: translateY(-50%) scale(1.1);
+}
+
+.scroll-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scroll-left {
+  left: 10px;
+}
+
+.scroll-right {
+  right: 10px;
+}
+
+.scroll-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.match-details-container {
+  overflow: hidden;
+}
+
+.details-header {
+  margin-bottom: 1rem;
+  flex-shrink: 0;
+}
+
+.details-header h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
   color: var(--text-primary);
+  margin-bottom: 0.5rem;
 }
 
-.widget-kickoff {
-  margin: 0.2rem 0 1rem;
-  font-size: 0.85rem;
+.details-divider {
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+  border-radius: 2px;
+  width: 80px;
+}
+
+.details-title-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+/* The betting widget — same pill/row conventions as the sign-up panel's own
+   state badge/detail/message, duplicated under prediction-specific class
+   names since this isn't a sign-up. */
+.prediction-inline {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.prediction-inline-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.prediction-state-badge {
+  padding: 0.3rem 0.65rem;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background-color: var(--bg-tertiary);
   color: var(--text-secondary);
 }
 
-.prediction-closed-hint {
-  margin: 0 0 1rem;
+.prediction-state-badge.open {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.prediction-state-badge.closed {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.prediction-inline-detail {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.prediction-inline-message {
+  margin: 0.6rem 0 0;
   font-size: 0.85rem;
-  font-style: italic;
-  color: var(--text-light);
+}
+
+.prediction-inline-message.success {
+  color: #065f46;
+}
+
+.prediction-inline-message.error {
+  color: var(--danger-color);
 }
 
 .prediction-picks {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+  margin-top: 1rem;
 }
 
 .prediction-pick-btn {
@@ -453,33 +780,154 @@ export default {
   color: var(--primary-color);
 }
 
-.prediction-message {
-  margin: 1rem 0 0;
-  font-size: 0.85rem;
+.signup-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
 }
 
-.prediction-message.error {
-  color: var(--danger-color);
+/* The composed roster — identical to MatchesPanel.vue's own team columns,
+   minus the goal/own-goal/MOTM columns that don't apply before a match has
+   been played. */
+.players-section {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1.5rem;
 }
 
-.prediction-entries {
+.teams-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.team-column {
+  background-color: var(--bg-primary);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.team-column-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background-color: var(--bg-tertiary);
+  border-bottom: 2px solid var(--border-color);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.team-column-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-players-list {
   list-style: none;
-  margin: 1rem 0 0;
-  padding: 0.75rem 0 0;
-  border-top: 1px solid var(--border-color);
+  margin: 0;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: max(9rem, calc(100vh - 660px));
+  overflow-y: auto;
+}
+
+.team-player-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--border-radius);
+  transition: background-color var(--transition-fast);
+}
+
+.team-player-row:hover {
+  background-color: var(--bg-secondary);
+}
+
+.team-player-row .player-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.team-player-row .player-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-players-list .empty-slot {
+  padding: 0.5rem;
+  text-align: center;
+  color: var(--text-light);
+  font-style: italic;
+}
+
+/* Other members' picks — reusing the sign-up list's own
+   title/count-badge/entries visual language (see MatchesPanel.vue), just one
+   list instead of a confirmed/waiting pair. */
+.prediction-entries-section {
+  grid-template-columns: 1fr;
+}
+
+.signup-list-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.count-badge {
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.signup-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  max-height: 14rem;
+  overflow-y: auto;
 }
 
-.prediction-entry {
+.signup-entry {
   display: flex;
-  justify-content: space-between;
-  font-size: 0.85rem;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius);
+  font-size: 0.875rem;
 }
 
-.prediction-entry-name {
+.signup-entry.is-me {
+  border: 1px solid var(--primary-color);
+}
+
+.signup-name {
+  flex: 1;
   color: var(--text-primary);
+  font-weight: 500;
 }
 
 .prediction-entry-pick {
@@ -487,15 +935,103 @@ export default {
   font-weight: 600;
 }
 
+.signup-you {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--primary-color);
+}
+
+/* The leaderboard, below the carousel/details card — its own section, same
+   as MatchesAndStandings.vue's .standings-section. */
+.standings-section {
+  padding: 2rem 0;
+}
+
+.match-details-enter-active,
+.match-details-leave-active {
+  transition: all var(--transition-smooth);
+}
+
+.match-details-enter-from,
+.match-details-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
 @media (max-width: 768px) {
-  .match-pick-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.3rem;
+  .matches-section {
+    padding: 1rem 0;
+  }
+
+  .matches-layout {
+    gap: 0.75rem;
+  }
+
+  .matches-bar-container {
+    padding: 0.35rem;
+  }
+
+  .matches-bar {
+    padding: 0.35rem;
+    gap: 0.5rem;
+  }
+
+  .match-card-horizontal {
+    flex: 0 0 200px;
+    padding: 0.5rem;
+  }
+
+  .match-details-container {
+    padding: 1rem;
+  }
+
+  .details-header h3 {
+    font-size: 1.1rem;
+  }
+
+  .teams-columns {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .team-column-header {
+    padding: 0.5rem;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+  }
+
+  .team-players-list {
+    padding: 0.35rem;
+    gap: 0.25rem;
+  }
+
+  .team-player-row {
+    padding: 0.3rem 0.35rem;
+    gap: 0.35rem;
+  }
+
+  .team-player-row .player-name {
+    font-size: 0.85rem;
   }
 
   .prediction-picks {
     flex-direction: column;
+  }
+
+  .scroll-btn {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .match-card-horizontal {
+    flex: 0 0 170px;
+    padding: 0.5rem;
+  }
+
+  .match-details-container {
+    padding: 0.75rem;
   }
 }
 </style>

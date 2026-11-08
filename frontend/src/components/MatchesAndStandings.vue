@@ -47,14 +47,6 @@
       <MatchesPanel v-if="activeSubTab === 'matches'" :active-group-id="activeGroupId" :is-admin="isAdmin"
         :season="selectedSeason" :deep-link-match-id="deepLinkMatchId" />
 
-      <!-- Its own self-contained panel, not another row of the generic
-           standings section below: unlike Points/Scorers/MOTM, this tab
-           also needs the per-match betting widget itself, not just a
-           leaderboard table — and it is a deliberately separate feature
-           from Man of the Match, sharing no data or UI with it. -->
-      <PredictionsPanel v-else-if="activeSubTab === 'predictions'" :active-group-id="activeGroupId"
-        :season="selectedSeason" />
-
       <section v-else class="standings-section">
         <div class="container">
           <PointsStandingsTable v-if="activeSubTab === 'points'" :rows="pointsStandings"
@@ -77,7 +69,6 @@ import MatchesPanel from '@/components/MatchesPanel.vue';
 import PointsStandingsTable from '@/components/PointsStandingsTable.vue';
 import ScorersTable from '@/components/ScorersTable.vue';
 import MotmStandingsTable from '@/components/MotmStandingsTable.vue';
-import PredictionsPanel from '@/components/PredictionsPanel.vue';
 
 // The app's home page: the group's matches and its three standings tables,
 // under one season selector. It owns everything the four sub-tabs share — the
@@ -85,7 +76,7 @@ import PredictionsPanel from '@/components/PredictionsPanel.vue';
 // the selected one — and composes the four presentational children.
 export default {
   name: 'MatchesAndStandings',
-  components: { MatchesPanel, PointsStandingsTable, ScorersTable, MotmStandingsTable, PredictionsPanel },
+  components: { MatchesPanel, PointsStandingsTable, ScorersTable, MotmStandingsTable },
   data() {
     return {
       // Resolved once, before any child mounts: MatchesPanel creates matches
@@ -121,8 +112,7 @@ export default {
         { key: 'matches', label: 'Matches' },
         { key: 'points', label: 'Points' },
         { key: 'scorers', label: 'Scorers' },
-        { key: 'motm', label: 'MOTM' },
-        { key: 'predictions', label: 'Predictions' }
+        { key: 'motm', label: 'MOTM' }
       ]
     };
   },
