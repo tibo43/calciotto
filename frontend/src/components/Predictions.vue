@@ -1,8 +1,7 @@
 <template>
   <div class="home-container">
-    <!-- Same context-bar pattern as MatchesAndStandings.vue — which group and
-         season this page is scoped to — just with no sub-tabs row below it,
-         since this page has only the one view. -->
+    <!-- Same context-bar + sub-tabs pattern as MatchesAndStandings.vue: which
+         group and season this page is scoped to, then which view of it. -->
     <section class="home-controls">
       <div class="container">
         <div v-if="isInitializing" class="loading-container">
@@ -10,55 +9,84 @@
           <p class="loading-text">Loading...</p>
         </div>
 
-        <div v-else class="context-bar card-base">
-          <div class="context-field">
-            <template v-if="groups.length > 0">
-              <label class="context-label" for="group-select">Group</label>
-              <select id="group-select" class="context-select" v-model="activeGroupId" @change="switchGroup">
-                <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
+        <template v-else>
+          <div class="context-bar card-base">
+            <div class="context-field">
+              <template v-if="groups.length > 0">
+                <label class="context-label" for="group-select">Group</label>
+                <select id="group-select" class="context-select" v-model="activeGroupId" @change="switchGroup">
+                  <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
+                </select>
+              </template>
+              <span v-else class="no-group-hint">No group yet — ask an admin to invite you (creating or joining a group yourself isn't available yet).</span>
+            </div>
+
+            <div class="context-field">
+              <label class="context-label" for="season-select">Season</label>
+              <select id="season-select" class="context-select" v-model="selectedSeason">
+                <option v-for="season in seasons" :key="season" :value="season">{{ season }}</option>
               </select>
-            </template>
-            <span v-else class="no-group-hint">No group yet — ask an admin to invite you (creating or joining a group yourself isn't available yet).</span>
+            </div>
           </div>
 
-          <div class="context-field">
-            <label class="context-label" for="season-select">Season</label>
-            <select id="season-select" class="context-select" v-model="selectedSeason">
-              <option v-for="season in seasons" :key="season" :value="season">{{ season }}</option>
-            </select>
+          <div class="sub-tabs-bar">
+            <button v-for="tab in subTabs" :key="tab.key" @click="activeSubTab = tab.key"
+              :class="['sub-tab-button', { active: activeSubTab === tab.key }]">
+              {{ tab.label }}
+            </button>
           </div>
-        </div>
+        </template>
       </div>
     </section>
 
-    <PredictionsPanel v-if="!isInitializing" :active-group-id="activeGroupId" :season="selectedSeason" />
+    <template v-if="!isInitializing">
+      <PredictionsPanel v-if="activeSubTab === 'matches'" :active-group-id="activeGroupId" :season="selectedSeason" />
+      <section v-else class="standings-section">
+        <div class="container">
+          <PredictionsStandingsTable :rows="standings" :is-loading="isLoadingStandings" />
+        </div>
+      </section>
+    </template>
   </div>
 </template>
 
 <script>
-import { getSeasons } from '@/services/api';
+import { getSeasons, getPredictionStandings } from '@/services/api';
 import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
 import { seasonOf } from '@/services/datetime';
 import PredictionsPanel from '@/components/PredictionsPanel.vue';
+import PredictionsStandingsTable from '@/components/PredictionsStandingsTable.vue';
 
 // Its own top-level page now (see router/index.js), not a sub-tab of
 // MatchesAndStandings.vue any more — it owns the same active-group/season
 // resolution that page already established, since it can no longer read
-// those off a parent. PredictionsPanel.vue itself still does all the actual
-// work (match carousel, the betting widget, the leaderboard); this is purely
-// the context-scoping shell, mirroring MatchesAndStandings.vue's own split
-// with MatchesPanel.vue.
+// those off a parent. Like MatchesAndStandings.vue it has two sub-tabs:
+// PredictionsPanel.vue (match carousel and betting widget) and the season
+// leaderboard, whose data this shell loads itself, as that page does for its
+// own standings tables.
 export default {
   name: 'PredictionsPage',
-  components: { PredictionsPanel },
+  components: { PredictionsPanel, PredictionsStandingsTable },
   data() {
     return {
       activeGroupId: '',
       groups: [],
       seasons: [],
       selectedSeason: '',
-      isInitializing: true
+      isInitializing: true,
+      standings: [],
+      isLoadingStandings: false,
+      activeSubTab: 'matches',
+      subTabs: [
+        { key: 'matches', label: 'Matches' },
+        { key: 'leaderboard', label: 'Leaderboard' }
+      ]
     };
+  },
+  watch: {
+    selectedSeason() {
+      this.loadStandings();
+    }
   },
   async created() {
     try {
@@ -81,6 +109,22 @@ export default {
     switchGroup() {
       setActiveGroupId(this.activeGroupId);
       window.location.reload();
+    },
+    async loadStandings() {
+      if (!this.activeGroupId) {
+        this.standings = [];
+        return;
+      }
+      this.isLoadingStandings = true;
+      try {
+        const rows = await getPredictionStandings(this.selectedSeason, this.activeGroupId);
+        this.standings = Array.isArray(rows) ? rows : [];
+      } catch (error) {
+        console.error('Error fetching prediction standings:', error);
+        this.standings = [];
+      } finally {
+        this.isLoadingStandings = false;
+      }
     },
     async loadSeasons() {
       try {
@@ -163,6 +207,39 @@ export default {
   font-size: 0.875rem;
 }
 
+.sub-tabs-bar {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.sub-tab-button {
+  flex: 1;
+  padding: 0.75rem 1.5rem;
+  background: none;
+  border: none;
+  border-radius: var(--border-radius);
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sub-tab-button:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.sub-tab-button.active {
+  background-color: var(--primary-color);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.standings-section {
+  padding: 2rem 0;
+}
+
 @media (max-width: 768px) {
   .home-controls {
     padding: 1rem 0 0;
@@ -185,6 +262,18 @@ export default {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+
+  /* min-width: 0 lets flex: 1 shrink below the label's width — see
+     MatchesAndStandings.vue for the overflow this prevents. */
+  .sub-tabs-bar {
+    gap: 0.35rem;
+  }
+
+  .sub-tab-button {
+    min-width: 0;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.8rem;
   }
 }
 </style>

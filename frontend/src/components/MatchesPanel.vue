@@ -1775,11 +1775,15 @@ export default {
   gap: 0.5rem;
 }
 
+/* Outlined in the text colour, like the team columns' own .team-color-small
+   (global-styles.css): a white team's swatch is otherwise invisible on a
+   light card. */
 .team-color-horizontal {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1px solid white;
+  border: 1px solid currentColor;
+  color: var(--text-secondary);
   box-shadow: var(--shadow-sm);
 }
 

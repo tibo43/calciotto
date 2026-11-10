@@ -4,7 +4,6 @@ import {
   getMatchesDetails,
   getMatchPredictions,
   predictForMatch,
-  getPredictionStandings,
   getToken
 } from '@/services/api';
 
@@ -12,7 +11,6 @@ jest.mock('@/services/api', () => ({
   getMatchesDetails: jest.fn(),
   getMatchPredictions: jest.fn(),
   predictForMatch: jest.fn(),
-  getPredictionStandings: jest.fn(),
   getToken: jest.fn()
 }));
 
@@ -62,7 +60,6 @@ let nowSpy;
 beforeEach(() => {
   jest.clearAllMocks();
   getToken.mockReturnValue(tokenFor(ME));
-  getPredictionStandings.mockResolvedValue([]);
   getMatchPredictions.mockResolvedValue(summary());
   // Two days before kick-off, so the window is open unless a test says so.
   nowSpy = jest.spyOn(Date, 'now').mockReturnValue(KICKOFF_MS - 2 * 24 * 3600 * 1000);
@@ -103,10 +100,9 @@ describe('PredictionsPanel — which matches are offered', () => {
     await mountPanel({ activeGroupId: '' });
 
     expect(getMatchesDetails).not.toHaveBeenCalled();
-    expect(getPredictionStandings).not.toHaveBeenCalled();
   });
 
-  it('reloads matches and standings when the season changes', async () => {
+  it('reloads matches when the season changes', async () => {
     getMatchesDetails.mockResolvedValue([scheduledComposed()]);
     const wrapper = await mountPanel();
 
@@ -114,7 +110,6 @@ describe('PredictionsPanel — which matches are offered', () => {
     await flushPromises();
 
     expect(getMatchesDetails).toHaveBeenLastCalledWith('group-uuid', '2025-2026');
-    expect(getPredictionStandings).toHaveBeenLastCalledWith('2025-2026', 'group-uuid');
   });
 });
 
@@ -203,12 +198,16 @@ describe('PredictionsPanel — the kick-off window', () => {
     expect(wrapper.find('.prediction-inline-detail').exists()).toBe(false);
   });
 
-  it('disables every pick at kick-off and explains why', async () => {
+  it('disables every pick at kick-off and says the result is awaited', async () => {
     nowSpy.mockReturnValue(KICKOFF_MS);
     const wrapper = await mountPanel();
 
     expect(pickButtons(wrapper).every(b => b.attributes('disabled') !== undefined)).toBe(true);
-    expect(wrapper.find('.prediction-inline-detail').text()).toBe('Predictions are closed — kick-off has passed.');
+    expect(wrapper.find('.match-details-container .prediction-state-badge').text()).toBe('Awaiting result');
+    expect(wrapper.find('.prediction-inline-detail').text())
+      .toBe('Kick-off has passed — points are counted once an admin saves the score.');
+    // Nothing is settled yet, so no row carries points.
+    expect(wrapper.findAll('.prediction-entry-points')).toHaveLength(0);
   });
 
   // Reading is never gated on the window, only casting.
@@ -219,5 +218,80 @@ describe('PredictionsPanel — the kick-off window', () => {
 
     expect(getMatchPredictions).toHaveBeenCalledWith('match-1');
     expect(pickButtons(wrapper)[0].classes('selected')).toBe(true);
+  });
+});
+
+describe('PredictionsPanel — a settled match', () => {
+  const settledMatch = () => {
+    const match = scheduledComposed({ ResultRecordedAt: '2026-09-06T23:10:00+02:00' });
+    match.Teams[0].Score = 3;
+    match.Teams[1].Score = 1;
+    return match;
+  };
+
+  beforeEach(() => {
+    nowSpy.mockReturnValue(KICKOFF_MS + 24 * 3600 * 1000);
+    getMatchesDetails.mockResolvedValue([settledMatch()]);
+    getMatchPredictions.mockResolvedValue(summary({
+      Entries: [
+        { PlayerID: ME, Name: 'me', PredictedTeamID: 'team-a' },
+        { PlayerID: 'p2', Name: 'zoe', PredictedTeamID: null }
+      ],
+      MyPrediction: { PlayerID: ME, Name: 'me', PredictedTeamID: 'team-a' }
+    }));
+  });
+
+  it('shows the final score and the settled badge, on the card and in the detail', async () => {
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.match-card-horizontal .prediction-state-badge').text()).toBe('Settled');
+    expect(wrapper.findAll('.match-card-horizontal .team-score-horizontal').map(n => n.text())).toEqual(['3', '1']);
+    expect(wrapper.find('.prediction-final-score').text()).toBe('Black 3 – 1 White');
+    expect(wrapper.find('.prediction-inline-detail').exists()).toBe(false);
+  });
+
+  it('shows each prediction\'s points: odds minus one on a hit, minus one on a miss', async () => {
+    const wrapper = await mountPanel();
+    const points = wrapper.findAll('.prediction-entry-points');
+
+    expect(points.map(n => n.text())).toEqual(['+0.80', '-1.00']);
+    expect(points.map(n => n.classes('won'))).toEqual([true, false]);
+  });
+});
+
+describe('PredictionsPanel — collapsible sections', () => {
+  beforeEach(() => {
+    getMatchesDetails.mockResolvedValue([scheduledComposed(), scheduledComposed({ ID: 'match-2' })]);
+    getMatchPredictions.mockResolvedValue(summary({ Entries: [{ PlayerID: 'p2', Name: 'zoe', PredictedTeamID: null }] }));
+  });
+
+  const toggle = (wrapper, label) => wrapper.findAll('.signup-toggle-btn').find(b => b.text().includes(label));
+
+  it('starts with the teams collapsed and the predictions shown', async () => {
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.teams-columns').exists()).toBe(false);
+    expect(wrapper.find('.signup-entries').exists()).toBe(true);
+  });
+
+  it('expands and collapses each section independently', async () => {
+    const wrapper = await mountPanel();
+
+    await toggle(wrapper, 'Show teams').trigger('click');
+    expect(wrapper.find('.teams-columns').exists()).toBe(true);
+
+    await toggle(wrapper, 'Hide predictions').trigger('click');
+    expect(wrapper.find('.signup-entries').exists()).toBe(false);
+    expect(wrapper.find('.teams-columns').exists()).toBe(true);
+  });
+
+  it('resets to the default when another match is selected', async () => {
+    const wrapper = await mountPanel();
+    await toggle(wrapper, 'Show teams').trigger('click');
+
+    await wrapper.findAll('.match-card-horizontal')[1].trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.teams-columns').exists()).toBe(false);
   });
 });

@@ -49,3 +49,71 @@ export const predictionState = (match, nowMs) => {
 };
 
 export const predictionsAreOpen = (match, nowMs) => predictionState(match, nowMs) === PREDICTIONS_OPEN;
+
+// What a match's card and detail view show, one step further than
+// predictionState: once predictions have closed, a match is either still
+// waiting for its result or settled. Settlement is the admin saving the
+// score after kick-off (Match.ResultRecordedAt, set by
+// MatchService.UpdateMatch), mirroring StandingsService.GetPredictionStandings'
+// FilterResultRecorded — not the calendar, since until the score is in a
+// 0-0 could just mean nobody has entered it yet.
+export const PREDICTIONS_AWAITING_RESULT = 'awaiting-result';
+export const PREDICTIONS_SETTLED = 'settled';
+
+export const predictionDisplayState = (match, nowMs) => {
+  const state = predictionState(match, nowMs);
+  if (state !== PREDICTIONS_CLOSED) {
+    return state;
+  }
+  return match.ResultRecordedAt ? PREDICTIONS_SETTLED : PREDICTIONS_AWAITING_RESULT;
+};
+
+export const predictionDisplayLabel = (displayState) => {
+  switch (displayState) {
+    case PREDICTIONS_OPEN:
+      return 'Predictions open';
+    case PREDICTIONS_AWAITING_RESULT:
+      return 'Awaiting result';
+    case PREDICTIONS_SETTLED:
+      return 'Settled';
+    default:
+      return 'Not available';
+  }
+};
+
+// The winning team's id, or null for a draw — read off Team.Score exactly
+// the way ComputePredictionStandings does on the Go side.
+export const matchWinnerId = (match) => {
+  const [teamA, teamB] = match.Teams;
+  if (teamA.Score > teamB.Score) {
+    return teamA.ID;
+  }
+  if (teamB.Score > teamA.Score) {
+    return teamB.ID;
+  }
+  return null;
+};
+
+// One settled prediction's outcome at the one implicit token staked: a hit
+// nets odds - 1, a miss -1 — the same arithmetic as
+// ComputePredictionStandings, so a row here always adds up to what the
+// leaderboard shows. predictedTeamId is null for a draw; odds is the
+// summary's { TeamAOdds, DrawOdds, TeamBOdds }. Returns null when the match
+// isn't settled or there are no odds to settle against.
+export const settlePrediction = (match, odds, predictedTeamId) => {
+  if (!match || !match.ResultRecordedAt || !odds || !rosterFullyComposed(match)) {
+    return null;
+  }
+  const picked = predictedTeamId || null;
+  const correct = picked === matchWinnerId(match);
+  if (!correct) {
+    return { correct, points: -1 };
+  }
+  let pickedOdds = odds.DrawOdds;
+  if (picked === match.Teams[0].ID) {
+    pickedOdds = odds.TeamAOdds;
+  } else if (picked === match.Teams[1].ID) {
+    pickedOdds = odds.TeamBOdds;
+  }
+  return { correct, points: pickedOdds - 1 };
+};

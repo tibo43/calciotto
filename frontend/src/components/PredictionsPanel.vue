@@ -29,9 +29,7 @@
                 </div>
 
                 <div class="match-prediction-state-horizontal">
-                  <span class="prediction-state-badge" :class="predictionStateLabel(match)">
-                    {{ predictionStateLabel(match) === 'closed' ? 'Predictions closed' : 'Predictions open' }}
-                  </span>
+                  <span class="prediction-state-badge" :class="displayState(match)">{{ displayLabel(match) }}</span>
                 </div>
 
                 <div class="teams-horizontal">
@@ -40,6 +38,7 @@
                       <div class="team-color-horizontal" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
                       <span class="team-name-horizontal">{{ team.Name }}</span>
                     </div>
+                    <div v-if="isSettled(match)" class="team-score-horizontal">{{ team.Score }}</div>
                     <div v-if="index < match.Teams.length - 1" class="vs-separator">vs</div>
                   </div>
                 </div>
@@ -74,8 +73,9 @@
                    elsewhere in this app, duplicated rather than shared. -->
               <div class="prediction-inline">
                 <div class="prediction-inline-top">
-                  <span class="prediction-state-badge" :class="predictionStateLabel(selectedMatch)">
-                    {{ predictionStateLabel(selectedMatch) === 'closed' ? 'Predictions closed' : 'Predictions open' }}
+                  <span class="prediction-state-badge" :class="displayState(selectedMatch)">{{ displayLabel(selectedMatch) }}</span>
+                  <span v-if="isSettled(selectedMatch)" class="prediction-final-score">
+                    {{ selectedMatch.Teams[0].Name }} {{ selectedMatch.Teams[0].Score }} – {{ selectedMatch.Teams[1].Score }} {{ selectedMatch.Teams[1].Name }}
                   </span>
                 </div>
                 <p v-if="predictionClosedReason" class="prediction-inline-detail">{{ predictionClosedReason }}</p>
@@ -111,7 +111,18 @@
                    Match star, since neither applies before a match that
                    hasn't been played. -->
               <div class="players-section">
-                <div class="teams-columns">
+                <div class="section-header">
+                  <h4 class="signup-list-title">Teams</h4>
+                  <button type="button" class="signup-toggle-btn" :aria-expanded="showTeams.toString()"
+                    @click="showTeams = !showTeams">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      class="signup-toggle-chevron" :class="{ 'is-expanded': showTeams }">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                    {{ showTeams ? 'Hide teams' : 'Show teams' }}
+                  </button>
+                </div>
+                <div v-if="showTeams" class="teams-columns">
                   <div v-for="team in selectedMatch.Teams" :key="team.ID" class="team-column">
                     <div class="team-column-header">
                       <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
@@ -135,16 +146,30 @@
                    for its own confirmed/waiting lists. -->
               <div v-if="entries.length > 0" class="signup-lists prediction-entries-section">
                 <div class="signup-list">
-                  <h4 class="signup-list-title">
-                    Predictions
-                    <span class="count-badge">{{ entries.length }}</span>
-                  </h4>
-                  <ul class="signup-entries">
+                  <div class="section-header">
+                    <h4 class="signup-list-title">
+                      Predictions
+                      <span class="count-badge">{{ entries.length }}</span>
+                    </h4>
+                    <button type="button" class="signup-toggle-btn" :aria-expanded="showEntries.toString()"
+                      @click="showEntries = !showEntries">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        class="signup-toggle-chevron" :class="{ 'is-expanded': showEntries }">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                      {{ showEntries ? 'Hide predictions' : 'Show predictions' }}
+                    </button>
+                  </div>
+                  <ul v-if="showEntries" class="signup-entries">
                     <li v-for="entry in entries" :key="entry.PlayerID" class="signup-entry"
                       :class="{ 'is-me': entry.PlayerID === currentPlayerId }">
                       <span class="signup-name">{{ formatPlayerNameForDisplay(entry.Name) }}</span>
-                      <span class="prediction-entry-pick">{{ pickLabel(entry.PredictedTeamID) }}</span>
                       <span v-if="entry.PlayerID === currentPlayerId" class="signup-you">you</span>
+                      <span class="prediction-entry-pick">{{ pickLabel(entry.PredictedTeamID) }}</span>
+                      <span v-if="entryOutcome(entry)" class="prediction-entry-points"
+                        :class="entryOutcome(entry).correct ? 'won' : 'lost'">
+                        {{ formatPoints(entryOutcome(entry).points) }}
+                      </span>
                     </li>
                   </ul>
                 </div>
@@ -167,14 +192,6 @@
         </div>
       </div>
     </section>
-
-    <!-- The season leaderboard — lives inside this page, not as a separate
-         tab/table elsewhere, and shares no data or UI with Man of the Match. -->
-    <section class="standings-section">
-      <div class="container">
-        <PredictionsStandingsTable :rows="standings" :is-loading="isLoadingStandings" />
-      </div>
-    </section>
   </div>
 </template>
 
@@ -191,13 +208,19 @@ import {
   getMatchesDetails,
   getMatchPredictions,
   predictForMatch,
-  getPredictionStandings,
   getToken
 } from '@/services/api';
 import { formatDateTimeShort } from '@/services/datetime';
 import { isScheduledMatch } from '@/services/matchRegistration';
-import { rosterFullyComposed, predictionsAreOpen, predictionState, PREDICTIONS_CLOSED } from '@/services/matchPrediction';
-import PredictionsStandingsTable from '@/components/PredictionsStandingsTable.vue';
+import {
+  rosterFullyComposed,
+  predictionsAreOpen,
+  predictionDisplayState,
+  predictionDisplayLabel,
+  settlePrediction,
+  PREDICTIONS_AWAITING_RESULT,
+  PREDICTIONS_SETTLED
+} from '@/services/matchPrediction';
 
 // Same shape as MatchesPanel.vue's/MatchDetails.vue's/Profile.vue's own
 // helper — the app has no auth store, so each page decodes the JWT payload
@@ -219,7 +242,6 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'PredictionsPanel',
-  components: { PredictionsStandingsTable },
   props: {
     activeGroupId: {
       type: String,
@@ -233,13 +255,11 @@ export default {
   data() {
     return {
       matches: [],
-      standings: [],
       selectedMatchId: '',
       entries: [],
       odds: null,
       myPrediction: null,
       isLoadingMatches: false,
-      isLoadingStandings: false,
       isLoadingPredictions: false,
       isSubmitting: false,
       predictionMessage: '',
@@ -247,6 +267,12 @@ export default {
       currentPlayerId: '',
       canScrollLeft: false,
       canScrollRight: false,
+      // Collapsible sections of the selected match, reset on every
+      // selection like MatchesPanel.vue's isSelectedMatchExpanded: the
+      // picks come first, the teams are one tap away, and everyone's
+      // predictions are shown since that is what people come back to see.
+      showTeams: false,
+      showEntries: true,
       // Sampled once, like every other clock-dependent view in this app
       // (MatchesPanel.vue's own registrationState/motmVotingOpen) — there is
       // no reactive clock anywhere, a player who had the tab open across
@@ -268,9 +294,14 @@ export default {
       if (!this.selectedMatch || this.predictionsOpen) {
         return '';
       }
-      return predictionState(this.selectedMatch, this.nowMs) === PREDICTIONS_CLOSED
-        ? 'Predictions are closed — kick-off has passed.'
-        : "Predictions aren't open for this match yet.";
+      switch (this.displayState(this.selectedMatch)) {
+        case PREDICTIONS_AWAITING_RESULT:
+          return 'Kick-off has passed — points are counted once an admin saves the score.';
+        case PREDICTIONS_SETTLED:
+          return '';
+        default:
+          return "Predictions aren't open for this match yet.";
+      }
     }
   },
   watch: {
@@ -281,13 +312,11 @@ export default {
     // follows.
     season() {
       this.loadMatches();
-      this.loadStandings();
     }
   },
   created() {
     this.currentPlayerId = currentPlayerIdFromToken();
     this.loadMatches();
-    this.loadStandings();
   },
   mounted() {
     // loadMatches() (started in created()) is still pending here — see
@@ -304,8 +333,20 @@ export default {
   },
   methods: {
     formatDateTimeShort,
-    predictionStateLabel(match) {
-      return predictionState(match, this.nowMs) === PREDICTIONS_CLOSED ? 'closed' : 'open';
+    displayState(match) {
+      return predictionDisplayState(match, this.nowMs);
+    },
+    displayLabel(match) {
+      return predictionDisplayLabel(this.displayState(match));
+    },
+    isSettled(match) {
+      return this.displayState(match) === PREDICTIONS_SETTLED;
+    },
+    entryOutcome(entry) {
+      return settlePrediction(this.selectedMatch, this.odds, entry.PredictedTeamID);
+    },
+    formatPoints(points) {
+      return `${points > 0 ? '+' : ''}${points.toFixed(2)}`;
     },
     getTeamColor(colour) {
       if (colour && colour.startsWith('#')) {
@@ -385,25 +426,11 @@ export default {
       // same reasoning MatchesPanel.vue's own loadMatches() follows.
       this.attachScrollListener();
     },
-    async loadStandings() {
-      if (!this.activeGroupId) {
-        this.standings = [];
-        return;
-      }
-      this.isLoadingStandings = true;
-      try {
-        const rows = await getPredictionStandings(this.season, this.activeGroupId);
-        this.standings = Array.isArray(rows) ? rows : [];
-      } catch (error) {
-        console.error('Error fetching prediction standings:', error);
-        this.standings = [];
-      } finally {
-        this.isLoadingStandings = false;
-      }
-    },
     async selectMatch(matchId) {
       this.selectedMatchId = matchId;
       this.predictionMessage = '';
+      this.showTeams = false;
+      this.showEntries = true;
       await this.loadSelectedPredictions();
     },
     async loadSelectedPredictions() {
@@ -580,12 +607,27 @@ export default {
   gap: 0.5rem;
 }
 
+/* Outlined in the text colour, like the team columns' own .team-color-small
+   (global-styles.css): a white team's swatch is otherwise invisible on a
+   light card. */
 .team-color-horizontal {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1px solid white;
+  border: 1px solid currentColor;
+  color: var(--text-secondary);
   box-shadow: var(--shadow-sm);
+}
+
+.team-score-horizontal {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  background-color: var(--bg-primary);
+  padding: 0.125rem 0.5rem;
+  border-radius: 6px;
+  min-width: 30px;
+  text-align: center;
 }
 
 .team-name-horizontal {
@@ -703,6 +745,9 @@ export default {
   letter-spacing: 0.5px;
   background-color: var(--bg-tertiary);
   color: var(--text-secondary);
+  /* One line whatever the card width — a wrapped badge made one carousel
+     card taller than its neighbours. */
+  white-space: nowrap;
 }
 
 .prediction-state-badge.open {
@@ -710,9 +755,21 @@ export default {
   color: #065f46;
 }
 
-.prediction-state-badge.closed {
+/* Same amber as MatchesPanel.vue's "Upcoming": something is still to come. */
+.prediction-state-badge.awaiting-result {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.prediction-state-badge.settled {
   background-color: #e5e7eb;
   color: #374151;
+}
+
+.prediction-final-score {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 0.95rem;
 }
 
 .prediction-inline-detail {
@@ -772,6 +829,10 @@ export default {
 
 .pick-label {
   font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pick-odds {
@@ -838,8 +899,6 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  max-height: max(9rem, calc(100vh - 660px));
-  overflow-y: auto;
 }
 
 .team-player-row {
@@ -884,8 +943,49 @@ export default {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin: 0 0 0.75rem;
+  margin: 0;
   font-size: 0.9rem;
+}
+
+/* A section title with its collapse toggle on the right. */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Same text-and-chevron toggle as MatchesPanel.vue's sign-up details,
+   duplicated per this codebase's convention. */
+.signup-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--border-radius);
+  transition: all var(--transition-fast);
+}
+
+.signup-toggle-btn:hover {
+  color: var(--primary-color);
+  background-color: var(--bg-tertiary);
+}
+
+.signup-toggle-chevron {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--transition-fast);
+}
+
+.signup-toggle-chevron.is-expanded {
+  transform: rotate(180deg);
 }
 
 .count-badge {
@@ -906,8 +1006,6 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  max-height: 14rem;
-  overflow-y: auto;
 }
 
 .signup-entry {
@@ -935,17 +1033,26 @@ export default {
   font-weight: 600;
 }
 
+.prediction-entry-points {
+  min-width: 3.5rem;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.prediction-entry-points.won {
+  color: #059669;
+}
+
+.prediction-entry-points.lost {
+  color: var(--danger-color);
+}
+
 .signup-you {
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--primary-color);
-}
-
-/* The leaderboard, below the carousel/details card — its own section, same
-   as MatchesAndStandings.vue's .standings-section. */
-.standings-section {
-  padding: 2rem 0;
 }
 
 .match-details-enter-active,
@@ -1015,8 +1122,22 @@ export default {
     font-size: 0.85rem;
   }
 
+  /* Three across on one line, compact: stacked, flex-basis became each
+     button's height and the three of them filled a whole phone screen. */
   .prediction-picks {
-    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+
+  .prediction-pick-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.6rem 0.35rem;
+    gap: 0.15rem;
+  }
+
+  .pick-label {
+    font-size: 0.85rem;
   }
 
   .scroll-btn {
