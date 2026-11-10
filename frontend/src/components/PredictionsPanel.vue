@@ -30,28 +30,45 @@
 
                 <div class="match-prediction-state-horizontal">
                   <span class="prediction-state-badge" :class="displayState(match)">{{ displayLabel(match) }}</span>
+                  <span v-if="isSettled(match)" class="card-score">{{ match.Teams[0].Score }} – {{ match.Teams[1].Score }}</span>
                 </div>
 
-                <div class="teams-horizontal">
-                  <div v-for="(team, index) in match.Teams" :key="team.ID" class="team-horizontal">
-                    <div class="team-info-horizontal">
-                      <div class="team-color-horizontal" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
-                      <span class="team-name-horizontal">{{ team.Name }}</span>
-                    </div>
-                    <div v-if="isSettled(match)" class="team-score-horizontal">{{ team.Score }}</div>
-                    <div v-if="index < match.Teams.length - 1" class="vs-separator">vs</div>
-                  </div>
+                <!-- The bet itself lives on the card: one row per outcome
+                     with its odds. Never a disabled <button> — a disabled
+                     button swallows the click, and tapping a closed match's
+                     rows should still select it — so a closed match's rows
+                     are only styled as locked (aria-disabled). Once
+                     settled, the winning row gets a check and the caller's
+                     own pick turns green or red. -->
+                <div class="card-picks">
+                  <button v-for="option in pickOptionsFor(match)" :key="option.key" type="button"
+                    class="prediction-pick-btn" :class="pickClassesFor(match, option.teamId)"
+                    :aria-disabled="(!predictionsAreOpenFor(match)).toString()" :aria-pressed="isMyPickFor(match, option.teamId).toString()"
+                    @click.stop="onPick(match, option.teamId)">
+                    <span class="pick-label">
+                      <svg v-if="isWinningPickFor(match, option.teamId)" class="pick-winner-icon" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="3" aria-label="Result">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      <span v-else-if="option.colour" class="team-color-horizontal"
+                        :style="{ backgroundColor: getTeamColor(option.colour) }"></span>
+                      <span class="pick-name">{{ option.label }}</span>
+                    </span>
+                    <span v-if="oddsFor(match)" class="pick-odds">{{ formatOdds(option.odds) }}</span>
+                  </button>
                 </div>
               </div>
             </div>
 
-            <!-- Scroll indicators -->
-            <button class="scroll-btn scroll-left" @click="scrollLeft" :disabled="!canScrollLeft">
+            <!-- Scroll indicators — hidden rather than just disabled when
+                 there is nothing to scroll to: they sit on top of the first
+                 and last cards, whose rows are now bet buttons. -->
+            <button v-show="canScrollLeft" class="scroll-btn scroll-left" @click="scrollLeft">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="15,18 9,12 15,6" />
               </svg>
             </button>
-            <button class="scroll-btn scroll-right" @click="scrollRight" :disabled="!canScrollRight">
+            <button v-show="canScrollRight" class="scroll-btn scroll-right" @click="scrollRight">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="9,18 15,12 9,6" />
               </svg>
@@ -61,57 +78,11 @@
           <!-- Selected Match Details -->
           <transition name="match-details">
             <div v-if="selectedMatch" class="match-details-container card-base">
-              <div class="details-header">
-                <div class="details-title-section">
-                  <h3>{{ formatDateTimeShort(selectedMatch.ScheduledAt) }} - Match Prediction</h3>
-                </div>
-                <div class="details-divider"></div>
-              </div>
-
-              <!-- The betting widget — state badge + 3-way odds buttons, same
-                   visual language as the sign-up panel's own state badge
-                   elsewhere in this app, duplicated rather than shared. -->
-              <div class="prediction-inline">
-                <div class="prediction-inline-top">
-                  <span class="prediction-state-badge" :class="displayState(selectedMatch)">{{ displayLabel(selectedMatch) }}</span>
-                  <span v-if="isSettled(selectedMatch)" class="prediction-final-score">
-                    {{ selectedMatch.Teams[0].Name }} {{ selectedMatch.Teams[0].Score }} – {{ selectedMatch.Teams[1].Score }} {{ selectedMatch.Teams[1].Name }}
-                  </span>
-                </div>
-                <p v-if="predictionClosedReason" class="prediction-inline-detail">{{ predictionClosedReason }}</p>
-
-                <div v-if="isLoadingPredictions" class="signup-loading">
-                  <div class="loading-spinner-small"></div>
-                  <span>Loading predictions...</span>
-                </div>
-                <template v-else>
-                  <!-- Once settled, the winning outcome gets a check and the
-                       caller's own pick turns green or red, so the result
-                       reads off the buttons themselves. -->
-                  <div class="prediction-picks" :class="{ settled: isSettled(selectedMatch) }">
-                    <button v-for="option in pickOptions" :key="option.key" type="button" class="prediction-pick-btn"
-                      :class="pickClasses(option.teamId)"
-                      :disabled="!predictionsOpen || isSubmitting" @click="predict(option.teamId)">
-                      <span class="pick-label">
-                        <svg v-if="isWinningPick(option.teamId)" class="pick-winner-icon" viewBox="0 0 24 24" fill="none"
-                          stroke="currentColor" stroke-width="3" aria-label="Result">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        {{ option.label }}
-                      </span>
-                      <span v-if="odds" class="pick-odds">{{ formatOdds(option.odds) }}</span>
-                    </button>
-                  </div>
-                  <p v-if="isSettled(selectedMatch)" class="my-prediction-result" :class="myOutcome ? (myOutcome.correct ? 'won' : 'lost') : ''">
-                    <template v-if="myOutcome">
-                      Your prediction: {{ pickLabel(myPrediction.PredictedTeamID) }} ·
-                      {{ myOutcome.correct ? 'won' : 'lost' }} · {{ formatPoints(myOutcome.points) }}
-                    </template>
-                    <template v-else>You didn't predict this match.</template>
-                  </p>
-                  <p v-if="predictionMessage" class="prediction-inline-message" :class="predictionMessageType">{{ predictionMessage }}</p>
-                </template>
-              </div>
+              <!-- Everything about the bet itself (state, score, the caller's
+                   pick and result) is on the match card above; this card
+                   only adds the rosters and everyone's picks. A refused bet
+                   still needs a place to say so. -->
+              <p v-if="predictionMessage" class="prediction-inline-message" :class="predictionMessageType">{{ predictionMessage }}</p>
 
               <!-- The composed roster, same two-column layout as the Matches
                    tab's own team columns — just names, no goals or Man of the
@@ -232,7 +203,6 @@ import {
   predictionDisplayState,
   predictionDisplayLabel,
   settlePrediction,
-  PREDICTIONS_AWAITING_RESULT,
   PREDICTIONS_SETTLED
 } from '@/services/matchPrediction';
 
@@ -270,14 +240,12 @@ export default {
     return {
       matches: [],
       selectedMatchId: '',
-      entries: [],
-      predictionCount: 0,
-      revealed: false,
-      odds: null,
-      myPrediction: null,
+      // GET /matches/:id/predictions per eligible match, keyed by match id:
+      // every card needs its own odds and the caller's pick, not only the
+      // selected one.
+      summaries: {},
       isLoadingMatches: false,
-      isLoadingPredictions: false,
-      isSubmitting: false,
+      submittingMatchId: '',
       predictionMessage: '',
       predictionMessageType: 'info',
       currentPlayerId: '',
@@ -303,40 +271,20 @@ export default {
     selectedMatch() {
       return this.eligibleMatches.find(match => match.ID === this.selectedMatchId) || null;
     },
-    predictionsOpen() {
-      return this.selectedMatch ? predictionsAreOpen(this.selectedMatch, this.nowMs) : false;
+    selectedSummary() {
+      return this.summaries[this.selectedMatchId] || {};
     },
-    // The three buttons, in display order: team A, draw, team B.
-    pickOptions() {
-      if (!this.selectedMatch) {
-        return [];
-      }
-      const [teamA, teamB] = this.selectedMatch.Teams;
-      const odds = this.odds || {};
-      return [
-        { key: 'a', teamId: teamA.ID, label: teamA.Name, odds: odds.TeamAOdds },
-        { key: 'draw', teamId: null, label: 'Draw', odds: odds.DrawOdds },
-        { key: 'b', teamId: teamB.ID, label: teamB.Name, odds: odds.TeamBOdds }
-      ];
+    entries() {
+      return Array.isArray(this.selectedSummary.Entries) ? this.selectedSummary.Entries : [];
     },
-    myOutcome() {
-      if (!this.myPrediction) {
-        return null;
-      }
-      return settlePrediction(this.selectedMatch, this.odds, this.myPrediction.PredictedTeamID);
+    predictionCount() {
+      return this.selectedSummary.Count || this.entries.length;
     },
-    predictionClosedReason() {
-      if (!this.selectedMatch || this.predictionsOpen) {
-        return '';
-      }
-      switch (this.displayState(this.selectedMatch)) {
-        case PREDICTIONS_AWAITING_RESULT:
-          return 'Kick-off has passed — points are counted once an admin saves the score.';
-        case PREDICTIONS_SETTLED:
-          return '';
-        default:
-          return "Predictions aren't open for this match yet.";
-      }
+    revealed() {
+      return Boolean(this.selectedSummary.Revealed);
+    },
+    odds() {
+      return this.selectedSummary.Odds || null;
     }
   },
   watch: {
@@ -424,31 +372,50 @@ export default {
       }
       return '';
     },
-    // null both represents "the Draw button" and "no prediction made" —
-    // deliberately the same comparison either way: a caller who hasn't
-    // predicted sees no button highlighted, since myPrediction itself is
-    // null (see MatchPredictionSummary.MyPrediction's own comment on the
-    // backend for why the *outer* pointer, not the inner one, carries
-    // "absent").
-    isWinningPick(teamId) {
-      return Boolean(this.selectedMatch) && this.isSettled(this.selectedMatch)
-        && matchWinnerId(this.selectedMatch) === teamId;
+    oddsFor(match) {
+      return this.summaries[match.ID]?.Odds || null;
     },
-    pickClasses(teamId) {
-      const mine = this.isMyPick(teamId);
-      const settled = this.myOutcome !== null;
+    myPickFor(match) {
+      return this.summaries[match.ID]?.MyPrediction || null;
+    },
+    predictionsAreOpenFor(match) {
+      return predictionsAreOpen(match, this.nowMs);
+    },
+    // A card's three rows, in display order: team A, draw, team B.
+    pickOptionsFor(match) {
+      const [teamA, teamB] = match.Teams;
+      const odds = this.oddsFor(match) || {};
+      return [
+        { key: 'a', teamId: teamA.ID, label: teamA.Name, colour: teamA.Colour, odds: odds.TeamAOdds },
+        { key: 'draw', teamId: null, label: 'Draw', colour: '', odds: odds.DrawOdds },
+        { key: 'b', teamId: teamB.ID, label: teamB.Name, colour: teamB.Colour, odds: odds.TeamBOdds }
+      ];
+    },
+    // null is both "the Draw row" and "no prediction made" — deliberately
+    // the same comparison: with no MyPrediction at all, nothing matches (see
+    // MatchPredictionSummary.MyPrediction on the backend for why the *outer*
+    // pointer, not the inner one, carries "absent").
+    isMyPickFor(match, teamId) {
+      const mine = this.myPickFor(match);
+      return Boolean(mine) && (mine.PredictedTeamID || null) === teamId;
+    },
+    isWinningPickFor(match, teamId) {
+      return this.isSettled(match) && matchWinnerId(match) === teamId;
+    },
+    outcomeFor(match) {
+      const mine = this.myPickFor(match);
+      return mine ? settlePrediction(match, this.oddsFor(match), mine.PredictedTeamID) : null;
+    },
+    pickClassesFor(match, teamId) {
+      const mine = this.isMyPickFor(match, teamId);
+      const outcome = mine ? this.outcomeFor(match) : null;
       return {
         selected: mine,
-        winner: this.isWinningPick(teamId),
-        won: mine && settled && this.myOutcome.correct,
-        lost: mine && settled && !this.myOutcome.correct
+        winner: this.isWinningPickFor(match, teamId),
+        won: Boolean(outcome) && outcome.correct,
+        lost: Boolean(outcome) && !outcome.correct,
+        locked: !this.predictionsAreOpenFor(match) || this.submittingMatchId === match.ID
       };
-    },
-    isMyPick(teamId) {
-      if (!this.myPrediction) {
-        return false;
-      }
-      return (this.myPrediction.PredictedTeamID || null) === teamId;
     },
     async loadMatches() {
       if (!this.activeGroupId) {
@@ -460,8 +427,10 @@ export default {
       try {
         const data = await getMatchesDetails(this.activeGroupId, this.season);
         this.matches = Array.isArray(data) ? data : [];
+        this.summaries = {};
         if (this.eligibleMatches.length > 0) {
-          await this.selectMatch(this.eligibleMatches[0].ID);
+          this.selectMatch(this.eligibleMatches[0].ID);
+          await Promise.all(this.eligibleMatches.map(match => this.loadSummary(match.ID)));
         }
       } catch (error) {
         console.error('Error fetching matches:', error);
@@ -475,44 +444,39 @@ export default {
       // same reasoning MatchesPanel.vue's own loadMatches() follows.
       this.attachScrollListener();
     },
-    async selectMatch(matchId) {
+    selectMatch(matchId) {
+      if (this.selectedMatchId === matchId) {
+        return;
+      }
       this.selectedMatchId = matchId;
       this.predictionMessage = '';
       this.showTeams = false;
       this.showEntries = true;
-      await this.loadSelectedPredictions();
     },
-    applySummary(summary) {
-      this.entries = Array.isArray(summary.Entries) ? summary.Entries : [];
-      this.predictionCount = summary.Count || this.entries.length;
-      this.revealed = Boolean(summary.Revealed);
-      this.odds = summary.Odds || null;
-      this.myPrediction = summary.MyPrediction || null;
-    },
-    async loadSelectedPredictions() {
-      if (!this.selectedMatchId) {
-        return;
-      }
-      this.isLoadingPredictions = true;
+    async loadSummary(matchId) {
       try {
-        const summary = await getMatchPredictions(this.selectedMatchId);
-        this.applySummary(summary);
+        const summary = await getMatchPredictions(matchId);
+        this.summaries = { ...this.summaries, [matchId]: summary || {} };
       } catch (error) {
         console.error('Error loading predictions:', error);
-        this.applySummary({});
-      } finally {
-        this.isLoadingPredictions = false;
+        this.summaries = { ...this.summaries, [matchId]: {} };
       }
     },
-    async predict(teamId) {
-      if (!this.selectedMatchId || this.isSubmitting) {
+    // A tap on one of a card's rows always selects that match; it also
+    // places (or changes) the bet when predictions are open.
+    onPick(match, teamId) {
+      this.selectMatch(match.ID);
+      if (!this.predictionsAreOpenFor(match) || this.submittingMatchId) {
         return;
       }
-      this.isSubmitting = true;
+      this.predict(match.ID, teamId);
+    },
+    async predict(matchId, teamId) {
+      this.submittingMatchId = matchId;
       this.predictionMessage = '';
       try {
-        const summary = await predictForMatch(this.selectedMatchId, teamId);
-        this.applySummary(summary);
+        const summary = await predictForMatch(matchId, teamId);
+        this.summaries = { ...this.summaries, [matchId]: summary || {} };
       } catch (error) {
         console.error('Error submitting prediction:', error);
         this.predictionMessage = error?.response?.data?.error || 'Failed to save your prediction. Please try again.';
@@ -520,9 +484,9 @@ export default {
         // A rejection here usually means the window just closed or this
         // view is stale — reload either way, the same reasoning the sign-up
         // panel already follows on its own 409s.
-        await this.loadSelectedPredictions();
+        await this.loadSummary(matchId);
       } finally {
-        this.isSubmitting = false;
+        this.submittingMatchId = '';
       }
     },
     scrollLeft() {
@@ -635,26 +599,9 @@ export default {
 .match-prediction-state-horizontal {
   display: flex;
   align-items: center;
-  margin-bottom: 0.6rem;
-}
-
-.teams-horizontal {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.team-horizontal {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  position: relative;
-}
-
-.team-info-horizontal {
-  display: flex;
-  align-items: center;
   gap: 0.5rem;
+  margin-bottom: 0.6rem;
 }
 
 /* Outlined in the text colour, like the team columns' own .team-color-small
@@ -667,34 +614,6 @@ export default {
   border: 1px solid currentColor;
   color: var(--text-secondary);
   box-shadow: var(--shadow-sm);
-}
-
-.team-score-horizontal {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--primary-color);
-  background-color: var(--bg-primary);
-  padding: 0.125rem 0.5rem;
-  border-radius: 6px;
-  min-width: 30px;
-  text-align: center;
-}
-
-.team-name-horizontal {
-  font-weight: 600;
-  color: var(--text-primary);
-  text-transform: capitalize;
-  font-size: 0.875rem;
-}
-
-.vs-separator {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  top: -0.25rem;
-  font-size: 0.75rem;
-  color: var(--text-light);
-  font-weight: 500;
 }
 
 .scroll-btn {
@@ -744,47 +663,9 @@ export default {
   overflow: hidden;
 }
 
-.details-header {
-  margin-bottom: 1rem;
-  flex-shrink: 0;
-}
-
-.details-header h3 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.5rem;
-}
-
-.details-divider {
-  height: 3px;
-  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
-  border-radius: 2px;
-  width: 80px;
-}
-
-.details-title-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
 /* The betting widget — same pill/row conventions as the sign-up panel's own
    state badge/detail/message, duplicated under prediction-specific class
    names since this isn't a sign-up. */
-.prediction-inline {
-  margin-bottom: 1.5rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.prediction-inline-top {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
 
 .prediction-state-badge {
   padding: 0.3rem 0.65rem;
@@ -816,20 +697,8 @@ export default {
   color: #374151;
 }
 
-.prediction-final-score {
-  font-weight: 700;
-  color: var(--text-primary);
-  font-size: 0.95rem;
-}
-
-.prediction-inline-detail {
-  margin: 0.5rem 0 0;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
 .prediction-inline-message {
-  margin: 0.6rem 0 0;
+  margin: 0 0 1rem;
   font-size: 0.85rem;
 }
 
@@ -841,32 +710,32 @@ export default {
   color: var(--danger-color);
 }
 
-/* Capped width: three full-width thirds of a desktop card made each button
-   a huge slab for a word and a number. */
-.prediction-picks {
+/* The three outcome rows inside a carousel card: name on the left, odds
+   on the right, the same row rhythm as the Matches tab's team rows. */
+.card-picks {
   display: flex;
-  gap: 0.6rem;
-  max-width: 26rem;
-  margin-top: 1rem;
+  flex-direction: column;
+  gap: 0.3rem;
 }
 
 .prediction-pick-btn {
-  flex: 1 1 0;
+  width: 100%;
   min-width: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
-  padding: 0.55rem 0.4rem;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.55rem;
   border-radius: var(--border-radius);
-  border: 2px solid var(--border-color);
+  border: 1.5px solid var(--border-color);
   background-color: var(--bg-primary);
   color: var(--text-primary);
+  font-size: 0.85rem;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
-.prediction-pick-btn:hover:not(:disabled) {
+.prediction-pick-btn:not(.locked):hover {
   border-color: var(--primary-color);
 }
 
@@ -875,23 +744,18 @@ export default {
   background-color: var(--bg-tertiary);
 }
 
-.prediction-pick-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+.prediction-pick-btn.locked {
+  cursor: default;
 }
 
-.prediction-picks.settled .prediction-pick-btn:disabled {
-  opacity: 0.7;
+/* Once closed, only what matters keeps full strength: the winning row and
+   the caller's own pick. */
+.prediction-pick-btn.locked:not(.selected):not(.winner) {
+  opacity: 0.6;
 }
 
 .prediction-pick-btn.winner {
   border-color: #10b981;
-}
-
-.prediction-picks.settled .prediction-pick-btn.winner,
-.prediction-picks.settled .prediction-pick-btn.won,
-.prediction-picks.settled .prediction-pick-btn.lost {
-  opacity: 1;
 }
 
 /* Fixed text colours on fixed light fills, like the state badges, so they
@@ -914,40 +778,51 @@ export default {
 }
 
 .pick-winner-icon {
-  width: 0.85rem;
-  height: 0.85rem;
-  margin-right: 0.15rem;
-  vertical-align: -0.1rem;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
   color: #059669;
 }
 
-.my-prediction-result {
-  margin: 0.6rem 0 0;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.my-prediction-result.won {
-  color: #059669;
-}
-
-.my-prediction-result.lost {
-  color: var(--danger-color);
+.prediction-pick-btn.won .pick-winner-icon {
+  color: inherit;
 }
 
 .pick-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
   font-weight: 600;
-  max-width: 100%;
+}
+
+.pick-label .team-color-horizontal {
+  flex: 0 0 12px;
+}
+
+/* Draw has no swatch: indent it to line up with the team names. */
+.pick-label:not(:has(.team-color-horizontal, .pick-winner-icon)) {
+  padding-left: calc(12px + 0.4rem);
+}
+
+.pick-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .pick-odds {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: var(--primary-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-score {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .signup-loading {
@@ -966,7 +841,7 @@ export default {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .teams-columns {
@@ -1209,10 +1084,6 @@ export default {
     padding: 1rem;
   }
 
-  .details-header h3 {
-    font-size: 1.1rem;
-  }
-
   .teams-columns {
     grid-template-columns: 1fr;
     gap: 0.5rem;
@@ -1235,22 +1106,6 @@ export default {
   }
 
   .team-player-row .player-name {
-    font-size: 0.85rem;
-  }
-
-  /* Three across on one line, compact: stacked, flex-basis became each
-     button's height and the three of them filled a whole phone screen. */
-  .prediction-picks {
-    max-width: none;
-    gap: 0.5rem;
-  }
-
-  .prediction-pick-btn {
-    padding: 0.55rem 0.35rem;
-    gap: 0.15rem;
-  }
-
-  .pick-label {
     font-size: 0.85rem;
   }
 

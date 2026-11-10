@@ -114,6 +114,33 @@ describe('PredictionsPanel — which matches are offered', () => {
 });
 
 describe('PredictionsPanel — the pick buttons', () => {
+  it('puts each match\'s own odds and pick on its own card', async () => {
+    getMatchesDetails.mockResolvedValue([scheduledComposed(), scheduledComposed({ ID: 'match-2' })]);
+    getMatchPredictions.mockImplementation(async (id) => (id === 'match-2'
+      ? summary({ Odds: { TeamAOdds: 3, DrawOdds: 3.2, TeamBOdds: 2 }, MyPrediction: { PredictedTeamID: 'team-b' } })
+      : summary()));
+    const wrapper = await mountPanel();
+    const [first, second] = wrapper.findAll('.match-card-horizontal');
+
+    expect(first.findAll('.pick-odds').map(n => n.text())).toEqual(['1.80x', '3.50x', '2.40x']);
+    expect(second.findAll('.pick-odds').map(n => n.text())).toEqual(['3.00x', '3.20x', '2.00x']);
+    expect(first.findAll('.prediction-pick-btn').map(b => b.classes('selected'))).toEqual([false, false, false]);
+    expect(second.findAll('.prediction-pick-btn').map(b => b.classes('selected'))).toEqual([false, false, true]);
+  });
+
+  it('places a bet from a card that isn\'t selected, and selects it', async () => {
+    getMatchesDetails.mockResolvedValue([scheduledComposed(), scheduledComposed({ ID: 'match-2' })]);
+    predictForMatch.mockResolvedValue(summary({ MyPrediction: { PredictedTeamID: null } }));
+    const wrapper = await mountPanel();
+
+    await wrapper.findAll('.match-card-horizontal')[1].findAll('.prediction-pick-btn')[1].trigger('click');
+    await flushPromises();
+
+    expect(predictForMatch).toHaveBeenCalledWith('match-2', null);
+    expect(wrapper.vm.selectedMatchId).toBe('match-2');
+    expect(wrapper.findAll('.match-card-horizontal')[1].findAll('.prediction-pick-btn')[1].classes('selected')).toBe(true);
+  });
+
   beforeEach(() => {
     getMatchesDetails.mockResolvedValue([scheduledComposed()]);
   });
@@ -194,23 +221,35 @@ describe('PredictionsPanel — the kick-off window', () => {
   it('enables every pick before kick-off, with no closed reason', async () => {
     const wrapper = await mountPanel();
 
-    expect(pickButtons(wrapper).every(b => b.attributes('disabled') === undefined)).toBe(true);
-    expect(wrapper.find('.prediction-inline-detail').exists()).toBe(false);
+    expect(pickButtons(wrapper).every(b => !b.classes('locked') && b.attributes('aria-disabled') === 'false')).toBe(true);
+    expect(wrapper.find('.match-card-horizontal .prediction-state-badge').text()).toBe('Predictions open');
   });
 
   it('disables every pick at kick-off and says the result is awaited', async () => {
     nowSpy.mockReturnValue(KICKOFF_MS);
     const wrapper = await mountPanel();
 
-    expect(pickButtons(wrapper).every(b => b.attributes('disabled') !== undefined)).toBe(true);
-    expect(wrapper.find('.match-details-container .prediction-state-badge').text()).toBe('Awaiting result');
-    expect(wrapper.find('.prediction-inline-detail').text())
-      .toBe('Kick-off has passed — points are counted once an admin saves the score.');
+    expect(pickButtons(wrapper).every(b => b.classes('locked') && b.attributes('aria-disabled') === 'true')).toBe(true);
+    expect(wrapper.find('.match-card-horizontal .prediction-state-badge').text()).toBe('Awaiting result');
     // Nothing is settled yet, so no row carries points.
     expect(wrapper.findAll('.prediction-entry-points')).toHaveLength(0);
   });
 
   // Reading is never gated on the window, only casting.
+  // A locked row is not a disabled <button>: tapping it must still select
+  // the match, it just doesn't place a bet.
+  it('selects a closed match from its rows without predicting', async () => {
+    nowSpy.mockReturnValue(KICKOFF_MS);
+    getMatchesDetails.mockResolvedValue([scheduledComposed(), scheduledComposed({ ID: 'match-2' })]);
+    const wrapper = await mountPanel();
+
+    await wrapper.findAll('.match-card-horizontal')[1].findAll('.prediction-pick-btn')[0].trigger('click');
+    await flushPromises();
+
+    expect(wrapper.vm.selectedMatchId).toBe('match-2');
+    expect(predictForMatch).not.toHaveBeenCalled();
+  });
+
   it('still loads and shows the summary after kick-off', async () => {
     nowSpy.mockReturnValue(KICKOFF_MS + 3600 * 1000);
     getMatchPredictions.mockResolvedValue(summary({ MyPrediction: { PredictedTeamID: 'team-a' } }));
@@ -284,13 +323,11 @@ describe('PredictionsPanel — a settled match', () => {
     }));
   });
 
-  it('shows the final score and the settled badge, on the card and in the detail', async () => {
+  it('shows the final score and the settled badge on the card', async () => {
     const wrapper = await mountPanel();
 
     expect(wrapper.find('.match-card-horizontal .prediction-state-badge').text()).toBe('Settled');
-    expect(wrapper.findAll('.match-card-horizontal .team-score-horizontal').map(n => n.text())).toEqual(['3', '1']);
-    expect(wrapper.find('.prediction-final-score').text()).toBe('Black 3 – 1 White');
-    expect(wrapper.find('.prediction-inline-detail').exists()).toBe(false);
+    expect(wrapper.find('.match-card-horizontal .card-score').text()).toBe('3 – 1');
   });
 
   it('marks the winning outcome and colours the caller\'s own pick by its result', async () => {
@@ -300,7 +337,6 @@ describe('PredictionsPanel — a settled match', () => {
     expect(buttons.map(b => b.classes('winner'))).toEqual([true, false, false]);
     expect(buttons[0].find('.pick-winner-icon').exists()).toBe(true);
     expect(buttons[0].classes('won')).toBe(true);
-    expect(wrapper.find('.my-prediction-result').text()).toBe('Your prediction: Black · won · +0.80');
   });
 
   it('shows a losing pick in red and says so', async () => {
@@ -315,15 +351,14 @@ describe('PredictionsPanel — a settled match', () => {
 
     expect(buttons[1].classes('lost')).toBe(true);
     expect(buttons[0].classes('winner')).toBe(true);
-    expect(wrapper.find('.my-prediction-result.lost').text()).toBe('Your prediction: Draw · lost · -1.00');
   });
 
-  it('says so when the caller made no prediction', async () => {
+  it('colours nothing as won or lost when the caller made no prediction', async () => {
     getMatchPredictions.mockResolvedValue(summary({ Entries: [], Count: 0, Revealed: true }));
     const wrapper = await mountPanel();
 
-    expect(wrapper.find('.my-prediction-result').text()).toBe('You didn\'t predict this match.');
     expect(pickButtons(wrapper).some(b => b.classes('won') || b.classes('lost'))).toBe(false);
+    expect(pickButtons(wrapper)[0].classes('winner')).toBe(true);
   });
 
   it('shows each prediction\'s points: odds minus one on a hit, minus one on a miss', async () => {
