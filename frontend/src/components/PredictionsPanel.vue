@@ -80,10 +80,7 @@
             <div v-if="selectedMatch" class="match-details-container card-base">
               <!-- Everything about the bet itself (state, score, the caller's
                    pick and result) is on the match card above; this card
-                   only adds the rosters and everyone's picks. A refused bet
-                   still needs a place to say so. -->
-              <p v-if="predictionMessage" class="prediction-inline-message" :class="predictionMessageType">{{ predictionMessage }}</p>
-
+                   only adds the rosters and everyone's picks. -->
               <!-- The composed roster, same two-column layout as the Matches
                    tab's own team columns — just names, no goals or Man of the
                    Match star, since neither applies before a match that
@@ -176,6 +173,19 @@
         </div>
       </div>
     </section>
+
+    <!-- A refused bet (kick-off passed while the page was open, network
+         failure...) would otherwise fail silently: the shared toast, at the
+         bottom right, closing on its own after a few seconds or from its
+         cross. -->
+    <transition name="prediction-toast">
+      <div v-if="predictionMessage" class="toast-container toast-bottom" role="status" aria-live="polite">
+        <div class="toast-message has-close" :class="predictionMessageType">
+          <span>{{ predictionMessage }}</span>
+          <button type="button" class="toast-close" aria-label="Dismiss" @click="dismissToast">×</button>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -224,6 +234,9 @@ function currentPlayerIdFromToken() {
   }
 }
 
+// Long enough to read a sentence, short enough not to linger.
+const TOAST_DURATION_MS = 5000;
+
 export default {
   name: 'PredictionsPanel',
   props: {
@@ -247,7 +260,8 @@ export default {
       isLoadingMatches: false,
       submittingMatchId: '',
       predictionMessage: '',
-      predictionMessageType: 'info',
+      predictionMessageType: 'error',
+      toastTimeout: null,
       currentPlayerId: '',
       canScrollLeft: false,
       canScrollRight: false,
@@ -310,6 +324,7 @@ export default {
     this.attachScrollListener();
   },
   beforeUnmount() {
+    clearTimeout(this.toastTimeout);
     if (this.$refs.matchesBar) {
       this.$refs.matchesBar.removeEventListener('scroll', this.updateScrollButtons);
     }
@@ -449,7 +464,6 @@ export default {
         return;
       }
       this.selectedMatchId = matchId;
-      this.predictionMessage = '';
       this.showTeams = false;
       this.showEntries = true;
     },
@@ -473,14 +487,13 @@ export default {
     },
     async predict(matchId, teamId) {
       this.submittingMatchId = matchId;
-      this.predictionMessage = '';
+      this.dismissToast();
       try {
         const summary = await predictForMatch(matchId, teamId);
         this.summaries = { ...this.summaries, [matchId]: summary || {} };
       } catch (error) {
         console.error('Error submitting prediction:', error);
-        this.predictionMessage = error?.response?.data?.error || 'Failed to save your prediction. Please try again.';
-        this.predictionMessageType = 'error';
+        this.showToast(error?.response?.data?.error || 'Failed to save your prediction. Please try again.', 'error');
         // A rejection here usually means the window just closed or this
         // view is stale — reload either way, the same reasoning the sign-up
         // panel already follows on its own 409s.
@@ -488,6 +501,17 @@ export default {
       } finally {
         this.submittingMatchId = '';
       }
+    },
+    showToast(message, type) {
+      clearTimeout(this.toastTimeout);
+      this.predictionMessage = message;
+      this.predictionMessageType = type;
+      this.toastTimeout = setTimeout(this.dismissToast, TOAST_DURATION_MS);
+    },
+    dismissToast() {
+      clearTimeout(this.toastTimeout);
+      this.toastTimeout = null;
+      this.predictionMessage = '';
     },
     scrollLeft() {
       if (this.$refs.matchesBar) {
@@ -695,19 +719,6 @@ export default {
 .prediction-state-badge.settled {
   background-color: #e5e7eb;
   color: #374151;
-}
-
-.prediction-inline-message {
-  margin: 0 0 1rem;
-  font-size: 0.85rem;
-}
-
-.prediction-inline-message.success {
-  color: #065f46;
-}
-
-.prediction-inline-message.error {
-  color: var(--danger-color);
 }
 
 /* The three outcome rows inside a carousel card: name on the left, odds
@@ -1044,6 +1055,10 @@ export default {
   font-weight: 700;
   text-transform: uppercase;
   color: var(--primary-color);
+}
+
+.prediction-toast-leave-active {
+  animation: toastSlideOut 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 .match-details-enter-active,

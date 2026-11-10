@@ -200,7 +200,7 @@ describe('PredictionsPanel — the pick buttons', () => {
     expect(pickButtons(wrapper).map(b => b.classes('selected'))).toEqual([true, false, false]);
   });
 
-  it('surfaces the backend error and reloads the summary on a rejection', async () => {
+  it('surfaces the backend error in a toast and reloads the summary on a rejection', async () => {
     predictForMatch.mockRejectedValue({ response: { status: 409, data: { error: 'predictions are closed' } } });
     const wrapper = await mountPanel();
     getMatchPredictions.mockClear();
@@ -208,8 +208,34 @@ describe('PredictionsPanel — the pick buttons', () => {
     await pickButtons(wrapper)[0].trigger('click');
     await flushPromises();
 
-    expect(wrapper.find('.prediction-inline-message.error').text()).toBe('predictions are closed');
+    expect(wrapper.find('.toast-container.toast-bottom .toast-message.error').text()).toContain('predictions are closed');
     expect(getMatchPredictions).toHaveBeenCalledWith('match-1');
+  });
+
+  it('closes the toast from its cross', async () => {
+    predictForMatch.mockRejectedValue({ response: { status: 409, data: { error: 'predictions are closed' } } });
+    const wrapper = await mountPanel();
+
+    await pickButtons(wrapper)[0].trigger('click');
+    await flushPromises();
+    await wrapper.find('.toast-close').trigger('click');
+
+    expect(wrapper.find('.toast-message').exists()).toBe(false);
+  });
+
+  it('closes the toast on its own after five seconds', async () => {
+    const timeoutSpy = jest.spyOn(global, 'setTimeout');
+    predictForMatch.mockRejectedValue({ response: { status: 409, data: { error: 'predictions are closed' } } });
+    const wrapper = await mountPanel();
+
+    await pickButtons(wrapper)[0].trigger('click');
+    await flushPromises();
+    const [dismiss] = timeoutSpy.mock.calls.find(([, delay]) => delay === 5000);
+    timeoutSpy.mockRestore();
+    dismiss();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.toast-message').exists()).toBe(false);
   });
 });
 
