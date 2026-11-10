@@ -239,3 +239,54 @@ describe('getMotmStandings', () => {
     expect(mockInstance.get).toHaveBeenCalledWith('/standings/motm?season=2025-2026&group_id=group-uuid');
   });
 });
+
+// Same rule again: the group comes from the match in the path, so neither
+// prediction call on a match carries a group_id.
+describe('the prediction calls', () => {
+  beforeEach(() => {
+    mockInstance.get.mockReset();
+    mockInstance.post.mockReset();
+    mockInstance.get.mockResolvedValue({ status: 200, data: { Entries: [], Odds: null, MyPrediction: null } });
+    mockInstance.post.mockResolvedValue({ status: 200, data: { Entries: [], Odds: null, MyPrediction: null } });
+  });
+
+  it('casts a team prediction with the team id in the body and no group_id', async () => {
+    await api.predictForMatch('match-uuid', 'team-a');
+
+    expect(mockInstance.post).toHaveBeenCalledWith('/matches/match-uuid/predictions', { predicted_team_id: 'team-a' });
+  });
+
+  // The key is always sent, null for a draw, so the payload says "draw"
+  // outright rather than relying on an absent key binding to nil.
+  it('casts a draw as an explicit null predicted_team_id', async () => {
+    await api.predictForMatch('match-uuid', null);
+
+    expect(mockInstance.post).toHaveBeenCalledWith('/matches/match-uuid/predictions', { predicted_team_id: null });
+  });
+
+  it('fetches the summary with a bare GET', async () => {
+    await api.getMatchPredictions('match-uuid');
+
+    expect(mockInstance.get).toHaveBeenCalledWith('/matches/match-uuid/predictions');
+  });
+
+  it('rethrows so a 409 (window closed) reaches the caller', async () => {
+    const conflict = { response: { status: 409, data: { error: 'predictions are closed' } } };
+    mockInstance.post.mockRejectedValue(conflict);
+
+    await expect(api.predictForMatch('match-uuid', 'team-a')).rejects.toBe(conflict);
+  });
+});
+
+describe('getPredictionStandings', () => {
+  beforeEach(() => {
+    mockInstance.get.mockReset();
+    mockInstance.get.mockResolvedValue({ status: 200, data: [] });
+  });
+
+  it('queries /standings/predictions with season and group_id', async () => {
+    await api.getPredictionStandings('2025-2026', 'group-uuid');
+
+    expect(mockInstance.get).toHaveBeenCalledWith('/standings/predictions?season=2025-2026&group_id=group-uuid');
+  });
+});
