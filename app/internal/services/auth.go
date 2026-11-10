@@ -508,6 +508,12 @@ func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 		if err := tx.Where("voter_id = ?", playerID).Delete(&models.MatchVote{}).Error; err != nil {
 			return err
 		}
+		// Predictions are the caller's own guesses, like a vote cast — kept,
+		// they would leave a "Deleted account" row on the prediction
+		// leaderboard.
+		if err := tx.Where("player_id = ?", playerID).Delete(&models.MatchPrediction{}).Error; err != nil {
+			return err
+		}
 
 		return tx.Model(&models.Player{}).
 			Where("id = ?", playerID).

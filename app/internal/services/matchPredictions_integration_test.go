@@ -262,3 +262,31 @@ func TestMatchPredictionService_ListPredictionsUnknownMatchNotFound(t *testing.T
 		t.Errorf("ListPredictions for an unknown match = %v, want ErrMatchNotFound", err)
 	}
 }
+
+// TestDeleteMatch_Integration_RemovesPredictions: like votes and sign-ups,
+// MatchPrediction declares no association on Match, so DeleteMatch has to
+// remove a match's predictions itself.
+func TestDeleteMatch_Integration_RemovesPredictions(t *testing.T) {
+	env := newPredictionEnv(t, "delete-match", time.Now().Add(48*time.Hour))
+	env.composeRoster(t)
+	predictor, err := env.players.CreatePlayer("Zzz Predictor " + uuid.NewString())
+	if err != nil {
+		t.Fatalf("failed to create predictor: %v", err)
+	}
+	if err := env.predictions.Predict(env.matchID, predictor, &env.teamAID); err != nil {
+		t.Fatalf("Predict returned error: %v", err)
+	}
+
+	if err := env.matches.DeleteMatch(env.matchID, env.groupID); err != nil {
+		t.Fatalf("DeleteMatch returned error: %v", err)
+	}
+
+	var remaining int64
+	if err := env.tx.Model(&models.MatchPrediction{}).Where("match_id = ?", env.matchID).
+		Count(&remaining).Error; err != nil {
+		t.Fatalf("failed to count predictions: %v", err)
+	}
+	if remaining != 0 {
+		t.Errorf("%d predictions survived the match deletion, want 0", remaining)
+	}
+}

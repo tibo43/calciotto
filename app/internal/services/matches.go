@@ -641,6 +641,11 @@ func (s *MatchService) DeleteMatch(matchID, groupID uuid.UUID) error {
 		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchVote{}).Error; err != nil {
 			return err
 		}
+		// Predictions, same reasoning again: no association, no FK, just
+		// rows nothing could ever read once their match is gone.
+		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchPrediction{}).Error; err != nil {
+			return err
+		}
 		return tx.Delete(&models.Match{}, "id = ?", matchID).Error
 	})
 }
