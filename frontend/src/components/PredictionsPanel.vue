@@ -144,12 +144,12 @@
                    list's own visual language (title + count badge + list of
                    rows), the same convention the sign-up panel already uses
                    for its own confirmed/waiting lists. -->
-              <div v-if="entries.length > 0" class="signup-lists prediction-entries-section">
+              <div v-if="predictionCount > 0" class="signup-lists prediction-entries-section">
                 <div class="signup-list">
                   <div class="section-header">
                     <h4 class="signup-list-title">
                       Predictions
-                      <span class="count-badge">{{ entries.length }}</span>
+                      <span class="count-badge">{{ predictionCount }}</span>
                     </h4>
                     <button type="button" class="signup-toggle-btn" :aria-expanded="showEntries.toString()"
                       @click="showEntries = !showEntries">
@@ -160,7 +160,13 @@
                       {{ showEntries ? 'Hide predictions' : 'Show predictions' }}
                     </button>
                   </div>
-                  <ul v-if="showEntries" class="signup-entries">
+                  <!-- Before kick-off the backend returns only the caller's own
+                       pick (see MatchPredictionSummary.Revealed): nobody can
+                       follow the crowd while the choice is still open. -->
+                  <p v-if="showEntries && !revealed" class="prediction-hidden-hint">
+                    Everyone's picks are revealed at kick-off.
+                  </p>
+                  <ul v-if="showEntries && entries.length > 0" class="signup-entries">
                     <li v-for="entry in entries" :key="entry.PlayerID" class="signup-entry"
                       :class="{ 'is-me': entry.PlayerID === currentPlayerId }">
                       <span class="signup-name">{{ formatPlayerNameForDisplay(entry.Name) }}</span>
@@ -257,6 +263,8 @@ export default {
       matches: [],
       selectedMatchId: '',
       entries: [],
+      predictionCount: 0,
+      revealed: false,
       odds: null,
       myPrediction: null,
       isLoadingMatches: false,
@@ -433,6 +441,13 @@ export default {
       this.showEntries = true;
       await this.loadSelectedPredictions();
     },
+    applySummary(summary) {
+      this.entries = Array.isArray(summary.Entries) ? summary.Entries : [];
+      this.predictionCount = summary.Count || this.entries.length;
+      this.revealed = Boolean(summary.Revealed);
+      this.odds = summary.Odds || null;
+      this.myPrediction = summary.MyPrediction || null;
+    },
     async loadSelectedPredictions() {
       if (!this.selectedMatchId) {
         return;
@@ -440,14 +455,10 @@ export default {
       this.isLoadingPredictions = true;
       try {
         const summary = await getMatchPredictions(this.selectedMatchId);
-        this.entries = Array.isArray(summary.Entries) ? summary.Entries : [];
-        this.odds = summary.Odds || null;
-        this.myPrediction = summary.MyPrediction || null;
+        this.applySummary(summary);
       } catch (error) {
         console.error('Error loading predictions:', error);
-        this.entries = [];
-        this.odds = null;
-        this.myPrediction = null;
+        this.applySummary({});
       } finally {
         this.isLoadingPredictions = false;
       }
@@ -460,9 +471,7 @@ export default {
       this.predictionMessage = '';
       try {
         const summary = await predictForMatch(this.selectedMatchId, teamId);
-        this.entries = Array.isArray(summary.Entries) ? summary.Entries : [];
-        this.odds = summary.Odds || null;
-        this.myPrediction = summary.MyPrediction || null;
+        this.applySummary(summary);
       } catch (error) {
         console.error('Error submitting prediction:', error);
         this.predictionMessage = error?.response?.data?.error || 'Failed to save your prediction. Please try again.';
@@ -1031,6 +1040,13 @@ export default {
 .prediction-entry-pick {
   color: var(--text-secondary);
   font-weight: 600;
+}
+
+.prediction-hidden-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 .prediction-entry-points {

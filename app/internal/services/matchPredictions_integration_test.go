@@ -383,3 +383,62 @@ func TestPredictionStandings_Integration_SettledOnlyOnceResultRecorded(t *testin
 		t.Errorf("ResultRecordedAt moved from %v to %v on a correction, want the first recording kept", first.ResultRecordedAt, second.ResultRecordedAt)
 	}
 }
+
+// TestListPredictions_Integration_OthersHiddenUntilKickoff: while predictions
+// are open a caller sees only their own pick (and how many were made); at
+// kick-off everyone's is revealed.
+func TestListPredictions_Integration_OthersHiddenUntilKickoff(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		kickoff  time.Time
+		revealed bool
+	}{
+		{"before kick-off", time.Now().Add(48 * time.Hour), false},
+		{"after kick-off", time.Now().Add(-time.Hour), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newPredictionEnv(t, "reveal-"+tc.name, tc.kickoff)
+			me, err := env.players.CreatePlayer("Zzz Reveal Me " + uuid.NewString())
+			if err != nil {
+				t.Fatalf("failed to create player: %v", err)
+			}
+			other, err := env.players.CreatePlayer("Zzz Reveal Other " + uuid.NewString())
+			if err != nil {
+				t.Fatalf("failed to create player: %v", err)
+			}
+			// Written directly so the same setup works on both sides of
+			// kick-off (Predict refuses after it).
+			for _, p := range []models.MatchPrediction{
+				{MatchID: env.matchID, PlayerID: me, PredictedTeamID: &env.teamAID},
+				{MatchID: env.matchID, PlayerID: other, PredictedTeamID: &env.teamBID},
+			} {
+				if err := env.tx.Create(&p).Error; err != nil {
+					t.Fatalf("failed to create prediction: %v", err)
+				}
+			}
+
+			summary, err := env.predictions.ListPredictions(env.matchID, me)
+			if err != nil {
+				t.Fatalf("ListPredictions returned error: %v", err)
+			}
+			if summary.Count != 2 || summary.Revealed != tc.revealed {
+				t.Errorf("Count/Revealed = %d/%v, want 2/%v", summary.Count, summary.Revealed, tc.revealed)
+			}
+			wantEntries := 1
+			if tc.revealed {
+				wantEntries = 2
+			}
+			if len(summary.Entries) != wantEntries {
+				t.Fatalf("got %d entries, want %d: %+v", len(summary.Entries), wantEntries, summary.Entries)
+			}
+			for _, entry := range summary.Entries {
+				if !tc.revealed && entry.PlayerID != me {
+					t.Errorf("another player's pick leaked before kick-off: %+v", entry)
+				}
+			}
+			if summary.MyPrediction == nil || summary.MyPrediction.PlayerID != me {
+				t.Errorf("MyPrediction = %+v, want the caller's own", summary.MyPrediction)
+			}
+		})
+	}
+}

@@ -623,3 +623,35 @@ func TestFilterResultRecorded(t *testing.T) {
 		t.Fatalf("FilterResultRecorded = %+v, want only the recorded match", filtered)
 	}
 }
+
+// TestComputePredictionStandings_HistoryOldestFirst: each row carries every
+// settled prediction, oldest first whatever order the matches arrive in,
+// with the pick's odds and what it earned.
+func TestComputePredictionStandings_HistoryOldestFirst(t *testing.T) {
+	alice := uuid.New()
+	newer := eloMatch(time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC), time.Time{},
+		[]models.PlayerCustom{{ID: uuid.New(), Name: "x"}}, 0, []models.PlayerCustom{{ID: uuid.New(), Name: "y"}}, 2)
+	older := eloMatch(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), time.Time{},
+		[]models.PlayerCustom{{ID: uuid.New(), Name: "x"}}, 1, []models.PlayerCustom{{ID: uuid.New(), Name: "y"}}, 0)
+	predictions := map[uuid.UUID][]models.MatchPredictionEntry{
+		newer.ID: {{PlayerID: alice, Name: "alice", PredictedTeamID: &newer.Teams[0].ID}},
+		older.ID: {{PlayerID: alice, Name: "alice", PredictedTeamID: &older.Teams[0].ID}},
+	}
+	matches := []models.MatchWithDetails{newer, older} // newest first, as loaded
+
+	row := predictionRowsByID(ComputePredictionStandings(matches, matches, predictions))[alice]
+
+	if len(row.History) != 2 || row.History[0].MatchID != older.ID || row.History[1].MatchID != newer.ID {
+		t.Fatalf("History = %+v, want the older match first", row.History)
+	}
+	hit, miss := row.History[0], row.History[1]
+	if !hit.Correct || hit.Points != hit.Odds-1 || hit.ScoreA != 1 || hit.ScoreB != 0 {
+		t.Errorf("first entry = %+v, want a hit worth odds-1 on a 1-0", hit)
+	}
+	if miss.Correct || miss.Points != -1 {
+		t.Errorf("second entry = %+v, want a miss worth -1", miss)
+	}
+	if row.Points != hit.Points+miss.Points {
+		t.Errorf("row points %.3f != sum of history %.3f", row.Points, hit.Points+miss.Points)
+	}
+}

@@ -158,13 +158,22 @@ func (s *MatchPredictionService) ListPredictions(matchID, callerID uuid.UUID) (*
 		return nil, err
 	}
 
-	summary := &models.MatchPredictionSummary{Entries: make([]models.MatchPredictionEntry, 0, len(rows))}
+	// Everyone's pick is revealed at kick-off, once nobody can change theirs
+	// any more; before it, a caller sees only their own.
+	revealed := match.IsScheduled() && !time.Now().Before(*match.ScheduledAt)
+	summary := &models.MatchPredictionSummary{
+		Entries:  make([]models.MatchPredictionEntry, 0, len(rows)),
+		Count:    len(rows),
+		Revealed: revealed,
+	}
 	for _, row := range rows {
 		entry := models.MatchPredictionEntry{PlayerID: row.PlayerID, Name: row.Name, PredictedTeamID: row.PredictedTeamID}
-		summary.Entries = append(summary.Entries, entry)
 		if row.PlayerID == callerID {
 			summary.MyPrediction = &entry
+		} else if !revealed {
+			continue
 		}
+		summary.Entries = append(summary.Entries, entry)
 	}
 
 	odds, err := s.oddsForMatch(*match, details)

@@ -612,6 +612,7 @@ func ComputePredictionStandings(allMatches, countedMatches []models.MatchWithDet
 		name                 string
 		predictions, correct int
 		points               float64
+		history              []models.PredictionHistoryEntry
 	}
 	stats := make(map[uuid.UUID]*acc)
 
@@ -650,12 +651,28 @@ func ComputePredictionStandings(allMatches, countedMatches []models.MatchWithDet
 			}
 			row.predictions++
 
-			if predictionMatchesResult(entry.PredictedTeamID, actualWinner) {
+			pickedOdds := correctPredictionOdds(entry.PredictedTeamID, teamA.ID, odds)
+			correct := predictionMatchesResult(entry.PredictedTeamID, actualWinner)
+			points := -1.0
+			if correct {
 				row.correct++
-				row.points += correctPredictionOdds(entry.PredictedTeamID, teamA.ID, odds) - 1
-			} else {
-				row.points--
+				points = pickedOdds - 1
 			}
+			row.points += points
+			row.history = append(row.history, models.PredictionHistoryEntry{
+				MatchID:         match.ID,
+				Date:            match.Date,
+				TeamAID:         teamA.ID,
+				TeamAName:       teamA.Name,
+				TeamBID:         teamB.ID,
+				TeamBName:       teamB.Name,
+				ScoreA:          teamA.Score,
+				ScoreB:          teamB.Score,
+				PredictedTeamID: entry.PredictedTeamID,
+				Odds:            pickedOdds,
+				Correct:         correct,
+				Points:          points,
+			})
 		}
 	}
 
@@ -667,6 +684,7 @@ func ComputePredictionStandings(allMatches, countedMatches []models.MatchWithDet
 			Predictions: row.predictions,
 			Correct:     row.correct,
 			Points:      row.points,
+			History:     chronologicalHistory(row.history),
 		})
 	}
 
@@ -677,6 +695,20 @@ func ComputePredictionStandings(allMatches, countedMatches []models.MatchWithDet
 		return rows[i].Name < rows[j].Name
 	})
 	return rows
+}
+
+// chronologicalHistory orders a player's settled predictions oldest first;
+// countedMatches arrive newest first (GetMatchesDetails' own order), and the
+// leaderboard reads the last five off the end.
+func chronologicalHistory(history []models.PredictionHistoryEntry) []models.PredictionHistoryEntry {
+	sort.SliceStable(history, func(i, j int) bool {
+		di, dj := time.Time(history[i].Date), time.Time(history[j].Date)
+		if !di.Equal(dj) {
+			return di.Before(dj)
+		}
+		return history[i].MatchID.String() < history[j].MatchID.String()
+	})
+	return history
 }
 
 // predictionMatchesResult reports whether a prediction (nil = draw) matches

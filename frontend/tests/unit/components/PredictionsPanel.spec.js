@@ -221,6 +221,47 @@ describe('PredictionsPanel — the kick-off window', () => {
   });
 });
 
+describe('PredictionsPanel — others\' picks before kick-off', () => {
+  beforeEach(() => {
+    getMatchesDetails.mockResolvedValue([scheduledComposed()]);
+  });
+
+  it('shows only the caller\'s own pick, the total count and a hint while picks are hidden', async () => {
+    getMatchPredictions.mockResolvedValue(summary({
+      Entries: [{ PlayerID: ME, Name: 'me', PredictedTeamID: 'team-a' }],
+      Count: 5,
+      Revealed: false,
+      MyPrediction: { PlayerID: ME, Name: 'me', PredictedTeamID: 'team-a' }
+    }));
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.count-badge').text()).toBe('5');
+    expect(wrapper.findAll('.signup-entry')).toHaveLength(1);
+    expect(wrapper.find('.prediction-hidden-hint').text()).toBe('Everyone\'s picks are revealed at kick-off.');
+  });
+
+  it('keeps the section, with no list, when others predicted but the caller hasn\'t', async () => {
+    getMatchPredictions.mockResolvedValue(summary({ Entries: [], Count: 3, Revealed: false }));
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.count-badge').text()).toBe('3');
+    expect(wrapper.find('.signup-entries').exists()).toBe(false);
+    expect(wrapper.find('.prediction-hidden-hint').exists()).toBe(true);
+  });
+
+  it('drops the hint once picks are revealed', async () => {
+    getMatchPredictions.mockResolvedValue(summary({
+      Entries: [{ PlayerID: 'p2', Name: 'zoe', PredictedTeamID: null }],
+      Count: 1,
+      Revealed: true
+    }));
+    const wrapper = await mountPanel();
+
+    expect(wrapper.find('.prediction-hidden-hint').exists()).toBe(false);
+    expect(wrapper.findAll('.signup-entry')).toHaveLength(1);
+  });
+});
+
 describe('PredictionsPanel — a settled match', () => {
   const settledMatch = () => {
     const match = scheduledComposed({ ResultRecordedAt: '2026-09-06T23:10:00+02:00' });
@@ -237,6 +278,8 @@ describe('PredictionsPanel — a settled match', () => {
         { PlayerID: ME, Name: 'me', PredictedTeamID: 'team-a' },
         { PlayerID: 'p2', Name: 'zoe', PredictedTeamID: null }
       ],
+      Count: 2,
+      Revealed: true,
       MyPrediction: { PlayerID: ME, Name: 'me', PredictedTeamID: 'team-a' }
     }));
   });
