@@ -71,6 +71,7 @@ type MatchWithDetails struct {
 	RegistrationOpensAt   *time.Time        `json:"RegistrationOpensAt,omitempty"`
 	RegistrationsClosedAt *time.Time        `json:"RegistrationsClosedAt,omitempty"`
 	MaxPlayers            *int              `json:"MaxPlayers,omitempty"`
+	ResultRecordedAt      *time.Time        `json:"ResultRecordedAt,omitempty"`
 	RegistrationCount     *int              `json:"RegistrationCount,omitempty"`
 	Teams                 []TeamWithPlayers `json:"Teams"`
 }
@@ -99,6 +100,7 @@ type RowsMatchDetails struct {
 	MatchRegistrationOpensAt   *time.Time
 	MatchRegistrationsClosedAt *time.Time
 	MatchMaxPlayers            *int
+	MatchResultRecordedAt      *time.Time
 	TeamID                     uuid.UUID
 	TeamName                   string
 	TeamColour                 string

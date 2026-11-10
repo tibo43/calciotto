@@ -123,6 +123,13 @@ type Match struct {
 	RegistrationOpensAt   *time.Time `gorm:"type:timestamptz" json:"registration_opens_at,omitempty"`
 	RegistrationsClosedAt *time.Time `gorm:"type:timestamptz" json:"registrations_closed_at,omitempty"`
 	MaxPlayers            *int       `json:"max_players,omitempty"`
+	// ResultRecordedAt is when an admin first saved this scheduled match's
+	// score after kick-off (MatchService.UpdateMatch sets it). It is what
+	// settles predictions: until then, a 0-0 could just mean nobody has
+	// entered the score yet, and settling on it would hand every "Draw"
+	// prediction a win. NULL for an unscheduled match — that is recorded
+	// after the fact by construction and never carries predictions.
+	ResultRecordedAt *time.Time `gorm:"type:timestamptz" json:"result_recorded_at,omitempty"`
 	// CreatedAt is the moment this row was logged — GORM's usual
 	// auto-populate-on-create convention, like MatchRegistration.CreatedAt and
 	// MatchVote.CreatedAt. It was originally added as the Man of the Match

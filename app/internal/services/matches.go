@@ -216,6 +216,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
                matches.registration_opens_at as match_registration_opens_at,
                matches.registrations_closed_at as match_registrations_closed_at,
                matches.max_players as match_max_players,
+               matches.result_recorded_at as match_result_recorded_at,
                teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored,
@@ -267,6 +268,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 				RegistrationOpensAt:   rowMatches.MatchRegistrationOpensAt,
 				RegistrationsClosedAt: rowMatches.MatchRegistrationsClosedAt,
 				MaxPlayers:            rowMatches.MatchMaxPlayers,
+				ResultRecordedAt:      rowMatches.MatchResultRecordedAt,
 				Teams:                 []models.TeamWithPlayers{},
 			}
 			// Present iff the match is scheduled — a nil count means "there is
@@ -413,6 +415,7 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
                matches.registration_opens_at as match_registration_opens_at,
                matches.registrations_closed_at as match_registrations_closed_at,
                matches.max_players as match_max_players,
+               matches.result_recorded_at as match_result_recorded_at,
                teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored,
@@ -445,6 +448,7 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 		RegistrationOpensAt:   rowsMatch[0].MatchRegistrationOpensAt,
 		RegistrationsClosedAt: rowsMatch[0].MatchRegistrationsClosedAt,
 		MaxPlayers:            rowsMatch[0].MatchMaxPlayers,
+		ResultRecordedAt:      rowsMatch[0].MatchResultRecordedAt,
 		Teams:                 []models.TeamWithPlayers{},
 	}
 
@@ -746,6 +750,16 @@ func (s *MatchService) UpdateMatch(matchID, groupID uuid.UUID, teams []models.Te
 						return result.Error
 					}
 				}
+			}
+		}
+
+		// A save after kick-off is the admin recording the result, which
+		// is what settles the match's predictions. The first such save is
+		// kept: later corrections change the score, and every standing is
+		// derived from the score, so nothing else needs to move.
+		if match.IsScheduled() && match.ResultRecordedAt == nil && !time.Now().Before(*match.ScheduledAt) {
+			if err := tx.Model(&models.Match{}).Where("id = ?", matchID).Update("result_recorded_at", time.Now()).Error; err != nil {
+				return err
 			}
 		}
 		return nil

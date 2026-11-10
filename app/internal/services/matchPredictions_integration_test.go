@@ -290,3 +290,96 @@ func TestDeleteMatch_Integration_RemovesPredictions(t *testing.T) {
 		t.Errorf("%d predictions survived the match deletion, want 0", remaining)
 	}
 }
+
+// TestUpdateMatch_Integration_RecordsResultOnlyAfterKickoff: composing a
+// roster ahead of kick-off is not recording a result, so it must not settle
+// anything.
+func TestUpdateMatch_Integration_RecordsResultOnlyAfterKickoff(t *testing.T) {
+	env := newPredictionEnv(t, "before-kickoff-save", time.Now().Add(48*time.Hour))
+	env.composeRoster(t)
+
+	var match models.Match
+	if err := env.tx.First(&match, "id = ?", env.matchID).Error; err != nil {
+		t.Fatalf("failed to reload match: %v", err)
+	}
+	if match.ResultRecordedAt != nil {
+		t.Errorf("ResultRecordedAt = %v after a save before kick-off, want nil", match.ResultRecordedAt)
+	}
+}
+
+// TestPredictionStandings_Integration_SettledOnlyOnceResultRecorded: a match
+// that has kicked off still settles nothing until an admin saves its score;
+// that save settles it straight away, and a later correction keeps the
+// first recording time.
+func TestPredictionStandings_Integration_SettledOnlyOnceResultRecorded(t *testing.T) {
+	env := newPredictionEnv(t, "settle-on-record", time.Now().Add(-2*time.Hour))
+	alice, err := env.players.CreatePlayer("Zzz Settle Alice " + uuid.NewString())
+	if err != nil {
+		t.Fatalf("failed to create player: %v", err)
+	}
+	bob, err := env.players.CreatePlayer("Zzz Settle Bob " + uuid.NewString())
+	if err != nil {
+		t.Fatalf("failed to create player: %v", err)
+	}
+	membership := services.NewGroupMembershipService(env.tx)
+	for _, id := range []uuid.UUID{alice, bob} {
+		if err := membership.AddPlayerToGroup(env.groupID, id); err != nil {
+			t.Fatalf("failed to add member: %v", err)
+		}
+	}
+	// The roster and the prediction are written directly: going through
+	// UpdateMatch here would itself record the result (kick-off has passed),
+	// and Predict refuses after kick-off.
+	for _, mp := range []models.MatchPlayer{
+		{MatchID: env.matchID, TeamID: env.teamAID, PlayerID: alice},
+		{MatchID: env.matchID, TeamID: env.teamBID, PlayerID: bob},
+	} {
+		if err := env.tx.Create(&mp).Error; err != nil {
+			t.Fatalf("failed to compose roster: %v", err)
+		}
+	}
+	if err := env.tx.Create(&models.MatchPrediction{MatchID: env.matchID, PlayerID: alice, PredictedTeamID: &env.teamAID}).Error; err != nil {
+		t.Fatalf("failed to create prediction: %v", err)
+	}
+
+	standings := services.NewStandingsService(env.tx, membership)
+	rows, err := standings.GetPredictionStandings(env.groupID, "")
+	if err != nil {
+		t.Fatalf("GetPredictionStandings returned error: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("standings = %+v before the result was recorded, want none", rows)
+	}
+
+	saveScore := func(aliceGoals int) {
+		t.Helper()
+		if err := env.matches.UpdateMatch(env.matchID, env.groupID, []models.TeamWithPlayers{
+			{ID: env.teamAID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: aliceGoals}}},
+			{ID: env.teamBID, Players: []models.PlayerCustom{{ID: bob}}},
+		}); err != nil {
+			t.Fatalf("UpdateMatch returned error: %v", err)
+		}
+	}
+	saveScore(2)
+
+	rows, err = standings.GetPredictionStandings(env.groupID, "")
+	if err != nil {
+		t.Fatalf("GetPredictionStandings returned error: %v", err)
+	}
+	if len(rows) != 1 || rows[0].PlayerID != alice || rows[0].Correct != 1 {
+		t.Fatalf("standings = %+v after the result was recorded, want alice with 1 correct prediction", rows)
+	}
+
+	var first models.Match
+	if err := env.tx.First(&first, "id = ?", env.matchID).Error; err != nil || first.ResultRecordedAt == nil {
+		t.Fatalf("ResultRecordedAt not set after a save past kick-off (err %v)", err)
+	}
+	saveScore(3)
+	var second models.Match
+	if err := env.tx.First(&second, "id = ?", env.matchID).Error; err != nil {
+		t.Fatalf("failed to reload match: %v", err)
+	}
+	if second.ResultRecordedAt == nil || !second.ResultRecordedAt.Equal(*first.ResultRecordedAt) {
+		t.Errorf("ResultRecordedAt moved from %v to %v on a correction, want the first recording kept", first.ResultRecordedAt, second.ResultRecordedAt)
+	}
+}

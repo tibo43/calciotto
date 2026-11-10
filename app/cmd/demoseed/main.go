@@ -12,6 +12,8 @@
 //   - this season: six weekly scheduled matches already played (results,
 //     sign-up lists, Man of the Match votes, settled predictions), the most
 //     recent one yesterday so its voting window is still open;
+//   - today: a match that kicked off two hours ago whose score nobody has
+//     saved yet, so its predictions are still waiting to be settled;
 //   - upcoming: one composed match with predictions open (+3 days), one with
 //     sign-ups closed but no teams yet (+5), one with sign-ups open and a
 //     waiting list (+7), and one whose sign-ups haven't opened yet (+14).
@@ -229,6 +231,7 @@ func buildGroupHistory(e *env, g *group) {
 	for _, offset := range playedOffsets {
 		createScheduledPlayed(e, g, e.kickoff(g, offset))
 	}
+	createAwaitingResult(e, g, e.now.Add(-2*time.Hour))
 	createComposedUpcoming(e, g, e.kickoff(g, composedOffset))
 	createClosedUncomposed(e, g, e.kickoff(g, closedOffset))
 	createOpenSignups(e, g, e.kickoff(g, openOffset))
@@ -287,6 +290,11 @@ func createScheduledPlayed(e *env, g *group, kickoff time.Time) {
 
 	roster := signedUp[:min(maxPlayers, len(signedUp))]
 	composeRoster(e, g, matchID, roster, true)
+	// The admin saved the score after the final whistle — that is what
+	// settles the predictions (see Match.ResultRecordedAt).
+	if err := e.db.Model(&models.Match{}).Where("id = ?", matchID).Update("result_recorded_at", kickoff.Add(2*time.Hour)).Error; err != nil {
+		log.Fatalf("failed to record the result: %v", err)
+	}
 
 	// Yesterday's match is still inside the Man of the Match window, so its
 	// votes go through the service — and thibaut's is left for him to cast.
@@ -305,6 +313,26 @@ func createScheduledPlayed(e *env, g *group, kickoff time.Time) {
 
 	for _, predictor := range pickPlayers(g.members, len(g.members)*2/3) {
 		insert(e, &models.MatchPrediction{MatchID: matchID, PlayerID: predictor, PredictedTeamID: randomPick(g), CreatedAt: opensAt.Add(36 * time.Hour)})
+	}
+}
+
+// createAwaitingResult: kicked off two hours ago, teams composed, predictions
+// made, but no score saved yet — so nothing is settled. Written directly
+// for the same reason as createScheduledPlayed: every window has closed.
+func createAwaitingResult(e *env, g *group, kickoff time.Time) {
+	opensAt := kickoff.AddDate(0, 0, -6)
+	maxPlayers := 12
+	matchID := createScheduled(e, g, kickoff, opensAt, maxPlayers)
+	roster := pickPlayers(g.members, maxPlayers)
+	for i, playerID := range roster {
+		insert(e, &models.MatchRegistration{MatchID: matchID, PlayerID: playerID, CreatedAt: opensAt.Add(time.Duration(i+1) * time.Hour)})
+	}
+	if err := e.db.Model(&models.Match{}).Where("id = ?", matchID).Update("registrations_closed_at", kickoff.Add(-24*time.Hour)).Error; err != nil {
+		log.Fatalf("failed to close sign-ups: %v", err)
+	}
+	composeRoster(e, g, matchID, roster, false)
+	for _, predictor := range pickPlayers(g.members, len(g.members)/2) {
+		insert(e, &models.MatchPrediction{MatchID: matchID, PlayerID: predictor, PredictedTeamID: randomPick(g), CreatedAt: kickoff.Add(-24 * time.Hour)})
 	}
 }
 

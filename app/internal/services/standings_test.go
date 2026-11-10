@@ -607,3 +607,19 @@ func TestComputePredictionStandings_UsesFullHistoryForOddsNotJustCountedMatches(
 		t.Errorf("points with full history = %.3f, want below the even-match baseline (%.3f) now that alice's side is a real favourite", withFullHistory[alicePredicts].Points, testEvenOdds-1)
 	}
 }
+
+// TestFilterResultRecorded: predictions are settled once the admin has
+// saved the score, not on a calendar rule — a match that kicked off days
+// ago but has no recorded result still doesn't count, while one recorded
+// an hour after kick-off counts straight away.
+func TestFilterResultRecorded(t *testing.T) {
+	now := time.Now()
+	recordedAt := now.Add(-time.Hour)
+	recorded := models.MatchWithDetails{ID: uuid.New(), Date: models.Date(now), ResultRecordedAt: &recordedAt}
+	notYet := models.MatchWithDetails{ID: uuid.New(), Date: models.Date(now.AddDate(0, 0, -5))}
+
+	filtered := FilterResultRecorded([]models.MatchWithDetails{recorded, notYet})
+	if len(filtered) != 1 || filtered[0].ID != recorded.ID {
+		t.Fatalf("FilterResultRecorded = %+v, want only the recorded match", filtered)
+	}
+}

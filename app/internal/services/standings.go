@@ -109,7 +109,7 @@ func (s *StandingsService) GetMotmStandings(groupID uuid.UUID, season string) ([
 // GetPredictionStandings ranks a group's players by their net return on
 // win/draw/loss predictions, following the exact same shape as
 // GetPointsStandings/GetScorers/GetMotmStandings: load the group's matches,
-// season-filter and completed-filter in Go, run a pure Compute* function,
+// season-filter in Go, run a pure Compute* function,
 // then tag IsMember as a post-processing step. Like GetMotmStandings, the
 // extra data source (predictions) is not part of MatchWithDetails at all
 // (see CLAUDE.md's "flatten/reconstruct pattern" — joining match_predictions
@@ -117,8 +117,9 @@ func (s *StandingsService) GetMotmStandings(groupID uuid.UUID, season string) ([
 // so it is loaded separately for every match in the already-filtered result.
 //
 // Unlike the other three, two match slices are threaded through to
-// ComputePredictionStandings: the season-filtered, completed set whose
-// predictions actually count toward this leaderboard, and the group's
+// ComputePredictionStandings: the season-filtered set whose result an admin
+// has recorded (FilterResultRecorded) — the only matches whose predictions
+// actually count toward this leaderboard — and the group's
 // entire unfiltered history, needed to replay Elo correctly (see
 // EloRatingsBeforeMatch) — Elo is explicitly continuous across a group's
 // whole history and never reset per season (see cmd/elo's own doc comment),
@@ -130,7 +131,7 @@ func (s *StandingsService) GetPredictionStandings(groupID uuid.UUID, season stri
 	if err != nil {
 		return nil, err
 	}
-	counted := FilterCompletedMatches(FilterMatchesBySeason(allMatches, season), time.Now())
+	counted := FilterResultRecorded(FilterMatchesBySeason(allMatches, season))
 
 	matchIDs := make([]uuid.UUID, len(counted))
 	for i, match := range counted {
@@ -318,6 +319,22 @@ func FilterMatchesBySeason(matches []models.MatchWithDetails, season string) []m
 func IsMatchCompleted(match models.MatchWithDetails, now time.Time) bool {
 	deadline := time.Time(match.Date).AddDate(0, 0, 1)
 	return !now.Before(deadline)
+}
+
+// FilterResultRecorded keeps only the matches whose result an admin has
+// recorded after kick-off (Match.ResultRecordedAt). It is what settles
+// predictions, instead of FilterCompletedMatches' midnight-after rule: a
+// match is only over once its score is in — settling on the 0-0 of a score
+// nobody has entered yet would hand every "Draw" prediction a win — and,
+// equally, nothing is gained by waiting for midnight once it is.
+func FilterResultRecorded(matches []models.MatchWithDetails) []models.MatchWithDetails {
+	filtered := make([]models.MatchWithDetails, 0, len(matches))
+	for _, match := range matches {
+		if match.ResultRecordedAt != nil {
+			filtered = append(filtered, match)
+		}
+	}
+	return filtered
 }
 
 // FilterCompletedMatches keeps only the matches IsMatchCompleted reports true
