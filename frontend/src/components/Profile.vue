@@ -218,15 +218,27 @@
 
           <!-- Danger zone: kept in its own card, visually separated from
                everything above, so an irreversible action doesn't sit next
-               to routine ones (favoriting a group, viewing a roster). -->
-          <div class="danger-zone-card card-base card-large">
-            <h2 class="section-title danger-zone-title">Danger zone</h2>
-            <p class="danger-zone-description">
-              Permanently delete your account. This cannot be undone.
-            </p>
-            <button class="btn-base btn-danger" @click="showDeleteAccountModal = true">
-              Delete my account
+               to routine ones (favoriting a group, viewing a roster).
+               Collapsed by default: on a phone it is the last thing above
+               the bottom tab bar, and a big red button there was one stray
+               tap away from the logout icon. -->
+          <div class="danger-zone-card card-base">
+            <button type="button" class="danger-zone-toggle" :aria-expanded="isDangerZoneOpen.toString()"
+              @click="isDangerZoneOpen = !isDangerZoneOpen">
+              <span class="danger-zone-title">Danger zone</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                class="danger-zone-chevron" :class="{ 'is-expanded': isDangerZoneOpen }">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
             </button>
+            <div v-if="isDangerZoneOpen" class="danger-zone-body">
+              <p class="danger-zone-description">
+                Permanently delete your account. This cannot be undone.
+              </p>
+              <button class="btn-base btn-small btn-danger" @click="showDeleteAccountModal = true">
+                Delete my account
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -304,7 +316,8 @@ export default {
 
       // Non-null while the invite-code/teams dialog for one group is open.
       settingsForGroup: null,
-      showDeleteAccountModal: false
+      showDeleteAccountModal: false,
+      isDangerZoneOpen: false
     };
   },
   computed: {
@@ -1003,16 +1016,60 @@ export default {
    actions) — an irreversible action shouldn't blend in next to them. */
 .danger-zone-card {
   border: 1px solid var(--danger-color);
+  padding: 0;
+}
+
+.danger-zone-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.85rem 1.25rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--danger-color);
 }
 
 .danger-zone-title {
-  color: var(--danger-color);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.danger-zone-chevron {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  transition: transform var(--transition-fast);
+}
+
+.danger-zone-chevron.is-expanded {
+  transform: rotate(180deg);
+}
+
+/* Description left, a small button right, instead of a full-size red
+   button on its own line. */
+.danger-zone-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 1.25rem 1rem;
 }
 
 .danger-zone-description {
   color: var(--text-secondary);
-  font-size: 0.9rem;
-  margin: 0.25rem 0 1rem;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.danger-zone-body .btn-danger {
+  flex-shrink: 0;
+  /* Undo global-styles.css's mobile `.btn-base { width: 100% }` and its
+     padding (which also beats .btn-small): this one stays a small button. */
+  width: auto;
+  padding: 0.5rem 0.9rem;
+  white-space: nowrap;
 }
 
 /* Responsive */
