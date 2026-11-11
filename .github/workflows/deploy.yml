@@ -116,19 +116,89 @@ jobs:
           # GitHub is the source of truth; Koyeb needs its own copy because the
           # values are read at every container start, not just at deploy time.
           # --value-from-stdin keeps them out of the process argument list.
-          # There is no upsert in the CLI, hence update-then-create.
+          # There is no upsert in the CLI. `koyeb secrets get` cannot decide
+          # whether a write is even needed: it prints the value as `*****`.
+          # `koyeb secrets reveal` prints the raw value and exactly one
+          # trailing newline (fmt.Printf("%s\n") in secrets_reveal.go). That
+          # newline is stripped before `cmp`, which recovers the stored bytes
+          # — including a value that itself ends in a newline. The bytes stay
+          # in a mode-600 file and are never written to the log.
+          #
+          # Rewriting a secret that has not changed is not a no-op. On
+          # 11 Nov 2026 (run 43053082184, both attempts) this step updated all
+          # six secrets and the deploy step called `services update` a few
+          # seconds later; Koyeb failed that deployment at provisioning with
+          # every secret reported missing (`secret:workspace:jwt_secret` and
+          # the rest, names lowercased) even though the secrets existed and
+          # the @NAME refs were the ones the previous deploy had used. Compare
+          # first, and write only when the secret is absent or the value
+          # differs. A real write tells the next step to wait before
+          # provisioning (KOYEB_SECRETS_WRITTEN).
+          secrets_written=0
+          tmp_files=()
+          cleanup_tmp() {
+            if [ "${#tmp_files[@]}" -gt 0 ]; then
+              rm -f "${tmp_files[@]}"
+            fi
+          }
+          trap cleanup_tmp EXIT
+
           sync_secret() {
-            local name="$1" value="$2"
+            local name="$1"
+            local value="$2"
+            local reveal_file want_file reveal_err last_byte
+
             if [ -z "$value" ]; then
               echo "::error::secret $name is empty — set it in the 'production' environment"
               exit 1
             fi
-            if printf '%s' "$value" | koyeb secrets update "$name" --value-from-stdin >/dev/null 2>&1; then
-              echo "updated secret $name"
-            else
-              printf '%s' "$value" | koyeb secrets create "$name" --value-from-stdin >/dev/null
-              echo "created secret $name"
+
+            reveal_file=$(mktemp)
+            want_file=$(mktemp)
+            reveal_err=$(mktemp)
+            chmod 600 "$reveal_file" "$want_file" "$reveal_err"
+            tmp_files+=("$reveal_file" "$want_file" "$reveal_err")
+            printf '%s' "$value" >"$want_file"
+
+            if ! koyeb secrets reveal "$name" >"$reveal_file" 2>"$reveal_err"; then
+              # "Unable to find the secret `<name>`" is the mapper's not-found
+              # text (errors.NewCLIErrorForMapperResolve). Any other failure
+              # — auth, network, a list error — must not be treated as
+              # "create it", or a blip becomes a second secret or a swallowed
+              # error. The value is not in this stderr: reveal writes it only
+              # to stdout, and only on success.
+              if grep -F -q "Unable to find the secret" "$reveal_err"; then
+                # Redirect the file rather than `printf '%s' "$value" | …`.
+                # Same stdin contract; a `set -x` trace then shows the temp
+                # path instead of the secret.
+                koyeb secrets create "$name" --value-from-stdin <"$want_file" >/dev/null
+                echo "created secret $name"
+                secrets_written=1
+              else
+                echo "::error::could not read Koyeb secret $name"
+                cat "$reveal_err" >&2
+                exit 1
+              fi
+              rm -f "$reveal_file" "$want_file" "$reveal_err"
+              return 0
             fi
+
+            # Drop the single trailing newline `secrets reveal` appends.
+            # od -tu1 prints the last byte as a decimal (10 is LF) with
+            # surrounding whitespace; nothing here prints the file.
+            last_byte=$(tail -c 1 "$reveal_file" | od -An -tu1 | tr -d '[:space:]')
+            if [ "$last_byte" = "10" ]; then
+              truncate -s -1 "$reveal_file"
+            fi
+
+            if cmp -s "$reveal_file" "$want_file"; then
+              echo "secret $name unchanged"
+            else
+              koyeb secrets update "$name" --value-from-stdin <"$want_file" >/dev/null
+              echo "updated secret $name"
+              secrets_written=1
+            fi
+            rm -f "$reveal_file" "$want_file" "$reveal_err"
           }
 
           sync_secret DATABASE_URL "$DATABASE_URL"
@@ -156,6 +226,13 @@ jobs:
             sync_secret SIGNUP_RATE_LIMIT_BURST "$SIGNUP_RATE_LIMIT_BURST"
           fi
 
+          if [ "$secrets_written" -eq 1 ]; then
+            echo "One or more Koyeb secrets were created or updated; the deploy step will wait before provisioning"
+          else
+            echo "No Koyeb secret changed"
+          fi
+          echo "KOYEB_SECRETS_WRITTEN=$secrets_written" >>"$GITHUB_ENV"
+
       - name: Deploy to Koyeb
         env:
           IMAGE: ${{ vars.DOCKERHUB_IMAGE }}:${{ github.sha }}
@@ -168,6 +245,17 @@ jobs:
           HAS_SIGNUP_RATE_LIMIT_BURST: ${{ secrets.SIGNUP_RATE_LIMIT_BURST != '' }}
         run: |
           set -euo pipefail
+
+          # The sync step sets this when it created or updated a secret.
+          # Koyeb accepts the write immediately and can still fail the
+          # deployment that follows a few seconds later, reporting those
+          # secrets missing at provisioning (run 43053082184). Wait that
+          # window out only after a real write; an unchanged secret is the
+          # steady state and deploys straight away.
+          if [ "${KOYEB_SECRETS_WRITTEN:-0}" = "1" ]; then
+            echo "Waiting 20s for Koyeb to observe the secret write before deploying"
+            sleep 20
+          fi
 
           if koyeb apps get "$KOYEB_APP" >/dev/null 2>&1; then
             # The app can be left PAUSED by an earlier experiment, in which
@@ -221,8 +309,32 @@ jobs:
             args+=(--env SIGNUP_RATE_LIMIT_BURST=@SIGNUP_RATE_LIMIT_BURST)
           fi
 
-          koyeb services update "$KOYEB_APP/$KOYEB_SERVICE" "${args[@]}" \
-            || koyeb services create "$KOYEB_SERVICE" --app "$KOYEB_APP" --type web "${args[@]}"
+          # `services get` is the existence check. Update and create used to be
+          # chained with `||`, so an update that failed because the deployment
+          # itself failed (run 43053082184: status ERROR, secrets not found at
+          # provisioning) fell through into `services create`, which then
+          # failed with "maximum number of instances of type free" and hid the
+          # deployment error. A missing service is the only path that creates.
+          # Any other lookup failure, and any update failure, fails the job.
+          # "Unable to find the service `<app>/<name>`" is the same mapper
+          # not-found text the secret sync matches on.
+          service_ref="$KOYEB_APP/$KOYEB_SERVICE"
+          service_err=$(mktemp)
+          chmod 600 "$service_err"
+          if koyeb services get "$service_ref" >/dev/null 2>"$service_err"; then
+            rm -f "$service_err"
+            echo "updating existing service $service_ref"
+            koyeb services update "$service_ref" "${args[@]}"
+          elif grep -F -q "Unable to find the service" "$service_err"; then
+            rm -f "$service_err"
+            echo "service $service_ref does not exist; creating it"
+            koyeb services create "$KOYEB_SERVICE" --app "$KOYEB_APP" --type web "${args[@]}"
+          else
+            echo "::error::could not look up Koyeb service $service_ref"
+            cat "$service_err" >&2
+            rm -f "$service_err"
+            exit 1
+          fi
 
   deploy-frontend:
     name: Deploy frontend (Vercel)
