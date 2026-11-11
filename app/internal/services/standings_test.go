@@ -432,12 +432,12 @@ func predictionRowsByID(rows []models.PredictionStandingRow) map[uuid.UUID]model
 
 // With no prior match history, EloRatingsBeforeMatch returns every player
 // at EloStartingRating on both sides, so ComputeMatchOdds(1500, 1500)'s own
-// fixed values apply — 2.857.. for either team, 3.333.. for a draw (see
+// fixed values apply — 3.333.. for either team, 2.5 for a draw (see
 // matchOdds_test.go's own TestComputeMatchOdds_EvenMatch for the same
 // figures pinned directly).
 const (
-	testEvenOdds     = 1.0 / 0.35
-	testEvenDrawOdds = 1.0 / 0.30
+	testEvenOdds     = 1.0 / 0.30
+	testEvenDrawOdds = 1.0 / 0.40
 )
 
 func TestComputePredictionStandings_CorrectPredictionNetsOddsMinusOne(t *testing.T) {
