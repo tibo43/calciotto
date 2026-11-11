@@ -2,29 +2,6 @@
   <div class="profile-container">
     <section class="profile-section">
       <div class="container">
-        <!-- Phone only: App.vue hides its top bar there, so logout and the
-             theme toggle live here instead. Outside the loading/error
-             branches so they stay reachable even when the stats fail. -->
-        <div v-if="appShell" class="profile-toolbar">
-          <button class="theme-toggle" @click="appShell.toggleTheme"
-            :aria-label="appShell.isDarkMode.value ? 'Switch to light mode' : 'Switch to dark mode'">
-            <svg v-if="appShell.isDarkMode.value" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="5" />
-              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-          </button>
-          <button class="icon-nav-button logout-btn" @click="appShell.logout" aria-label="Log out">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-          </button>
-        </div>
-
         <!-- Loading State -->
         <div v-if="isLoading" class="loading-container">
           <div class="loading-spinner"></div>
@@ -290,9 +267,6 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'PlayerProfile',
-  inject: {
-    appShell: { default: null }
-  },
   components: { GroupSettingsModal, DeleteAccountModal },
   data() {
     return {
@@ -541,20 +515,6 @@ export default {
 </script>
 
 <style scoped>
-/* Hidden on desktop, where App.vue's top bar already carries both buttons. */
-.profile-toolbar {
-  display: none;
-}
-
-@media (max-width: 768px) {
-  .profile-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.25rem;
-    margin-bottom: 0.5rem;
-  }
-}
-
 /* Layout mirrors MatchesAndStandings.vue — same container/header/table treatment, so
    the two ranking pages read as one screen family. */
 .profile-container {

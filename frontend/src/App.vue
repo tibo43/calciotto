@@ -5,7 +5,7 @@
         <!-- Top Navigation -->
         <!-- On a phone, an authenticated page has no top bar at all: the
              bottom tab bar navigates, and logout/theme live at the top of
-             Profile.vue (provided below as appShell). Public pages keep it,
+             the bottom bar, next to the Profile tab. Public pages keep it,
              since they have no bottom bar and no profile to reach. -->
         <nav class="top-navbar" :class="{ 'scrolled': isScrolled, 'hidden-on-mobile': isAuthenticatedRoute }">
           <div class="nav-container">
@@ -111,8 +111,10 @@
              app places its primary navigation at the thumb, along the
              bottom edge — so this isn't a duplicate of the top nav, it
              replaces it as the actual navigation surface on a phone, and
-             the top bar is hidden altogether (logout and theme move to the
-             top of the Profile page). Same three destinations, labels
+             the top bar is hidden altogether. Its two actions (theme,
+             logout) appear at the end of this bar, next to the Profile tab,
+             while the Profile page is open: account-level actions where the
+             account lives, out of the way everywhere else. Same three destinations, labels
              and icons as the top nav-menu, so both bars read as one app. -->
         <nav v-if="isAuthenticatedRoute" class="bottom-tab-bar">
           <router-link to="/" :class="['bottom-tab-button', { active: $route.name === 'MatchesAndStandings' }]"
@@ -142,13 +144,31 @@
             </svg>
             <span class="bottom-tab-label">Profile</span>
           </router-link>
+          <div v-if="$route.name === 'Profile'" class="bottom-tab-actions">
+            <button class="bottom-tab-action" @click="toggleTheme"
+              :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'">
+              <svg v-if="isDarkMode" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="5" />
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            </button>
+            <button class="bottom-tab-action" @click="logout" aria-label="Log out">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </button>
+          </div>
         </nav>
     </div>
   </div>
 </template>
 
 <script>
-import { computed } from 'vue';
 import { clearToken } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 
@@ -161,18 +181,6 @@ export default {
     return {
       isScrolled: false,
       isDarkMode: false
-    };
-  },
-  // Profile.vue renders its own logout/theme buttons on a phone, where the
-  // top bar is hidden; it reuses these rather than keeping a second copy of
-  // the theme preference or of logout's cache clearing.
-  provide() {
-    return {
-      appShell: {
-        isDarkMode: computed(() => this.isDarkMode),
-        toggleTheme: this.toggleTheme,
-        logout: this.logout
-      }
     };
   },
   computed: {
@@ -460,6 +468,39 @@ export default {
 
 .bottom-tab-button.active {
   color: var(--primary-color);
+}
+
+/* Theme and logout, shown only on the Profile page: a compact pair set off
+   from the tabs by a divider, so they don't read as two more destinations. */
+.bottom-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0 0.5rem;
+  border-left: 1px solid var(--border-color);
+  margin: 0.6rem 0;
+}
+
+.bottom-tab-action {
+  background: none;
+  border: none;
+  padding: 0.5rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bottom-tab-action:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.bottom-tab-action svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* Transitions */
