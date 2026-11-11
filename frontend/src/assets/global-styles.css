@@ -501,7 +501,7 @@ body {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1px solid white;
+  border: 1px solid currentColor;
   box-shadow: var(--shadow-sm);
 }
 
@@ -590,6 +590,48 @@ body {
 }
 
 /* Toast Animations */
+/* Bottom-right variant, for a toast that shouldn't cover the page's own
+   controls at the top. */
+.toast-container.toast-bottom {
+  top: auto;
+  bottom: 20px;
+}
+
+/* A real close button instead of the decorative ::after cross, for a
+   toast that should only close from its cross. */
+.toast-message.has-close {
+  padding-right: 48px;
+}
+
+.toast-message.has-close::after {
+  content: none;
+}
+
+.toast-close {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.toast-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
 @keyframes toastSlideIn {
   from {
     opacity: 0;
@@ -706,10 +748,19 @@ body {
     justify-content: center;
   }
 
+  /* width: auto undoes Bootstrap's own .toast-container (width:
+     max-content), which otherwise wins over the left/right stretch and
+     leaves the toast at its 300px content width on a phone. */
   .toast-container {
     top: 10px;
     right: 10px;
     left: 10px;
+    width: auto;
+  }
+
+  .toast-container.toast-bottom {
+    top: auto;
+    bottom: 10px;
   }
 
   .toast-message {

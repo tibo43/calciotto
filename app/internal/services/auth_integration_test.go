@@ -559,6 +559,13 @@ func TestDeleteAccount_Integration_AnonymizesAndCleansUp(t *testing.T) {
 	if err := tx.Create(&models.MatchVote{MatchID: matchID, VoterID: survivorID, VotedForID: deletingPlayerID}).Error; err != nil {
 		t.Fatalf("failed to create Rita's vote: %v", err)
 	}
+	// Quinn's own prediction goes with the account; Rita's stays.
+	if err := tx.Create(&models.MatchPrediction{MatchID: matchID, PlayerID: deletingPlayerID}).Error; err != nil {
+		t.Fatalf("failed to create Quinn's prediction: %v", err)
+	}
+	if err := tx.Create(&models.MatchPrediction{MatchID: matchID, PlayerID: survivorID}).Error; err != nil {
+		t.Fatalf("failed to create Rita's prediction: %v", err)
+	}
 
 	if err := authService.DeleteAccount(deletingPlayerID, "s3cret-pass"); err != nil {
 		t.Fatalf("DeleteAccount returned error: %v", err)
@@ -595,6 +602,18 @@ func TestDeleteAccount_Integration_AnonymizesAndCleansUp(t *testing.T) {
 	}
 	if castVoteCount != 0 {
 		t.Errorf("votes cast by deleted player = %d, want 0", castVoteCount)
+	}
+
+	var predictionCount int64
+	if err := tx.Model(&models.MatchPrediction{}).Where("player_id = ?", deletingPlayerID).Count(&predictionCount).Error; err != nil {
+		t.Fatalf("failed to count predictions by deleted player: %v", err)
+	}
+	if predictionCount != 0 {
+		t.Errorf("predictions by deleted player = %d, want 0", predictionCount)
+	}
+	var survivorPrediction models.MatchPrediction
+	if err := tx.Where("player_id = ?", survivorID).First(&survivorPrediction).Error; err != nil {
+		t.Errorf("another player's prediction was removed by the account deletion: %v", err)
 	}
 
 	var voteForDeletedPlayer models.MatchVote

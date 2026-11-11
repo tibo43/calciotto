@@ -420,3 +420,238 @@ func TestFilterCompletedMatches_ExcludesAComposedButUpcomingMatch(t *testing.T) 
 		t.Errorf("alice.Played = %d after filtering, want 1 (only the played match should count)", r.Played)
 	}
 }
+
+// predictionRowsByID mirrors pointsRowsByID for PredictionStandingRow.
+func predictionRowsByID(rows []models.PredictionStandingRow) map[uuid.UUID]models.PredictionStandingRow {
+	m := make(map[uuid.UUID]models.PredictionStandingRow, len(rows))
+	for _, r := range rows {
+		m[r.PlayerID] = r
+	}
+	return m
+}
+
+// With no prior match history, EloRatingsBeforeMatch returns every player
+// at EloStartingRating on both sides, so ComputeMatchOdds(1500, 1500)'s own
+// fixed values apply — 2.857.. for either team, 3.333.. for a draw (see
+// matchOdds_test.go's own TestComputeMatchOdds_EvenMatch for the same
+// figures pinned directly).
+const (
+	testEvenOdds     = 1.0 / 0.35
+	testEvenDrawOdds = 1.0 / 0.30
+)
+
+func TestComputePredictionStandings_CorrectPredictionNetsOddsMinusOne(t *testing.T) {
+	alice := uuid.New()
+	teamAID, teamBID := uuid.New(), uuid.New()
+	match := models.MatchWithDetails{
+		ID:   uuid.New(),
+		Date: models.Date(time.Now()),
+		Teams: []models.TeamWithPlayers{
+			{ID: teamAID, Colour: "black", Score: 2, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "scorer"}}},
+			{ID: teamBID, Colour: "white", Score: 0, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "other"}}},
+		},
+	}
+	predictions := map[uuid.UUID][]models.MatchPredictionEntry{
+		match.ID: {{PlayerID: alice, Name: "alice", PredictedTeamID: &teamAID}},
+	}
+
+	rows := predictionRowsByID(ComputePredictionStandings([]models.MatchWithDetails{match}, []models.MatchWithDetails{match}, predictions))
+
+	r, ok := rows[alice]
+	if !ok {
+		t.Fatalf("alice has no row at all, want one")
+	}
+	if r.Predictions != 1 || r.Correct != 1 {
+		t.Errorf("alice = %+v, want 1 prediction, 1 correct", r)
+	}
+	wantPoints := testEvenOdds - 1
+	if !almostEqual(r.Points, wantPoints) {
+		t.Errorf("alice.Points = %.3f, want ~%.3f (even-match team odds minus the one token staked)", r.Points, wantPoints)
+	}
+}
+
+func TestComputePredictionStandings_WrongPredictionNetsMinusOne(t *testing.T) {
+	alice := uuid.New()
+	teamAID, teamBID := uuid.New(), uuid.New()
+	match := models.MatchWithDetails{
+		ID:   uuid.New(),
+		Date: models.Date(time.Now()),
+		Teams: []models.TeamWithPlayers{
+			{ID: teamAID, Colour: "black", Score: 2, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "scorer"}}},
+			{ID: teamBID, Colour: "white", Score: 0, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "other"}}},
+		},
+	}
+	// alice backs team B, but team A wins.
+	predictions := map[uuid.UUID][]models.MatchPredictionEntry{
+		match.ID: {{PlayerID: alice, Name: "alice", PredictedTeamID: &teamBID}},
+	}
+
+	rows := predictionRowsByID(ComputePredictionStandings([]models.MatchWithDetails{match}, []models.MatchWithDetails{match}, predictions))
+
+	r := rows[alice]
+	if r.Predictions != 1 || r.Correct != 0 {
+		t.Errorf("alice = %+v, want 1 prediction, 0 correct", r)
+	}
+	if !almostEqual(r.Points, -1) {
+		t.Errorf("alice.Points = %.3f, want -1 (the one token staked, lost)", r.Points)
+	}
+}
+
+func TestComputePredictionStandings_CorrectDrawPrediction(t *testing.T) {
+	alice := uuid.New()
+	teamAID, teamBID := uuid.New(), uuid.New()
+	match := models.MatchWithDetails{
+		ID:   uuid.New(),
+		Date: models.Date(time.Now()),
+		Teams: []models.TeamWithPlayers{
+			{ID: teamAID, Colour: "black", Score: 1, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "a"}}},
+			{ID: teamBID, Colour: "white", Score: 1, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "b"}}},
+		},
+	}
+	predictions := map[uuid.UUID][]models.MatchPredictionEntry{
+		match.ID: {{PlayerID: alice, Name: "alice", PredictedTeamID: nil}},
+	}
+
+	rows := predictionRowsByID(ComputePredictionStandings([]models.MatchWithDetails{match}, []models.MatchWithDetails{match}, predictions))
+
+	r := rows[alice]
+	wantPoints := testEvenDrawOdds - 1
+	if r.Correct != 1 || !almostEqual(r.Points, wantPoints) {
+		t.Errorf("alice = %+v, want 1 correct and ~%.3f points (even-match draw odds minus stake)", r, wantPoints)
+	}
+}
+
+func TestComputePredictionStandings_SkipsMatchesWithNoPredictions(t *testing.T) {
+	teamAID, teamBID := uuid.New(), uuid.New()
+	match := models.MatchWithDetails{
+		ID:   uuid.New(),
+		Date: models.Date(time.Now()),
+		Teams: []models.TeamWithPlayers{
+			{ID: teamAID, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "a"}}},
+			{ID: teamBID, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "b"}}},
+		},
+	}
+
+	rows := ComputePredictionStandings([]models.MatchWithDetails{match}, []models.MatchWithDetails{match}, map[uuid.UUID][]models.MatchPredictionEntry{})
+	if len(rows) != 0 {
+		t.Fatalf("expected no rows for a match nobody predicted, got %+v", rows)
+	}
+}
+
+func TestComputePredictionStandings_SkipsAnUncomposedMatch(t *testing.T) {
+	alice := uuid.New()
+	teamAID, teamBID := uuid.New(), uuid.New()
+	// Scheduled, but white's side has no roster yet — no derivable result.
+	match := models.MatchWithDetails{
+		ID:   uuid.New(),
+		Date: models.Date(time.Now()),
+		Teams: []models.TeamWithPlayers{
+			{ID: teamAID, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "a"}}},
+			{ID: teamBID, Players: []models.PlayerCustom{}},
+		},
+	}
+	predictions := map[uuid.UUID][]models.MatchPredictionEntry{
+		match.ID: {{PlayerID: alice, Name: "alice", PredictedTeamID: &teamAID}},
+	}
+
+	rows := ComputePredictionStandings([]models.MatchWithDetails{match}, []models.MatchWithDetails{match}, predictions)
+	if len(rows) != 0 {
+		t.Fatalf("expected no rows for an uncomposed match, got %+v", rows)
+	}
+}
+
+// TestComputePredictionStandings_UsesFullHistoryForOddsNotJustCountedMatches
+// pins the exact bug this function's own doc comment warns about: settling
+// a counted (season-filtered) match's prediction must replay Elo against the
+// group's *entire* history, not just the matches passed in as "counted" —
+// otherwise a group with more than one season would understate (or reset)
+// every player's true rating the moment a season filter narrows the input.
+func TestComputePredictionStandings_UsesFullHistoryForOddsNotJustCountedMatches(t *testing.T) {
+	alice := []models.PlayerCustom{{ID: uuid.New(), Name: "alice"}}
+	bob := []models.PlayerCustom{{ID: uuid.New(), Name: "bob"}}
+	alicePredicts := alice[0].ID
+
+	// A prior "season" of matches, all won by alice's side, pushing her Elo
+	// rating well above the starting value before the counted match below.
+	day1 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	day2 := time.Date(2026, 1, 8, 0, 0, 0, 0, time.UTC)
+	day3 := time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)
+	priorSeason := []models.MatchWithDetails{
+		eloMatch(day1, day1, alice, 3, bob, 0),
+		eloMatch(day2, day2, alice, 3, bob, 0),
+		eloMatch(day3, day3, alice, 3, bob, 0),
+	}
+
+	// This season's only match: alice's team (now the clear favourite) wins
+	// again, and alice correctly predicted it.
+	counted := eloMatch(time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), time.Time{}, alice, 2, bob, 0)
+	teamAID := counted.Teams[0].ID
+	predictions := map[uuid.UUID][]models.MatchPredictionEntry{
+		counted.ID: {{PlayerID: alicePredicts, Name: "alice", PredictedTeamID: &teamAID}},
+	}
+
+	allMatches := append(append([]models.MatchWithDetails{}, priorSeason...), counted)
+
+	withFullHistory := predictionRowsByID(ComputePredictionStandings(allMatches, []models.MatchWithDetails{counted}, predictions))
+	// The bug this guards against: passing only the counted match as if it
+	// were also the full history, so EloRatingsBeforeMatch sees no prior
+	// season at all and treats both sides as freshly started.
+	withOnlyCountedAsHistory := predictionRowsByID(ComputePredictionStandings([]models.MatchWithDetails{counted}, []models.MatchWithDetails{counted}, predictions))
+
+	if withFullHistory[alicePredicts].Points == withOnlyCountedAsHistory[alicePredicts].Points {
+		t.Fatalf("points were identical (%.3f) whether or not the prior season was included — the odds must differ once alice's side is a known favourite rather than an even match", withFullHistory[alicePredicts].Points)
+	}
+	// Alice's side is now the proven favourite, so backing them correctly
+	// nets *less* than the even-match baseline (2.857-1), not the same.
+	if withFullHistory[alicePredicts].Points >= testEvenOdds-1 {
+		t.Errorf("points with full history = %.3f, want below the even-match baseline (%.3f) now that alice's side is a real favourite", withFullHistory[alicePredicts].Points, testEvenOdds-1)
+	}
+}
+
+// TestFilterResultRecorded: predictions are settled once the admin has
+// saved the score, not on a calendar rule — a match that kicked off days
+// ago but has no recorded result still doesn't count, while one recorded
+// an hour after kick-off counts straight away.
+func TestFilterResultRecorded(t *testing.T) {
+	now := time.Now()
+	recordedAt := now.Add(-time.Hour)
+	recorded := models.MatchWithDetails{ID: uuid.New(), Date: models.Date(now), ResultRecordedAt: &recordedAt}
+	notYet := models.MatchWithDetails{ID: uuid.New(), Date: models.Date(now.AddDate(0, 0, -5))}
+
+	filtered := FilterResultRecorded([]models.MatchWithDetails{recorded, notYet})
+	if len(filtered) != 1 || filtered[0].ID != recorded.ID {
+		t.Fatalf("FilterResultRecorded = %+v, want only the recorded match", filtered)
+	}
+}
+
+// TestComputePredictionStandings_HistoryOldestFirst: each row carries every
+// settled prediction, oldest first whatever order the matches arrive in,
+// with the pick's odds and what it earned.
+func TestComputePredictionStandings_HistoryOldestFirst(t *testing.T) {
+	alice := uuid.New()
+	newer := eloMatch(time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC), time.Time{},
+		[]models.PlayerCustom{{ID: uuid.New(), Name: "x"}}, 0, []models.PlayerCustom{{ID: uuid.New(), Name: "y"}}, 2)
+	older := eloMatch(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), time.Time{},
+		[]models.PlayerCustom{{ID: uuid.New(), Name: "x"}}, 1, []models.PlayerCustom{{ID: uuid.New(), Name: "y"}}, 0)
+	predictions := map[uuid.UUID][]models.MatchPredictionEntry{
+		newer.ID: {{PlayerID: alice, Name: "alice", PredictedTeamID: &newer.Teams[0].ID}},
+		older.ID: {{PlayerID: alice, Name: "alice", PredictedTeamID: &older.Teams[0].ID}},
+	}
+	matches := []models.MatchWithDetails{newer, older} // newest first, as loaded
+
+	row := predictionRowsByID(ComputePredictionStandings(matches, matches, predictions))[alice]
+
+	if len(row.History) != 2 || row.History[0].MatchID != older.ID || row.History[1].MatchID != newer.ID {
+		t.Fatalf("History = %+v, want the older match first", row.History)
+	}
+	hit, miss := row.History[0], row.History[1]
+	if !hit.Correct || hit.Points != hit.Odds-1 || hit.ScoreA != 1 || hit.ScoreB != 0 {
+		t.Errorf("first entry = %+v, want a hit worth odds-1 on a 1-0", hit)
+	}
+	if miss.Correct || miss.Points != -1 {
+		t.Errorf("second entry = %+v, want a miss worth -1", miss)
+	}
+	if row.Points != hit.Points+miss.Points {
+		t.Errorf("row points %.3f != sum of history %.3f", row.Points, hit.Points+miss.Points)
+	}
+}

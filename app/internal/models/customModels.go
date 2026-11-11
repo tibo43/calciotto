@@ -71,6 +71,7 @@ type MatchWithDetails struct {
 	RegistrationOpensAt   *time.Time        `json:"RegistrationOpensAt,omitempty"`
 	RegistrationsClosedAt *time.Time        `json:"RegistrationsClosedAt,omitempty"`
 	MaxPlayers            *int              `json:"MaxPlayers,omitempty"`
+	ResultRecordedAt      *time.Time        `json:"ResultRecordedAt,omitempty"`
 	RegistrationCount     *int              `json:"RegistrationCount,omitempty"`
 	Teams                 []TeamWithPlayers `json:"Teams"`
 }
@@ -99,6 +100,7 @@ type RowsMatchDetails struct {
 	MatchRegistrationOpensAt   *time.Time
 	MatchRegistrationsClosedAt *time.Time
 	MatchMaxPlayers            *int
+	MatchResultRecordedAt      *time.Time
 	TeamID                     uuid.UUID
 	TeamName                   string
 	TeamColour                 string
@@ -154,6 +156,95 @@ type MatchVoteTally struct {
 type MatchVoteSummary struct {
 	Tally     []MatchVoteTally `json:"Tally"`
 	MyVoteFor *uuid.UUID       `json:"MyVoteFor,omitempty"`
+}
+
+// MatchOdds is the three-way betting odds for one match, derived fresh from
+// both teams' pre-match Elo ratings (see ComputeMatchOdds) — never stored,
+// the same "derive it, don't store it" choice this whole feature makes
+// throughout. A multiplier of 2.0 means a correct 1-token prediction nets
+// +1 (pays out 2, stake included); see MatchPrediction's own comment for why
+// there is no stake field to multiply this against.
+type MatchOdds struct {
+	TeamAOdds float64 `json:"TeamAOdds"`
+	DrawOdds  float64 `json:"DrawOdds"`
+	TeamBOdds float64 `json:"TeamBOdds"`
+}
+
+// MatchPredictionEntry is one player's prediction line for a match, as
+// returned by MatchPredictionService.ListPredictions — mirrors
+// MatchRegistrationEntry's shape. PredictedTeamID carries no omitempty: nil
+// here means "predicted a draw", which must always be visible on an entry
+// that exists, never hidden the way an *absent* prediction would be (see
+// MatchPredictionSummary.MyPrediction for that distinction).
+type MatchPredictionEntry struct {
+	PlayerID        uuid.UUID  `json:"PlayerID"`
+	Name            string     `json:"Name"`
+	PredictedTeamID *uuid.UUID `json:"PredictedTeamID"`
+}
+
+// MatchPredictionSummary is GET /matches/:id/predictions' whole response:
+// every member's prediction, the odds they were/are made against, and the
+// caller's own prediction.
+//
+// MyPrediction is a *MatchPredictionEntry, not a bare *uuid.UUID: a
+// predicted draw is itself represented as PredictedTeamID: nil (see
+// MatchPrediction's comment), so a bare pointer could never distinguish
+// "hasn't predicted at all" from "predicted a draw" — both would be nil.
+// Wrapping the whole entry resolves that the same way MatchWithDetails.
+// RegistrationCount resolves "N/A" vs "zero": the outer pointer is what
+// carries "absent", not the inner one.
+//
+// Odds is nil when the match's roster isn't fully composed on both sides yet
+// — there is nothing to average a rating over, so nothing to show.
+//
+// Other members' picks stay private until kick-off: before it, Entries holds
+// only the caller's own prediction (if any) and Revealed is false, so nobody
+// can follow the crowd while the choice is still open. Count is always the
+// total number of predictions made, which reveals no one's pick.
+type MatchPredictionSummary struct {
+	Entries      []MatchPredictionEntry `json:"Entries"`
+	Count        int                    `json:"Count"`
+	Revealed     bool                   `json:"Revealed"`
+	Odds         *MatchOdds             `json:"Odds,omitempty"`
+	MyPrediction *MatchPredictionEntry  `json:"MyPrediction,omitempty"`
+}
+
+// PredictionStandingRow is one player's row in the season-long prediction
+// leaderboard. Points is a float, not an int, because a correct prediction
+// nets its odds' value minus the one implicit token staked (an evens
+// favourite nets barely above 0, a long-shot draw nets several) rather than
+// a flat +1 — see MatchPrediction's own comment for why there is no actual
+// balance anywhere, just this derived running total. IsMember is tagged the
+// same post-processing way as PointsStandingRow/ScorerRow/MotmStandingRow.
+//
+// History is every settled prediction behind the row, oldest first — what
+// the leaderboard's last-five form and per-player detail are drawn from.
+type PredictionStandingRow struct {
+	PlayerID    uuid.UUID                `json:"PlayerID"`
+	Name        string                   `json:"Name"`
+	Predictions int                      `json:"Predictions"`
+	Correct     int                      `json:"Correct"`
+	Points      float64                  `json:"Points"`
+	IsMember    bool                     `json:"IsMember"`
+	History     []PredictionHistoryEntry `json:"History"`
+}
+
+// PredictionHistoryEntry is one settled prediction: the match, its final
+// score, what was picked (PredictedTeamID nil = draw) at which odds, and
+// what it earned — odds - 1 on a hit, -1 on a miss.
+type PredictionHistoryEntry struct {
+	MatchID         uuid.UUID  `json:"MatchID"`
+	Date            Date       `json:"Date"`
+	TeamAID         uuid.UUID  `json:"TeamAID"`
+	TeamAName       string     `json:"TeamAName"`
+	TeamBID         uuid.UUID  `json:"TeamBID"`
+	TeamBName       string     `json:"TeamBName"`
+	ScoreA          int        `json:"ScoreA"`
+	ScoreB          int        `json:"ScoreB"`
+	PredictedTeamID *uuid.UUID `json:"PredictedTeamID"`
+	Odds            float64    `json:"Odds"`
+	Correct         bool       `json:"Correct"`
+	Points          float64    `json:"Points"`
 }
 
 // MotmStandingRow is one player's row in the season-long Man of the Match

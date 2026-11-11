@@ -123,6 +123,13 @@ type Match struct {
 	RegistrationOpensAt   *time.Time `gorm:"type:timestamptz" json:"registration_opens_at,omitempty"`
 	RegistrationsClosedAt *time.Time `gorm:"type:timestamptz" json:"registrations_closed_at,omitempty"`
 	MaxPlayers            *int       `json:"max_players,omitempty"`
+	// ResultRecordedAt is when an admin first saved this scheduled match's
+	// score after kick-off (MatchService.UpdateMatch sets it). It is what
+	// settles predictions: until then, a 0-0 could just mean nobody has
+	// entered the score yet, and settling on it would hand every "Draw"
+	// prediction a win. NULL for an unscheduled match — that is recorded
+	// after the fact by construction and never carries predictions.
+	ResultRecordedAt *time.Time `gorm:"type:timestamptz" json:"result_recorded_at,omitempty"`
 	// CreatedAt is the moment this row was logged — GORM's usual
 	// auto-populate-on-create convention, like MatchRegistration.CreatedAt and
 	// MatchVote.CreatedAt. It was originally added as the Man of the Match
@@ -199,6 +206,32 @@ type MatchVote struct {
 	VoterID    uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_match_vote_match_voter" json:"voter_id"`
 	VotedForID uuid.UUID `gorm:"type:uuid" json:"voted_for_id"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+// MatchPrediction is one player's win/draw/loss prediction for a scheduled
+// match, made once its roster is fully composed and locked once kick-off
+// passes (see MatchPredictionService.PredictionWindowError). The composite
+// unique index means "exactly one *current* prediction per player per
+// match" — an upsert, the same meaning MatchVote's own index carries, not
+// MatchRegistration's "at most one sign-up": changing your prediction before
+// kick-off is the ordinary case, not a mistake.
+//
+// PredictedTeamID is nil for a predicted draw — there is no separate "is a
+// draw" boolean, a real team id can never collide with nil.
+//
+// There is deliberately no stake/amount field: every prediction implicitly
+// "plays" exactly one token, so a correct prediction nets (odds-1) and a
+// wrong one nets -1 — no balance to track, nothing that can run out. The
+// odds themselves are never stored here either: they are derived fresh from
+// each team's pre-match Elo rating whenever a prediction is shown or
+// settled (see ComputeMatchOdds/EloRatingsBeforeMatch), the same
+// "derive, don't store" choice the waiting list and MOTM award already make.
+type MatchPrediction struct {
+	BaseModel
+	MatchID         uuid.UUID  `gorm:"type:uuid;uniqueIndex:idx_match_prediction_match_player" json:"match_id"`
+	PlayerID        uuid.UUID  `gorm:"type:uuid;uniqueIndex:idx_match_prediction_match_player" json:"player_id"`
+	PredictedTeamID *uuid.UUID `gorm:"type:uuid" json:"predicted_team_id"`
+	CreatedAt       time.Time  `json:"created_at"`
 }
 
 // MatchPlayer représente la composition d'une équipe pour un match.

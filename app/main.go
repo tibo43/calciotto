@@ -65,6 +65,7 @@ func main() {
 	matchHandler := handlers.NewMatchHandler(matchService, groupMembershipService)
 	matchRegistrationHandler := handlers.NewMatchRegistrationHandler(services.NewMatchRegistrationService(db))
 	matchVoteHandler := handlers.NewMatchVoteHandler(services.NewMatchVoteService(db))
+	matchPredictionHandler := handlers.NewMatchPredictionHandler(services.NewMatchPredictionService(db, matchService))
 	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(db, groupMembershipService), groupMembershipService)
 	authHandler := handlers.NewAuthHandler(authService)
 
@@ -223,10 +224,18 @@ func main() {
 	r.DELETE("/matches/:id/votes", authRequired, requireGroupMemberByMatchID, matchVoteHandler.Unvote)
 	r.GET("/matches/:id/votes", authRequired, requireGroupMemberByMatchID, matchVoteHandler.ListVotes)
 
+	// Win/draw/loss predictions — same match-scoped middleware as votes
+	// above and for the same reason, but deliberately its own, unrelated
+	// feature: no admin-only route, no roster-eligibility check (see
+	// MatchPredictionHandler's own doc comment).
+	r.POST("/matches/:id/predictions", authRequired, requireGroupMemberByMatchID, matchPredictionHandler.Predict)
+	r.GET("/matches/:id/predictions", authRequired, requireGroupMemberByMatchID, matchPredictionHandler.ListPredictions)
+
 	// Standings
 	r.GET("/standings/points", authRequired, requireGroupMember, standingsHandler.GetPointsStandings)
 	r.GET("/standings/scorers", authRequired, requireGroupMember, standingsHandler.GetScorers)
 	r.GET("/standings/motm", authRequired, requireGroupMember, standingsHandler.GetMotmStandings)
+	r.GET("/standings/predictions", authRequired, requireGroupMember, standingsHandler.GetPredictionStandings)
 	r.GET("/standings/seasons", authRequired, requireGroupMember, standingsHandler.GetSeasons)
 
 	// Auth — all four are unauthenticated by necessity (a caller signing up or

@@ -139,6 +139,15 @@ const routes = [
     name: 'Profile',
     component: () => import('@/components/Profile.vue')
   },
+  // Its own top-level destination, alongside Matches and Profile — not a
+  // sub-tab of MatchesAndStandings.vue any more. It owns its own active-group/
+  // season resolution the same way MatchesAndStandings.vue does, since it's
+  // no longer a child that can read those off a parent page.
+  {
+    path: '/predictions',
+    name: 'Predictions',
+    component: () => import('@/components/Predictions.vue')
+  },
   {
     path: '/login',
     name: 'Login',

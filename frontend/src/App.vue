@@ -30,6 +30,23 @@
                 <span class="nav-button-label">Matches</span>
               </router-link>
               <router-link
+                to="/predictions"
+                :class="{ 'active': $route.name === 'Predictions' }"
+                class="nav-button"
+                aria-label="Pronostic"
+              >
+                <!-- Target/bullseye — "getting the call right", not a dice or
+                     chip: this is a free prediction game with no stake or
+                     balance (see matchPredictions.js), so an icon evoking
+                     real-money betting would misrepresent it. -->
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="9"/>
+                  <circle cx="12" cy="12" r="5"/>
+                  <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>
+                </svg>
+                <span class="nav-button-label">Pronostic</span>
+              </router-link>
+              <router-link
                 to="/profile"
                 :class="{ 'active': $route.name === 'Profile' }"
                 class="nav-button"
