@@ -8,6 +8,7 @@ import (
 	"app/internal/models"
 	"app/internal/services"
 	"app/internal/testutil"
+	"app/pkg/database"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -440,5 +441,53 @@ func TestListPredictions_Integration_OthersHiddenUntilKickoff(t *testing.T) {
 				t.Errorf("MyPrediction = %+v, want the caller's own", summary.MyPrediction)
 			}
 		})
+	}
+}
+
+// TestBackfillResultRecordedAt_Integration: a composed scheduled match played
+// before ResultRecordedAt existed is marked recorded at startup, while an
+// uncomposed one, and a composed one kicking off after the release (whose
+// NULL means the score really isn't in yet), are left alone.
+func TestBackfillResultRecordedAt_Integration(t *testing.T) {
+	beforeRelease := time.Date(2026, time.October, 4, 20, 0, 0, 0, time.UTC)
+	// Already kicked off, but after the release: its NULL is a real
+	// "score not saved yet".
+	afterRelease := time.Now().Add(-5 * time.Minute)
+
+	old := newPredictionEnv(t, "backfill-old", beforeRelease)
+	old.composeRoster(t)
+	oldEmpty := newPredictionEnv(t, "backfill-old-empty", beforeRelease)
+	recent := newPredictionEnv(t, "backfill-recent", afterRelease)
+	recent.composeRoster(t)
+
+	// Composing after kick-off records the result; undo that to reproduce a
+	// row saved before the column existed. Each env has its own transaction.
+	for _, env := range []*predictionEnv{old, oldEmpty, recent} {
+		if err := env.tx.Model(&models.Match{}).Where("id = ?", env.matchID).
+			Update("result_recorded_at", nil).Error; err != nil {
+			t.Fatalf("failed to clear result_recorded_at: %v", err)
+		}
+		if err := database.BackfillResultRecordedAt(env.tx); err != nil {
+			t.Fatalf("BackfillResultRecordedAt: %v", err)
+		}
+	}
+
+	recordedAt := func(env *predictionEnv) *time.Time {
+		t.Helper()
+		var match models.Match
+		if err := env.tx.First(&match, "id = ?", env.matchID).Error; err != nil {
+			t.Fatalf("failed to reload match: %v", err)
+		}
+		return match.ResultRecordedAt
+	}
+
+	if got := recordedAt(old); got == nil || !got.Equal(beforeRelease) {
+		t.Errorf("old composed match: ResultRecordedAt = %v, want its kick-off %v", got, beforeRelease)
+	}
+	if got := recordedAt(oldEmpty); got != nil {
+		t.Errorf("old uncomposed match: ResultRecordedAt = %v, want nil", got)
+	}
+	if got := recordedAt(recent); got != nil {
+		t.Errorf("match after the release: ResultRecordedAt = %v, want nil", got)
 	}
 }
