@@ -174,7 +174,11 @@ async function gotoApp(page, path, options = {}) {
 
   // The app renders a spinner while it resolves the active group; every page
   // under test is past that once the navbar and the main content are both up.
-  await expect(page.locator('.nav-menu')).toBeVisible();
+  // `.main-content` rather than anything in the top bar: on a phone-width
+  // viewport (the @mobile project) App.vue hides the whole top bar on an
+  // authenticated page, so no locator inside it would ever become visible
+  // there. The main content renders on every viewport and route.
+  await expect(page.locator('.main-content')).toBeVisible();
   await expect(page.locator('.loading-spinner')).toHaveCount(0);
 
   return { unstubbed };
