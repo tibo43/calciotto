@@ -3,7 +3,11 @@
     <!-- Main App Container -->
     <div class="app-container">
         <!-- Top Navigation -->
-        <nav class="top-navbar" :class="{ 'scrolled': isScrolled }">
+        <!-- On a phone, an authenticated page has no top bar at all: the
+             bottom tab bar navigates, and logout/theme live at the top of
+             Profile.vue (provided below as appShell). Public pages keep it,
+             since they have no bottom bar and no profile to reach. -->
+        <nav class="top-navbar" :class="{ 'scrolled': isScrolled, 'hidden-on-mobile': isAuthenticatedRoute }">
           <div class="nav-container">
             <!-- Logo/Brand -->
             <div class="nav-brand" @click="goHome">
@@ -95,7 +99,7 @@
         </nav>
 
         <!-- Main Content -->
-        <main class="main-content">
+        <main class="main-content" :class="{ 'no-top-bar-on-mobile': isAuthenticatedRoute }">
           <router-view />
         </main>
 
@@ -106,9 +110,9 @@
              cramped and unfamiliar next to how every native-feeling mobile
              app places its primary navigation at the thumb, along the
              bottom edge — so this isn't a duplicate of the top nav, it
-             replaces it as the actual navigation surface on a phone; the
-             top bar keeps only the brand and the actions that aren't really
-             "navigation" (theme, logout). Same three destinations, labels
+             replaces it as the actual navigation surface on a phone, and
+             the top bar is hidden altogether (logout and theme move to the
+             top of the Profile page). Same three destinations, labels
              and icons as the top nav-menu, so both bars read as one app. -->
         <nav v-if="isAuthenticatedRoute" class="bottom-tab-bar">
           <router-link to="/" :class="['bottom-tab-button', { active: $route.name === 'MatchesAndStandings' }]"
@@ -144,6 +148,7 @@
 </template>
 
 <script>
+import { computed } from 'vue';
 import { clearToken } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 
@@ -156,6 +161,18 @@ export default {
     return {
       isScrolled: false,
       isDarkMode: false
+    };
+  },
+  // Profile.vue renders its own logout/theme buttons on a phone, where the
+  // top bar is hidden; it reuses these rather than keeping a second copy of
+  // the theme preference or of logout's cache clearing.
+  provide() {
+    return {
+      appShell: {
+        isDarkMode: computed(() => this.isDarkMode),
+        toggleTheme: this.toggleTheme,
+        logout: this.logout
+      }
     };
   },
   computed: {
@@ -496,14 +513,24 @@ export default {
 
   /* The bottom tab bar (below) replaces the top nav-menu as the actual
      navigation surface on a phone — see its own comment in the template
-     above for why. Only the links move down there; brand/theme/logout
-     stay on the top bar. */
+     above for why. On an authenticated page the whole top bar goes (see
+     .hidden-on-mobile); on a public one only its links do. */
   .nav-menu {
     display: none;
   }
 
   .nav-actions {
     gap: 0.25rem;
+  }
+
+  .top-navbar.hidden-on-mobile {
+    display: none;
+  }
+
+  .main-content.no-top-bar-on-mobile {
+    margin-top: 0;
+    min-height: 100vh;
+    padding-top: env(safe-area-inset-top, 0px);
   }
 
   .bottom-tab-bar {

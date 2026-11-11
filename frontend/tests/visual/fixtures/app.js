@@ -174,13 +174,11 @@ async function gotoApp(page, path, options = {}) {
 
   // The app renders a spinner while it resolves the active group; every page
   // under test is past that once the navbar and the main content are both up.
-  // `.nav-brand` rather than `.nav-menu` specifically: the mobile bottom tab
-  // bar (App.vue) hides `.nav-menu` at the same @media(max-width: 768px)
-  // breakpoint the @mobile project's own viewport trips, so that locator
-  // would never become visible on a mobile run — the brand renders
-  // unconditionally on every viewport and every authenticated/public route
-  // alike, which is what this assertion actually needs.
-  await expect(page.locator('.nav-brand')).toBeVisible();
+  // `.main-content` rather than anything in the top bar: on a phone-width
+  // viewport (the @mobile project) App.vue hides the whole top bar on an
+  // authenticated page, so no locator inside it would ever become visible
+  // there. The main content renders on every viewport and route.
+  await expect(page.locator('.main-content')).toBeVisible();
   await expect(page.locator('.loading-spinner')).toHaveCount(0);
 
   return { unstubbed };
