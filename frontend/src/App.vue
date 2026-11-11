@@ -108,27 +108,27 @@
              bottom edge — so this isn't a duplicate of the top nav, it
              replaces it as the actual navigation surface on a phone; the
              top bar keeps only the brand and the actions that aren't really
-             "navigation" (theme, logout). "Prono" doesn't have a page of
-             its own yet — a win/draw/loss predictions feature is landing in
-             a separate PR — so it points at the home page for now, same as
-             "Calendar", rather than a route that doesn't exist. -->
+             "navigation" (theme, logout). Same three destinations, labels
+             and icons as the top nav-menu, so both bars read as one app. -->
         <nav v-if="isAuthenticatedRoute" class="bottom-tab-bar">
           <router-link to="/" :class="['bottom-tab-button', { active: $route.name === 'MatchesAndStandings' }]"
-            aria-label="Calendar">
+            aria-label="Matches">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
               <line x1="16" y1="2" x2="16" y2="6" />
               <line x1="8" y1="2" x2="8" y2="6" />
               <line x1="3" y1="10" x2="21" y2="10" />
             </svg>
-            <span class="bottom-tab-label">Calendar</span>
+            <span class="bottom-tab-label">Matches</span>
           </router-link>
-          <router-link to="/" class="bottom-tab-button" aria-label="Predictions">
+          <router-link to="/predictions" :class="['bottom-tab-button', { active: $route.name === 'Predictions' }]"
+            aria-label="Pronostic">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-              <polyline points="17 6 23 6 23 12" />
+              <circle cx="12" cy="12" r="9" />
+              <circle cx="12" cy="12" r="5" />
+              <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
             </svg>
-            <span class="bottom-tab-label">Prono</span>
+            <span class="bottom-tab-label">Pronostic</span>
           </router-link>
           <router-link to="/profile" :class="['bottom-tab-button', { active: $route.name === 'Profile' }]"
             aria-label="Profile">

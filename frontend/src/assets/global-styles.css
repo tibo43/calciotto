@@ -758,9 +758,11 @@ body {
     width: auto;
   }
 
+  /* Clears App.vue's fixed bottom tab bar (same offset as the padding
+     .main-content reserves for it), so the toast never covers the tabs. */
   .toast-container.toast-bottom {
     top: auto;
-    bottom: 10px;
+    bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
   }
 
   .toast-message {
