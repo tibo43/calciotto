@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"app/internal/models"
 
@@ -199,8 +200,39 @@ func applySchema(db *gorm.DB) error {
 	// since before this column existed is, for every one of them, already
 	// long past that regardless of which of the two timestamps is used.
 	// Idempotent — after the first run no NULL is left to update.
-	return db.Exec(`UPDATE matches SET created_at = date::timestamptz WHERE created_at IS NULL`).Error
+	if err := db.Exec(`UPDATE matches SET created_at = date::timestamptz WHERE created_at IS NULL`).Error; err != nil {
+		return err
+	}
+
+	return BackfillResultRecordedAt(db)
 }
+
+// BackfillResultRecordedAt marks old scheduled matches as recorded.
+// Match.ResultRecordedAt is set by MatchService.UpdateMatch the first time
+// an admin saves a scheduled match at or after kick-off — but only from the
+// release that added it on. A scheduled match played and scored before
+// that keeps NULL, which the Pronostic page reads as "Awaiting result"
+// forever. Every such match with a composed roster (both teams have a
+// player) is treated as already recorded. Bounded by
+// resultRecordedAtCutoff rather than "kick-off has passed": on a match
+// after the cutoff, NULL is meaningful (the score really isn't in yet), and
+// filling it here on every startup would settle it at 0-0. No prediction
+// can exist on a match that kicked off before the cutoff, so this changes
+// no standing. Idempotent — after the first run no such NULL is left.
+func BackfillResultRecordedAt(db *gorm.DB) error {
+	return db.Exec(`
+		UPDATE matches SET result_recorded_at = scheduled_at
+		WHERE result_recorded_at IS NULL
+		  AND scheduled_at IS NOT NULL
+		  AND scheduled_at < ?
+		  AND (SELECT COUNT(DISTINCT team_id) FROM match_players WHERE match_players.match_id = matches.id) = 2
+	`, resultRecordedAtCutoff).Error
+}
+
+// resultRecordedAtCutoff is when Match.ResultRecordedAt reached production
+// (the end of the deploy of the match predictions feature, #33): before it,
+// saving a score didn't set the column. See BackfillResultRecordedAt.
+var resultRecordedAtCutoff = time.Date(2026, time.November, 11, 15, 41, 0, 0, time.UTC)
 
 func InitDB() (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(appDSN()), &gorm.Config{})
