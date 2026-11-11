@@ -98,6 +98,9 @@ const registrationList = () => [
 
 let nowSpy;
 
+// The shared toast's text (its close button's × excluded).
+const toastText = (wrapper) => wrapper.find('.toast-message span').text();
+
 const mountDetails = async ({ match, registrations = [], isAdmin = false, now = DURING_SIGNUPS } = {}) => {
   nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
   getMatchDetailsByID.mockResolvedValue(match);
@@ -455,8 +458,8 @@ describe('MatchDetails.vue admin editing the number of confirmed places', () => 
     await wrapper.vm.updateMaxPlayers();
     await flushPromises();
 
-    expect(wrapper.vm.message).toBe('maximum number of players must be greater than zero');
-    expect(wrapper.vm.messageType).toBe('error');
+    expect(toastText(wrapper)).toBe('maximum number of players must be greater than zero');
+    expect(wrapper.find('.toast-message').classes()).toContain('error');
     // The cap is unchanged, and the list was re-read rather than left stale.
     expect(wrapper.vm.maxPlayers).toBe(3);
     expect(getMatchRegistrations).toHaveBeenCalledTimes(2);
@@ -642,9 +645,9 @@ describe('MatchDetails.vue signing up and withdrawing', () => {
 
     await wrapper.vm.participate();
 
-    expect(wrapper.vm.message).toContain('#17');
-    expect(wrapper.vm.message).toMatch(/waiting list/i);
-    expect(wrapper.vm.messageType).toBe('success');
+    expect(toastText(wrapper)).toContain('#17');
+    expect(toastText(wrapper)).toMatch(/waiting list/i);
+    expect(wrapper.find('.toast-message').classes()).toContain('success');
   });
 
   it('does not claim a waiting-list place for a confirmed sign-up', async () => {
@@ -653,8 +656,8 @@ describe('MatchDetails.vue signing up and withdrawing', () => {
 
     await wrapper.vm.participate();
 
-    expect(wrapper.vm.message).not.toMatch(/waiting list/i);
-    expect(wrapper.vm.message).toContain('#5');
+    expect(toastText(wrapper)).not.toMatch(/waiting list/i);
+    expect(toastText(wrapper)).toContain('#5');
   });
 
   it('surfaces the backend 409 message verbatim when a sign-up is refused', async () => {
@@ -665,8 +668,8 @@ describe('MatchDetails.vue signing up and withdrawing', () => {
 
     await wrapper.vm.participate();
 
-    expect(wrapper.vm.message).toBe('registrations for this match are closed');
-    expect(wrapper.vm.messageType).toBe('error');
+    expect(toastText(wrapper)).toBe('registrations for this match are closed');
+    expect(wrapper.find('.toast-message').classes()).toContain('error');
   });
 
   it('confirms before withdrawing, and re-fetches the list so the promoted reserve shows', async () => {
@@ -872,9 +875,9 @@ describe('MatchDetails.vue "Fill teams from sign-ups" behaviour', () => {
 
     await clickAutoFill(wrapper);
 
-    expect(wrapper.vm.messageType).toBe('success');
-    expect(wrapper.vm.message).toMatch(/nothing is saved yet/i);
-    expect(wrapper.vm.message).toMatch(/save changes/i);
+    expect(wrapper.find('.toast-message').classes()).toContain('success');
+    expect(toastText(wrapper)).toMatch(/nothing is saved yet/i);
+    expect(toastText(wrapper)).toMatch(/save changes/i);
   });
 
   // The copy has to be visible before the admin commits, not only afterwards:
@@ -903,7 +906,7 @@ describe('MatchDetails.vue "Fill teams from sign-ups" behaviour', () => {
     expect(everyone.filter(name => name === 'marco')).toHaveLength(1);
     // Their goals survive, and the message accounts for them.
     expect(teamB.Players[0].GoalNumber).toBe(2);
-    expect(wrapper.vm.message).toMatch(/1 already in a team was left where they are/i);
+    expect(toastText(wrapper)).toMatch(/1 already in a team was left where they are/i);
   });
 
   it('refuses with an error when nobody is on the confirmed list', async () => {
@@ -913,8 +916,8 @@ describe('MatchDetails.vue "Fill teams from sign-ups" behaviour', () => {
 
     await clickAutoFill(wrapper);
 
-    expect(wrapper.vm.messageType).toBe('error');
-    expect(wrapper.vm.message).toMatch(/nothing to fill the teams with/i);
+    expect(wrapper.find('.toast-message').classes()).toContain('error');
+    expect(toastText(wrapper)).toMatch(/nothing to fill the teams with/i);
     expect(wrapper.vm.hasUnsavedChanges()).toBe(false);
   });
 
@@ -947,8 +950,8 @@ describe('MatchDetails.vue Save Changes and empty teams', () => {
     await wrapper.vm.saveChanges();
 
     expect(updateMatch).not.toHaveBeenCalled();
-    expect(wrapper.vm.messageType).toBe('error');
-    expect(wrapper.vm.message).toMatch(/each team requires at least 1 player/i);
+    expect(wrapper.find('.toast-message').classes()).toContain('error');
+    expect(toastText(wrapper)).toMatch(/each team requires at least 1 player/i);
   });
 
   it('allows saving a scheduled match with both teams still empty', async () => {

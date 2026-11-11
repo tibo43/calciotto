@@ -175,21 +175,13 @@
     </section>
 
     <!-- A refused bet (kick-off passed while the page was open, network
-         failure...) would otherwise fail silently: the shared toast, at the
-         bottom right, closing on its own after a few seconds or from its
-         cross. -->
-    <transition name="prediction-toast">
-      <div v-if="predictionMessage" class="toast-container toast-bottom" role="status" aria-live="polite">
-        <div class="toast-message has-close" :class="predictionMessageType">
-          <span>{{ predictionMessage }}</span>
-          <button type="button" class="toast-close" aria-label="Dismiss" @click="dismissToast">×</button>
-        </div>
-      </div>
-    </transition>
+         failure...) would otherwise fail silently. -->
+    <AppToast ref="toast" />
   </div>
 </template>
 
 <script>
+import AppToast from '@/components/AppToast.vue';
 // The Pronostic page's actual content (see Predictions.vue for the
 // context-bar shell around it): the match carousel, the per-match betting
 // widget, and the season leaderboard. Deliberately mirrors MatchesPanel.vue's
@@ -234,11 +226,9 @@ function currentPlayerIdFromToken() {
   }
 }
 
-// Long enough to read a sentence, short enough not to linger.
-const TOAST_DURATION_MS = 5000;
-
 export default {
   name: 'PredictionsPanel',
+  components: { AppToast },
   props: {
     activeGroupId: {
       type: String,
@@ -259,9 +249,6 @@ export default {
       summaries: {},
       isLoadingMatches: false,
       submittingMatchId: '',
-      predictionMessage: '',
-      predictionMessageType: 'error',
-      toastTimeout: null,
       currentPlayerId: '',
       canScrollLeft: false,
       canScrollRight: false,
@@ -324,7 +311,6 @@ export default {
     this.attachScrollListener();
   },
   beforeUnmount() {
-    clearTimeout(this.toastTimeout);
     if (this.$refs.matchesBar) {
       this.$refs.matchesBar.removeEventListener('scroll', this.updateScrollButtons);
     }
@@ -487,13 +473,13 @@ export default {
     },
     async predict(matchId, teamId) {
       this.submittingMatchId = matchId;
-      this.dismissToast();
+      this.$refs.toast.dismiss();
       try {
         const summary = await predictForMatch(matchId, teamId);
         this.summaries = { ...this.summaries, [matchId]: summary || {} };
       } catch (error) {
         console.error('Error submitting prediction:', error);
-        this.showToast(error?.response?.data?.error || 'Failed to save your prediction. Please try again.', 'error');
+        this.$refs.toast.show(error?.response?.data?.error || 'Failed to save your prediction. Please try again.', 'error');
         // A rejection here usually means the window just closed or this
         // view is stale — reload either way, the same reasoning the sign-up
         // panel already follows on its own 409s.
@@ -501,17 +487,6 @@ export default {
       } finally {
         this.submittingMatchId = '';
       }
-    },
-    showToast(message, type) {
-      clearTimeout(this.toastTimeout);
-      this.predictionMessage = message;
-      this.predictionMessageType = type;
-      this.toastTimeout = setTimeout(this.dismissToast, TOAST_DURATION_MS);
-    },
-    dismissToast() {
-      clearTimeout(this.toastTimeout);
-      this.toastTimeout = null;
-      this.predictionMessage = '';
     },
     scrollLeft() {
       if (this.$refs.matchesBar) {
@@ -1055,10 +1030,6 @@ export default {
   font-weight: 700;
   text-transform: uppercase;
   color: var(--primary-color);
-}
-
-.prediction-toast-leave-active {
-  animation: toastSlideOut 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 .match-details-enter-active,
