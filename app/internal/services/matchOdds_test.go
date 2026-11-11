@@ -15,11 +15,11 @@ func almostEqual(a, b float64) bool {
 func TestComputeMatchOdds_EvenMatch(t *testing.T) {
 	odds := ComputeMatchOdds(1500, 1500)
 
-	if !almostEqual(odds.DrawOdds, 3.33) {
-		t.Errorf("DrawOdds = %.3f, want ~3.33 (pDraw at even rating = %.2f)", odds.DrawOdds, PredictionDrawProbabilityAtEven)
+	if !almostEqual(odds.DrawOdds, 2.50) {
+		t.Errorf("DrawOdds = %.3f, want ~2.50 (pDraw at even rating = %.2f)", odds.DrawOdds, PredictionDrawProbabilityAtEven)
 	}
-	if !almostEqual(odds.TeamAOdds, 2.86) || !almostEqual(odds.TeamBOdds, 2.86) {
-		t.Errorf("TeamAOdds/TeamBOdds = %.3f/%.3f, want ~2.86 each (symmetric at equal rating)", odds.TeamAOdds, odds.TeamBOdds)
+	if !almostEqual(odds.TeamAOdds, 3.33) || !almostEqual(odds.TeamBOdds, 3.33) {
+		t.Errorf("TeamAOdds/TeamBOdds = %.3f/%.3f, want ~3.33 each (symmetric at equal rating)", odds.TeamAOdds, odds.TeamBOdds)
 	}
 }
 
@@ -60,10 +60,10 @@ func TestComputeMatchOdds_WorkedExamplesFromDesign(t *testing.T) {
 		ratingA, ratingB           float64
 		wantAOdds, wantDraw, wantB float64
 	}{
-		{"even (0 gap)", 1500, 1500, 2.86, 3.33, 2.86},
-		{"slight favourite (100 gap)", 1600, 1500, 2.10, 3.92, 3.73},
-		{"clear favourite (200 gap)", 1700, 1500, 1.67, 4.76, 5.27},
-		{"big gap (300 gap)", 1800, 1500, 1.41, 6.06, 7.93},
+		{"even (0 gap)", 1500, 1500, 3.33, 2.50, 3.33},
+		{"slight favourite (100 gap)", 1600, 1500, 2.42, 2.82, 4.31},
+		{"clear favourite (200 gap)", 1700, 1500, 1.91, 3.23, 6.03},
+		{"big gap (300 gap)", 1800, 1500, 1.60, 3.77, 9.01},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

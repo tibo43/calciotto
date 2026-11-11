@@ -16,15 +16,19 @@ const (
 	// when both teams carry the identical average rating — i.e. the ceiling
 	// this model ever assigns a draw, since the chance of a draw is modelled
 	// as strictly decreasing as the rating gap grows (see
-	// PredictionDrawSlopePerEloPoint). 0.30 is a deliberately round starting
-	// point, not fitted to any real calciotto data yet.
-	PredictionDrawProbabilityAtEven = 0.30
+	// PredictionDrawSlopePerEloPoint). 0.40 because draws are common in
+	// calciotto: the first production group drew 4 of its first 8 matches.
+	// Above 1/3, a draw between level sides is the likeliest outcome and so
+	// gets the lowest odds. 8 matches is a small sample: revisit once there
+	// are a few dozen.
+	PredictionDrawProbabilityAtEven = 0.40
 
 	// PredictionDrawProbabilityFloor is how far the modelled draw probability
 	// is allowed to fall as the rating gap widens — a real, if unlikely,
 	// draw between very mismatched teams should never evaporate to
-	// (and divide-by-near-zero toward) a degenerate odds value.
-	PredictionDrawProbabilityFloor = 0.12
+	// (and divide-by-near-zero toward) a degenerate odds value. Reached at a
+	// 444-point gap.
+	PredictionDrawProbabilityFloor = 0.20
 
 	// PredictionDrawSlopePerEloPoint is how much the draw probability drops
 	// per Elo point of rating gap between the two teams — e.g. a 200-point
