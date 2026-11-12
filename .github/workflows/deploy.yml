@@ -111,9 +111,11 @@ jobs:
           SIGNUP_RATE_LIMIT_PER_HOUR: ${{ secrets.SIGNUP_RATE_LIMIT_PER_HOUR }}
           SIGNUP_RATE_LIMIT_BURST: ${{ secrets.SIGNUP_RATE_LIMIT_BURST }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-          # A repository-level secret, not a 'production' one: the scheduler
-          # in notifications-tick.yml sends it too, and runs outside that
-          # environment.
+          # Repository-level secret. deploy.yml copies it to Koyeb on each
+          # deploy. cron-job.org calls
+          # POST https://calciotto.koyeb.app/internal/notifications/tick
+          # every five minutes with Authorization: Bearer <this value>, so
+          # the GitHub secret must match the one configured in cron-job.org.
           NOTIFICATIONS_TICK_SECRET: ${{ secrets.NOTIFICATIONS_TICK_SECRET }}
         run: |
           set -euo pipefail
