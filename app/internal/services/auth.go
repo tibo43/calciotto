@@ -518,6 +518,10 @@ func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 		if err := tx.Where("player_id = ?", playerID).Delete(&models.PlayerFeature{}).Error; err != nil {
 			return err
 		}
+		// And the devices it received push notifications on.
+		if err := tx.Where("player_id = ?", playerID).Delete(&models.PushSubscription{}).Error; err != nil {
+			return err
+		}
 
 		return tx.Model(&models.Player{}).
 			Where("id = ?", playerID).

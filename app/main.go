@@ -62,6 +62,20 @@ func main() {
 	groupHandler := handlers.NewGroupHandler(groupService, groupMembershipService)
 	teamHandler := handlers.NewTeamHandler(services.NewTeamService(db))
 	matchService := services.NewMatchService(db)
+	// Push notifications (services/notifications.go). Without the three
+	// VAPID settings nothing is delivered, but the rest works, the same
+	// degraded-but-running choice as Brevo for emails.
+	var pushSender services.PushSender
+	vapidPublicKey := os.Getenv("VAPID_PUBLIC_KEY")
+	if vapidPrivateKey, vapidSubject := os.Getenv("VAPID_PRIVATE_KEY"), os.Getenv("VAPID_SUBJECT"); vapidPublicKey != "" && vapidPrivateKey != "" && vapidSubject != "" {
+		pushSender = &services.WebPushSender{PublicKey: vapidPublicKey, PrivateKey: vapidPrivateKey, Subject: vapidSubject}
+	} else {
+		log.Println("VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT not all set: push notifications will not be delivered")
+		vapidPublicKey = ""
+	}
+	notificationService := services.NewNotificationService(db, pushSender, matchService)
+	matchService.Notifier = notificationService
+	notificationHandler := handlers.NewNotificationHandler(notificationService, vapidPublicKey, os.Getenv("NOTIFICATIONS_TICK_SECRET"))
 	matchHandler := handlers.NewMatchHandler(matchService, groupMembershipService)
 	matchRegistrationHandler := handlers.NewMatchRegistrationHandler(services.NewMatchRegistrationService(db))
 	matchVoteHandler := handlers.NewMatchVoteHandler(services.NewMatchVoteService(db))
@@ -96,6 +110,19 @@ func main() {
 	// Hidden features enabled for the caller (models.PlayerFeature), which
 	// are switched on by hand in the database. Same scoping as above.
 	r.GET("/players/me/features", authRequired, playerHandler.GetMyFeatures)
+	// Push notifications for the caller's own devices (the subscribe route
+	// refuses a player without the push-notifications feature).
+	r.GET("/push/public-key", authRequired, notificationHandler.GetPublicKey)
+	r.POST("/players/me/push-subscription", authRequired, notificationHandler.Subscribe)
+	r.DELETE("/players/me/push-subscription", authRequired, notificationHandler.Unsubscribe)
+	// Called by the scheduler (.github/workflows/notifications-tick.yml), not
+	// by players: authenticated by its own shared secret instead of a JWT, and
+	// not registered at all when that secret isn't configured.
+	if notificationHandler.TickSecret != "" {
+		r.POST("/internal/notifications/tick", notificationHandler.Tick)
+	} else {
+		log.Println("NOTIFICATIONS_TICK_SECRET not set: sign-up and kick-off notifications will not be sent")
+	}
 	// Self-service "delete my account" — the current password is required in
 	// the body as a safety confirmation. Lives on AuthHandler rather than
 	// PlayerHandler since it's fundamentally a credential-lifecycle action,

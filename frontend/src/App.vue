@@ -178,6 +178,7 @@
 import { clearToken } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta } from '@/services/theme';
+import { disablePushOnLogout } from '@/services/pushNotifications';
 
 // Routes reachable without a token — nothing group-related is shown there.
 const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
@@ -230,7 +231,11 @@ export default {
       this.isDarkMode = !this.isDarkMode;
       localStorage.setItem('calciotto-theme', this.isDarkMode ? 'dark' : 'light');
     },
-    logout() {
+    async logout() {
+      // Before the token goes: the next account on this device must not get
+      // this one's notifications, and the backend needs the token to forget
+      // the device.
+      await disablePushOnLogout();
       clearToken();
       // The next account to log in on this browser must not inherit this
       // one's group — the stale-id fallback would catch it, but only after a

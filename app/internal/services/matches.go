@@ -111,6 +111,28 @@ func (spec MatchSpec) validate() error {
 
 type MatchService struct {
 	DB *gorm.DB
+	// Notifier hears about every saved roster (UpdateMatch), which is what
+	// sends the "your team" and "result recorded" push notifications. Nil
+	// unless main.go wires one in, so tests and the cmd/ tools are unaffected.
+	Notifier MatchEventNotifier
+}
+
+// MatchEventNotifier is told, after the save has committed, that a match's
+// roster was saved. NotificationService implements it; an interface keeps
+// MatchService from depending on how notifications are sent.
+type MatchEventNotifier interface {
+	RosterSaved(event RosterSavedEvent)
+}
+
+// RosterSavedEvent describes one UpdateMatch call. Before and After map each
+// player on the roster to their team, so a listener can tell who was newly
+// placed or moved. ResultRecorded is true only for the save that first set
+// Match.ResultRecordedAt, i.e. the admin entering the score after kick-off.
+type RosterSavedEvent struct {
+	Match          models.Match
+	Before         map[uuid.UUID]uuid.UUID
+	After          map[uuid.UUID]uuid.UUID
+	ResultRecorded bool
 }
 
 func NewMatchService(db *gorm.DB) *MatchService {
@@ -693,7 +715,22 @@ func (s *MatchService) UpdateMatch(matchID, groupID uuid.UUID, teams []models.Te
 		return err
 	}
 
-	return s.DB.Transaction(func(tx *gorm.DB) error {
+	// Only read when someone listens: without a notifier this is the same
+	// query count as before.
+	var before map[uuid.UUID]uuid.UUID
+	if s.Notifier != nil {
+		var rows []models.MatchPlayer
+		if err := s.DB.Where("match_id = ?", matchID).Find(&rows).Error; err != nil {
+			return err
+		}
+		before = make(map[uuid.UUID]uuid.UUID, len(rows))
+		for _, row := range rows {
+			before[row.PlayerID] = row.TeamID
+		}
+	}
+
+	resultRecorded := false
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		var dbMatchPlayers []models.MatchPlayer
 
 		for i := range teams {
@@ -761,9 +798,24 @@ func (s *MatchService) UpdateMatch(matchID, groupID uuid.UUID, teams []models.Te
 			if err := tx.Model(&models.Match{}).Where("id = ?", matchID).Update("result_recorded_at", time.Now()).Error; err != nil {
 				return err
 			}
+			resultRecorded = true
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	if s.Notifier != nil {
+		after := make(map[uuid.UUID]uuid.UUID)
+		for i := range teams {
+			for j := range teams[i].Players {
+				after[teams[i].Players[j].ID] = teams[i].ID
+			}
+		}
+		s.Notifier.RosterSaved(RosterSavedEvent{Match: match, Before: before, After: after, ResultRecorded: resultRecorded})
+	}
+	return nil
 }
 
 // assertTeamsInGroup rejects a payload naming a team that is not one of

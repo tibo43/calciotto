@@ -119,3 +119,29 @@ test.describe('profile install card', () => {
     expectEverythingStubbed(unstubbed);
   });
 });
+
+// The "Notifications" card (NotificationsCard.vue), another hidden feature.
+// The test browser has no push support of its own (and service workers are
+// blocked), so the page is handed a device that supports push and isn't
+// subscribed yet: the "off" state with its switch, the one a player sees
+// first.
+test.describe('profile notifications card', () => {
+  test('off, on a device that supports push @mobile', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.PushManager = function PushManager() {};
+      window.Notification = { permission: 'default', requestPermission: () => Promise.resolve('default') };
+      Object.defineProperty(navigator, 'serviceWorker', {
+        configurable: true,
+        value: {
+          register: () => Promise.resolve(),
+          getRegistration: () => Promise.resolve({ pushManager: { getSubscription: () => Promise.resolve(null) } }),
+        },
+      });
+    });
+    const { unstubbed } = await gotoApp(page, '/profile', { features: ['push-notifications'] });
+    await expect(page.locator('.notifications-card [role="switch"]')).toBeVisible();
+    await expect(page.locator('.notifications-card')).toHaveScreenshot('notifications-card-off-mobile.png');
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+});
