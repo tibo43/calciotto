@@ -44,22 +44,30 @@ describe('buildNotification', () => {
     });
   });
 
-  it('settles a prediction with the score and the points earned', () => {
+  it('settles a prediction with the score and the points earned or lost', () => {
     expect(buildNotification({
       type: 'predictions_settled',
       score: [{ team: 'Black', goals: 3 }, { team: 'White', goals: 1 }],
       points: (1 / 0.3) - 1
     })).toEqual({
       title: 'Predictions settled',
-      body: 'Final score: Black 3 – White 1. You earned +2.33 points.'
+      body: 'Final score: Black 3 – White 1. You earned 2.33 points.'
     });
     expect(buildNotification({
       type: 'predictions_settled',
       score: [{ team: 'Black', goals: 1 }, { team: 'White', goals: 1 }],
       points: -1
-    }).body).toBe('Final score: Black 1 – White 1. You earned -1.00 points.');
+    }).body).toBe('Final score: Black 1 – White 1. You lost 1 point.');
     expect(buildNotification({ type: 'predictions_settled', points: 1.5 }).body)
-      .toBe('You earned +1.50 points.');
+      .toBe('You earned 1.50 points.');
+    expect(buildNotification({ type: 'predictions_settled', points: -1.5 }).body)
+      .toBe('You lost 1.50 points.');
+    expect(buildNotification({ type: 'predictions_settled', points: 1 }).body)
+      .toBe('You earned 1 point.');
+    expect(buildNotification({ type: 'predictions_settled', points: 2 }).body)
+      .toBe('You earned 2 points.');
+    expect(buildNotification({ type: 'predictions_settled', points: 0 }).body)
+      .toBe('You earned 0 points.');
   });
 
   it('still shows something for a type it does not know', () => {

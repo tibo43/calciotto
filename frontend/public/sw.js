@@ -44,13 +44,18 @@ function formatScore(score) {
   return (score || []).map((line) => `${line.team} ${line.goals}`).join(' – ');
 }
 
-// Signed, two decimals — the same rounding a settled prediction row shows
-// (PredictionsPanel.formatPoints). A miss is −1.00; a hit is the odds minus
-// the one implicit token.
-function formatSignedPoints(points) {
+// The points half of a settled prediction. A gain or a zero is "You earned
+// 2.33 points."; a loss is "You lost 1 point." — the absolute value, no
+// minus. A whole number drops the decimals; anything else keeps two. The
+// noun is singular only when that amount is exactly 1.
+function formatPointsSentence(points) {
   const value = Number(points);
-  if (!Number.isFinite(value)) return '0.00';
-  return `${value > 0 ? '+' : ''}${value.toFixed(2)}`;
+  const finite = Number.isFinite(value) ? value : 0;
+  const rounded = Math.abs(finite).toFixed(2);
+  const amount = rounded.endsWith('.00') ? rounded.slice(0, -3) : rounded;
+  const noun = amount === '1' ? 'point' : 'points';
+  const verb = finite < 0 ? 'lost' : 'earned';
+  return `You ${verb} ${amount} ${noun}.`;
 }
 
 // Title and body for one push payload. Unknown types still show something
@@ -88,10 +93,10 @@ function buildNotification(data) {
     }
     case 'predictions_settled': {
       const score = formatScore(data.score);
-      const earned = `You earned ${formatSignedPoints(data.points)} points.`;
+      const points = formatPointsSentence(data.points);
       return {
         title: 'Predictions settled',
-        body: score ? `Final score: ${score}. ${earned}` : earned,
+        body: score ? `Final score: ${score}. ${points}` : points,
       };
     }
     default:
