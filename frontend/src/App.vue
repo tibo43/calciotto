@@ -1,5 +1,5 @@
 <template>
-  <div id="app" :class="{ 'dark-mode': isDarkMode }">
+  <div id="app" :class="{ 'dark-mode': isDarkMode, 'design-v2': designV2 }">
     <!-- Main App Container -->
     <div class="app-container">
         <!-- Top Navigation -->
@@ -175,10 +175,18 @@
 </template>
 
 <script>
-import { clearToken } from '@/services/api';
+import { clearToken, getMyFeatures } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta } from '@/services/theme';
 import { disablePushOnLogout } from '@/services/pushNotifications';
+import {
+  readDesignV2Cached,
+  writeDesignV2Cached,
+  clearDesignV2Cached,
+  hasDesignV2,
+  ensureDesignV2Fonts,
+  removeDesignV2Fonts
+} from '@/services/designV2';
 
 // Routes reachable without a token — nothing group-related is shown there.
 const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
@@ -188,7 +196,16 @@ export default {
   data() {
     return {
       isScrolled: false,
-      isDarkMode: false
+      isDarkMode: false,
+      // Set in created(), which runs before the first render — data() itself
+      // is too early for $route (it's a computed) and for methods.
+      designV2: false,
+      // Set once a features response has landed this session. Later route
+      // changes reuse it; a failure leaves it false so the next navigation
+      // retries. Logout bumps the request id and resets this.
+      designV2Loaded: false,
+      designV2InFlight: false,
+      designV2Request: 0
     };
   },
   computed: {
@@ -197,13 +214,22 @@ export default {
     // there's no session to act on) makes a standalone login/signup page
     // read as the logged-in app shell instead of its own view.
     isAuthenticatedRoute() {
-      return !PUBLIC_ROUTE_NAMES.includes(this.$route.name);
+      return this.isAuthenticatedRouteName(this.$route.name);
     }
   },
   watch: {
     isDarkMode(isDark) {
       syncThemeColorMeta(isDark);
+    },
+    '$route.name'() {
+      this.syncDesignV2();
     }
+  },
+  created() {
+    // Before the first render, so an authenticated page that already knows
+    // it is on the redesign doesn't paint the current design for a frame.
+    // Public routes stay off here too: created() sees the real route.
+    this.applyCachedDesignV2();
   },
   mounted() {
     // Check for saved theme preference
@@ -216,6 +242,7 @@ export default {
 
     // Add scroll listener
     window.addEventListener('scroll', this.handleScroll);
+    this.syncDesignV2();
   },
   beforeUnmount() {
     window.removeEventListener('scroll', this.handleScroll);
@@ -231,7 +258,78 @@ export default {
       this.isDarkMode = !this.isDarkMode;
       localStorage.setItem('calciotto-theme', this.isDarkMode ? 'dark' : 'light');
     },
+    isAuthenticatedRouteName(name) {
+      // A missing name is the router's start location, before the real
+      // route has matched. That is not an authenticated page — treating it
+      // as one would flash the redesign onto login.
+      return Boolean(name) && !PUBLIC_ROUTE_NAMES.includes(name);
+    },
+    // Public routes never take the class, even when this browser last saw
+    // the redesign on — login/signup/forgot/reset stay on the current design.
+    // The cache is left in place so coming back doesn't flash.
+    applyCachedDesignV2() {
+      if (this.isAuthenticatedRoute && readDesignV2Cached()) {
+        this.designV2 = true;
+        ensureDesignV2Fonts();
+      }
+    },
+    // Cached class first (synchronous), then one features fetch per session
+    // to confirm it.
+    syncDesignV2() {
+      if (!this.isAuthenticatedRoute) {
+        this.designV2 = false;
+        return;
+      }
+      this.applyCachedDesignV2();
+      if (this.designV2Loaded || this.designV2InFlight) {
+        return;
+      }
+      this.fetchDesignV2();
+    },
+    async fetchDesignV2() {
+      const requestId = ++this.designV2Request;
+      this.designV2InFlight = true;
+      try {
+        const features = await getMyFeatures();
+        // Logout (or a newer fetch) happened while this was in flight.
+        // Drop the response: it must not repaint the class or rewrite the
+        // cache that logout just cleared.
+        if (requestId !== this.designV2Request) {
+          return;
+        }
+        const enabled = hasDesignV2(features);
+        writeDesignV2Cached(enabled);
+        this.designV2Loaded = true;
+        if (!this.isAuthenticatedRoute) {
+          return;
+        }
+        this.designV2 = enabled;
+        if (enabled) {
+          ensureDesignV2Fonts();
+        } else {
+          removeDesignV2Fonts();
+        }
+      } catch (error) {
+        if (requestId !== this.designV2Request) {
+          return;
+        }
+        // Keep whatever the cache already painted. A blip must not turn the
+        // redesign off for someone who has it, and must not turn it on for
+        // someone who doesn't. The next authenticated navigation retries.
+        console.error('Error fetching features:', error);
+      } finally {
+        if (requestId === this.designV2Request) {
+          this.designV2InFlight = false;
+        }
+      }
+    },
     async logout() {
+      // Invalidate an in-flight features response before anything awaits, so
+      // it can't write the cache back after this clears it.
+      this.designV2Request += 1;
+      this.designV2 = false;
+      this.designV2Loaded = false;
+      this.designV2InFlight = false;
       // Before the token goes: the next account on this device must not get
       // this one's notifications, and the backend needs the token to forget
       // the device.
@@ -245,6 +343,8 @@ export default {
       // seeing the previous user's group memberships/roles. Without this, the
       // in-memory promise cache would survive the logout and return stale data.
       clearMyGroupsCache();
+      clearDesignV2Cached();
+      removeDesignV2Fonts();
       this.$router.push('/login');
     }
   }

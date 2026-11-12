@@ -1,0 +1,29 @@
+/* Design v2 tokens. Every rule in this file is scoped to `.design-v2`, the
+   class App.vue puts on #app only for a player who has the hidden feature.
+   Nothing here restyles a screen yet: the custom properties are unused until
+   a surface is redesigned, so Profile, Predictions, and the current Matches
+   tab render exactly as they do today whether or not the class is present.
+   Do not repoint the global --primary-color / --bg-primary / … variables.
+   `.dark-mode` on the same element (the existing theme toggle) picks the
+   dark palette; without it, v2 is the light inversion. */
+
+.design-v2 {
+  --v2-font-display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --v2-font-label: "Space Mono", ui-monospace, monospace;
+  --v2-font-body: "DM Sans", sans-serif;
+
+  --v2-accent: #e8743b;
+  --v2-bg: #eef0f7;
+  --v2-text: #141a33;
+  --v2-text-muted: #5c6578;
+  --v2-rule: rgba(20, 26, 51, 0.14);
+  --v2-outline: #5c6578;
+}
+
+.design-v2.dark-mode {
+  --v2-bg: #141a33;
+  --v2-text: #eef0f7;
+  --v2-text-muted: #8b93ad;
+  --v2-rule: rgba(238, 240, 247, 0.12);
+  --v2-outline: #9aa3bc;
+}

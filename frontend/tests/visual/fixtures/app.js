@@ -69,7 +69,9 @@ async function stubApi(page, overrides = {}) {
   // Profile.vue's own cross-group stats call. Deliberately carries no
   // group_id — GET /players/me/stats is cross-group by design.
   await page.route(`${API}/players/me/stats*`, (route) => json(route, overrides.playerStats ?? data.playerStats));
-  // Hidden features (Profile.vue): none by default, like most players.
+  // Hidden features. Profile.vue reads this for its cards; App.vue reads it
+  // once per session for the design-v2 class. None by default, like most
+  // players — so the redesign class stays off and today's screenshots hold.
   await page.route(`${API}/players/me/features`, (route) => json(route, { features: overrides.features ?? data.features }));
   // The Notifications card reads these only once push is on for the device.
   // The off-state screenshot never calls them; stubbing them keeps an on-state
