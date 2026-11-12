@@ -20,24 +20,31 @@ import (
 
 // Push notifications: who gets told what, and when.
 //
-// Four notifications, all for scheduled matches only:
+// Six notifications, all for scheduled matches only:
 //   - registration_open: the match's sign-up list has opened (every group
 //     member not already signed up).
 //   - team_assigned: an admin saved a roster that puts the player on a team,
 //     or moves them, before kick-off (that player only).
+//   - predictions_open: that same save left both teams with a player, so
+//     predictions are open (every group member, once per match).
 //   - kickoff_reminder: kick-off is at most KickoffReminderLead away (the
 //     roster once composed, otherwise the confirmed sign-ups).
 //   - result_recorded: an admin saved the score for the first time, so the
 //     result is in and Man of the Match voting is open (the roster, who are
 //     the only ones allowed to vote).
+//   - predictions_settled: that same first score save. Only players who
+//     placed a prediction — "who played" means who took part in the
+//     predictions, not who was on the roster — each told the points that
+//     prediction earned.
 //
-// The two event-driven ones go out from MatchService.UpdateMatch through
+// The four event-driven ones go out from MatchService.UpdateMatch through
 // RosterSaved. The two time-driven ones need a clock, and the backend's free
 // Koyeb instance sleeps when idle, so an in-process timer would not fire:
 // instead an external scheduler (.github/workflows/notifications-tick.yml)
 // calls POST /internal/notifications/tick, which runs Tick. Each match records
-// when each of those two went out, so however many ticks see it, it is sent
-// once, and a tick that runs late still sends what is due.
+// when each of the time-driven ones went out, and when predictions_open went
+// out, so however many saves or ticks see it, it is sent once, and a tick
+// that runs late still sends what is due.
 //
 // Everything is gated by the push-notifications hidden feature
 // (models.FeaturePushNotifications), checked when subscribing and again on
@@ -48,10 +55,12 @@ import (
 // own time zone, the way the rest of the app shows it.
 
 const (
-	PushTypeRegistrationOpen = "registration_open"
-	PushTypeTeamAssigned     = "team_assigned"
-	PushTypeKickoffReminder  = "kickoff_reminder"
-	PushTypeResultRecorded   = "result_recorded"
+	PushTypeRegistrationOpen   = "registration_open"
+	PushTypeTeamAssigned       = "team_assigned"
+	PushTypePredictionsOpen    = "predictions_open"
+	PushTypeKickoffReminder    = "kickoff_reminder"
+	PushTypeResultRecorded     = "result_recorded"
+	PushTypePredictionsSettled = "predictions_settled"
 )
 
 // KickoffReminderLead is how long before kick-off the reminder becomes due.
@@ -84,6 +93,10 @@ type PushMessage struct {
 	KickoffAt *time.Time  `json:"kickoffAt,omitempty"`
 	TeamName  string      `json:"teamName,omitempty"`
 	Score     []PushScore `json:"score,omitempty"`
+	// Points is set only on predictions_settled: what this recipient earned
+	// on their one prediction (the odds minus the implicit token, or −1).
+	// A pointer so the field is absent on every other notification.
+	Points *float64 `json:"points,omitempty"`
 }
 
 // PushScore is one team's line of a recorded result.
@@ -245,6 +258,14 @@ func pushTag(matchID uuid.UUID, kind string) string {
 	return "match-" + matchID.String() + "-" + kind
 }
 
+func pushScore(details *models.MatchWithDetails) []PushScore {
+	score := make([]PushScore, 0, len(details.Teams))
+	for _, team := range details.Teams {
+		score = append(score, PushScore{Team: team.Name, Goals: team.Score})
+	}
+	return score
+}
+
 func (s *NotificationService) teamNames(groupID uuid.UUID) (map[uuid.UUID]string, error) {
 	var teams []models.Team
 	if err := s.DB.Where("group_id = ?", groupID).Find(&teams).Error; err != nil {
@@ -280,7 +301,16 @@ func (s *NotificationService) rosterSaved(event RosterSavedEvent, now time.Time)
 		return nil
 	}
 	if event.ResultRecorded {
-		return s.notifyResult(match)
+		// Independent of each other: one failing to load its rows must not
+		// swallow the other. Both are already once-only, because
+		// ResultRecorded is true only for the save that first set
+		// ResultRecordedAt — a later correction of the score sends neither.
+		errResult := s.notifyResult(match)
+		errSettled := s.notifyPredictionsSettled(match)
+		if errResult != nil {
+			return errResult
+		}
+		return errSettled
 	}
 	if !now.Before(*match.ScheduledAt) {
 		return nil
@@ -305,6 +335,40 @@ func (s *NotificationService) rosterSaved(event RosterSavedEvent, now time.Time)
 		}
 	}
 	s.send(messages)
+	return s.notifyPredictionsOpen(match, now)
+}
+
+// notifyPredictionsOpen tells every current group member that predictions
+// are open, the first time a save before kick-off leaves both teams with a
+// player. A one-sided roster is not open yet (rosterFullyComposed), and the
+// claim means a later save — a player moved, a goal edited, the roster
+// emptied and filled again — does not send it a second time.
+func (s *NotificationService) notifyPredictionsOpen(match models.Match, now time.Time) error {
+	details, err := s.Matches.GetMatchDetailsByID(match.ID, match.GroupID)
+	if err != nil {
+		return err
+	}
+	if !rosterFullyComposed(details.Teams) {
+		return nil
+	}
+	var memberIDs []uuid.UUID
+	if err := s.DB.Model(&models.GroupMembership{}).Where("group_id = ?", match.GroupID).Pluck("player_id", &memberIDs).Error; err != nil {
+		return err
+	}
+	// Claimed after the reads, so a failure to load the roster or the
+	// members leaves the match unclaimed and the next save can retry.
+	// Two saves racing still send once: only one UPDATE matches IS NULL.
+	claimed, err := s.claim(match.ID, "predictions_open_notified_at", now)
+	if err != nil || !claimed {
+		return err
+	}
+	s.send(sameMessageFor(memberIDs, PushMessage{
+		Type:      PushTypePredictionsOpen,
+		URL:       MatchDeepLink(match.ID),
+		Tag:       pushTag(match.ID, "predictions"),
+		GroupName: s.groupName(match.GroupID),
+		KickoffAt: match.ScheduledAt,
+	}))
 	return nil
 }
 
@@ -313,10 +377,7 @@ func (s *NotificationService) notifyResult(match models.Match) error {
 	if err != nil {
 		return err
 	}
-	score := make([]PushScore, 0, len(details.Teams))
-	for _, team := range details.Teams {
-		score = append(score, PushScore{Team: team.Name, Goals: team.Score})
-	}
+	score := pushScore(details)
 	group := s.groupName(match.GroupID)
 	messages := map[uuid.UUID]PushMessage{}
 	for _, team := range details.Teams {
@@ -328,6 +389,56 @@ func (s *NotificationService) notifyResult(match models.Match) error {
 				GroupName: group,
 				TeamName:  team.Name,
 				Score:     score,
+			}
+		}
+	}
+	s.send(messages)
+	return nil
+}
+
+// notifyPredictionsSettled tells each player who placed a prediction what it
+// earned. The points are ComputePredictionStandings' own result for this one
+// match — odds − 1 on a hit, −1 on a miss — so the notification and the
+// leaderboard cannot disagree about the save that recorded the result. A
+// roster that is not fully composed has nothing to settle (the same skip
+// that function makes), and a match nobody predicted sends nothing.
+func (s *NotificationService) notifyPredictionsSettled(match models.Match) error {
+	details, err := s.Matches.GetMatchDetailsByID(match.ID, match.GroupID)
+	if err != nil {
+		return err
+	}
+	if !rosterFullyComposed(details.Teams) {
+		return nil
+	}
+	byMatch, err := NewMatchPredictionService(s.DB, s.Matches).TallyPredictionsForMatches([]uuid.UUID{match.ID})
+	if err != nil {
+		return err
+	}
+	entries := byMatch[match.ID]
+	if len(entries) == 0 {
+		return nil
+	}
+	allMatches, err := s.Matches.GetMatchesDetails(match.GroupID, "")
+	if err != nil {
+		return err
+	}
+	rows := ComputePredictionStandings(allMatches, []models.MatchWithDetails{*details}, map[uuid.UUID][]models.MatchPredictionEntry{
+		match.ID: entries,
+	})
+	score := pushScore(details)
+	messages := make(map[uuid.UUID]PushMessage, len(rows))
+	for _, row := range rows {
+		for _, history := range row.History {
+			if history.MatchID != match.ID {
+				continue
+			}
+			earned := history.Points
+			messages[row.PlayerID] = PushMessage{
+				Type:   PushTypePredictionsSettled,
+				URL:    MatchDeepLink(match.ID),
+				Tag:    pushTag(match.ID, "predictions-settled"),
+				Score:  score,
+				Points: &earned,
 			}
 		}
 	}

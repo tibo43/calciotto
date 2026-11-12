@@ -40,6 +40,24 @@ function formatTime(iso) {
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
+function formatScore(score) {
+  return (score || []).map((line) => `${line.team} ${line.goals}`).join(' – ');
+}
+
+// The points half of a settled prediction. A gain or a zero is "You earned
+// 2.33 points."; a loss is "You lost 1 point." — the absolute value, no
+// minus. A whole number drops the decimals; anything else keeps two. The
+// noun is singular only when that amount is exactly 1.
+function formatPointsSentence(points) {
+  const value = Number(points);
+  const finite = Number.isFinite(value) ? value : 0;
+  const rounded = Math.abs(finite).toFixed(2);
+  const amount = rounded.endsWith('.00') ? rounded.slice(0, -3) : rounded;
+  const noun = amount === '1' ? 'point' : 'points';
+  const verb = finite < 0 ? 'lost' : 'earned';
+  return `You ${verb} ${amount} ${noun}.`;
+}
+
 // Title and body for one push payload. Unknown types still show something
 // rather than nothing, since a push the user can't see is a wasted one.
 function buildNotification(data) {
@@ -56,16 +74,29 @@ function buildNotification(data) {
         title: `You're playing for ${data.teamName}`,
         body: `${prefix}match on ${kickoff}.`,
       };
+    case 'predictions_open':
+      return {
+        title: 'Predictions are open',
+        body: `${prefix}match on ${kickoff}. Make your pick.`,
+      };
     case 'kickoff_reminder':
       return {
         title: 'Match starting soon',
         body: `Kick-off at ${formatTime(data.kickoffAt)}` + (data.teamName ? `, you're with ${data.teamName}.` : '.'),
       };
     case 'result_recorded': {
-      const score = (data.score || []).map((line) => `${line.team} ${line.goals}`).join(' – ');
+      const score = formatScore(data.score);
       return {
         title: score ? `Final score: ${score}` : 'The result is in',
         body: 'Vote for your Man of the Match.',
+      };
+    }
+    case 'predictions_settled': {
+      const score = formatScore(data.score);
+      const points = formatPointsSentence(data.points);
+      return {
+        title: 'Predictions settled',
+        body: score ? `Final score: ${score}. ${points}` : points,
       };
     }
     default:
