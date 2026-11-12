@@ -171,6 +171,7 @@
 <script>
 import { clearToken } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
+import { syncThemeColorMeta } from '@/services/theme';
 
 // Routes reachable without a token — nothing group-related is shown there.
 const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
@@ -190,6 +191,11 @@ export default {
     // read as the logged-in app shell instead of its own view.
     isAuthenticatedRoute() {
       return !PUBLIC_ROUTE_NAMES.includes(this.$route.name);
+    }
+  },
+  watch: {
+    isDarkMode(isDark) {
+      syncThemeColorMeta(isDark);
     }
   },
   mounted() {

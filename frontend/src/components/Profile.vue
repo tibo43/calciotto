@@ -216,6 +216,8 @@
             </template>
           </div>
 
+          <InstallAppCard />
+
           <!-- Danger zone: kept in its own card, visually separated from
                everything above, so an irreversible action doesn't sit next
                to routine ones (favoriting a group, viewing a roster).
@@ -257,6 +259,7 @@ import {
 } from '@/services/api';
 import GroupSettingsModal from '@/components/GroupSettingsModal.vue';
 import DeleteAccountModal from '@/components/DeleteAccountModal.vue';
+import InstallAppCard from '@/components/InstallAppCard.vue';
 
 // The JWT's own player_id claim is the only place the caller's player id is
 // available on this page (there's no "who am I" endpoint) — decoded locally,
@@ -279,7 +282,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'PlayerProfile',
-  components: { GroupSettingsModal, DeleteAccountModal },
+  components: { GroupSettingsModal, DeleteAccountModal, InstallAppCard },
   data() {
     return {
       overall: { Name: '', Played: 0, Won: 0, Drawn: 0, Lost: 0, GoalsFor: 0, OwnGoals: 0, Points: 0, MotmAwards: 0 },
