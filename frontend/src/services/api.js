@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { clearDesignV2Cached } from './designV2';
 
 const API_BASE_URL = process.env.VUE_APP_API_BASE_URL || 'http://127.0.0.1:8080';
 
@@ -39,6 +40,9 @@ api.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       clearToken();
+      // Same session-end as an explicit logout: the cached redesign flag is
+      // per viewer, and the next account on this browser must not inherit it.
+      clearDesignV2Cached();
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }

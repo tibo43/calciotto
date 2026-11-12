@@ -4,6 +4,7 @@ import router from './router';
 import { getInstallTracker } from './services/pwaInstall';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './assets/global-styles.css'
+import './assets/design-v2.css'
 
 // Before mounting: Chrome's install offer can arrive right after load, long
 // before the Profile page that shows it is opened (see pwaInstall.js).
@@ -21,4 +22,9 @@ if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
 
 const app = createApp(App);
 app.use(router);
-app.mount('#app');
+// Mount only once the initial route has matched. App.vue applies the cached
+// design-v2 class in created(), and the router's start location has no name,
+// so mounting earlier would skip that cache and flash today's design.
+router.isReady().then(() => {
+  app.mount('#app');
+});
