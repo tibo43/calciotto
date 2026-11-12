@@ -241,7 +241,11 @@ const groupMembersLongName = [
 // viewing a scheduled match, to append to its "Share on WhatsApp" message.
 const inviteCode = 'ABC23XYZ';
 
+// GET /players/me/features — no hidden feature enabled.
+const features = [];
+
 module.exports = {
+  features,
   FIXED_NOW,
   GROUP_ID,
   CURRENT_PLAYER_ID,

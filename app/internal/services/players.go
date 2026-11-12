@@ -78,3 +78,17 @@ func (s *PlayerService) UpdateName(playerID uuid.UUID, newName string) error {
 
 	return s.DB.Model(&models.Player{}).Where("id = ?", playerID).Update("name", newName).Error
 }
+
+// GetFeatures lists the hidden features enabled for a player (see
+// models.PlayerFeature), sorted, and never nil: no row means no feature, which
+// is the normal case, not an error.
+func (s *PlayerService) GetFeatures(playerID uuid.UUID) ([]string, error) {
+	features := []string{}
+	if err := s.DB.Model(&models.PlayerFeature{}).
+		Where("player_id = ?", playerID).
+		Order("feature").
+		Pluck("feature", &features).Error; err != nil {
+		return nil, err
+	}
+	return features, nil
+}

@@ -12,6 +12,10 @@
 //   user has to go through Safari's Share menu themselves, so all the card can
 //   do there is say how.
 
+// The hidden-feature key (GET /players/me/features) that shows the install
+// card at all. Must match the backend's models.FeaturePWAInstall.
+export const PWA_INSTALL_FEATURE = 'pwa-install';
+
 export const INSTALL_STATE = {
   INSTALLED: 'installed',
   PROMPT: 'prompt',

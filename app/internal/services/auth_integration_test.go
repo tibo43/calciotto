@@ -567,6 +567,10 @@ func TestDeleteAccount_Integration_AnonymizesAndCleansUp(t *testing.T) {
 		t.Fatalf("failed to create Rita's prediction: %v", err)
 	}
 
+	if err := tx.Create(&models.PlayerFeature{PlayerID: deletingPlayerID, Feature: models.FeaturePWAInstall}).Error; err != nil {
+		t.Fatalf("failed to enable a feature for Quinn: %v", err)
+	}
+
 	if err := authService.DeleteAccount(deletingPlayerID, "s3cret-pass"); err != nil {
 		t.Fatalf("DeleteAccount returned error: %v", err)
 	}
@@ -614,6 +618,14 @@ func TestDeleteAccount_Integration_AnonymizesAndCleansUp(t *testing.T) {
 	var survivorPrediction models.MatchPrediction
 	if err := tx.Where("player_id = ?", survivorID).First(&survivorPrediction).Error; err != nil {
 		t.Errorf("another player's prediction was removed by the account deletion: %v", err)
+	}
+
+	var featureCount int64
+	if err := tx.Model(&models.PlayerFeature{}).Where("player_id = ?", deletingPlayerID).Count(&featureCount).Error; err != nil {
+		t.Fatalf("failed to count features of deleted player: %v", err)
+	}
+	if featureCount != 0 {
+		t.Errorf("features of deleted player = %d, want 0", featureCount)
 	}
 
 	var voteForDeletedPlayer models.MatchVote

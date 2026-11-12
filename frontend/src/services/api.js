@@ -507,6 +507,13 @@ export const updateMyName = async (name) => {
   return response.data;
 };
 
+// Hidden features switched on for the caller (backend models.PlayerFeature,
+// enabled by hand in the database). Always an array.
+export const getMyFeatures = async () => {
+  const response = await api.get('/players/me/features');
+  return Array.isArray(response.data?.features) ? response.data.features : [];
+};
+
 // Self-service "delete my account". The backend anonymizes the account
 // rather than erasing it (see AuthService.DeleteAccount) so every other
 // player's shared match history stays intact — but from this app's point of

@@ -514,6 +514,10 @@ func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 		if err := tx.Where("player_id = ?", playerID).Delete(&models.MatchPrediction{}).Error; err != nil {
 			return err
 		}
+		// Hidden features enabled for this account: nothing left to show them to.
+		if err := tx.Where("player_id = ?", playerID).Delete(&models.PlayerFeature{}).Error; err != nil {
+			return err
+		}
 
 		return tx.Model(&models.Player{}).
 			Where("id = ?", playerID).

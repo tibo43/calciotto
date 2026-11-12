@@ -216,7 +216,9 @@
             </template>
           </div>
 
-          <InstallAppCard />
+          <!-- Hidden feature: only for players it was enabled for by hand
+               (see PWA_INSTALL_FEATURE). -->
+          <InstallAppCard v-if="features.includes(pwaInstallFeature)" />
 
           <!-- Danger zone: kept in its own card, visually separated from
                everything above, so an irreversible action doesn't sit next
@@ -255,8 +257,9 @@
 <script>
 import {
   getPlayerProfile, getMyGroups, getGroupMembers,
-  updateMemberRole, removeMember, setFavoriteGroup, updateMyName, getToken
+  updateMemberRole, removeMember, setFavoriteGroup, updateMyName, getMyFeatures, getToken
 } from '@/services/api';
+import { PWA_INSTALL_FEATURE } from '@/services/pwaInstall';
 import GroupSettingsModal from '@/components/GroupSettingsModal.vue';
 import DeleteAccountModal from '@/components/DeleteAccountModal.vue';
 import InstallAppCard from '@/components/InstallAppCard.vue';
@@ -320,7 +323,11 @@ export default {
       // Non-null while the invite-code/teams dialog for one group is open.
       settingsForGroup: null,
       showDeleteAccountModal: false,
-      isDangerZoneOpen: false
+      isDangerZoneOpen: false,
+
+      // Hidden features enabled for the caller (GET /players/me/features).
+      features: [],
+      pwaInstallFeature: PWA_INSTALL_FEATURE
     };
   },
   computed: {
@@ -360,7 +367,7 @@ export default {
   },
   async created() {
     this.currentPlayerId = currentPlayerIdFromToken();
-    await Promise.all([this.loadProfile(), this.loadGroupMeta()]);
+    await Promise.all([this.loadProfile(), this.loadGroupMeta(), this.loadFeatures()]);
   },
   methods: {
     async loadProfile() {
@@ -377,6 +384,15 @@ export default {
         this.perGroup = [];
       } finally {
         this.isLoading = false;
+      }
+    },
+    async loadFeatures() {
+      try {
+        this.features = await getMyFeatures();
+      } catch (error) {
+        // Non-fatal: a failure only keeps hidden features hidden.
+        console.error('Error fetching features:', error);
+        this.features = [];
       }
     },
     async loadGroupMeta() {

@@ -290,3 +290,18 @@ describe('getPredictionStandings', () => {
     expect(mockInstance.get).toHaveBeenCalledWith('/standings/predictions?season=2025-2026&group_id=group-uuid');
   });
 });
+
+describe('getMyFeatures', () => {
+  beforeEach(() => mockInstance.get.mockReset());
+
+  it('returns the features list from GET /players/me/features', async () => {
+    mockInstance.get.mockResolvedValue({ data: { features: ['pwa-install'] } });
+    await expect(api.getMyFeatures()).resolves.toEqual(['pwa-install']);
+    expect(mockInstance.get).toHaveBeenCalledWith('/players/me/features');
+  });
+
+  it('falls back to an empty list on an unexpected body', async () => {
+    mockInstance.get.mockResolvedValue({ data: {} });
+    await expect(api.getMyFeatures()).resolves.toEqual([]);
+  });
+});
