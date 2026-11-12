@@ -37,6 +37,31 @@ describe('buildNotification', () => {
     })).toEqual({ title: 'Final score: Black 3 – White 1', body: 'Vote for your Man of the Match.' });
   });
 
+  it('announces that predictions are open for the match', () => {
+    expect(buildNotification({ type: 'predictions_open', groupName: 'Calciotto Milano', kickoffAt: KICKOFF })).toEqual({
+      title: 'Predictions are open',
+      body: `Calciotto Milano: match on ${kickoffText}. Make your pick.`
+    });
+  });
+
+  it('settles a prediction with the score and the points earned', () => {
+    expect(buildNotification({
+      type: 'predictions_settled',
+      score: [{ team: 'Black', goals: 3 }, { team: 'White', goals: 1 }],
+      points: (1 / 0.3) - 1
+    })).toEqual({
+      title: 'Predictions settled',
+      body: 'Final score: Black 3 – White 1. You earned +2.33 points.'
+    });
+    expect(buildNotification({
+      type: 'predictions_settled',
+      score: [{ team: 'Black', goals: 1 }, { team: 'White', goals: 1 }],
+      points: -1
+    }).body).toBe('Final score: Black 1 – White 1. You earned -1.00 points.');
+    expect(buildNotification({ type: 'predictions_settled', points: 1.5 }).body)
+      .toBe('You earned +1.50 points.');
+  });
+
   it('still shows something for a type it does not know', () => {
     expect(buildNotification({ type: 'something_new' }).title).toBe('Calciotto');
   });

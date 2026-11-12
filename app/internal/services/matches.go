@@ -112,8 +112,9 @@ func (spec MatchSpec) validate() error {
 type MatchService struct {
 	DB *gorm.DB
 	// Notifier hears about every saved roster (UpdateMatch), which is what
-	// sends the "your team" and "result recorded" push notifications. Nil
-	// unless main.go wires one in, so tests and the cmd/ tools are unaffected.
+	// sends the team, predictions-open, result and predictions-settled push
+	// notifications. Nil unless main.go wires one in, so tests and the cmd/
+	// tools are unaffected.
 	Notifier MatchEventNotifier
 }
 

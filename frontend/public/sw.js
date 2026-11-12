@@ -40,6 +40,19 @@ function formatTime(iso) {
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
+function formatScore(score) {
+  return (score || []).map((line) => `${line.team} ${line.goals}`).join(' – ');
+}
+
+// Signed, two decimals — the same rounding a settled prediction row shows
+// (PredictionsPanel.formatPoints). A miss is −1.00; a hit is the odds minus
+// the one implicit token.
+function formatSignedPoints(points) {
+  const value = Number(points);
+  if (!Number.isFinite(value)) return '0.00';
+  return `${value > 0 ? '+' : ''}${value.toFixed(2)}`;
+}
+
 // Title and body for one push payload. Unknown types still show something
 // rather than nothing, since a push the user can't see is a wasted one.
 function buildNotification(data) {
@@ -56,16 +69,29 @@ function buildNotification(data) {
         title: `You're playing for ${data.teamName}`,
         body: `${prefix}match on ${kickoff}.`,
       };
+    case 'predictions_open':
+      return {
+        title: 'Predictions are open',
+        body: `${prefix}match on ${kickoff}. Make your pick.`,
+      };
     case 'kickoff_reminder':
       return {
         title: 'Match starting soon',
         body: `Kick-off at ${formatTime(data.kickoffAt)}` + (data.teamName ? `, you're with ${data.teamName}.` : '.'),
       };
     case 'result_recorded': {
-      const score = (data.score || []).map((line) => `${line.team} ${line.goals}`).join(' – ');
+      const score = formatScore(data.score);
       return {
         title: score ? `Final score: ${score}` : 'The result is in',
         body: 'Vote for your Man of the Match.',
+      };
+    }
+    case 'predictions_settled': {
+      const score = formatScore(data.score);
+      const earned = `You earned ${formatSignedPoints(data.points)} points.`;
+      return {
+        title: 'Predictions settled',
+        body: score ? `Final score: ${score}. ${earned}` : earned,
       };
     }
     default:

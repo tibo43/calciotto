@@ -3,6 +3,7 @@ package services_test
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"sort"
 	"testing"
 	"time"
@@ -45,6 +46,7 @@ type notificationEnv struct {
 	notifications *services.NotificationService
 	matches       *services.MatchService
 	groupID       uuid.UUID
+	groupName     string
 	teamA, teamB  models.Team
 }
 
@@ -69,7 +71,7 @@ func newNotificationEnv(t *testing.T) *notificationEnv {
 	notifications.Dispatch = func(work func()) { work() }
 	matches.Notifier = notifications
 
-	return &notificationEnv{tx: tx, sender: sender, notifications: notifications, matches: matches, groupID: group.ID, teamA: teams[0], teamB: teams[1]}
+	return &notificationEnv{tx: tx, sender: sender, notifications: notifications, matches: matches, groupID: group.ID, groupName: group.Name, teamA: teams[0], teamB: teams[1]}
 }
 
 // member creates a group member; withFeature also enables push for them and
@@ -115,6 +117,16 @@ func (e *notificationEnv) scheduledMatch(t *testing.T, kickoff, opensAt time.Tim
 		t.Fatalf("CreateMatch: %v", err)
 	}
 	return id
+}
+
+func messagesOfType(sent []services.PushMessage, kind string) []services.PushMessage {
+	var out []services.PushMessage
+	for _, message := range sent {
+		if message.Type == kind {
+			out = append(out, message)
+		}
+	}
+	return out
 }
 
 func (e *notificationEnv) types(endpoint string) []string {
@@ -191,11 +203,26 @@ func TestNotifications_Integration_TeamAssignedThenResult(t *testing.T) {
 	}
 
 	save([]uuid.UUID{alice}, []uuid.UUID{bob, carol})
-	if got := env.sender.sent[aliceEndpoint]; len(got) != 1 || got[0].Type != services.PushTypeTeamAssigned || got[0].TeamName != env.teamA.Name {
-		t.Fatalf("Alice got %+v, want one team_assigned for %q", got, env.teamA.Name)
+	aliceTeam := messagesOfType(env.sender.sent[aliceEndpoint], services.PushTypeTeamAssigned)
+	if len(aliceTeam) != 1 || aliceTeam[0].TeamName != env.teamA.Name {
+		t.Fatalf("Alice got %+v, want one team_assigned for %q", env.sender.sent[aliceEndpoint], env.teamA.Name)
 	}
-	if got := env.sender.sent[bobEndpoint]; len(got) != 1 || got[0].TeamName != env.teamB.Name || got[0].KickoffAt == nil || got[0].URL != services.MatchDeepLink(matchID) {
-		t.Fatalf("Bob got %+v, want one team_assigned for %q with kick-off and link", got, env.teamB.Name)
+	// Both teams have a player, so predictions open in the same save, for
+	// every member who can receive a push — alongside the team notification,
+	// not instead of it.
+	aliceOpen := messagesOfType(env.sender.sent[aliceEndpoint], services.PushTypePredictionsOpen)
+	if len(aliceOpen) != 1 || aliceOpen[0].URL != services.MatchDeepLink(matchID) || aliceOpen[0].GroupName != env.groupName || aliceOpen[0].KickoffAt == nil {
+		t.Fatalf("Alice got %+v, want one predictions_open for the match", env.sender.sent[aliceEndpoint])
+	}
+	if len(env.sender.sent[aliceEndpoint]) != 2 {
+		t.Fatalf("Alice got %+v, want exactly team_assigned and predictions_open", env.sender.sent[aliceEndpoint])
+	}
+	bobTeam := messagesOfType(env.sender.sent[bobEndpoint], services.PushTypeTeamAssigned)
+	if len(bobTeam) != 1 || bobTeam[0].TeamName != env.teamB.Name || bobTeam[0].KickoffAt == nil || bobTeam[0].URL != services.MatchDeepLink(matchID) {
+		t.Fatalf("Bob got %+v, want one team_assigned for %q with kick-off and link", env.sender.sent[bobEndpoint], env.teamB.Name)
+	}
+	if len(messagesOfType(env.sender.sent[bobEndpoint], services.PushTypePredictionsOpen)) != 1 {
+		t.Fatalf("Bob got %+v, want predictions_open alongside the team", env.sender.sent[bobEndpoint])
 	}
 	if len(env.sender.sent[carolEndpoint]) != 0 {
 		t.Errorf("Carol, without the feature, got %+v", env.sender.sent[carolEndpoint])
@@ -342,5 +369,253 @@ func TestNotifications_Integration_FeatureRemovedAndGoneSubscriptions(t *testing
 	env.tx.Model(&models.PushSubscription{}).Where("endpoint = ?", goneEndpoint).Count(&count)
 	if count != 0 {
 		t.Error("a subscription the push service reported gone was kept")
+	}
+}
+
+// TestNotifications_Integration_PredictionsOpenOnceThenSettledForPredictors
+// covers the two prediction notifications: they share the roster-save
+// trigger with team_assigned and result_recorded, they go out once, and the
+// settled one is only for players who placed a prediction — with that
+// prediction's own points.
+func TestNotifications_Integration_PredictionsOpenOnceThenSettledForPredictors(t *testing.T) {
+	env := newNotificationEnv(t)
+	alice, aliceEndpoint := env.member(t, "Alice", true) // roster, predicts the winner
+	bob, bobEndpoint := env.member(t, "Bob", true)       // roster, predicts the other team
+	_, carolEndpoint := env.member(t, "Carol", true)     // member, never predicts
+	eve, eveEndpoint := env.member(t, "Eve", true)       // not on the roster, predicts a draw
+	dave, daveEndpoint := env.member(t, "Dave", false)   // predicts, feature off
+
+	kickoff := time.Now().Add(48 * time.Hour)
+	matchID := env.scheduledMatch(t, kickoff, kickoff.Add(-72*time.Hour), 10)
+
+	roster := func(ids ...uuid.UUID) []models.PlayerCustom {
+		players := make([]models.PlayerCustom, 0, len(ids))
+		for _, id := range ids {
+			players = append(players, models.PlayerCustom{ID: id})
+		}
+		return players
+	}
+	save := func(teams []models.TeamWithPlayers) {
+		t.Helper()
+		if err := env.matches.UpdateMatch(matchID, env.groupID, teams); err != nil {
+			t.Fatalf("UpdateMatch: %v", err)
+		}
+	}
+	notifiedAt := func() *time.Time {
+		t.Helper()
+		var match models.Match
+		if err := env.tx.First(&match, "id = ?", matchID).Error; err != nil {
+			t.Fatalf("reload match: %v", err)
+		}
+		return match.PredictionsOpenNotifiedAt
+	}
+
+	// One team still empty: predictions are not open, and nothing is claimed,
+	// so the save that completes the roster can still announce them.
+	save([]models.TeamWithPlayers{{ID: env.teamA.ID, Players: roster(alice)}})
+	if got := env.types(aliceEndpoint); len(got) != 1 || got[0] != services.PushTypeTeamAssigned {
+		t.Fatalf("one-sided roster: Alice got %v, want only team_assigned", got)
+	}
+	if len(env.sender.sent[eveEndpoint])+len(env.sender.sent[carolEndpoint]) != 0 {
+		t.Fatalf("one-sided roster announced predictions: eve %+v carol %+v", env.sender.sent[eveEndpoint], env.sender.sent[carolEndpoint])
+	}
+	if notifiedAt() != nil {
+		t.Fatal("one-sided roster claimed predictions_open")
+	}
+
+	env.sender.reset()
+	save([]models.TeamWithPlayers{
+		{ID: env.teamA.ID, Players: roster(alice)},
+		{ID: env.teamB.ID, Players: roster(bob)},
+	})
+	// Alice was already on her team, so she hears only that predictions
+	// opened. Bob was placed, so he hears both. Eve is not on the roster and
+	// Carol is not in this save either: every member with the feature gets
+	// predictions_open, whether or not they are playing.
+	if got := env.types(aliceEndpoint); len(got) != 1 || got[0] != services.PushTypePredictionsOpen {
+		t.Fatalf("Alice, already placed, got %v, want only predictions_open", got)
+	}
+	if got := env.types(bobEndpoint); len(got) != 2 || got[0] != services.PushTypePredictionsOpen || got[1] != services.PushTypeTeamAssigned {
+		t.Fatalf("Bob got %v, want predictions_open and team_assigned", got)
+	}
+	for _, endpoint := range []string{eveEndpoint, carolEndpoint} {
+		got := env.sender.sent[endpoint]
+		if len(got) != 1 || got[0].Type != services.PushTypePredictionsOpen || got[0].URL != services.MatchDeepLink(matchID) || got[0].GroupName != env.groupName || got[0].KickoffAt == nil {
+			t.Fatalf("member %s got %+v, want one predictions_open", endpoint, got)
+		}
+		if got[0].Tag != "match-"+matchID.String()+"-predictions" {
+			t.Errorf("predictions_open tag = %q", got[0].Tag)
+		}
+	}
+	if len(env.sender.sent[daveEndpoint]) != 0 {
+		t.Errorf("Dave, without the feature, got %+v", env.sender.sent[daveEndpoint])
+	}
+	firstClaim := notifiedAt()
+	if firstClaim == nil {
+		t.Fatal("composed roster did not claim predictions_open")
+	}
+
+	// Same roster again: nobody moved, and predictions were already announced.
+	env.sender.reset()
+	save([]models.TeamWithPlayers{
+		{ID: env.teamA.ID, Players: roster(alice)},
+		{ID: env.teamB.ID, Players: roster(bob)},
+	})
+	if len(env.sender.sent) != 0 {
+		t.Fatalf("saving the same roster again sent %+v", env.sender.sent)
+	}
+	if second := notifiedAt(); second == nil || !second.Equal(*firstClaim) {
+		t.Errorf("predictions_open claim moved from %v to %v", firstClaim, second)
+	}
+
+	predict := services.NewMatchPredictionService(env.tx, env.matches)
+	if err := predict.Predict(matchID, alice, &env.teamA.ID); err != nil {
+		t.Fatalf("Alice predict: %v", err)
+	}
+	if err := predict.Predict(matchID, bob, &env.teamB.ID); err != nil {
+		t.Fatalf("Bob predict: %v", err)
+	}
+	if err := predict.Predict(matchID, eve, nil); err != nil {
+		t.Fatalf("Eve predict draw: %v", err)
+	}
+	if err := predict.Predict(matchID, dave, &env.teamA.ID); err != nil {
+		t.Fatalf("Dave predict: %v", err)
+	}
+
+	if err := env.tx.Model(&models.Match{}).Where("id = ?", matchID).Update("scheduled_at", time.Now().Add(-2*time.Hour)).Error; err != nil {
+		t.Fatalf("move kick-off: %v", err)
+	}
+	env.sender.reset()
+	save([]models.TeamWithPlayers{
+		{ID: env.teamA.ID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: 3}}},
+		{ID: env.teamB.ID, Players: []models.PlayerCustom{{ID: bob, GoalsScored: 1}}},
+	})
+
+	details, err := env.matches.GetMatchDetailsByID(matchID, env.groupID)
+	if err != nil {
+		t.Fatalf("GetMatchDetailsByID: %v", err)
+	}
+	all, err := env.matches.GetMatchesDetails(env.groupID, "")
+	if err != nil {
+		t.Fatalf("GetMatchesDetails: %v", err)
+	}
+	byMatch, err := predict.TallyPredictionsForMatches([]uuid.UUID{matchID})
+	if err != nil {
+		t.Fatalf("TallyPredictionsForMatches: %v", err)
+	}
+	standings := services.ComputePredictionStandings(all, []models.MatchWithDetails{*details}, byMatch)
+	wantPoints := map[uuid.UUID]float64{}
+	for _, row := range standings {
+		wantPoints[row.PlayerID] = row.Points
+	}
+	// A fresh group has no history, so both sides are even and a correct
+	// team pick is the even-match odds minus one token. A miss, including a
+	// draw that did not happen, is −1. Pinning both keeps this from passing
+	// on a notification that merely echoes a broken settlement.
+	even := services.ComputeMatchOdds(services.EloStartingRating, services.EloStartingRating)
+	if math.Abs(wantPoints[alice]-(even.TeamAOdds-1)) > 1e-9 || wantPoints[bob] != -1 || wantPoints[eve] != -1 {
+		t.Fatalf("standings points = %+v, want Alice ~%.3f and Bob and Eve −1", wantPoints, even.TeamAOdds-1)
+	}
+
+	checkSettled := func(playerID uuid.UUID, endpoint string, alsoResult bool) {
+		t.Helper()
+		settled := messagesOfType(env.sender.sent[endpoint], services.PushTypePredictionsSettled)
+		if len(settled) != 1 || settled[0].Points == nil || math.Abs(*settled[0].Points-wantPoints[playerID]) > 1e-9 {
+			t.Fatalf("%s got %+v, want one predictions_settled worth %v", endpoint, env.sender.sent[endpoint], wantPoints[playerID])
+		}
+		if settled[0].URL != services.MatchDeepLink(matchID) || settled[0].Tag != "match-"+matchID.String()+"-predictions-settled" {
+			t.Errorf("%s settled link/tag = %q %q", endpoint, settled[0].URL, settled[0].Tag)
+		}
+		goals := map[string]int{}
+		for _, line := range settled[0].Score {
+			goals[line.Team] = line.Goals
+		}
+		if goals[env.teamA.Name] != 3 || goals[env.teamB.Name] != 1 {
+			t.Errorf("%s score = %+v, want %s 3 – %s 1", endpoint, settled[0].Score, env.teamA.Name, env.teamB.Name)
+		}
+		results := messagesOfType(env.sender.sent[endpoint], services.PushTypeResultRecorded)
+		if alsoResult {
+			if len(results) != 1 {
+				t.Errorf("%s got %d result_recorded, want 1 (they played)", endpoint, len(results))
+			}
+		} else if len(results) != 0 {
+			t.Errorf("%s got a result_recorded without being on the roster: %+v", endpoint, results)
+		}
+	}
+	checkSettled(alice, aliceEndpoint, true)
+	checkSettled(bob, bobEndpoint, true)
+	checkSettled(eve, eveEndpoint, false)
+	if len(env.sender.sent[carolEndpoint]) != 0 {
+		t.Errorf("Carol, who did not predict, got %+v", env.sender.sent[carolEndpoint])
+	}
+	if len(env.sender.sent[daveEndpoint]) != 0 {
+		t.Errorf("Dave, who predicted without the feature, got %+v", env.sender.sent[daveEndpoint])
+	}
+
+	// Editing the score later changes what the leaderboard derives, and does
+	// not send the result or the settlement again.
+	env.sender.reset()
+	save([]models.TeamWithPlayers{
+		{ID: env.teamA.ID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: 4}}},
+		{ID: env.teamB.ID, Players: []models.PlayerCustom{{ID: bob}}},
+	})
+	if len(env.sender.sent) != 0 {
+		t.Fatalf("a score correction sent %+v", env.sender.sent)
+	}
+}
+
+// A correct draw (predicted team nil) earns the draw odds minus one token,
+// the same number ComputePredictionStandings records for it.
+func TestNotifications_Integration_SettledDrawPaysDrawOdds(t *testing.T) {
+	env := newNotificationEnv(t)
+	alice, aliceEndpoint := env.member(t, "Alice", true)
+	bob, _ := env.member(t, "Bob", true)
+
+	kickoff := time.Now().Add(36 * time.Hour)
+	matchID := env.scheduledMatch(t, kickoff, kickoff.Add(-48*time.Hour), 10)
+	if err := env.matches.UpdateMatch(matchID, env.groupID, []models.TeamWithPlayers{
+		{ID: env.teamA.ID, Players: []models.PlayerCustom{{ID: alice}}},
+		{ID: env.teamB.ID, Players: []models.PlayerCustom{{ID: bob}}},
+	}); err != nil {
+		t.Fatalf("UpdateMatch: %v", err)
+	}
+	if err := services.NewMatchPredictionService(env.tx, env.matches).Predict(matchID, alice, nil); err != nil {
+		t.Fatalf("Predict draw: %v", err)
+	}
+	if err := env.tx.Model(&models.Match{}).Where("id = ?", matchID).Update("scheduled_at", time.Now().Add(-time.Hour)).Error; err != nil {
+		t.Fatalf("move kick-off: %v", err)
+	}
+	env.sender.reset()
+	if err := env.matches.UpdateMatch(matchID, env.groupID, []models.TeamWithPlayers{
+		{ID: env.teamA.ID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: 1}}},
+		{ID: env.teamB.ID, Players: []models.PlayerCustom{{ID: bob, GoalsScored: 1}}},
+	}); err != nil {
+		t.Fatalf("UpdateMatch (draw): %v", err)
+	}
+
+	settled := messagesOfType(env.sender.sent[aliceEndpoint], services.PushTypePredictionsSettled)
+	even := services.ComputeMatchOdds(services.EloStartingRating, services.EloStartingRating)
+	if len(settled) != 1 || settled[0].Points == nil || math.Abs(*settled[0].Points-(even.DrawOdds-1)) > 1e-9 {
+		t.Fatalf("Alice got %+v, want one predictions_settled worth draw odds − 1 (%.3f)", env.sender.sent[aliceEndpoint], even.DrawOdds-1)
+	}
+}
+
+func TestNotifications_Integration_UnscheduledSaveSendsNothing(t *testing.T) {
+	env := newNotificationEnv(t)
+	alice, aliceEndpoint := env.member(t, "Alice", true)
+	bob, bobEndpoint := env.member(t, "Bob", true)
+
+	matchID, err := env.matches.CreateMatch(services.MatchSpec{Date: models.DateOf(time.Now())}, env.groupID)
+	if err != nil {
+		t.Fatalf("CreateMatch: %v", err)
+	}
+	if err := env.matches.UpdateMatch(matchID, env.groupID, []models.TeamWithPlayers{
+		{ID: env.teamA.ID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: 2}}},
+		{ID: env.teamB.ID, Players: []models.PlayerCustom{{ID: bob, GoalsScored: 1}}},
+	}); err != nil {
+		t.Fatalf("UpdateMatch: %v", err)
+	}
+	if len(env.sender.sent[aliceEndpoint])+len(env.sender.sent[bobEndpoint]) != 0 {
+		t.Fatalf("an unscheduled match sent %+v", env.sender.sent)
 	}
 }
