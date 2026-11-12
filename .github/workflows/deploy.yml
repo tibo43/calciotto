@@ -110,6 +110,11 @@ jobs:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           SIGNUP_RATE_LIMIT_PER_HOUR: ${{ secrets.SIGNUP_RATE_LIMIT_PER_HOUR }}
           SIGNUP_RATE_LIMIT_BURST: ${{ secrets.SIGNUP_RATE_LIMIT_BURST }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          # A repository-level secret, not a 'production' one: the scheduler
+          # in notifications-tick.yml sends it too, and runs outside that
+          # environment.
+          NOTIFICATIONS_TICK_SECRET: ${{ secrets.NOTIFICATIONS_TICK_SECRET }}
         run: |
           set -euo pipefail
 
@@ -226,6 +231,21 @@ jobs:
             sync_secret SIGNUP_RATE_LIMIT_BURST "$SIGNUP_RATE_LIMIT_BURST"
           fi
 
+          # Push notifications are optional, like Brevo: without the VAPID
+          # private key nothing is delivered, and without the tick secret the
+          # sign-ups-open and kick-off reminders never fire (see
+          # services/notifications.go). The app runs either way.
+          if [ -n "$VAPID_PRIVATE_KEY" ]; then
+            sync_secret VAPID_PRIVATE_KEY "$VAPID_PRIVATE_KEY"
+          else
+            echo "::warning::VAPID_PRIVATE_KEY is not set — push notifications will not be delivered"
+          fi
+          if [ -n "$NOTIFICATIONS_TICK_SECRET" ]; then
+            sync_secret NOTIFICATIONS_TICK_SECRET "$NOTIFICATIONS_TICK_SECRET"
+          else
+            echo "::warning::NOTIFICATIONS_TICK_SECRET is not set — sign-ups-open and kick-off notifications will not be sent"
+          fi
+
           if [ "$secrets_written" -eq 1 ]; then
             echo "One or more Koyeb secrets were created or updated; the deploy step will wait before provisioning"
           else
@@ -243,6 +263,10 @@ jobs:
           HAS_BREVO_KEY: ${{ secrets.BREVO_API_KEY != '' }}
           HAS_SIGNUP_RATE_LIMIT_PER_HOUR: ${{ secrets.SIGNUP_RATE_LIMIT_PER_HOUR != '' }}
           HAS_SIGNUP_RATE_LIMIT_BURST: ${{ secrets.SIGNUP_RATE_LIMIT_BURST != '' }}
+          HAS_VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY != '' }}
+          HAS_NOTIFICATIONS_TICK_SECRET: ${{ secrets.NOTIFICATIONS_TICK_SECRET != '' }}
+          VAPID_PUBLIC_KEY: ${{ vars.VAPID_PUBLIC_KEY }}
+          VAPID_SUBJECT: ${{ vars.VAPID_SUBJECT }}
         run: |
           set -euo pipefail
 
@@ -307,6 +331,20 @@ jobs:
           fi
           if [ "$HAS_SIGNUP_RATE_LIMIT_BURST" = "true" ]; then
             args+=(--env SIGNUP_RATE_LIMIT_BURST=@SIGNUP_RATE_LIMIT_BURST)
+          fi
+
+          # Push notifications — see the "Sync secrets to Koyeb" step. The
+          # public key and subject are not secrets, so they are plain
+          # variables; all three are needed for anything to be delivered.
+          if [ "$HAS_VAPID_PRIVATE_KEY" = "true" ]; then
+            args+=(
+              --env VAPID_PRIVATE_KEY=@VAPID_PRIVATE_KEY
+              --env "VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY"
+              --env "VAPID_SUBJECT=$VAPID_SUBJECT"
+            )
+          fi
+          if [ "$HAS_NOTIFICATIONS_TICK_SECRET" = "true" ]; then
+            args+=(--env NOTIFICATIONS_TICK_SECRET=@NOTIFICATIONS_TICK_SECRET)
           fi
 
           # `services get` is the existence check. Update and create used to be

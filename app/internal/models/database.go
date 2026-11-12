@@ -61,6 +61,27 @@ type PlayerFeature struct {
 // FeaturePWAInstall shows the "Install Calciotto" card on the Profile page.
 const FeaturePWAInstall = "pwa-install"
 
+// FeaturePushNotifications lets a player turn push notifications on (the
+// Profile page's "Notifications" card) and is checked again on every send, so
+// deleting the row stops them at once, even on a device already subscribed.
+const FeaturePushNotifications = "push-notifications"
+
+// PushSubscription is one device a player receives push notifications on,
+// as the browser's PushManager hands it over: the push service's endpoint
+// URL plus the two keys the payload is encrypted with. A player can have
+// several (phone, laptop). Endpoint is unique because it identifies the
+// device's browser profile: subscribing again from the same one, even as
+// another account, replaces the row rather than adding a second.
+type PushSubscription struct {
+	BaseModel
+	PlayerID  uuid.UUID `gorm:"type:uuid;index;not null" json:"player_id"`
+	Endpoint  string    `gorm:"type:text;uniqueIndex;not null" json:"endpoint"`
+	P256dh    string    `gorm:"type:text;not null" json:"-"`
+	Auth      string    `gorm:"type:text;not null" json:"-"`
+	CreatedAt time.Time `json:"created_at"`
+	Player    Player    `gorm:"foreignKey:PlayerID" json:"-"`
+}
+
 // PasswordResetToken matérialise un lien "mot de passe oublié" à usage unique,
 // émis par AuthService.ForgotPassword et consommé par ResetPassword.
 //
@@ -151,6 +172,12 @@ type Match struct {
 	// prediction a win. NULL for an unscheduled match — that is recorded
 	// after the fact by construction and never carries predictions.
 	ResultRecordedAt *time.Time `gorm:"type:timestamptz" json:"result_recorded_at,omitempty"`
+	// RegistrationOpenNotifiedAt and KickoffReminderNotifiedAt record when the
+	// "sign-ups are open" and "kick-off soon" push notifications went out
+	// (NotificationService.Tick), so each is sent once however many ticks
+	// see the match. Internal bookkeeping, never serialized.
+	RegistrationOpenNotifiedAt *time.Time `gorm:"type:timestamptz" json:"-"`
+	KickoffReminderNotifiedAt  *time.Time `gorm:"type:timestamptz" json:"-"`
 	// CreatedAt is the moment this row was logged — GORM's usual
 	// auto-populate-on-create convention, like MatchRegistration.CreatedAt and
 	// MatchVote.CreatedAt. It was originally added as the Man of the Match

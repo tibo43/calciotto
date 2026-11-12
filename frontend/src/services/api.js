@@ -514,6 +514,24 @@ export const getMyFeatures = async () => {
   return Array.isArray(response.data?.features) ? response.data.features : [];
 };
 
+// Push notifications (see services/pushNotifications.js). The public key is
+// '' when the backend has no VAPID keys configured.
+export const getPushPublicKey = async () => {
+  const response = await api.get('/push/public-key');
+  return response.data?.public_key || '';
+};
+
+// `subscription` is the browser's PushSubscription.toJSON(): { endpoint, keys }.
+export const savePushSubscription = async (subscription) => {
+  const response = await api.post('/players/me/push-subscription', subscription);
+  return response.data;
+};
+
+export const deletePushSubscription = async (endpoint) => {
+  const response = await api.delete('/players/me/push-subscription', { data: { endpoint } });
+  return response.data;
+};
+
 // Self-service "delete my account". The backend anonymizes the account
 // rather than erasing it (see AuthService.DeleteAccount) so every other
 // player's shared match history stays intact — but from this app's point of

@@ -219,6 +219,7 @@
           <!-- Hidden feature: only for players it was enabled for by hand
                (see PWA_INSTALL_FEATURE). -->
           <InstallAppCard v-if="features.includes(pwaInstallFeature)" />
+          <NotificationsCard v-if="features.includes(pushFeature)" />
 
           <!-- Danger zone: kept in its own card, visually separated from
                everything above, so an irreversible action doesn't sit next
@@ -260,9 +261,11 @@ import {
   updateMemberRole, removeMember, setFavoriteGroup, updateMyName, getMyFeatures, getToken
 } from '@/services/api';
 import { PWA_INSTALL_FEATURE } from '@/services/pwaInstall';
+import { PUSH_FEATURE } from '@/services/pushNotifications';
 import GroupSettingsModal from '@/components/GroupSettingsModal.vue';
 import DeleteAccountModal from '@/components/DeleteAccountModal.vue';
 import InstallAppCard from '@/components/InstallAppCard.vue';
+import NotificationsCard from '@/components/NotificationsCard.vue';
 
 // The JWT's own player_id claim is the only place the caller's player id is
 // available on this page (there's no "who am I" endpoint) — decoded locally,
@@ -285,7 +288,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'PlayerProfile',
-  components: { GroupSettingsModal, DeleteAccountModal, InstallAppCard },
+  components: { GroupSettingsModal, DeleteAccountModal, InstallAppCard, NotificationsCard },
   data() {
     return {
       overall: { Name: '', Played: 0, Won: 0, Drawn: 0, Lost: 0, GoalsFor: 0, OwnGoals: 0, Points: 0, MotmAwards: 0 },
@@ -327,7 +330,8 @@ export default {
 
       // Hidden features enabled for the caller (GET /players/me/features).
       features: [],
-      pwaInstallFeature: PWA_INSTALL_FEATURE
+      pwaInstallFeature: PWA_INSTALL_FEATURE,
+      pushFeature: PUSH_FEATURE
     };
   },
   computed: {

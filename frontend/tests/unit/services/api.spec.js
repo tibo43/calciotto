@@ -305,3 +305,29 @@ describe('getMyFeatures', () => {
     await expect(api.getMyFeatures()).resolves.toEqual([]);
   });
 });
+
+describe('the push notification calls', () => {
+  beforeEach(() => {
+    mockInstance.get.mockReset();
+    mockInstance.post.mockReset();
+    mockInstance.delete.mockReset();
+  });
+
+  it('reads the public key, empty when the backend has none', async () => {
+    mockInstance.get.mockResolvedValue({ data: { public_key: 'BEl62' } });
+    await expect(api.getPushPublicKey()).resolves.toBe('BEl62');
+    expect(mockInstance.get).toHaveBeenCalledWith('/push/public-key');
+    mockInstance.get.mockResolvedValue({ data: {} });
+    await expect(api.getPushPublicKey()).resolves.toBe('');
+  });
+
+  it('posts the subscription as is and deletes by endpoint in the body', async () => {
+    mockInstance.post.mockResolvedValue({ data: {} });
+    mockInstance.delete.mockResolvedValue({ data: {} });
+    const subscription = { endpoint: 'https://push.test/x', keys: { p256dh: 'k', auth: 'a' } };
+    await api.savePushSubscription(subscription);
+    expect(mockInstance.post).toHaveBeenCalledWith('/players/me/push-subscription', subscription);
+    await api.deletePushSubscription('https://push.test/x');
+    expect(mockInstance.delete).toHaveBeenCalledWith('/players/me/push-subscription', { data: { endpoint: 'https://push.test/x' } });
+  });
+});
