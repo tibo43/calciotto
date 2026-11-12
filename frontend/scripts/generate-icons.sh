@@ -1,11 +1,11 @@
 #!/usr/bin/env sh
-# Regenerates public/icons/ from one source image, inside the same pinned
+# Regenerates every icon (public/icons/, public/favicon.ico) from one source image, inside the same pinned
 # Playwright image the visual tests use (see tests/visual/run-in-docker.sh for
 # why that image, and the node_modules volume, rather than the host).
 #
 # Usage (from frontend/):
-#   sh scripts/generate-icons.sh public/favicon.svg --inset 0.8
-#   sh scripts/generate-icons.sh path/to/logo.png              # full-bleed square logo
+#   sh scripts/generate-icons.sh branding/icon-source.jpg        # the current logo (full-bleed square)
+#   sh scripts/generate-icons.sh path/to/round-logo.svg --inset 0.8
 set -e
 
 IMAGE=mcr.microsoft.com/playwright:v1.62.1-noble
