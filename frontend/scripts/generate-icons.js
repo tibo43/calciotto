@@ -39,7 +39,41 @@ const ICONS = [
   { file: 'icon-maskable-512.png', size: 512, opaque: true },
   { file: 'apple-touch-icon.png', size: 180, opaque: true },
   { file: 'favicon-32.png', size: 32, opaque: false },
+  // The navbar logo in light mode (App.vue): the same mark with its dark
+  // background and its white lines swapped, so it reads as a light logo on a
+  // light bar. Dark mode uses icon-192.png as is.
+  { file: 'logo-light.png', size: 192, opaque: false, swapNeutrals: true },
 ];
+
+// Swaps the logo's two neutral colours — its navy background and its white
+// lines — and leaves its colours (the green swoosh, the amber accent) alone.
+// Each pixel is reflected across the midpoint of navy and white
+// (navy + white - pixel), weighted by how grey it is: fully for the neutrals
+// and the antialiased edges between them, not at all for a saturated colour,
+// and partly for the blended edge between a colour and a neutral, which keeps
+// those edges smooth. Runs in the page, on a canvas.
+const NAVY = [31, 41, 55];
+function swapNeutralsInPage(navy) {
+  const img = document.querySelector('img');
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  canvas.style.cssText = img.style.cssText;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, img.width, img.height);
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const px = image.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const saturation = (Math.max(px[i], px[i + 1], px[i + 2]) - Math.min(px[i], px[i + 1], px[i + 2])) / 255;
+    const weight = Math.min(1, Math.max(0, (0.35 - saturation) / 0.2));
+    for (let c = 0; c < 3; c++) {
+      const swapped = navy[c] + 255 - px[i + c];
+      px[i + c] = Math.round(px[i + c] + (swapped - px[i + c]) * weight);
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  img.replaceWith(canvas);
+}
 
 // favicon.ico, for browsers (and tools) that ask for /favicon.ico without
 // reading <link rel="icon">. An .ico may hold a PNG as-is, so it is just the
@@ -109,6 +143,9 @@ async function main() {
           <img src="${src}" style="flex-shrink:0;width:${imageSize}px;height:${imageSize}px;object-fit:contain">
         </body></html>`);
       await page.locator('img').evaluate((img) => img.decode());
+      if (icon.swapNeutrals) {
+        await page.evaluate(swapNeutralsInPage, NAVY);
+      }
       const out = path.join(PUBLIC_DIR, 'icons', icon.file);
       await page.screenshot({ path: out, omitBackground: !icon.opaque });
       await page.close();

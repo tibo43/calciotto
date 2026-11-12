@@ -11,7 +11,13 @@
           <div class="nav-container">
             <!-- Logo/Brand -->
             <div class="nav-brand" @click="goHome">
-              <span class="brand-text">Calciotto</span>
+              <!-- The app icon (public/icons/, generated from
+                   branding/icon-source.jpg), so the web page and the
+                   installed app share one mark: as is in dark mode, with
+                   navy and white swapped in light mode. Desktop only (see
+                   the mobile rule below). -->
+              <img class="brand-logo" :src="isDarkMode ? '/icons/icon-192.png' : '/icons/logo-light.png'"
+                alt="Calciotto">
             </div>
 
             <!-- Desktop Menu — hidden on public routes (Login/Signup/...):
@@ -312,10 +318,11 @@ export default {
   transform: scale(1.05);
 }
 
-.brand-text {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--primary-color);
+.brand-logo {
+  display: block;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
 }
 
 .nav-menu {
@@ -550,6 +557,18 @@ export default {
     padding: 0 1rem;
   }
 
+  /* No logo on a phone: the installed app already has it on the home
+     screen, and the bar there only exists on the public pages. */
+  .nav-brand {
+    display: none;
+  }
+
+  /* With the logo gone, the actions are the bar's only item on a public
+     page; space-between would otherwise put them on the left. */
+  .nav-actions {
+    margin-left: auto;
+  }
+
   .nav-button-label {
     display: none;
   }
@@ -588,12 +607,6 @@ export default {
      content (e.g. a "Danger zone" card) isn't hidden underneath it. */
   .main-content {
     padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
-  }
-}
-
-@media (max-width: 400px) {
-  .brand-text {
-    font-size: 1.15rem;
   }
 }
 </style>
