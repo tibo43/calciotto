@@ -7,7 +7,16 @@
 // new dependency for something run once per logo change — @playwright/test is
 // already in the tree for the visual tests.
 //
-// Usage: node scripts/generate-icons.js <source> [--background <css colour>] [--inset <0..1>]
+// Usage: node scripts/generate-icons.js <source> [--zoom <>=1>] [--maskable-zoom <>=1>]
+//                                      [--background <css colour>] [--inset <0..1>]
+//   --zoom        crops the source's margins by enlarging it from its centre:
+//                 1.3 shows the middle 1/1.3 (77%) of it. For a logo whose
+//                 subject sits in the middle of a plain background, so it
+//                 fills more of a small home-screen icon. Default: 1.
+//   --maskable-zoom  the same for the maskable icon alone. Android crops that
+//                 one to a circle of 80% of its width (and smaller shapes on
+//                 some launchers), so it usually can't zoom as far as the
+//                 others without cutting into the subject. Default: --zoom.
 //   --background  fills the transparent parts of the opaque icons (maskable,
 //                 apple-touch-icon). Default: the app's primary green.
 //   --inset       how much of each opaque icon the source covers (the
@@ -52,18 +61,23 @@ function writeIco(png, size, file) {
 }
 
 function parseArgs(argv) {
-  const args = { source: null, background: '#10b981', inset: 1 };
+  const args = { source: null, background: '#10b981', inset: 1, zoom: 1, maskableZoom: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--background') {
       args.background = argv[++i];
+    } else if (argv[i] === '--zoom') {
+      args.zoom = Number(argv[++i]);
+    } else if (argv[i] === '--maskable-zoom') {
+      args.maskableZoom = Number(argv[++i]);
     } else if (argv[i] === '--inset') {
       args.inset = Number(argv[++i]);
     } else {
       args.source = argv[i];
     }
   }
-  if (!args.source || !(args.inset > 0 && args.inset <= 1)) {
-    throw new Error('usage: generate-icons.js <source> [--background <colour>] [--inset <0..1>]');
+  args.maskableZoom = args.maskableZoom ?? args.zoom;
+  if (!args.source || !(args.inset > 0 && args.inset <= 1) || !(args.zoom >= 1) || !(args.maskableZoom >= 1)) {
+    throw new Error('usage: generate-icons.js <source> [--zoom <>=1>] [--maskable-zoom <>=1>] [--background <colour>] [--inset <0..1>]');
   }
   return args;
 }
@@ -79,17 +93,20 @@ function dataUrl(file) {
 }
 
 async function main() {
-  const { source, background, inset } = parseArgs(process.argv.slice(2));
+  const { source, background, inset, zoom, maskableZoom } = parseArgs(process.argv.slice(2));
   const src = dataUrl(source);
   const browser = await chromium.launch();
   try {
     for (const icon of ICONS) {
       const page = await browser.newPage({ viewport: { width: icon.size, height: icon.size } });
-      const imageSize = Math.round(icon.size * (icon.opaque ? inset : 1));
+      // Zoomed past the canvas, the centred image overflows evenly on every
+      // side and the overflow is clipped: that is the crop.
+      const iconZoom = icon.file.includes('maskable') ? maskableZoom : zoom;
+      const imageSize = Math.round(icon.size * (icon.opaque ? inset : 1) * iconZoom);
       await page.setContent(`
-        <html><body style="margin:0;width:${icon.size}px;height:${icon.size}px;display:flex;
+        <html><body style="margin:0;width:${icon.size}px;height:${icon.size}px;overflow:hidden;display:flex;
           align-items:center;justify-content:center;background:${icon.opaque ? background : 'transparent'}">
-          <img src="${src}" style="width:${imageSize}px;height:${imageSize}px;object-fit:contain">
+          <img src="${src}" style="flex-shrink:0;width:${imageSize}px;height:${imageSize}px;object-fit:contain">
         </body></html>`);
       await page.locator('img').evaluate((img) => img.decode());
       const out = path.join(PUBLIC_DIR, 'icons', icon.file);

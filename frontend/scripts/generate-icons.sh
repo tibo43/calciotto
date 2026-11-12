@@ -4,7 +4,7 @@
 # why that image, and the node_modules volume, rather than the host).
 #
 # Usage (from frontend/):
-#   sh scripts/generate-icons.sh branding/icon-source.jpg        # the current logo (full-bleed square)
+#   sh scripts/generate-icons.sh branding/icon-source.jpg --zoom 1.35 --maskable-zoom 1.1   # the current logo
 #   sh scripts/generate-icons.sh path/to/round-logo.svg --inset 0.8
 set -e
 
