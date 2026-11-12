@@ -248,10 +248,6 @@ export default {
 
 .notifications-group {
   margin: 0;
-  /* The card itself is as wide as the profile column. Keeping each group to
-     a reading width leaves the switch next to its label on a desktop window
-     instead of at the far edge of the page. A phone is already narrower. */
-  max-width: 28rem;
 }
 
 .notifications-group-title {
