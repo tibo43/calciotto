@@ -216,6 +216,10 @@
             </template>
           </div>
 
+          <!-- Hidden feature: only for players it was enabled for by hand
+               (see PWA_INSTALL_FEATURE). -->
+          <InstallAppCard v-if="features.includes(pwaInstallFeature)" />
+
           <!-- Danger zone: kept in its own card, visually separated from
                everything above, so an irreversible action doesn't sit next
                to routine ones (favoriting a group, viewing a roster).
@@ -253,10 +257,12 @@
 <script>
 import {
   getPlayerProfile, getMyGroups, getGroupMembers,
-  updateMemberRole, removeMember, setFavoriteGroup, updateMyName, getToken
+  updateMemberRole, removeMember, setFavoriteGroup, updateMyName, getMyFeatures, getToken
 } from '@/services/api';
+import { PWA_INSTALL_FEATURE } from '@/services/pwaInstall';
 import GroupSettingsModal from '@/components/GroupSettingsModal.vue';
 import DeleteAccountModal from '@/components/DeleteAccountModal.vue';
+import InstallAppCard from '@/components/InstallAppCard.vue';
 
 // The JWT's own player_id claim is the only place the caller's player id is
 // available on this page (there's no "who am I" endpoint) — decoded locally,
@@ -279,7 +285,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'PlayerProfile',
-  components: { GroupSettingsModal, DeleteAccountModal },
+  components: { GroupSettingsModal, DeleteAccountModal, InstallAppCard },
   data() {
     return {
       overall: { Name: '', Played: 0, Won: 0, Drawn: 0, Lost: 0, GoalsFor: 0, OwnGoals: 0, Points: 0, MotmAwards: 0 },
@@ -317,7 +323,11 @@ export default {
       // Non-null while the invite-code/teams dialog for one group is open.
       settingsForGroup: null,
       showDeleteAccountModal: false,
-      isDangerZoneOpen: false
+      isDangerZoneOpen: false,
+
+      // Hidden features enabled for the caller (GET /players/me/features).
+      features: [],
+      pwaInstallFeature: PWA_INSTALL_FEATURE
     };
   },
   computed: {
@@ -357,7 +367,7 @@ export default {
   },
   async created() {
     this.currentPlayerId = currentPlayerIdFromToken();
-    await Promise.all([this.loadProfile(), this.loadGroupMeta()]);
+    await Promise.all([this.loadProfile(), this.loadGroupMeta(), this.loadFeatures()]);
   },
   methods: {
     async loadProfile() {
@@ -374,6 +384,15 @@ export default {
         this.perGroup = [];
       } finally {
         this.isLoading = false;
+      }
+    },
+    async loadFeatures() {
+      try {
+        this.features = await getMyFeatures();
+      } catch (error) {
+        // Non-fatal: a failure only keeps hidden features hidden.
+        console.error('Error fetching features:', error);
+        this.features = [];
       }
     },
     async loadGroupMeta() {

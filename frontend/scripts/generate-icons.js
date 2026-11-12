@@ -1,0 +1,152 @@
+// Renders every icon the app ships from one source image (SVG, PNG or JPEG):
+// the installable-app icons in public/icons/ and the browser-tab favicon
+// (public/favicon.ico). An optional second source (--light) is the same mark
+// on a light background; it becomes public/icons/logo-light.png, the navbar
+// logo App.vue shows in light mode. Run through generate-icons.sh, not
+// directly: it needs the Chromium that ships in the pinned Playwright image.
+//
+// Chromium does the rasterising rather than an image library, so there is no
+// new dependency for something run once per logo change — @playwright/test is
+// already in the tree for the visual tests.
+//
+// Usage: node scripts/generate-icons.js <source> [--light <source>]
+//                                      [--zoom <>=1>] [--maskable-zoom <>=1>]
+//                                      [--background <css colour>] [--inset <0..1>]
+//   --light       a light variant of the same logo. Rendered to
+//                 public/icons/logo-light.png at 192 px, with --zoom (not the
+//                 maskable one). Omit it and that file is left untouched.
+//   --zoom        crops the source's margins by enlarging it from its centre:
+//                 1.3 shows the middle 1/1.3 (77%) of it. For a logo whose
+//                 subject sits in the middle of a plain background, so it
+//                 fills more of a small home-screen icon. Default: 1.
+//   --maskable-zoom  the same for the maskable icon alone. Android crops that
+//                 one to a circle of 80% of its width (and smaller shapes on
+//                 some launchers), so it usually can't zoom as far as the
+//                 others without cutting into the subject. Default: --zoom.
+//   --background  fills the transparent parts of the opaque icons (maskable,
+//                 apple-touch-icon). Default: the app's primary green. A
+//                 full-bleed logo that already paints its own background
+//                 covers this; pass that colour anyway so a one-pixel seam
+//                 matches the logo instead of showing green.
+//   --inset       how much of each opaque icon the source covers (the
+//                 transparent ones always use the whole canvas). 1 for a
+//                 full-bleed square logo; less for a round or transparent one,
+//                 so that Android's maskable crop (a circle of 80% of the
+//                 icon) and iOS's rounded corners don't cut into it. Default: 1.
+
+const fs = require('fs');
+const path = require('path');
+const { chromium } = require('@playwright/test');
+
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+
+// `opaque` icons get the background colour: iOS shows transparency as black,
+// and a maskable icon is by definition cropped out of a full-bleed square.
+const ICONS = [
+  { file: 'icon-192.png', size: 192, opaque: false },
+  { file: 'icon-512.png', size: 512, opaque: false },
+  { file: 'icon-maskable-512.png', size: 512, opaque: true },
+  { file: 'apple-touch-icon.png', size: 180, opaque: true },
+  { file: 'favicon-32.png', size: 32, opaque: false },
+];
+
+// Navbar logo for light mode. Same canvas as icon-192.png so the two marks
+// occupy the same box in App.vue; the light source supplies the pixels.
+const LIGHT_ICON = { file: 'logo-light.png', size: 192, opaque: false };
+
+// favicon.ico, for browsers (and tools) that ask for /favicon.ico without
+// reading <link rel="icon">. An .ico may hold a PNG as-is, so it is just the
+// 32px icon behind a 22-byte header — no encoder needed.
+function writeIco(png, size, file) {
+  const header = Buffer.alloc(22);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // type: icon
+  header.writeUInt16LE(1, 4); // one image
+  header.writeUInt8(size, 6); // width
+  header.writeUInt8(size, 7); // height
+  header.writeUInt8(0, 8); // no palette
+  header.writeUInt8(0, 9); // reserved
+  header.writeUInt16LE(1, 10); // colour planes
+  header.writeUInt16LE(32, 12); // bits per pixel
+  header.writeUInt32LE(png.length, 14); // image size
+  header.writeUInt32LE(22, 18); // image offset
+  fs.writeFileSync(file, Buffer.concat([header, png]));
+}
+
+function parseArgs(argv) {
+  const args = { source: null, light: null, background: '#10b981', inset: 1, zoom: 1, maskableZoom: null };
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--background') {
+      args.background = argv[++i];
+    } else if (argv[i] === '--light') {
+      args.light = argv[++i];
+    } else if (argv[i] === '--zoom') {
+      args.zoom = Number(argv[++i]);
+    } else if (argv[i] === '--maskable-zoom') {
+      args.maskableZoom = Number(argv[++i]);
+    } else if (argv[i] === '--inset') {
+      args.inset = Number(argv[++i]);
+    } else if (!argv[i].startsWith('--')) {
+      args.source = argv[i];
+    } else {
+      throw new Error(`unknown option: ${argv[i]}`);
+    }
+  }
+  args.maskableZoom = args.maskableZoom ?? args.zoom;
+  if (!args.source || !args.background || (args.light !== null && !args.light)
+      || !(args.inset > 0 && args.inset <= 1) || !(args.zoom >= 1) || !(args.maskableZoom >= 1)) {
+    throw new Error('usage: generate-icons.js <source> [--light <source>] [--zoom <>=1>] [--maskable-zoom <>=1>] [--background <colour>] [--inset <0..1>]');
+  }
+  return args;
+}
+
+const MIME_TYPES = { '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
+
+function dataUrl(file) {
+  const mime = MIME_TYPES[path.extname(file).toLowerCase()];
+  if (!mime) {
+    throw new Error(`unsupported source format: ${file} (use SVG, PNG or JPEG)`);
+  }
+  return `data:${mime};base64,${fs.readFileSync(file).toString('base64')}`;
+}
+
+async function renderIcon(browser, src, icon, { background, inset, zoom, maskableZoom }) {
+  const page = await browser.newPage({ viewport: { width: icon.size, height: icon.size } });
+  // Zoomed past the canvas, the centred image overflows evenly on every
+  // side and the overflow is clipped: that is the crop.
+  const iconZoom = icon.file.includes('maskable') ? maskableZoom : zoom;
+  const imageSize = Math.round(icon.size * (icon.opaque ? inset : 1) * iconZoom);
+  await page.setContent(`
+    <html><body style="margin:0;width:${icon.size}px;height:${icon.size}px;overflow:hidden;display:flex;
+      align-items:center;justify-content:center;background:${icon.opaque ? background : 'transparent'}">
+      <img src="${src}" style="flex-shrink:0;width:${imageSize}px;height:${imageSize}px;object-fit:contain">
+    </body></html>`);
+  await page.locator('img').evaluate((img) => img.decode());
+  const out = path.join(PUBLIC_DIR, 'icons', icon.file);
+  await page.screenshot({ path: out, omitBackground: !icon.opaque });
+  await page.close();
+  console.log(`wrote public/icons/${icon.file}`);
+}
+
+async function main() {
+  const { source, light, background, inset, zoom, maskableZoom } = parseArgs(process.argv.slice(2));
+  const src = dataUrl(source);
+  const browser = await chromium.launch();
+  try {
+    for (const icon of ICONS) {
+      await renderIcon(browser, src, icon, { background, inset, zoom, maskableZoom });
+    }
+    if (light) {
+      await renderIcon(browser, dataUrl(light), LIGHT_ICON, { background, inset, zoom, maskableZoom });
+    }
+    writeIco(fs.readFileSync(path.join(PUBLIC_DIR, 'icons', 'favicon-32.png')), 32, path.join(PUBLIC_DIR, 'favicon.ico'));
+    console.log('wrote public/favicon.ico');
+  } finally {
+    await browser.close();
+  }
+}
+
+main().catch((err) => {
+  console.error(err.message);
+  process.exit(1);
+});

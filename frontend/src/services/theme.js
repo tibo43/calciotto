@@ -14,3 +14,17 @@
 export function isDarkModeActive() {
   return document.querySelector('.dark-mode') !== null;
 }
+
+// The page background in each theme (global-styles.css's --bg-primary), which
+// is also what the phone's status bar should show above it.
+const THEME_COLORS = { light: '#ffffff', dark: '#0f172a' };
+
+// Points index.html's <meta name="theme-color"> at the current theme, so the
+// status bar of an installed app (and Chrome's toolbar on Android) follows the
+// in-app light/dark toggle rather than staying white over a dark page.
+export function syncThemeColorMeta(isDark) {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) {
+    meta.setAttribute('content', isDark ? THEME_COLORS.dark : THEME_COLORS.light);
+  }
+}

@@ -69,6 +69,8 @@ async function stubApi(page, overrides = {}) {
   // Profile.vue's own cross-group stats call. Deliberately carries no
   // group_id — GET /players/me/stats is cross-group by design.
   await page.route(`${API}/players/me/stats*`, (route) => json(route, overrides.playerStats ?? data.playerStats));
+  // Hidden features (Profile.vue): none by default, like most players.
+  await page.route(`${API}/players/me/features`, (route) => json(route, { features: overrides.features ?? data.features }));
   await page.route(`${API}/groups/*/players`, (route) => json(route, overrides.groupMembers ?? data.groupMembers));
   // Only an admin viewing a scheduled match fetches this (MatchDetails.vue,
   // for "Share on WhatsApp") — stubbed unconditionally anyway since every

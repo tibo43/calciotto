@@ -85,6 +85,10 @@ module.exports = defineConfig({
     // to 'retain-on-failure' if the suite grows enough for that to change.
     trace: 'on',
     video: 'on',
+    // The production build registers public/sw.js (see main.js). Nothing here
+    // tests it, and a worker that outlived one test into the next would be
+    // state the screenshots don't control.
+    serviceWorkers: 'block',
   },
 
   projects: [

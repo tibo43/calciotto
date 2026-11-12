@@ -93,6 +93,9 @@ func main() {
 	// Same reasoning as /players/me/stats: this only ever acts on the JWT's
 	// own player id, so no group-scoping middleware is needed.
 	r.PATCH("/players/me", authRequired, playerHandler.UpdateMyName)
+	// Hidden features enabled for the caller (models.PlayerFeature), which
+	// are switched on by hand in the database. Same scoping as above.
+	r.GET("/players/me/features", authRequired, playerHandler.GetMyFeatures)
 	// Self-service "delete my account" — the current password is required in
 	// the body as a safety confirmation. Lives on AuthHandler rather than
 	// PlayerHandler since it's fundamentally a credential-lifecycle action,

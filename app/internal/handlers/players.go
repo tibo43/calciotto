@@ -49,3 +49,20 @@ func (h *PlayerHandler) UpdateMyName(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"name": name})
 }
+
+// GetMyFeatures returns the hidden features enabled for the authenticated
+// player, as {"features": [...]}. Only ever the caller's own: which features
+// someone else has is nobody's business, so there is no /players/:id form.
+func (h *PlayerHandler) GetMyFeatures(c *gin.Context) {
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+	features, err := h.Service.GetFeatures(playerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"features": features})
+}

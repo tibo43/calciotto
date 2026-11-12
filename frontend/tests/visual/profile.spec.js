@@ -68,3 +68,54 @@ test.describe('profile page', () => {
     expectEverythingStubbed(unstubbed);
   });
 });
+
+// The "Install Calciotto" card above the danger zone (InstallAppCard.vue). It
+// is a hidden feature, shown only to players it was enabled for by hand
+// (GET /players/me/features), and only where the browser can install the app,
+// which the test Chromium never says on its own, so each test puts the page
+// in that situation itself. Only the card is photographed: the rest of the
+// page is the baselines above.
+const ENABLED = { features: ['pwa-install'] };
+
+// What Chrome fires once the page is installable; the tracker only needs an
+// event it can hold on to.
+const offerInstall = (page) => page.evaluate(() => {
+  const event = new Event('beforeinstallprompt', { cancelable: true });
+  event.prompt = () => Promise.resolve();
+  event.userChoice = Promise.resolve({ outcome: 'dismissed' });
+  window.dispatchEvent(event);
+});
+
+test.describe('profile install card', () => {
+  test('as offered by Chrome on Android @mobile', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/profile', ENABLED);
+    await expect(page.locator('.danger-zone-card')).toBeVisible();
+    await offerInstall(page);
+    await expect(page.locator('.install-app-card')).toHaveScreenshot('install-card-android-mobile.png');
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test.describe('on an iPhone', () => {
+    test.use({
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+    });
+
+    test('with the Share-menu instructions @mobile', async ({ page }) => {
+      const { unstubbed } = await gotoApp(page, '/profile', ENABLED);
+      await expect(page.locator('.install-app-card')).toHaveScreenshot('install-card-ios-mobile.png');
+      await expectNoHorizontalOverflow(page);
+      expectEverythingStubbed(unstubbed);
+    });
+  });
+
+  // Not a screenshot: what matters is that the card is absent, which a
+  // baseline of the whole page would only show indirectly.
+  test('stays hidden for a player without the feature, even when Chrome offers @mobile', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/profile');
+    await expect(page.locator('.danger-zone-card')).toBeVisible();
+    await offerInstall(page);
+    await expect(page.locator('.install-app-card')).toHaveCount(0);
+    expectEverythingStubbed(unstubbed);
+  });
+});
