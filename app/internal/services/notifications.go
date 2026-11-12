@@ -40,8 +40,9 @@ import (
 // The four event-driven ones go out from MatchService.UpdateMatch through
 // RosterSaved. The two time-driven ones need a clock, and the backend's free
 // Koyeb instance sleeps when idle, so an in-process timer would not fire:
-// instead an external scheduler (.github/workflows/notifications-tick.yml)
-// calls POST /internal/notifications/tick, which runs Tick. Each match records
+// cron-job.org calls POST https://calciotto.koyeb.app/internal/notifications/tick
+// every five minutes with Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>,
+// which runs Tick. Each match records
 // when each of the time-driven ones went out, and when predictions_open went
 // out, so however many saves or ticks see it, it is sent once, and a tick
 // that runs late still sends what is due.
@@ -79,9 +80,8 @@ var AllPushTypes = []string{
 }
 
 // KickoffReminderLead is how long before kick-off the reminder becomes due.
-// The tick runs every few minutes (and GitHub's scheduler can run late), so
-// the reminder arrives at most this long before kick-off, usually a little
-// less.
+// The tick runs every five minutes from cron-job.org, so the reminder
+// arrives at most this long before kick-off, usually a little less.
 const KickoffReminderLead = 30 * time.Minute
 
 // RegistrationOpenWindow bounds how late a "sign-ups are open" notification

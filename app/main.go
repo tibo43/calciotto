@@ -119,9 +119,10 @@ func main() {
 	// subscribe: the card that calls these is hidden without it.
 	r.GET("/players/me/notification-preferences", authRequired, notificationHandler.GetPreferences)
 	r.PUT("/players/me/notification-preferences", authRequired, notificationHandler.UpdatePreferences)
-	// Called by the scheduler (.github/workflows/notifications-tick.yml), not
-	// by players: authenticated by its own shared secret instead of a JWT, and
-	// not registered at all when that secret isn't configured.
+	// Called by an external scheduler (cron-job.org) every five minutes:
+	// POST https://calciotto.koyeb.app/internal/notifications/tick with
+	// Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>. Authenticated by
+	// that shared secret, and not registered at all when it isn't configured.
 	if notificationHandler.TickSecret != "" {
 		r.POST("/internal/notifications/tick", notificationHandler.Tick)
 	} else {
