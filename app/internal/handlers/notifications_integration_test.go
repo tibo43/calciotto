@@ -85,3 +85,95 @@ func TestNotificationRoutes_Integration(t *testing.T) {
 		t.Errorf("tick with the secret = %d %s, want 200", rec.Code, rec.Body.String())
 	}
 }
+
+func preferenceBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]bool {
+	t.Helper()
+	var body struct {
+		Preferences map[string]bool `json:"preferences"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode preferences: %v (%s)", err, rec.Body.String())
+	}
+	return body.Preferences
+}
+
+func TestNotificationPreferences_Integration(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	playerService := services.NewPlayerService(tx)
+	authService := services.NewAuthService(tx, testNotificationsJWTSecret)
+	notificationService := services.NewNotificationService(tx, nil, services.NewMatchService(tx))
+	handler := handlers.NewNotificationHandler(notificationService, "public-key", "tick-secret")
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	authRequired := handlers.AuthMiddleware(authService)
+	router.GET("/players/me/notification-preferences", authRequired, handler.GetPreferences)
+	router.PUT("/players/me/notification-preferences", authRequired, handler.UpdatePreferences)
+
+	_, token := authenticatedRenamePlayer(t, playerService, authService, "Zzz Integration Prefs Owner", "prefs-owner@example.com")
+	bearer := "Bearer " + token
+	playerID, err := authService.ParseToken(token)
+	if err != nil {
+		t.Fatalf("ParseToken: %v", err)
+	}
+
+	if rec := sendJSON(router, http.MethodGet, "/players/me/notification-preferences", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("GET without a token = %d, want 401", rec.Code)
+	}
+	if rec := sendJSON(router, http.MethodGet, "/players/me/notification-preferences", bearer, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("GET without the feature = %d, want 403", rec.Code)
+	}
+	if rec := sendJSON(router, http.MethodPut, "/players/me/notification-preferences", bearer, map[string]any{"preferences": map[string]bool{"kickoff_reminder": false}}); rec.Code != http.StatusForbidden {
+		t.Errorf("PUT without the feature = %d, want 403", rec.Code)
+	}
+
+	if err := tx.Create(&models.PlayerFeature{PlayerID: playerID, Feature: models.FeaturePushNotifications}).Error; err != nil {
+		t.Fatalf("enable feature: %v", err)
+	}
+
+	rec := sendJSON(router, http.MethodGet, "/players/me/notification-preferences", bearer, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET = %d %s, want 200", rec.Code, rec.Body.String())
+	}
+	for _, kind := range services.AllPushTypes {
+		if !preferenceBody(t, rec)[kind] {
+			t.Errorf("default %s = false, want true (no row yet)", kind)
+		}
+	}
+
+	if rec := sendJSON(router, http.MethodPut, "/players/me/notification-preferences", bearer, map[string]any{}); rec.Code != http.StatusBadRequest {
+		t.Errorf("PUT without preferences = %d, want 400", rec.Code)
+	}
+	if rec := sendJSON(router, http.MethodPut, "/players/me/notification-preferences", bearer, map[string]any{"preferences": map[string]any{"nope": false}}); rec.Code != http.StatusBadRequest || !bytes.Contains(rec.Body.Bytes(), []byte("unknown notification type")) {
+		t.Errorf("PUT unknown type = %d %s, want 400", rec.Code, rec.Body.String())
+	}
+	if rec := sendJSON(router, http.MethodPut, "/players/me/notification-preferences", bearer, map[string]any{"preferences": map[string]any{"kickoff_reminder": "off"}}); rec.Code != http.StatusBadRequest {
+		t.Errorf("PUT non-bool = %d, want 400", rec.Code)
+	}
+
+	rec = sendJSON(router, http.MethodPut, "/players/me/notification-preferences", bearer, map[string]any{"preferences": map[string]bool{"kickoff_reminder": false}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT = %d %s, want 200", rec.Code, rec.Body.String())
+	}
+	saved := preferenceBody(t, rec)
+	if saved["kickoff_reminder"] {
+		t.Error("kickoff_reminder stayed on after turning it off")
+	}
+	for _, kind := range services.AllPushTypes {
+		if kind != "kickoff_reminder" && !saved[kind] {
+			t.Errorf("%s = false after updating a different type", kind)
+		}
+	}
+
+	rec = sendJSON(router, http.MethodGet, "/players/me/notification-preferences", bearer, nil)
+	if rec.Code != http.StatusOK || preferenceBody(t, rec)["kickoff_reminder"] {
+		t.Fatalf("GET after PUT = %d %s, want kickoff_reminder false", rec.Code, rec.Body.String())
+	}
+
+	rec = sendJSON(router, http.MethodPut, "/players/me/notification-preferences", bearer, map[string]any{"preferences": map[string]bool{"kickoff_reminder": true}})
+	if rec.Code != http.StatusOK || !preferenceBody(t, rec)["kickoff_reminder"] {
+		t.Fatalf("PUT back on = %d %s, want kickoff_reminder true", rec.Code, rec.Body.String())
+	}
+}

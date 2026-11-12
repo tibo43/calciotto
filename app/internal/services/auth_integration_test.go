@@ -570,6 +570,12 @@ func TestDeleteAccount_Integration_AnonymizesAndCleansUp(t *testing.T) {
 	if err := tx.Create(&models.PlayerFeature{PlayerID: deletingPlayerID, Feature: models.FeaturePWAInstall}).Error; err != nil {
 		t.Fatalf("failed to enable a feature for Quinn: %v", err)
 	}
+	if err := tx.Create(&models.NotificationPreference{PlayerID: deletingPlayerID, Type: "kickoff_reminder", Enabled: false}).Error; err != nil {
+		t.Fatalf("failed to store Quinn's notification preference: %v", err)
+	}
+	if err := tx.Create(&models.NotificationPreference{PlayerID: survivorID, Type: "kickoff_reminder", Enabled: false}).Error; err != nil {
+		t.Fatalf("failed to store Rita's notification preference: %v", err)
+	}
 
 	if err := authService.DeleteAccount(deletingPlayerID, "s3cret-pass"); err != nil {
 		t.Fatalf("DeleteAccount returned error: %v", err)
@@ -626,6 +632,18 @@ func TestDeleteAccount_Integration_AnonymizesAndCleansUp(t *testing.T) {
 	}
 	if featureCount != 0 {
 		t.Errorf("features of deleted player = %d, want 0", featureCount)
+	}
+
+	var preferenceCount int64
+	if err := tx.Model(&models.NotificationPreference{}).Where("player_id = ?", deletingPlayerID).Count(&preferenceCount).Error; err != nil {
+		t.Fatalf("failed to count notification preferences of deleted player: %v", err)
+	}
+	if preferenceCount != 0 {
+		t.Errorf("notification preferences of deleted player = %d, want 0", preferenceCount)
+	}
+	var survivorPreference models.NotificationPreference
+	if err := tx.Where("player_id = ?", survivorID).First(&survivorPreference).Error; err != nil {
+		t.Errorf("another player's notification preference was removed by the account deletion: %v", err)
 	}
 
 	var voteForDeletedPlayer models.MatchVote

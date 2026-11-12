@@ -310,6 +310,7 @@ describe('the push notification calls', () => {
   beforeEach(() => {
     mockInstance.get.mockReset();
     mockInstance.post.mockReset();
+    mockInstance.put.mockReset();
     mockInstance.delete.mockReset();
   });
 
@@ -329,5 +330,23 @@ describe('the push notification calls', () => {
     expect(mockInstance.post).toHaveBeenCalledWith('/players/me/push-subscription', subscription);
     await api.deletePushSubscription('https://push.test/x');
     expect(mockInstance.delete).toHaveBeenCalledWith('/players/me/push-subscription', { data: { endpoint: 'https://push.test/x' } });
+  });
+
+  it('reads and updates notification preferences without a group id', async () => {
+    const preferences = { kickoff_reminder: false, registration_open: true };
+    mockInstance.get.mockResolvedValue({ data: { preferences } });
+    await expect(api.getNotificationPreferences()).resolves.toEqual(preferences);
+    expect(mockInstance.get).toHaveBeenCalledWith('/players/me/notification-preferences');
+
+    mockInstance.put.mockResolvedValue({ data: { preferences } });
+    await expect(api.updateNotificationPreferences({ kickoff_reminder: false })).resolves.toEqual(preferences);
+    expect(mockInstance.put).toHaveBeenCalledWith('/players/me/notification-preferences', {
+      preferences: { kickoff_reminder: false }
+    });
+
+    mockInstance.get.mockResolvedValue({ data: {} });
+    await expect(api.getNotificationPreferences()).resolves.toEqual({});
+    mockInstance.put.mockResolvedValue({ data: {} });
+    await expect(api.updateNotificationPreferences({})).resolves.toEqual({});
   });
 });

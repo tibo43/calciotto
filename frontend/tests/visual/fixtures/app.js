@@ -71,6 +71,32 @@ async function stubApi(page, overrides = {}) {
   await page.route(`${API}/players/me/stats*`, (route) => json(route, overrides.playerStats ?? data.playerStats));
   // Hidden features (Profile.vue): none by default, like most players.
   await page.route(`${API}/players/me/features`, (route) => json(route, { features: overrides.features ?? data.features }));
+  // The Notifications card reads these only once push is on for the device.
+  // The off-state screenshot never calls them; stubbing them keeps an on-state
+  // page from falling through to the catch-all. A PUT merges into the copy
+  // this page is holding, so a test can flip one switch and read it back.
+  let notificationPreferences = {
+    ...(overrides.notificationPreferences ?? data.notificationPreferences),
+  };
+  await page.route(`${API}/players/me/notification-preferences`, async (route) => {
+    const method = route.request().method();
+    if (method === 'PUT') {
+      const body = JSON.parse(route.request().postData() || '{}');
+      notificationPreferences = { ...notificationPreferences, ...(body.preferences || {}) };
+    } else if (method !== 'GET') {
+      unstubbed.push(`${method} ${route.request().url()}`);
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
+    }
+    return json(route, { preferences: notificationPreferences });
+  });
+  await page.route(`${API}/push/public-key`, (route) => json(route, { public_key: 'test-public-key' }));
+  await page.route(`${API}/players/me/push-subscription`, (route) => {
+    const method = route.request().method();
+    if (method === 'POST') return json(route, { subscribed: true });
+    if (method === 'DELETE') return json(route, { unsubscribed: true });
+    unstubbed.push(`${method} ${route.request().url()}`);
+    return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
+  });
   await page.route(`${API}/groups/*/players`, (route) => json(route, overrides.groupMembers ?? data.groupMembers));
   // Only an admin viewing a scheduled match fetches this (MatchDetails.vue,
   // for "Share on WhatsApp") — stubbed unconditionally anyway since every

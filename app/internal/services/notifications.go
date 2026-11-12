@@ -48,7 +48,11 @@ import (
 //
 // Everything is gated by the push-notifications hidden feature
 // (models.FeaturePushNotifications), checked when subscribing and again on
-// every send.
+// every send. On top of that, each player can turn any of the six off
+// (models.NotificationPreference). No row means on, so a player who has
+// never chosen still receives all six. send skips a player for a type they
+// turned off; the match is still claimed, so turning it back on later does
+// not replay a notification that already went out.
 //
 // The payload is data, not text: the service worker (frontend/public/sw.js)
 // writes the title and body, so that a kick-off time is shown in the device's
@@ -62,6 +66,17 @@ const (
 	PushTypeResultRecorded     = "result_recorded"
 	PushTypePredictionsSettled = "predictions_settled"
 )
+
+// AllPushTypes is every notification a player can turn off, in the order the
+// Profile card lists them (Match, then Predictions, then Reminder).
+var AllPushTypes = []string{
+	PushTypeRegistrationOpen,
+	PushTypeTeamAssigned,
+	PushTypeResultRecorded,
+	PushTypePredictionsOpen,
+	PushTypePredictionsSettled,
+	PushTypeKickoffReminder,
+}
 
 // KickoffReminderLead is how long before kick-off the reminder becomes due.
 // The tick runs every few minutes (and GitHub's scheduler can run late), so
@@ -77,6 +92,7 @@ const RegistrationOpenWindow = 6 * time.Hour
 
 var (
 	ErrPushFeatureNotEnabled   = errors.New("push notifications are not enabled for this player")
+	ErrUnknownNotificationType = errors.New("unknown notification type")
 	ErrInvalidPushSubscription = errors.New("a push subscription needs an endpoint and both keys")
 	// ErrPushSubscriptionGone is what a PushSender returns when the push
 	// service says the subscription no longer exists (the app was
@@ -210,9 +226,93 @@ func (s *NotificationService) Unsubscribe(playerID uuid.UUID, endpoint string) e
 	return s.DB.Where("player_id = ? AND endpoint = ?", playerID, endpoint).Delete(&models.PushSubscription{}).Error
 }
 
+func knownPushType(kind string) bool {
+	for _, candidate := range AllPushTypes {
+		if candidate == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func defaultPreferences() map[string]bool {
+	prefs := make(map[string]bool, len(AllPushTypes))
+	for _, kind := range AllPushTypes {
+		prefs[kind] = true
+	}
+	return prefs
+}
+
+// preferences is the player's choice for every type. A type with no row is
+// on, including one this player has never touched.
+func (s *NotificationService) preferences(playerID uuid.UUID) (map[string]bool, error) {
+	prefs := defaultPreferences()
+	var rows []models.NotificationPreference
+	if err := s.DB.Where("player_id = ?", playerID).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if knownPushType(row.Type) {
+			prefs[row.Type] = row.Enabled
+		}
+	}
+	return prefs, nil
+}
+
+// GetPreferences returns all six types for the player. 403-shaped
+// ErrPushFeatureNotEnabled without the feature, the same gate as Subscribe.
+func (s *NotificationService) GetPreferences(playerID uuid.UUID) (map[string]bool, error) {
+	enabled, err := s.hasFeature(playerID)
+	if err != nil {
+		return nil, err
+	}
+	if !enabled {
+		return nil, ErrPushFeatureNotEnabled
+	}
+	return s.preferences(playerID)
+}
+
+// UpdatePreferences stores the types in updates (a subset is enough) and
+// returns the full map. An unknown type is ErrUnknownNotificationType and
+// nothing is written. enabled is written with an explicit upsert because a
+// struct update would skip false, and "off" is the whole point of the row.
+func (s *NotificationService) UpdatePreferences(playerID uuid.UUID, updates map[string]bool) (map[string]bool, error) {
+	enabled, err := s.hasFeature(playerID)
+	if err != nil {
+		return nil, err
+	}
+	if !enabled {
+		return nil, ErrPushFeatureNotEnabled
+	}
+	for kind := range updates {
+		if !knownPushType(kind) {
+			return nil, fmt.Errorf("%w: %s", ErrUnknownNotificationType, kind)
+		}
+	}
+	err = s.DB.Transaction(func(tx *gorm.DB) error {
+		for kind, on := range updates {
+			row := models.NotificationPreference{PlayerID: playerID, Type: kind, Enabled: on}
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "player_id"}, {Name: "type"}},
+				DoUpdates: clause.AssignmentColumns([]string{"enabled"}),
+			}).Create(&row).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.preferences(playerID)
+}
+
 // send delivers each player's message to every device they subscribed, if
-// they still have the feature. Failures are logged, never returned: one dead
-// phone must not stop the others, nor fail the admin action that triggered it.
+// they still have the feature and have not turned that notification off.
+// Failures are logged, never returned: one dead phone must not stop the
+// others, nor fail the admin action that triggered it. A failure to read
+// preferences sends nothing — the same as a failure to read subscriptions —
+// so a player who turned a type off is never told because the lookup failed.
 func (s *NotificationService) send(messages map[uuid.UUID]PushMessage) {
 	if s.Sender == nil || len(messages) == 0 {
 		return
@@ -220,6 +320,11 @@ func (s *NotificationService) send(messages map[uuid.UUID]PushMessage) {
 	playerIDs := make([]uuid.UUID, 0, len(messages))
 	for id := range messages {
 		playerIDs = append(playerIDs, id)
+	}
+	optedOut, err := s.optedOut(playerIDs)
+	if err != nil {
+		log.Printf("[push] could not load notification preferences: %v", err)
+		return
 	}
 	var subs []models.PushSubscription
 	if err := s.DB.
@@ -230,7 +335,11 @@ func (s *NotificationService) send(messages map[uuid.UUID]PushMessage) {
 		return
 	}
 	for _, sub := range subs {
-		payload, err := json.Marshal(messages[sub.PlayerID])
+		message := messages[sub.PlayerID]
+		if optedOut[sub.PlayerID][message.Type] {
+			continue
+		}
+		payload, err := json.Marshal(message)
 		if err != nil {
 			log.Printf("[push] could not encode message: %v", err)
 			continue
@@ -243,6 +352,26 @@ func (s *NotificationService) send(messages map[uuid.UUID]PushMessage) {
 			log.Printf("[push] delivery to a subscription of player %s failed: %v", sub.PlayerID, err)
 		}
 	}
+}
+
+// optedOut is the set of types each player has turned off. A player with no
+// row is absent, which send treats as receiving everything.
+func (s *NotificationService) optedOut(playerIDs []uuid.UUID) (map[uuid.UUID]map[string]bool, error) {
+	out := make(map[uuid.UUID]map[string]bool)
+	if len(playerIDs) == 0 {
+		return out, nil
+	}
+	var rows []models.NotificationPreference
+	if err := s.DB.Where("player_id IN ? AND enabled = ?", playerIDs, false).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if out[row.PlayerID] == nil {
+			out[row.PlayerID] = map[string]bool{}
+		}
+		out[row.PlayerID][row.Type] = true
+	}
+	return out, nil
 }
 
 // sameMessageFor addresses one message to several players.

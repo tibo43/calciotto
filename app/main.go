@@ -115,6 +115,10 @@ func main() {
 	r.GET("/push/public-key", authRequired, notificationHandler.GetPublicKey)
 	r.POST("/players/me/push-subscription", authRequired, notificationHandler.Subscribe)
 	r.DELETE("/players/me/push-subscription", authRequired, notificationHandler.Unsubscribe)
+	// Which of the six notifications this player wants. Same feature gate as
+	// subscribe: the card that calls these is hidden without it.
+	r.GET("/players/me/notification-preferences", authRequired, notificationHandler.GetPreferences)
+	r.PUT("/players/me/notification-preferences", authRequired, notificationHandler.UpdatePreferences)
 	// Called by the scheduler (.github/workflows/notifications-tick.yml), not
 	// by players: authenticated by its own shared secret instead of a JWT, and
 	// not registered at all when that secret isn't configured.

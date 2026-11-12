@@ -130,7 +130,10 @@ func applySchema(db *gorm.DB) error {
 	// "this match was never scheduled" state every pre-existing match is in —
 	// unlike GroupMembership.IsFavorite below, whose non-null default(false)
 	// broke an invariant and had to be repaired.
-	if err := db.AutoMigrate(&models.Group{}, &models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{}, &models.MatchRegistration{}, &models.MatchVote{}, &models.MatchPrediction{}, &models.GroupMembership{}, &models.PasswordResetToken{}, &models.PlayerFeature{}, &models.PushSubscription{}); err != nil {
+	// NotificationPreference needs no backfill: no row for a (player, type)
+	// means that notification is on, which is what every existing player
+	// should get. See models.NotificationPreference.
+	if err := db.AutoMigrate(&models.Group{}, &models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{}, &models.MatchRegistration{}, &models.MatchVote{}, &models.MatchPrediction{}, &models.GroupMembership{}, &models.PasswordResetToken{}, &models.PlayerFeature{}, &models.PushSubscription{}, &models.NotificationPreference{}); err != nil {
 		return err
 	}
 
