@@ -1648,9 +1648,10 @@ export default {
 }
 
 .matches-bar {
+  --matches-bar-padding: 0.5rem;
   display: flex;
   gap: 0.75rem;
-  padding: 0.5rem;
+  padding: var(--matches-bar-padding);
   overflow-x: auto;
   scroll-behavior: smooth;
 }
@@ -1695,6 +1696,19 @@ export default {
   z-index: 2;
   background-color: var(--bg-tertiary);
   box-shadow: 8px 0 8px -8px rgba(0, 0, 0, 0.15);
+}
+
+/* The sticky "+" stops at the bar's padding edge, so cards scrolling under
+   it stayed visible in the padding strip on its left. This covers that
+   strip with the card's own background. */
+.add-match-card::before {
+  content: '';
+  position: absolute;
+  top: calc(-1 * var(--matches-bar-padding) - 2px);
+  bottom: calc(-1 * var(--matches-bar-padding) - 2px);
+  left: calc(-1 * var(--matches-bar-padding) - 2px);
+  width: var(--matches-bar-padding);
+  background-color: var(--bg-primary);
 }
 
 .add-match-card:hover {
@@ -2419,7 +2433,7 @@ export default {
   }
 
   .matches-bar {
-    padding: 0.35rem;
+    --matches-bar-padding: 0.35rem;
     gap: 0.5rem;
   }
 

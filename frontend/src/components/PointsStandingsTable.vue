@@ -92,7 +92,10 @@ export default {
 
 .standings-table th {
   position: sticky;
-  top: 0;
+  /* Minus the container's card-large padding: sticky stops at the padding
+     edge, so with top: 0 rows scrolled past it stayed visible in the 2rem
+     strip above the header. */
+  top: -2rem;
   z-index: 1;
   background-color: var(--bg-tertiary);
   color: var(--text-secondary);
