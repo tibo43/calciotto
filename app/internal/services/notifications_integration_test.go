@@ -619,3 +619,215 @@ func TestNotifications_Integration_UnscheduledSaveSendsNothing(t *testing.T) {
 		t.Fatalf("an unscheduled match sent %+v", env.sender.sent)
 	}
 }
+
+func (e *notificationEnv) prefs(t *testing.T, playerID uuid.UUID, updates map[string]bool) {
+	t.Helper()
+	if _, err := e.notifications.UpdatePreferences(playerID, updates); err != nil {
+		t.Fatalf("UpdatePreferences: %v", err)
+	}
+}
+
+func (e *notificationEnv) wantTypes(t *testing.T, endpoint string, kinds ...string) {
+	t.Helper()
+	got := e.types(endpoint)
+	sort.Strings(kinds)
+	if len(got) != len(kinds) {
+		t.Fatalf("%s got %v, want %v", endpoint, got, kinds)
+	}
+	for i := range kinds {
+		if got[i] != kinds[i] {
+			t.Fatalf("%s got %v, want %v", endpoint, got, kinds)
+		}
+	}
+}
+
+func wantAllOnExcept(t *testing.T, got map[string]bool, off ...string) {
+	t.Helper()
+	turnedOff := map[string]bool{}
+	for _, kind := range off {
+		turnedOff[kind] = true
+	}
+	if len(got) != len(services.AllPushTypes) {
+		t.Fatalf("got %d preferences (%v), want the %d types", len(got), got, len(services.AllPushTypes))
+	}
+	for _, kind := range services.AllPushTypes {
+		if got[kind] == turnedOff[kind] {
+			t.Errorf("%s = %v, want %v", kind, got[kind], !turnedOff[kind])
+		}
+	}
+}
+
+func TestNotifications_Integration_PreferencesDefaultAllOn(t *testing.T) {
+	env := newNotificationEnv(t)
+	playerID, _ := env.member(t, "Chooser", true)
+	noFeature, _ := env.member(t, "NoFeature", false)
+
+	got, err := env.notifications.GetPreferences(playerID)
+	if err != nil {
+		t.Fatalf("GetPreferences: %v", err)
+	}
+	wantAllOnExcept(t, got)
+
+	if _, err := env.notifications.GetPreferences(noFeature); !errors.Is(err, services.ErrPushFeatureNotEnabled) {
+		t.Errorf("GetPreferences without the feature = %v, want ErrPushFeatureNotEnabled", err)
+	}
+	if _, err := env.notifications.UpdatePreferences(noFeature, map[string]bool{services.PushTypeKickoffReminder: false}); !errors.Is(err, services.ErrPushFeatureNotEnabled) {
+		t.Errorf("UpdatePreferences without the feature = %v, want ErrPushFeatureNotEnabled", err)
+	}
+	if _, err := env.notifications.UpdatePreferences(playerID, map[string]bool{"not_a_type": false}); !errors.Is(err, services.ErrUnknownNotificationType) {
+		t.Errorf("unknown type = %v, want ErrUnknownNotificationType", err)
+	}
+	var stored int64
+	if err := env.tx.Model(&models.NotificationPreference{}).Where("player_id = ?", playerID).Count(&stored).Error; err != nil {
+		t.Fatalf("count preferences: %v", err)
+	}
+	if stored != 0 {
+		t.Errorf("an unknown type left %d rows", stored)
+	}
+
+	got, err = env.notifications.UpdatePreferences(playerID, map[string]bool{
+		services.PushTypeKickoffReminder: false,
+		services.PushTypeResultRecorded:  false,
+	})
+	if err != nil {
+		t.Fatalf("UpdatePreferences: %v", err)
+	}
+	wantAllOnExcept(t, got, services.PushTypeKickoffReminder, services.PushTypeResultRecorded)
+
+	// Turning one back on leaves the other off, and a second write of the
+	// same value is a no-op success.
+	got, err = env.notifications.UpdatePreferences(playerID, map[string]bool{services.PushTypeKickoffReminder: true})
+	if err != nil {
+		t.Fatalf("UpdatePreferences (back on): %v", err)
+	}
+	wantAllOnExcept(t, got, services.PushTypeResultRecorded)
+	got, err = env.notifications.UpdatePreferences(playerID, map[string]bool{services.PushTypeResultRecorded: false})
+	if err != nil {
+		t.Fatalf("UpdatePreferences (same value): %v", err)
+	}
+	wantAllOnExcept(t, got, services.PushTypeResultRecorded)
+
+	if got, err = env.notifications.UpdatePreferences(playerID, map[string]bool{}); err != nil {
+		t.Fatalf("empty update: %v", err)
+	} else {
+		wantAllOnExcept(t, got, services.PushTypeResultRecorded)
+	}
+}
+
+// TestNotifications_Integration_SendRespectsEachPreference checks the filter
+// on every type: the player who turned that one off receives none of it, and
+// a player who never set a preference still receives all six. Types that
+// share a trigger stay independent — team_assigned off still allows
+// predictions_open, and result_recorded off still allows predictions_settled.
+func TestNotifications_Integration_SendRespectsEachPreference(t *testing.T) {
+	env := newNotificationEnv(t)
+	now := time.Now()
+	alice, aliceEndpoint := env.member(t, "Alice", true)
+	bob, bobEndpoint := env.member(t, "Bob", true) // never sets a preference
+
+	roster := func(ids ...uuid.UUID) []models.PlayerCustom {
+		players := make([]models.PlayerCustom, 0, len(ids))
+		for _, id := range ids {
+			players = append(players, models.PlayerCustom{ID: id})
+		}
+		return players
+	}
+	saveRoster := func(matchID uuid.UUID, sideA, sideB []uuid.UUID) {
+		t.Helper()
+		if err := env.matches.UpdateMatch(matchID, env.groupID, []models.TeamWithPlayers{
+			{ID: env.teamA.ID, Players: roster(sideA...)},
+			{ID: env.teamB.ID, Players: roster(sideB...)},
+		}); err != nil {
+			t.Fatalf("UpdateMatch: %v", err)
+		}
+	}
+
+	// Sign-ups open: only Alice opted out.
+	env.scheduledMatch(t, now.Add(72*time.Hour), now.Add(-10*time.Minute), 10)
+	env.prefs(t, alice, map[string]bool{services.PushTypeRegistrationOpen: false})
+	if _, err := env.notifications.Tick(now); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	env.wantTypes(t, aliceEndpoint)
+	env.wantTypes(t, bobEndpoint, services.PushTypeRegistrationOpen)
+
+	// Her team is off, predictions open is on: she hears only the second.
+	// Sign-ups opened long enough ago that a later tick does not announce
+	// them — this test's second tick is the kick-off reminder.
+	env.sender.reset()
+	teams := env.scheduledMatch(t, now.Add(48*time.Hour), now.Add(-7*time.Hour), 10)
+	env.prefs(t, alice, map[string]bool{
+		services.PushTypeRegistrationOpen: true,
+		services.PushTypeTeamAssigned:     false,
+	})
+	saveRoster(teams, []uuid.UUID{alice}, []uuid.UUID{bob})
+	env.wantTypes(t, aliceEndpoint, services.PushTypePredictionsOpen)
+	env.wantTypes(t, bobEndpoint, services.PushTypeTeamAssigned, services.PushTypePredictionsOpen)
+
+	// The other way round, on a match that has not announced predictions yet.
+	env.sender.reset()
+	predictions := env.scheduledMatch(t, now.Add(36*time.Hour), now.Add(-7*time.Hour), 10)
+	env.prefs(t, alice, map[string]bool{
+		services.PushTypeTeamAssigned:    true,
+		services.PushTypePredictionsOpen: false,
+	})
+	saveRoster(predictions, []uuid.UUID{alice}, []uuid.UUID{bob})
+	env.wantTypes(t, aliceEndpoint, services.PushTypeTeamAssigned)
+	env.wantTypes(t, bobEndpoint, services.PushTypeTeamAssigned, services.PushTypePredictionsOpen)
+
+	// Kick-off reminder, after the roster save's own notifications are cleared.
+	env.sender.reset()
+	soon := env.scheduledMatch(t, now.Add(20*time.Minute), now.Add(-7*time.Hour), 10)
+	saveRoster(soon, []uuid.UUID{alice}, []uuid.UUID{bob})
+	env.sender.reset()
+	env.prefs(t, alice, map[string]bool{services.PushTypeKickoffReminder: false})
+	if _, err := env.notifications.Tick(now); err != nil {
+		t.Fatalf("Tick (kick-off): %v", err)
+	}
+	env.wantTypes(t, aliceEndpoint)
+	env.wantTypes(t, bobEndpoint, services.PushTypeKickoffReminder)
+
+	// Final score off, predictions settled on.
+	predict := services.NewMatchPredictionService(env.tx, env.matches)
+	if err := predict.Predict(teams, alice, &env.teamA.ID); err != nil {
+		t.Fatalf("Alice predict: %v", err)
+	}
+	if err := predict.Predict(teams, bob, &env.teamA.ID); err != nil {
+		t.Fatalf("Bob predict: %v", err)
+	}
+	if err := env.tx.Model(&models.Match{}).Where("id = ?", teams).Update("scheduled_at", now.Add(-2*time.Hour)).Error; err != nil {
+		t.Fatalf("move kick-off: %v", err)
+	}
+	env.sender.reset()
+	env.prefs(t, alice, map[string]bool{
+		services.PushTypeKickoffReminder:    false,
+		services.PushTypeResultRecorded:     false,
+		services.PushTypePredictionsSettled: true,
+	})
+	saveRoster(teams, []uuid.UUID{alice}, []uuid.UUID{bob})
+	env.wantTypes(t, aliceEndpoint, services.PushTypePredictionsSettled)
+	env.wantTypes(t, bobEndpoint, services.PushTypeResultRecorded, services.PushTypePredictionsSettled)
+
+	// Predictions settled off, final score on. A different match, so the
+	// first score save is still the one that sends.
+	env.sender.reset()
+	scored := env.scheduledMatch(t, now.Add(24*time.Hour), now.Add(-7*time.Hour), 10)
+	saveRoster(scored, []uuid.UUID{alice}, []uuid.UUID{bob})
+	if err := predict.Predict(scored, alice, &env.teamB.ID); err != nil {
+		t.Fatalf("Alice predict (second): %v", err)
+	}
+	if err := predict.Predict(scored, bob, &env.teamB.ID); err != nil {
+		t.Fatalf("Bob predict (second): %v", err)
+	}
+	if err := env.tx.Model(&models.Match{}).Where("id = ?", scored).Update("scheduled_at", now.Add(-time.Hour)).Error; err != nil {
+		t.Fatalf("move second kick-off: %v", err)
+	}
+	env.sender.reset()
+	env.prefs(t, alice, map[string]bool{
+		services.PushTypeResultRecorded:     true,
+		services.PushTypePredictionsSettled: false,
+	})
+	saveRoster(scored, []uuid.UUID{alice}, []uuid.UUID{bob})
+	env.wantTypes(t, aliceEndpoint, services.PushTypeResultRecorded)
+	env.wantTypes(t, bobEndpoint, services.PushTypeResultRecorded, services.PushTypePredictionsSettled)
+}

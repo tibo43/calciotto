@@ -82,6 +82,20 @@ type PushSubscription struct {
 	Player    Player    `gorm:"foreignKey:PlayerID" json:"-"`
 }
 
+// NotificationPreference is one player's choice for one push type
+// (registration_open, team_assigned, and the other four). A missing row
+// means the type is on: every player who already exists, and any type added
+// later, keeps receiving it until they turn that one off. That is why adding
+// the table needs no backfill — an empty table is the all-on default.
+// Enabled is stored either way once the player has chosen, so "I turned it
+// back on" is a row rather than the absence of one.
+type NotificationPreference struct {
+	PlayerID uuid.UUID `gorm:"type:uuid;primaryKey" json:"-"`
+	Type     string    `gorm:"type:text;primaryKey" json:"-"`
+	Enabled  bool      `gorm:"not null" json:"-"`
+	Player   Player    `gorm:"foreignKey:PlayerID" json:"-"`
+}
+
 // PasswordResetToken matérialise un lien "mot de passe oublié" à usage unique,
 // émis par AuthService.ForgotPassword et consommé par ResetPassword.
 //

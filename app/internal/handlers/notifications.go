@@ -81,6 +81,61 @@ func (h *NotificationHandler) Unsubscribe(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"unsubscribed": true})
 }
 
+// GetPreferences returns all six notification types for the caller, each
+// true unless they have turned that one off. 403 without the feature.
+func (h *NotificationHandler) GetPreferences(c *gin.Context) {
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+	prefs, err := h.Service.GetPreferences(playerID)
+	if err != nil {
+		writePreferenceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"preferences": prefs})
+}
+
+// UpdatePreferences stores the subset of types in the body and answers the
+// full map. A missing preferences object is 400; an unknown type is 400 and
+// changes nothing.
+func (h *NotificationHandler) UpdatePreferences(c *gin.Context) {
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+	var req struct {
+		Preferences map[string]bool `json:"preferences"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Preferences == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "preferences is required"})
+		return
+	}
+	prefs, err := h.Service.UpdatePreferences(playerID, req.Preferences)
+	if err != nil {
+		writePreferenceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"preferences": prefs})
+}
+
+func writePreferenceError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, services.ErrPushFeatureNotEnabled):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, services.ErrUnknownNotificationType):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
 // Tick sends the time-driven notifications that are due. Called by the
 // scheduler with `Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>`, compared
 // in constant time; anything else is a 401 that says nothing more.

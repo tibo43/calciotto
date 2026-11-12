@@ -244,8 +244,20 @@ const inviteCode = 'ABC23XYZ';
 // GET /players/me/features — no hidden feature enabled.
 const features = [];
 
+// GET /players/me/notification-preferences — every type on, which is what a
+// player who has never chosen gets back.
+const notificationPreferences = {
+  registration_open: true,
+  team_assigned: true,
+  result_recorded: true,
+  predictions_open: true,
+  predictions_settled: true,
+  kickoff_reminder: true,
+};
+
 module.exports = {
   features,
+  notificationPreferences,
   FIXED_NOW,
   GROUP_ID,
   CURRENT_PLAYER_ID,

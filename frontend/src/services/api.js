@@ -532,6 +532,21 @@ export const deletePushSubscription = async (endpoint) => {
   return response.data;
 };
 
+// Which of the six notifications this player wants. Missing types are the
+// caller's problem to treat as on — the backend already fills them in.
+export const getNotificationPreferences = async () => {
+  const response = await api.get('/players/me/notification-preferences');
+  const preferences = response.data?.preferences;
+  return preferences && typeof preferences === 'object' ? preferences : {};
+};
+
+// `preferences` is a subset, one key per switch the player just moved.
+export const updateNotificationPreferences = async (preferences) => {
+  const response = await api.put('/players/me/notification-preferences', { preferences });
+  const saved = response.data?.preferences;
+  return saved && typeof saved === 'object' ? saved : {};
+};
+
 // Self-service "delete my account". The backend anonymizes the account
 // rather than erasing it (see AuthService.DeleteAccount) so every other
 // player's shared match history stays intact — but from this app's point of
