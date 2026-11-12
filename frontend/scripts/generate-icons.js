@@ -1,14 +1,20 @@
 // Renders every icon the app ships from one source image (SVG, PNG or JPEG):
 // the installable-app icons in public/icons/ and the browser-tab favicon
-// (public/favicon.ico). Run through generate-icons.sh, not directly: it needs the
-// Chromium that ships in the pinned Playwright image.
+// (public/favicon.ico). An optional second source (--light) is the same mark
+// on a light background; it becomes public/icons/logo-light.png, the navbar
+// logo App.vue shows in light mode. Run through generate-icons.sh, not
+// directly: it needs the Chromium that ships in the pinned Playwright image.
 //
 // Chromium does the rasterising rather than an image library, so there is no
 // new dependency for something run once per logo change — @playwright/test is
 // already in the tree for the visual tests.
 //
-// Usage: node scripts/generate-icons.js <source> [--zoom <>=1>] [--maskable-zoom <>=1>]
+// Usage: node scripts/generate-icons.js <source> [--light <source>]
+//                                      [--zoom <>=1>] [--maskable-zoom <>=1>]
 //                                      [--background <css colour>] [--inset <0..1>]
+//   --light       a light variant of the same logo. Rendered to
+//                 public/icons/logo-light.png at 192 px, with --zoom (not the
+//                 maskable one). Omit it and that file is left untouched.
 //   --zoom        crops the source's margins by enlarging it from its centre:
 //                 1.3 shows the middle 1/1.3 (77%) of it. For a logo whose
 //                 subject sits in the middle of a plain background, so it
@@ -18,7 +24,10 @@
 //                 some launchers), so it usually can't zoom as far as the
 //                 others without cutting into the subject. Default: --zoom.
 //   --background  fills the transparent parts of the opaque icons (maskable,
-//                 apple-touch-icon). Default: the app's primary green.
+//                 apple-touch-icon). Default: the app's primary green. A
+//                 full-bleed logo that already paints its own background
+//                 covers this; pass that colour anyway so a one-pixel seam
+//                 matches the logo instead of showing green.
 //   --inset       how much of each opaque icon the source covers (the
 //                 transparent ones always use the whole canvas). 1 for a
 //                 full-bleed square logo; less for a round or transparent one,
@@ -39,41 +48,11 @@ const ICONS = [
   { file: 'icon-maskable-512.png', size: 512, opaque: true },
   { file: 'apple-touch-icon.png', size: 180, opaque: true },
   { file: 'favicon-32.png', size: 32, opaque: false },
-  // The navbar logo in light mode (App.vue): the same mark with its dark
-  // background and its white lines swapped, so it reads as a light logo on a
-  // light bar. Dark mode uses icon-192.png as is.
-  { file: 'logo-light.png', size: 192, opaque: false, swapNeutrals: true },
 ];
 
-// Swaps the logo's two neutral colours — its navy background and its white
-// lines — and leaves its colours (the green swoosh, the amber accent) alone.
-// Each pixel is reflected across the midpoint of navy and white
-// (navy + white - pixel), weighted by how grey it is: fully for the neutrals
-// and the antialiased edges between them, not at all for a saturated colour,
-// and partly for the blended edge between a colour and a neutral, which keeps
-// those edges smooth. Runs in the page, on a canvas.
-const NAVY = [31, 41, 55];
-function swapNeutralsInPage(navy) {
-  const img = document.querySelector('img');
-  const canvas = document.createElement('canvas');
-  canvas.width = img.width;
-  canvas.height = img.height;
-  canvas.style.cssText = img.style.cssText;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0, img.width, img.height);
-  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const px = image.data;
-  for (let i = 0; i < px.length; i += 4) {
-    const saturation = (Math.max(px[i], px[i + 1], px[i + 2]) - Math.min(px[i], px[i + 1], px[i + 2])) / 255;
-    const weight = Math.min(1, Math.max(0, (0.35 - saturation) / 0.2));
-    for (let c = 0; c < 3; c++) {
-      const swapped = navy[c] + 255 - px[i + c];
-      px[i + c] = Math.round(px[i + c] + (swapped - px[i + c]) * weight);
-    }
-  }
-  ctx.putImageData(image, 0, 0);
-  img.replaceWith(canvas);
-}
+// Navbar logo for light mode. Same canvas as icon-192.png so the two marks
+// occupy the same box in App.vue; the light source supplies the pixels.
+const LIGHT_ICON = { file: 'logo-light.png', size: 192, opaque: false };
 
 // favicon.ico, for browsers (and tools) that ask for /favicon.ico without
 // reading <link rel="icon">. An .ico may hold a PNG as-is, so it is just the
@@ -95,23 +74,28 @@ function writeIco(png, size, file) {
 }
 
 function parseArgs(argv) {
-  const args = { source: null, background: '#10b981', inset: 1, zoom: 1, maskableZoom: null };
+  const args = { source: null, light: null, background: '#10b981', inset: 1, zoom: 1, maskableZoom: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--background') {
       args.background = argv[++i];
+    } else if (argv[i] === '--light') {
+      args.light = argv[++i];
     } else if (argv[i] === '--zoom') {
       args.zoom = Number(argv[++i]);
     } else if (argv[i] === '--maskable-zoom') {
       args.maskableZoom = Number(argv[++i]);
     } else if (argv[i] === '--inset') {
       args.inset = Number(argv[++i]);
-    } else {
+    } else if (!argv[i].startsWith('--')) {
       args.source = argv[i];
+    } else {
+      throw new Error(`unknown option: ${argv[i]}`);
     }
   }
   args.maskableZoom = args.maskableZoom ?? args.zoom;
-  if (!args.source || !(args.inset > 0 && args.inset <= 1) || !(args.zoom >= 1) || !(args.maskableZoom >= 1)) {
-    throw new Error('usage: generate-icons.js <source> [--zoom <>=1>] [--maskable-zoom <>=1>] [--background <colour>] [--inset <0..1>]');
+  if (!args.source || !args.background || (args.light !== null && !args.light)
+      || !(args.inset > 0 && args.inset <= 1) || !(args.zoom >= 1) || !(args.maskableZoom >= 1)) {
+    throw new Error('usage: generate-icons.js <source> [--light <source>] [--zoom <>=1>] [--maskable-zoom <>=1>] [--background <colour>] [--inset <0..1>]');
   }
   return args;
 }
@@ -126,30 +110,34 @@ function dataUrl(file) {
   return `data:${mime};base64,${fs.readFileSync(file).toString('base64')}`;
 }
 
+async function renderIcon(browser, src, icon, { background, inset, zoom, maskableZoom }) {
+  const page = await browser.newPage({ viewport: { width: icon.size, height: icon.size } });
+  // Zoomed past the canvas, the centred image overflows evenly on every
+  // side and the overflow is clipped: that is the crop.
+  const iconZoom = icon.file.includes('maskable') ? maskableZoom : zoom;
+  const imageSize = Math.round(icon.size * (icon.opaque ? inset : 1) * iconZoom);
+  await page.setContent(`
+    <html><body style="margin:0;width:${icon.size}px;height:${icon.size}px;overflow:hidden;display:flex;
+      align-items:center;justify-content:center;background:${icon.opaque ? background : 'transparent'}">
+      <img src="${src}" style="flex-shrink:0;width:${imageSize}px;height:${imageSize}px;object-fit:contain">
+    </body></html>`);
+  await page.locator('img').evaluate((img) => img.decode());
+  const out = path.join(PUBLIC_DIR, 'icons', icon.file);
+  await page.screenshot({ path: out, omitBackground: !icon.opaque });
+  await page.close();
+  console.log(`wrote public/icons/${icon.file}`);
+}
+
 async function main() {
-  const { source, background, inset, zoom, maskableZoom } = parseArgs(process.argv.slice(2));
+  const { source, light, background, inset, zoom, maskableZoom } = parseArgs(process.argv.slice(2));
   const src = dataUrl(source);
   const browser = await chromium.launch();
   try {
     for (const icon of ICONS) {
-      const page = await browser.newPage({ viewport: { width: icon.size, height: icon.size } });
-      // Zoomed past the canvas, the centred image overflows evenly on every
-      // side and the overflow is clipped: that is the crop.
-      const iconZoom = icon.file.includes('maskable') ? maskableZoom : zoom;
-      const imageSize = Math.round(icon.size * (icon.opaque ? inset : 1) * iconZoom);
-      await page.setContent(`
-        <html><body style="margin:0;width:${icon.size}px;height:${icon.size}px;overflow:hidden;display:flex;
-          align-items:center;justify-content:center;background:${icon.opaque ? background : 'transparent'}">
-          <img src="${src}" style="flex-shrink:0;width:${imageSize}px;height:${imageSize}px;object-fit:contain">
-        </body></html>`);
-      await page.locator('img').evaluate((img) => img.decode());
-      if (icon.swapNeutrals) {
-        await page.evaluate(swapNeutralsInPage, NAVY);
-      }
-      const out = path.join(PUBLIC_DIR, 'icons', icon.file);
-      await page.screenshot({ path: out, omitBackground: !icon.opaque });
-      await page.close();
-      console.log(`wrote public/icons/${icon.file}`);
+      await renderIcon(browser, src, icon, { background, inset, zoom, maskableZoom });
+    }
+    if (light) {
+      await renderIcon(browser, dataUrl(light), LIGHT_ICON, { background, inset, zoom, maskableZoom });
     }
     writeIco(fs.readFileSync(path.join(PUBLIC_DIR, 'icons', 'favicon-32.png')), 32, path.join(PUBLIC_DIR, 'favicon.ico'));
     console.log('wrote public/favicon.ico');

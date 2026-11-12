@@ -4,8 +4,17 @@
 # why that image, and the node_modules volume, rather than the host).
 #
 # Usage (from frontend/):
-#   sh scripts/generate-icons.sh branding/icon-source.jpg --zoom 1.35 --maskable-zoom 1.1   # the current logo
+#   sh scripts/generate-icons.sh branding/icon-source.png \
+#       --light branding/icon-source-light.png \
+#       --zoom 1.5 --maskable-zoom 1.22 --background '#1f2937'   # the current logo
 #   sh scripts/generate-icons.sh path/to/round-logo.svg --inset 0.8
+#
+# The current source is a 1024 px square whose ball occupies about 60% of it,
+# centred, on navy #1f2937. --zoom 1.5 crops that margin so the ball fills
+# about 90% of the any-purpose icons (and of logo-light.png, from the light
+# source). --maskable-zoom 1.22 stops at about 73%, inside Android's safe-zone
+# circle (80% of the width); the navy still covers the whole maskable square.
+# Re-measure both against a new source before reusing these numbers.
 set -e
 
 IMAGE=mcr.microsoft.com/playwright:v1.62.1-noble

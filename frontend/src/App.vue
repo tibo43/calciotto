@@ -12,10 +12,10 @@
             <!-- Logo/Brand -->
             <div class="nav-brand" @click="goHome">
               <!-- The app icon (public/icons/, generated from
-                   branding/icon-source.jpg), so the web page and the
-                   installed app share one mark: as is in dark mode, with
-                   navy and white swapped in light mode. Desktop only (see
-                   the mobile rule below). -->
+                   branding/icon-source.png), so the web page and the
+                   installed app share one mark. Light mode uses the light
+                   source (branding/icon-source-light.png, written to
+                   logo-light.png). Desktop only (see the mobile rule below). -->
               <img class="brand-logo" :src="isDarkMode ? '/icons/icon-192.png' : '/icons/logo-light.png'"
                 alt="Calciotto">
             </div>
