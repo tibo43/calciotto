@@ -629,16 +629,12 @@
       </div>
     </div>
 
-    <!-- Toast Container -->
-    <div v-if="message" class="toast-container">
-      <div :class="['toast-message', messageType]" @click="dismissMessage" :key="messageKey">
-        {{ message }}
-      </div>
-    </div>
+    <AppToast ref="toast" />
   </div>
 </template>
 
 <script>
+import AppToast from '@/components/AppToast.vue';
 import {
   getMatchDetailsByID,
   updateMatch,
@@ -690,6 +686,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'MatchDetail',
+  components: { AppToast },
   data() {
     return {
       match: null,
@@ -710,15 +707,12 @@ export default {
       // "Fill teams from sign-ups" opens this chooser rather than acting
       // immediately — see canFillTeamsFromSignups/allConfirmedAlreadyPlaced.
       showComposeChoiceModal: false,
-      message: '',
-      messageType: 'success',
       // New properties for player dropdown
       allPlayers: [],
       selectedPlayers: [],
       filteredAvailablePlayers: [],
       isLoadingPlayers: false,
       playerSearchTerm: '',
-      messageKey: 0,
       // --- Sign-ups (scheduled matches only) ---
       // The ordered list from GET /matches/:id/registrations, exactly as the
       // server sent it: never reordered or patched locally, since the whole
@@ -1618,31 +1612,7 @@ export default {
     },
 
     showMessage(text, type = 'success') {
-      this.message = text;
-      this.messageType = type;
-      this.messageKey++; // Trigger re-render for animations
-
-      // Auto-dismiss after 4 seconds
-      if (this.messageTimeout) {
-        clearTimeout(this.messageTimeout);
-      }
-
-      this.messageTimeout = setTimeout(() => {
-        this.dismissMessage();
-      }, 3000);
-    },
-
-    dismissMessage() {
-      const messageEl = document.querySelector('.message');
-      if (messageEl) {
-        messageEl.classList.add('toast-exit');
-        setTimeout(() => {
-          this.message = '';
-          if (this.messageTimeout) {
-            clearTimeout(this.messageTimeout);
-          }
-        }, 300);
-      }
+      this.$refs.toast.show(text, type);
     },
 
     formatDate(dateString) {

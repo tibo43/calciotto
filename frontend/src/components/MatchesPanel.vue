@@ -304,7 +304,6 @@
                   </div>
                 </div>
                 <p v-if="registrationStateDetail" class="signup-inline-detail">{{ registrationStateDetail }}</p>
-                <p v-if="signupMessage" class="signup-inline-message" :class="signupMessageType">{{ signupMessage }}</p>
 
                 <!-- Same confirmed/waiting split as MatchDetails.vue's own
                      .signup-panel: server-derived IsWaiting, never guessed
@@ -431,7 +430,6 @@
                     </ul>
                   </div>
                 </div>
-                <p v-if="motmMessage" class="motm-inline-message" :class="motmMessageType">{{ motmMessage }}</p>
               </div>
               <!-- Same hidden-until-composed rule as the card above, spelled
                    out here since this preview otherwise has nothing else to
@@ -465,10 +463,14 @@
         </div>
       </div>
     </section>
+
+    <!-- Outcome of Participate/Withdraw and Man of the Match votes. -->
+    <AppToast ref="toast" />
   </div>
 </template>
 
 <script>
+import AppToast from '@/components/AppToast.vue';
 import {
   getMatchesDetails,
   createMatch,
@@ -524,6 +526,7 @@ const DEFAULT_MAX_PLAYERS = 16;
 
 export default {
   name: 'MatchesPanel',
+  components: { AppToast },
   props: {
     // The group the list (and any match created from here) belongs to. Empty
     // means "let the backend pick the caller's first group", the same degraded
@@ -594,8 +597,6 @@ export default {
       registrations: [],
       isLoadingRegistrations: false,
       isUpdatingRegistration: false,
-      signupMessage: '',
-      signupMessageType: 'success',
       // Whether the full sign-up chrome (state badge, count,
       // Participate/Withdraw, confirmed/waiting named lists) is expanded for
       // `selectedMatch`, once its roster is composed — see
@@ -612,8 +613,6 @@ export default {
       motmVotes: { Tally: [], MyVoteFor: null },
       isLoadingMotmVotes: false,
       isUpdatingMotmVote: false,
-      motmMessage: '',
-      motmMessageType: 'success'
     };
   },
   async created() {
@@ -1025,8 +1024,6 @@ export default {
     },
     selectMatch(match) {
       this.selectedMatch = match;
-      this.signupMessage = '';
-      this.motmMessage = '';
       // Reset to the collapsed default for whichever match this now is —
       // expand state is not remembered per match, see
       // canCollapseSelectedMatchSignup/showSignupInline.
@@ -1123,8 +1120,7 @@ export default {
     },
 
     showSignupMessage(text, type) {
-      this.signupMessage = text;
-      this.signupMessageType = type;
+      this.$refs.toast.show(text, type);
     },
 
     // --- Man of the Match voting, for `selectedMatch` alone -----------------
@@ -1211,14 +1207,12 @@ export default {
           await voteForMotm(this.selectedMatch.ID, playerId);
         }
         await this.loadSelectedMotmVotes();
-        this.motmMessage = removing
+        this.$refs.toast.show(removing
           ? 'Your Man of the Match vote has been removed.'
-          : 'Your Man of the Match vote has been saved.';
-        this.motmMessageType = 'success';
+          : 'Your Man of the Match vote has been saved.', 'success');
       } catch (error) {
         console.error('Error updating Man of the Match vote:', error);
-        this.motmMessage = this.registrationErrorMessage(error, 'Error updating your Man of the Match vote.');
-        this.motmMessageType = 'error';
+        this.$refs.toast.show(this.registrationErrorMessage(error, 'Error updating your Man of the Match vote.'), 'error');
         await this.loadSelectedMotmVotes();
       } finally {
         this.isUpdatingMotmVote = false;
@@ -2032,19 +2026,6 @@ export default {
   gap: 0.6rem;
 }
 
-.signup-inline-message {
-  margin: 0.6rem 0 0;
-  font-size: 0.85rem;
-}
-
-.signup-inline-message.success {
-  color: #065f46;
-}
-
-.signup-inline-message.error {
-  color: var(--danger-color);
-}
-
 /* Confirmed/waiting sign-up lists, with names — duplicated verbatim from
    MatchDetails.vue's own .signup-panel (state badge colours already
    duplicated above), the same way getTeamColor() is duplicated between the
@@ -2370,19 +2351,6 @@ export default {
    just invisible — see the template comment above this button. */
 .motm-star-btn.is-self {
   visibility: hidden;
-}
-
-.motm-inline-message {
-  margin: 0.75rem 0 0;
-  font-size: 0.85rem;
-}
-
-.motm-inline-message.success {
-  color: #065f46;
-}
-
-.motm-inline-message.error {
-  color: var(--danger-color);
 }
 
 /* Transitions */

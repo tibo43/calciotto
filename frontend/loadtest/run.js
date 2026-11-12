@@ -51,7 +51,7 @@
 // only way to tell "cleanly rejected" apart from "the request itself broke".
 //
 // A failure's `error` field always names what actually happened (a visible
-// `.error-message`/`.signup-inline-message.error` if one appeared, or "no
+// `.error-message`/`.toast-message.error` if one appeared, or "no
 // error shown, just no navigation" if none did) rather than a bare
 // "Timeout 30000ms exceeded" — the three most likely real causes when
 // EVERY user fails at the signup step are: (1) the signup rate limit
@@ -228,8 +228,8 @@ async function runOneUser(browser, index) {
     await signupPanel.getByRole('button', { name: 'Participate' }).click();
 
     const participateOutcome = await waitForOutcome(page, {
-      successCheck: () => signupPanel.locator('.signup-inline-message.success').isVisible(),
-      errorSelector: '.signup-inline-message.error',
+      successCheck: () => page.locator('.toast-message.success').isVisible(),
+      errorSelector: '.toast-message.error',
       timeoutMs: PARTICIPATE_TIMEOUT_MS,
     });
     if (!participateOutcome.ok) {

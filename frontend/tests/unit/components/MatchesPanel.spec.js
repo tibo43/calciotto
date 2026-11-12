@@ -511,7 +511,7 @@ describe('MatchesPanel.vue inline sign-up panel', () => {
     // signupCountLabel reads the same match object the card renders from, so
     // the card's own badge reflects it too — "the list updates as we go".
     expect(wrapper.find('.match-card-horizontal.scheduled .signup-count').text()).toBe('8 / 16 signed up');
-    expect(wrapper.find('.signup-inline-message').text()).toMatch(/you are #8/i);
+    expect(wrapper.find('.toast-message span').text()).toMatch(/you are #8/i);
     expect(wrapper.find('.signup-inline-actions button').text()).toContain('Withdraw');
   });
 
@@ -523,7 +523,7 @@ describe('MatchesPanel.vue inline sign-up panel', () => {
     await wrapper.find('.signup-inline-actions button').trigger('click');
     await flushPromises();
 
-    expect(wrapper.find('.signup-inline-message').text()).toMatch(/waiting list/i);
+    expect(wrapper.find('.toast-message span').text()).toMatch(/waiting list/i);
   });
 
   it('withdraws, decrements the count, and switches back to Participate — after confirming', async () => {
@@ -575,8 +575,8 @@ describe('MatchesPanel.vue inline sign-up panel', () => {
     await wrapper.find('.signup-inline-actions button').trigger('click');
     await flushPromises();
 
-    expect(wrapper.find('.signup-inline-message').text()).toBe('registrations for this match are closed');
-    expect(wrapper.find('.signup-inline-message').classes()).toContain('error');
+    expect(wrapper.find('.toast-message span').text()).toBe('registrations for this match are closed');
+    expect(wrapper.find('.toast-message').classes()).toContain('error');
     // The count is left untouched on failure — only a successful call bumps it.
     expect(wrapper.find('.signup-count-inline').text()).toBe('7 / 16 signed up');
     expect(getMatchRegistrations).toHaveBeenCalledTimes(1);

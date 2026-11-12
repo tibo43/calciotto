@@ -526,7 +526,7 @@ body {
   gap: 20px;
   min-width: 300px;
   max-width: 420px;
-  padding: 16px 20px;
+  padding: 16px 48px 16px 20px;
   margin-bottom: 12px;
   border-radius: 12px;
   font-weight: 500;
@@ -565,48 +565,14 @@ body {
   border-color: rgba(255, 255, 255, 0.3);
 }
 
-/* Toast Close Button */
-.toast-message::after {
-  content: '×';
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  width: 20px;
-  height: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 18px;
-  font-weight: bold;
-  cursor: pointer;
-  border-radius: 50%;
-  transition: all 0.2s ease;
-}
-
-.toast-message::after:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-}
-
-/* Toast Animations */
-/* Bottom-right variant, for a toast that shouldn't cover the page's own
-   controls at the top. */
+/* Bottom-right variant (what AppToast.vue uses), so a toast doesn't cover
+   the page's own controls at the top. */
 .toast-container.toast-bottom {
   top: auto;
   bottom: 20px;
 }
 
-/* A real close button instead of the decorative ::after cross, for a
-   toast that should only close from its cross. */
-.toast-message.has-close {
-  padding-right: 48px;
-}
-
-.toast-message.has-close::after {
-  content: none;
-}
-
+/* Close button (AppToast.vue). */
 .toast-close {
   position: absolute;
   top: 50%;
@@ -652,10 +618,6 @@ body {
     opacity: 0;
     transform: translateX(100%) scale(0.8);
   }
-}
-
-.toast-message.toast-exit {
-  animation: toastSlideOut 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 /* ===========================
