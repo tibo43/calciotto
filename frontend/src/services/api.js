@@ -624,10 +624,11 @@ export const getInviteCode = async (groupId) => {
 
 // Members — fetched on demand per group, same pattern as the invite code and
 // teams above: a group's roster isn't part of the group JSON either. Each
-// entry is a Player (lowercase fields: id, name, email) plus its role
-// ("admin"/"member") in this group — a different casing convention than
-// getMyGroups' entries, since this mirrors Player's own JSON tags rather than
-// PlayerCustom's PascalCase ones.
+// entry is a Player (lowercase fields: id, name) plus its role
+// ("admin"/"member") in this group and has_account (false for a ghost player
+// with no account); no email address is ever part of it. A different casing
+// convention than getMyGroups' entries, since this mirrors Player's own JSON
+// tags rather than PlayerCustom's PascalCase ones.
 export const getGroupMembers = async (groupId) => {
   try {
     const response = await api.get(`/groups/${groupId}/players`);
