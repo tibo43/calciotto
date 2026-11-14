@@ -81,7 +81,7 @@ const routes = [
   {
     path: '/matches/:id/edit',
     name: 'MatchDetails',
-    component: () => import('@/components/MatchDetails.vue'),
+    component: () => import('@/components/v2/EditMatchGate.vue'),
     props: true,
     beforeEnter: async (to) => {
       try {

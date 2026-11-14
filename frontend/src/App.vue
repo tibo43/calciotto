@@ -1,7 +1,7 @@
 <template>
   <div id="app" :class="{ 'dark-mode': isDarkMode, 'design-v2': designV2 }">
     <!-- Main App Container -->
-    <div class="app-container" :class="{ wrap: designV2, 'is-confirming': designV2 && v2Context.confirming }">
+    <div class="app-container" :class="{ wrap: designV2, 'is-confirming': designV2 && v2Context.confirming, 'is-picking-csc': designV2 && v2Context.pickingCsc }">
         <header v-if="designV2" class="topbar">
           <div class="topbar-left">
             <router-link class="brand" to="/" aria-label="Home">
@@ -252,7 +252,7 @@ export default {
       // Set once a features response has landed this session. Later route
       // changes reuse it; a failure leaves it false so the next navigation
       // retries. Logout bumps the request id and resets this.
-      v2Context: { label: '', confirming: false, hide: false, groups: [], seasons: [], groupId: '', season: '', onGroup: null, onSeason: null },
+      v2Context: { label: '', confirming: false, pickingCsc: false, hide: false, groups: [], seasons: [], groupId: '', season: '', onGroup: null, onSeason: null },
       designV2Loaded: false,
       designV2InFlight: false,
       designV2Request: 0
