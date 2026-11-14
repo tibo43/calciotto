@@ -113,3 +113,14 @@ describe('ProfileV2.vue removing a member', () => {
     expect(wrapper.text()).toContain('cannot remove this member');
   });
 });
+
+describe('ProfileV2.vue notifications switch', () => {
+  it('cannot be turned on outside the installed app', async () => {
+    const { getPushState } = require('@/services/pushNotifications');
+    getPushState.mockResolvedValue('needs-install');
+    const { wrapper } = await mountProfile({ routeName: 'ProfileNotifications', features: ['push-notifications'] });
+    const toggle = wrapper.find('[aria-label="Notifications on this device"]');
+    expect(toggle.attributes('disabled')).toBeDefined();
+    expect(wrapper.text()).toContain('Install the app first');
+  });
+});

@@ -111,7 +111,7 @@
             <div class="who">Notifications on this device</div>
             <div class="note">{{ pushNote }}</div>
           </div>
-          <button class="switch" :class="{ 'is-on': pushOn }" type="button" role="switch" :aria-checked="pushOn.toString()" aria-label="Notifications on this device" @click="togglePush"><span class="track"></span></button>
+          <button class="switch" :class="{ 'is-on': pushOn }" type="button" role="switch" :disabled="!canTogglePush" :aria-checked="pushOn.toString()" aria-label="Notifications on this device" @click="togglePush"><span class="track"></span></button>
         </div>
         <p v-if="pushError" class="scope">{{ pushError }}</p>
       </section>
@@ -412,6 +412,12 @@ export default {
     pushOn() {
       return this.pushState === PUSH_STATE.ON;
     },
+    // Only on or off can be switched: turning on needs the installed app
+    // (getPushState says needs-install in a tab), a blocked permission only
+    // changes in the settings, and an unsupported browser has nothing to do.
+    canTogglePush() {
+      return this.pushState === PUSH_STATE.ON || this.pushState === PUSH_STATE.OFF;
+    },
     pushNote() {
       if (this.pushState === PUSH_STATE.NEEDS_INSTALL) return 'Install the app first, then turn notifications on.';
       if (this.pushState === PUSH_STATE.DENIED) return 'Notifications are blocked in the browser settings.';
@@ -591,6 +597,7 @@ export default {
       }
     },
     async togglePush() {
+      if (!this.canTogglePush) return;
       this.pushError = '';
       try {
         this.pushState = this.pushOn ? await disablePush() : await enablePush();
