@@ -60,6 +60,14 @@ export async function canEditMatch(matchId) {
   return found ? found.group.role === 'admin' : false;
 }
 
+function designV2Cached() {
+  try {
+    return localStorage.getItem('calciotto-design-v2') === '1';
+  } catch {
+    return false;
+  }
+}
+
 const routes = [
   {
     path: '/',
@@ -160,6 +168,41 @@ const routes = [
     path: '/profile',
     name: 'Profile',
     component: () => import('@/components/Profile.vue')
+  },
+  // Profile sub-pages exist for the design-v2 shell. Without the cached flag
+  // they fall back to today's profile, which is the only profile a v1 player
+  // has.
+  {
+    path: '/profile/groups/:id/settings',
+    name: 'ProfileGroupSettings',
+    component: () => import('@/components/Profile.vue'),
+    beforeEnter() {
+      return designV2Cached() ? true : { path: '/profile' };
+    }
+  },
+  {
+    path: '/profile/groups/:id',
+    name: 'ProfileGroup',
+    component: () => import('@/components/Profile.vue'),
+    beforeEnter() {
+      return designV2Cached() ? true : { path: '/profile' };
+    }
+  },
+  {
+    path: '/profile/notifications',
+    name: 'ProfileNotifications',
+    component: () => import('@/components/Profile.vue'),
+    beforeEnter() {
+      return designV2Cached() ? true : { path: '/profile' };
+    }
+  },
+  {
+    path: '/profile/account',
+    name: 'ProfileAccount',
+    component: () => import('@/components/Profile.vue'),
+    beforeEnter() {
+      return designV2Cached() ? true : { path: '/profile' };
+    }
   },
   // Its own top-level destination, alongside Matches and Profile — not a
   // sub-tab of MatchesAndStandings.vue any more. It owns its own active-group/

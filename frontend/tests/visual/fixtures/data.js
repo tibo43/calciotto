@@ -321,6 +321,11 @@ const predictionStandings = [
   { PlayerID: 'e6', Name: 'Davide Fontana', Points: 0, IsMember: false, History: predictionHistory([false, false, true]) },
 ];
 
+const teams = [
+  { id: 'aaaaaaaa-0000-4000-8000-000000000002', name: 'Les Bleus', colour: 'blue' },
+  { id: 'aaaaaaaa-0000-4000-8000-000000000001', name: 'Les Rouges', colour: 'red' },
+];
+
 const inviteCode = 'ABC23XYZ';
 
 // GET /players/me/features — no hidden feature enabled.
@@ -360,5 +365,6 @@ module.exports = {
   groupMembers,
   groupMembersLongName,
   playerStats,
+  teams,
   inviteCode,
 };

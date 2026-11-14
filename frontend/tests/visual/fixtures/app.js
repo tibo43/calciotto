@@ -100,6 +100,13 @@ async function stubApi(page, overrides = {}) {
     return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
   });
   await page.route(`${API}/groups/*/players`, (route) => json(route, overrides.groupMembers ?? data.groupMembers));
+  await page.route(`${API}/groups/*/teams`, (route) => {
+    if (route.request().method() !== 'GET') {
+      unstubbed.push(`${route.request().method()} ${route.request().url()}`);
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
+    }
+    return json(route, overrides.teams ?? data.teams);
+  });
   // Only an admin viewing a scheduled match fetches this (MatchDetails.vue,
   // for "Share on WhatsApp") — stubbed unconditionally anyway since every
   // match-details scenario shares this one route.

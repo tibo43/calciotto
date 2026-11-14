@@ -4,6 +4,13 @@
     <div class="app-container" :class="{ wrap: designV2, 'is-confirming': designV2 && v2Context.confirming, 'is-picking-csc': designV2 && v2Context.pickingCsc }">
         <header v-if="designV2" class="topbar">
           <div class="topbar-left">
+            <template v-if="v2Context.pageTitle">
+              <router-link class="back" :to="v2Context.backTo || '/profile'" aria-label="Back">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 5l-7 7 7 7"/></svg>
+              </router-link>
+              <h1 class="page-title">{{ v2Context.pageTitle }}</h1>
+            </template>
+            <template v-else>
             <router-link class="brand" to="/" aria-label="Home">
               <img class="brand-mark brand-mark-dark" src="/icons/v2/header-symbole-sombre.png" width="40" height="40" alt="">
               <img class="brand-mark brand-mark-light" src="/icons/v2/header-symbole-clair.png" width="40" height="40" alt="">
@@ -24,12 +31,13 @@
                 <svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4l4 4 4-4"/></svg>
               </label>
             </div>
+            </template>
           </div>
-          <nav v-if="isAuthenticatedRoute" class="dnav" aria-label="Main">
+          <nav v-if="isAuthenticatedRoute && !v2Context.pageTitle" class="dnav" aria-label="Main">
             <router-link to="/" :class="{ 'is-on': isV2Home }"><span class="outline" :class="{ 'is-on': isV2Home }">Home</span></router-link>
             <router-link to="/classements" :class="{ 'is-on': $route.name === 'Classements' }"><span class="outline" :class="{ 'is-on': $route.name === 'Classements' }">Rankings</span></router-link>
             <router-link to="/predictions" :class="{ 'is-on': $route.name === 'Predictions' }"><span class="outline" :class="{ 'is-on': $route.name === 'Predictions' }">Predictions</span></router-link>
-            <router-link to="/profile" :class="{ 'is-on': $route.name === 'Profile' }"><span class="outline" :class="{ 'is-on': $route.name === 'Profile' }">Profile</span></router-link>
+            <router-link to="/profile" :class="{ 'is-on': isV2Profile }"><span class="outline" :class="{ 'is-on': isV2Profile }">Profile</span></router-link>
           </nav>
           <div class="topbar-right">
             <button class="icon-btn" type="button" @click="toggleTheme" :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'">
@@ -162,7 +170,7 @@
           <router-link to="/" :class="{ 'is-on': isV2Home }"><span class="outline" :class="{ 'is-on': isV2Home }">Home</span></router-link>
           <router-link to="/classements" :class="{ 'is-on': $route.name === 'Classements' }"><span class="outline" :class="{ 'is-on': $route.name === 'Classements' }">Rankings</span></router-link>
           <router-link to="/predictions" :class="{ 'is-on': $route.name === 'Predictions' }"><span class="outline" :class="{ 'is-on': $route.name === 'Predictions' }">Predictions</span></router-link>
-          <router-link to="/profile" :class="{ 'is-on': $route.name === 'Profile' }"><span class="outline" :class="{ 'is-on': $route.name === 'Profile' }">Profile</span></router-link>
+          <router-link to="/profile" :class="{ 'is-on': isV2Profile }"><span class="outline" :class="{ 'is-on': isV2Profile }">Profile</span></router-link>
         </nav>
         <nav v-if="isAuthenticatedRoute && !designV2" class="bottom-tab-bar">
           <router-link to="/" :class="['bottom-tab-button', { active: $route.name === 'MatchesAndStandings' }]"
@@ -252,7 +260,7 @@ export default {
       // Set once a features response has landed this session. Later route
       // changes reuse it; a failure leaves it false so the next navigation
       // retries. Logout bumps the request id and resets this.
-      v2Context: { label: '', confirming: false, pickingCsc: false, hide: false, groups: [], seasons: [], groupId: '', season: '', onGroup: null, onSeason: null },
+      v2Context: { label: '', confirming: false, pickingCsc: false, hide: false, pageTitle: '', backTo: '', groups: [], seasons: [], groupId: '', season: '', onGroup: null, onSeason: null },
       designV2Loaded: false,
       designV2InFlight: false,
       designV2Request: 0
@@ -268,6 +276,9 @@ export default {
     },
     isV2Home() {
       return this.$route.name === 'MatchesAndStandings' || this.$route.name === 'MatchView';
+    },
+    isV2Profile() {
+      return String(this.$route.path || '').startsWith('/profile');
     }
   },
   watch: {
