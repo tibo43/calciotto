@@ -1,13 +1,49 @@
 <template>
   <div id="app" :class="{ 'dark-mode': isDarkMode, 'design-v2': designV2 }">
     <!-- Main App Container -->
-    <div class="app-container">
+    <div class="app-container" :class="{ wrap: designV2, 'is-confirming': designV2 && v2Context.confirming }">
+        <header v-if="designV2" class="topbar">
+          <div class="topbar-left">
+            <router-link class="brand" to="/" aria-label="Home">
+              <img class="brand-mark brand-mark-dark" src="/icons/v2/header-symbole-sombre.png" width="40" height="40" alt="">
+              <img class="brand-mark brand-mark-light" src="/icons/v2/header-symbole-clair.png" width="40" height="40" alt="">
+            </router-link>
+            <div v-if="isAuthenticatedRoute && !v2Context.hide" class="ctx-pair" aria-label="Choose the group and the season">
+              <label class="ctx">
+                <span class="sr-only">Group</span>
+                <select :value="v2Context.groupId" @change="onV2Group">
+                  <option v-for="group in v2Context.groups" :key="group.id" :value="group.id">{{ group.name }}</option>
+                </select>
+                <svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4l4 4 4-4"/></svg>
+              </label>
+              <label class="ctx">
+                <span class="sr-only">Season</span>
+                <select :value="v2Context.season" @change="onV2Season">
+                  <option v-for="season in v2Context.seasons" :key="season" :value="season">{{ season }}</option>
+                </select>
+                <svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4l4 4 4-4"/></svg>
+              </label>
+            </div>
+          </div>
+          <nav v-if="isAuthenticatedRoute" class="dnav" aria-label="Main">
+            <router-link to="/" :class="{ 'is-on': isV2Home }"><span class="outline" :class="{ 'is-on': isV2Home }">Home</span></router-link>
+            <router-link to="/classements" :class="{ 'is-on': $route.name === 'Classements' }"><span class="outline" :class="{ 'is-on': $route.name === 'Classements' }">Rankings</span></router-link>
+            <router-link to="/predictions" :class="{ 'is-on': $route.name === 'Predictions' }"><span class="outline" :class="{ 'is-on': $route.name === 'Predictions' }">Predictions</span></router-link>
+            <router-link to="/profile" :class="{ 'is-on': $route.name === 'Profile' }"><span class="outline" :class="{ 'is-on': $route.name === 'Profile' }">Profile</span></router-link>
+          </nav>
+          <div class="topbar-right">
+            <button class="icon-btn" type="button" @click="toggleTheme" :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'">
+              <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6.2 6.2l1.4 1.4M16.4 16.4l1.4 1.4M6.2 17.8l1.4-1.4M16.4 7.6l1.4-1.4"/></svg>
+              <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 3a8 8 0 1 0 5 13 7 7 0 0 1-5-13z"/></svg>
+            </button>
+          </div>
+        </header>
         <!-- Top Navigation -->
         <!-- On a phone, an authenticated page has no top bar at all: the
              bottom tab bar navigates, and logout/theme live at the top of
              the bottom bar, next to the Profile tab. Public pages keep it,
              since they have no bottom bar and no profile to reach. -->
-        <nav class="top-navbar" :class="{ 'scrolled': isScrolled, 'hidden-on-mobile': isAuthenticatedRoute }">
+        <nav v-if="!designV2" class="top-navbar" :class="{ 'scrolled': isScrolled, 'hidden-on-mobile': isAuthenticatedRoute }">
           <div class="nav-container">
             <!-- Logo/Brand -->
             <div class="nav-brand" @click="goHome">
@@ -122,7 +158,13 @@
              while the Profile page is open: account-level actions where the
              account lives, out of the way everywhere else. Same three destinations, labels
              and icons as the top nav-menu, so both bars read as one app. -->
-        <nav v-if="isAuthenticatedRoute" class="bottom-tab-bar">
+        <nav v-if="designV2 && isAuthenticatedRoute" class="tabbar" aria-label="Main">
+          <router-link to="/" :class="{ 'is-on': isV2Home }"><span class="outline" :class="{ 'is-on': isV2Home }">Home</span></router-link>
+          <router-link to="/classements" :class="{ 'is-on': $route.name === 'Classements' }"><span class="outline" :class="{ 'is-on': $route.name === 'Classements' }">Rankings</span></router-link>
+          <router-link to="/predictions" :class="{ 'is-on': $route.name === 'Predictions' }"><span class="outline" :class="{ 'is-on': $route.name === 'Predictions' }">Predictions</span></router-link>
+          <router-link to="/profile" :class="{ 'is-on': $route.name === 'Profile' }"><span class="outline" :class="{ 'is-on': $route.name === 'Profile' }">Profile</span></router-link>
+        </nav>
+        <nav v-if="isAuthenticatedRoute && !designV2" class="bottom-tab-bar">
           <router-link to="/" :class="['bottom-tab-button', { active: $route.name === 'MatchesAndStandings' }]"
             aria-label="Matches">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -175,6 +217,7 @@
 </template>
 
 <script>
+import { computed } from 'vue';
 import { clearToken, getMyFeatures } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta } from '@/services/theme';
@@ -193,6 +236,12 @@ const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'
 
 export default {
   name: 'App',
+  provide() {
+    return {
+      designV2On: computed(() => this.designV2),
+      v2Context: this.v2Context,
+    };
+  },
   data() {
     return {
       isScrolled: false,
@@ -203,6 +252,7 @@ export default {
       // Set once a features response has landed this session. Later route
       // changes reuse it; a failure leaves it false so the next navigation
       // retries. Logout bumps the request id and resets this.
+      v2Context: { label: '', confirming: false, hide: false, groups: [], seasons: [], groupId: '', season: '', onGroup: null, onSeason: null },
       designV2Loaded: false,
       designV2InFlight: false,
       designV2Request: 0
@@ -215,6 +265,9 @@ export default {
     // read as the logged-in app shell instead of its own view.
     isAuthenticatedRoute() {
       return this.isAuthenticatedRouteName(this.$route.name);
+    },
+    isV2Home() {
+      return this.$route.name === 'MatchesAndStandings' || this.$route.name === 'MatchView';
     }
   },
   watch: {
@@ -258,6 +311,12 @@ export default {
     toggleTheme() {
       this.isDarkMode = !this.isDarkMode;
       localStorage.setItem('calciotto-theme', this.isDarkMode ? 'dark' : 'light');
+    },
+    onV2Group(event) {
+      if (this.v2Context.onGroup) this.v2Context.onGroup(event.target.value);
+    },
+    onV2Season(event) {
+      if (this.v2Context.onSeason) this.v2Context.onSeason(event.target.value);
     },
     isAuthenticatedRouteName(name) {
       // A missing name is the router's start location, before the real

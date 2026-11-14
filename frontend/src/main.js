@@ -5,6 +5,7 @@ import { getInstallTracker } from './services/pwaInstall';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './assets/global-styles.css'
 import './assets/design-v2.css'
+import './assets/design-v2-ui.css'
 
 // Before mounting: Chrome's install offer can arrive right after load, long
 // before the Profile page that shows it is opened (see pwaInstall.js).

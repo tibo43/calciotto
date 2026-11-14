@@ -68,6 +68,17 @@ const routes = [
     props: true
   },
   {
+    path: '/classements',
+    name: 'Classements',
+    redirect: '/',
+  },
+  {
+    path: '/matches/:id',
+    name: 'MatchView',
+    component: () => import('@/components/v2/MatchView.vue'),
+    props: true,
+  },
+  {
     path: '/matches/:id/edit',
     name: 'MatchDetails',
     component: () => import('@/components/MatchDetails.vue'),
