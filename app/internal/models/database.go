@@ -66,6 +66,11 @@ const FeaturePWAInstall = "pwa-install"
 // deleting the row stops them at once, even on a device already subscribed.
 const FeaturePushNotifications = "push-notifications"
 
+// FeatureDesignV2 switches the signed-in shell onto the redesign. The
+// frontend adds a design-v2 class to the app root when this key comes back
+// from GET /players/me/features. Nothing on the backend branches on it.
+const FeatureDesignV2 = "design-v2"
+
 // PushSubscription is one device a player receives push notifications on,
 // as the browser's PushManager hands it over: the push service's endpoint
 // URL plus the two keys the payload is encrypted with. A player can have

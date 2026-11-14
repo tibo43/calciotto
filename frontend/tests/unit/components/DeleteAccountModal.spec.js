@@ -27,6 +27,7 @@ describe('DeleteAccountModal.vue', () => {
 
   it('clears the token once the account is deleted', async () => {
     deleteMyAccount.mockResolvedValue({ deleted: true });
+    localStorage.setItem('calciotto-design-v2', '1');
     const wrapper = shallowMount(DeleteAccountModal);
     wrapper.vm.password = 's3cret-pass';
 
@@ -35,6 +36,7 @@ describe('DeleteAccountModal.vue', () => {
 
     expect(deleteMyAccount).toHaveBeenCalledWith('s3cret-pass');
     expect(clearToken).toHaveBeenCalled();
+    expect(localStorage.getItem('calciotto-design-v2')).toBeNull();
   });
 
   it('surfaces the backend error and leaves the modal open (and the session intact) on failure', async () => {

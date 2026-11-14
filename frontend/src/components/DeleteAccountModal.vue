@@ -60,6 +60,7 @@
 
 <script>
 import { deleteMyAccount, clearToken } from '@/services/api';
+import { clearDesignV2Cached } from '@/services/designV2';
 import { isDarkModeActive } from '@/services/theme';
 
 export default {
@@ -88,6 +89,9 @@ export default {
         // elsewhere, rather than leaving a routed view to fail on its next
         // request.
         clearToken();
+        // The account is gone; the next person on this browser must not
+        // inherit its cached redesign flag (App.vue's logout does the same).
+        clearDesignV2Cached();
         window.location.href = '/login?accountDeleted=success';
       } catch (error) {
         this.deleteError = this.backendMessage(error, 'Failed to delete your account.');

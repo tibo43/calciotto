@@ -69,7 +69,9 @@ async function stubApi(page, overrides = {}) {
   // Profile.vue's own cross-group stats call. Deliberately carries no
   // group_id — GET /players/me/stats is cross-group by design.
   await page.route(`${API}/players/me/stats*`, (route) => json(route, overrides.playerStats ?? data.playerStats));
-  // Hidden features (Profile.vue): none by default, like most players.
+  // Hidden features. Profile.vue reads this for its cards; App.vue reads it
+  // once per session for the design-v2 class. None by default, like most
+  // players — so the redesign class stays off and today's screenshots hold.
   await page.route(`${API}/players/me/features`, (route) => json(route, { features: overrides.features ?? data.features }));
   // The Notifications card reads these only once push is on for the device.
   // The off-state screenshot never calls them; stubbing them keeps an on-state
@@ -98,6 +100,13 @@ async function stubApi(page, overrides = {}) {
     return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
   });
   await page.route(`${API}/groups/*/players`, (route) => json(route, overrides.groupMembers ?? data.groupMembers));
+  await page.route(`${API}/groups/*/teams`, (route) => {
+    if (route.request().method() !== 'GET') {
+      unstubbed.push(`${route.request().method()} ${route.request().url()}`);
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
+    }
+    return json(route, overrides.teams ?? data.teams);
+  });
   // Only an admin viewing a scheduled match fetches this (MatchDetails.vue,
   // for "Share on WhatsApp") — stubbed unconditionally anyway since every
   // match-details scenario shares this one route.
@@ -106,7 +115,17 @@ async function stubApi(page, overrides = {}) {
   await page.route(`${API}/standings/points*`, (route) => json(route, overrides.pointsStandings ?? data.pointsStandings));
   await page.route(`${API}/standings/scorers*`, (route) => json(route, overrides.topScorers ?? data.topScorers));
   await page.route(`${API}/standings/motm*`, (route) => json(route, overrides.motmStandings ?? data.motmStandings));
+  await page.route(`${API}/standings/predictions*`, (route) => json(route, overrides.predictionStandings ?? []));
   await page.route(`${API}/matches/details*`, (route) => json(route, overrides.matches ?? data.matches));
+  await page.route(`${API}/matches/*/predictions`, (route) => {
+    if (route.request().method() !== 'GET') {
+      unstubbed.push(`${route.request().method()} ${route.request().url()}`);
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
+    }
+    const id = new URL(route.request().url()).pathname.split('/')[2];
+    const summary = (overrides.predictionSummaries ?? {})[id];
+    return json(route, summary ?? { Entries: [], Count: 0, Revealed: false });
+  });
 
   // Keyed by id so one test can put a match in a state another test doesn't
   // have — the same URL shape serves every match.
