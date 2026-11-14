@@ -226,12 +226,20 @@ func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (
 	// into one combined map for the Overall computation below can never
 	// collide two different groups' entries under the same key.
 	allVotesByMatch := make(map[uuid.UUID][]models.MatchVoteTally)
+	// Seasons come from every group's unfiltered matches, so asking for one
+	// season still returns the full list the profile select is built from.
+	seasonSet := make(map[string]struct{})
+	var predictionTotal float64
 	for _, group := range groups {
-		matches, err := s.MatchService.GetMatchesDetails(group.ID, "")
+		raw, err := s.MatchService.GetMatchesDetails(group.ID, "")
 		if err != nil {
 			return nil, err
 		}
-		matches = FilterCompletedMatches(FilterMatchesBySeason(matches, season), time.Now())
+		for _, label := range ComputeSeasons(raw) {
+			seasonSet[label] = struct{}{}
+		}
+
+		matches := FilterCompletedMatches(FilterMatchesBySeason(raw, season), time.Now())
 		allMatches = append(allMatches, matches...)
 
 		row := zeroRow
@@ -251,11 +259,27 @@ func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (
 			allVotesByMatch[id] = tally
 		}
 
+		// Predictions settle only once an admin has recorded the result, and
+		// the odds replay this group's whole history — the same two slices
+		// GetPredictionStandings passes to ComputePredictionStandings.
+		counted := FilterResultRecorded(FilterMatchesBySeason(raw, season))
+		predictionMatchIDs := make([]uuid.UUID, len(counted))
+		for i, match := range counted {
+			predictionMatchIDs[i] = match.ID
+		}
+		predictionsByMatch, err := s.PredictionService.TallyPredictionsForMatches(predictionMatchIDs)
+		if err != nil {
+			return nil, err
+		}
+		predictionPoints := findPredictionPoints(ComputePredictionStandings(raw, counted, predictionsByMatch), playerID)
+		predictionTotal += predictionPoints
+
 		profile.PerGroup = append(profile.PerGroup, models.PlayerGroupStanding{
 			PointsStandingRow: row,
 			GroupID:           group.ID,
 			GroupName:         group.Name,
 			MotmAwards:        findMotmAwards(ComputeMotmStandings(matches, votesByMatch), playerID),
+			PredictionPoints:  predictionPoints,
 		})
 	}
 
@@ -263,6 +287,14 @@ func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (
 		profile.Overall.PointsStandingRow = *found
 	}
 	profile.Overall.MotmAwards = findMotmAwards(ComputeMotmStandings(allMatches, allVotesByMatch), playerID)
+	// Sum of the per-group returns, not a cross-group resettle: mixing the
+	// groups would price each bet against the wrong Elo pool.
+	profile.Overall.PredictionPoints = predictionTotal
+	profile.Seasons = make([]string, 0, len(seasonSet))
+	for label := range seasonSet {
+		profile.Seasons = append(profile.Seasons, label)
+	}
+	sort.Strings(profile.Seasons)
 	return profile, nil
 }
 
@@ -283,6 +315,18 @@ func findMotmAwards(rows []models.MotmStandingRow, playerID uuid.UUID) int {
 	for _, row := range rows {
 		if row.PlayerID == playerID {
 			return row.Awards
+		}
+	}
+	return 0
+}
+
+// findPredictionPoints picks one player's settled return out of a computed
+// prediction leaderboard, defaulting to 0 — no settled prediction is an
+// absence from the rows, not an error.
+func findPredictionPoints(rows []models.PredictionStandingRow, playerID uuid.UUID) float64 {
+	for _, row := range rows {
+		if row.PlayerID == playerID {
+			return row.Points
 		}
 	}
 	return 0

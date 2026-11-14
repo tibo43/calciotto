@@ -1,5 +1,6 @@
 <template>
-  <div class="home-container">
+  <HomeV2 v-if="designV2" :active-group-id="activeGroupId" :group-name="activeGroupName" :season="selectedSeason" :is-admin="isAdmin" />
+  <div v-else class="home-container">
     <!-- Context bar (which group/season we're scoped to) and sub-tab
          navigation, each on their own row — replaces the old gradient hero
          banner, which was purely decorative (a title/subtitle that only
@@ -65,7 +66,9 @@ import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
 import { seasonOf, parseCalendarDay } from '@/services/datetime';
 import { decodeMatchId } from '@/services/shortLink';
 import { findGroupForMatch } from '@/router/index';
+import { loadDesignV2 } from '@/services/designV2';
 import MatchesPanel from '@/components/MatchesPanel.vue';
+import HomeV2 from '@/components/v2/HomeV2.vue';
 import PointsStandingsTable from '@/components/PointsStandingsTable.vue';
 import ScorersTable from '@/components/ScorersTable.vue';
 import MotmStandingsTable from '@/components/MotmStandingsTable.vue';
@@ -76,7 +79,11 @@ import MotmStandingsTable from '@/components/MotmStandingsTable.vue';
 // the selected one — and composes the four presentational children.
 export default {
   name: 'MatchesAndStandings',
-  components: { MatchesPanel, PointsStandingsTable, ScorersTable, MotmStandingsTable },
+  components: { MatchesPanel, PointsStandingsTable, ScorersTable, MotmStandingsTable, HomeV2 },
+  inject: {
+    designV2On: { default: false },
+    v2Context: { default: null },
+  },
   data() {
     return {
       // Resolved once, before any child mounts: MatchesPanel creates matches
@@ -116,7 +123,27 @@ export default {
       ]
     };
   },
+  computed: {
+    designV2() {
+      return Boolean(this.designV2On);
+    },
+    activeGroupName() {
+      const group = this.groups.find((item) => item.id === this.activeGroupId);
+      return group ? group.name : '';
+    },
+  },
+  // The flag can land after created() has finished (it is fetched in
+  // parallel on a cold load): the shell's group/season selects are filled
+  // then, once this page's own data is in.
+  watch: {
+    designV2(on) {
+      if (on && !this.isInitializing) this.publishV2Context();
+    },
+  },
   async created() {
+    if (await this.openDeepLinkedMatchInV2()) {
+      return;
+    }
     try {
       const { groups, activeGroupId } = await resolveActiveGroup();
       this.groups = groups;
@@ -143,6 +170,7 @@ export default {
 
     await this.loadSeasons();
     this.isInitializing = false;
+    this.publishV2Context();
     await this.loadStandings();
   },
   methods: {
@@ -152,6 +180,26 @@ export default {
     switchGroup() {
       setActiveGroupId(this.activeGroupId);
       window.location.reload();
+    },
+    publishV2Context() {
+      if (!this.designV2 || !this.v2Context) return;
+      const pinned = sessionStorage.getItem('calciotto-v2-season');
+      if (pinned && this.seasons.includes(pinned)) this.selectedSeason = pinned;
+      this.v2Context.groups = this.groups;
+      this.v2Context.seasons = this.seasons;
+      this.v2Context.groupId = this.activeGroupId;
+      this.v2Context.season = this.selectedSeason;
+      this.v2Context.hide = false;
+      this.v2Context.onGroup = (id) => {
+        this.activeGroupId = id;
+        this.switchGroup();
+      };
+      this.v2Context.onSeason = (season) => {
+        sessionStorage.setItem('calciotto-v2-season', season);
+        this.selectedSeason = season;
+        this.v2Context.season = season;
+        this.loadStandings();
+      };
     },
 
     // Decodes a `?match=<code>` deep link (see router/index.js) and, on
@@ -168,6 +216,27 @@ export default {
     // mirroring the `/m/:code` redirect's own "malformed code falls back
     // home" philosophy: a shared link that doesn't resolve is not worth an
     // error toast.
+    // Design v2 has a page per match, so a `?match=<code>` link (a WhatsApp
+    // share, a push notification) opens that page instead of preselecting
+    // the match on the home list. The flag is asked for only when there is
+    // a link to follow (one request per session, shared with App.vue); the
+    // match page finds the match's own group itself. Returns true when it
+    // navigated away.
+    async openDeepLinkedMatchInV2() {
+      const code = this.$route?.query?.match;
+      if (!code || !(await loadDesignV2())) {
+        return false;
+      }
+      let matchId;
+      try {
+        matchId = decodeMatchId(code);
+      } catch (error) {
+        return false;
+      }
+      this.$router.replace({ name: 'MatchView', params: { id: matchId } });
+      return true;
+    },
+
     async resolveDeepLinkedMatch() {
       const code = this.$route?.query?.match;
       if (!code) {

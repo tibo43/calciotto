@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { getToken, getMatchDetailsByID } from '@/services/api';
 import { decodeMatchId } from '@/services/shortLink';
 import { loadMyGroups } from '@/services/activeGroup';
+import { loadDesignV2 } from '@/services/designV2';
 
 // The match's own group isn't known ahead of time from a bare match id (it
 // only ever appears alone, in a URL or a `/m/:code` link), and
@@ -68,9 +69,26 @@ const routes = [
     props: true
   },
   {
+    path: '/rankings',
+    name: 'Rankings',
+    component: () => import('@/components/v2/RankingsGate.vue'),
+    // The Rankings link only exists in the v2 shell. Without the flag this
+    // URL keeps today's behaviour: home. The guard asks the server (one
+    // request per session, shared with App.vue); a failed request is v1.
+    async beforeEnter() {
+      return (await loadDesignV2()) ? true : { path: '/' };
+    },
+  },
+  {
+    path: '/matches/:id',
+    name: 'MatchView',
+    component: () => import('@/components/v2/MatchView.vue'),
+    props: true,
+  },
+  {
     path: '/matches/:id/edit',
     name: 'MatchDetails',
-    component: () => import('@/components/MatchDetails.vue'),
+    component: () => import('@/components/v2/EditMatchGate.vue'),
     props: true,
     beforeEnter: async (to) => {
       try {
@@ -138,6 +156,40 @@ const routes = [
     path: '/profile',
     name: 'Profile',
     component: () => import('@/components/Profile.vue')
+  },
+  // Profile sub-pages exist for the design-v2 shell. Without the flag they
+  // fall back to today's profile, which is the only profile a v1 player has.
+  {
+    path: '/profile/groups/:id/settings',
+    name: 'ProfileGroupSettings',
+    component: () => import('@/components/Profile.vue'),
+    async beforeEnter() {
+      return (await loadDesignV2()) ? true : { path: '/profile' };
+    }
+  },
+  {
+    path: '/profile/groups/:id',
+    name: 'ProfileGroup',
+    component: () => import('@/components/Profile.vue'),
+    async beforeEnter() {
+      return (await loadDesignV2()) ? true : { path: '/profile' };
+    }
+  },
+  {
+    path: '/profile/notifications',
+    name: 'ProfileNotifications',
+    component: () => import('@/components/Profile.vue'),
+    async beforeEnter() {
+      return (await loadDesignV2()) ? true : { path: '/profile' };
+    }
+  },
+  {
+    path: '/profile/account',
+    name: 'ProfileAccount',
+    component: () => import('@/components/Profile.vue'),
+    async beforeEnter() {
+      return (await loadDesignV2()) ? true : { path: '/profile' };
+    }
   },
   // Its own top-level destination, alongside Matches and Profile — not a
   // sub-tab of MatchesAndStandings.vue any more. It owns its own active-group/

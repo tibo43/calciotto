@@ -4,6 +4,7 @@ import { getPointsStandings, getScorers, getMotmStandings, getSeasons } from '@/
 import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
 import { decodeMatchId } from '@/services/shortLink';
 import { findGroupForMatch } from '@/router/index';
+import { loadDesignV2 } from '@/services/designV2';
 
 jest.mock('@/services/api', () => ({
   getPointsStandings: jest.fn(),
@@ -30,7 +31,13 @@ jest.mock('@/router/index', () => ({
   findGroupForMatch: jest.fn()
 }));
 
-const mountPage = async (seasons, { routeQuery = {} } = {}) => {
+// Design v2 off unless a test says otherwise: these tests are about today's
+// page.
+jest.mock('@/services/designV2', () => ({
+  loadDesignV2: jest.fn(() => Promise.resolve(false))
+}));
+
+const mountPage = async (seasons, { routeQuery = {}, router = { replace: jest.fn() }, provide = {} } = {}) => {
   resolveActiveGroup.mockResolvedValue({
     groups: [{ id: 'group-uuid', name: 'Test Group', role: 'admin' }],
     activeGroupId: 'group-uuid'
@@ -44,7 +51,7 @@ const mountPage = async (seasons, { routeQuery = {} } = {}) => {
   // preselection, not about what MatchesPanel/the standings tables render —
   // each of those already has its own test file.
   const wrapper = shallowMount(MatchesAndStandings, {
-    global: { mocks: { $route: { query: routeQuery } } }
+    global: { mocks: { $route: { query: routeQuery }, $router: router }, provide }
   });
   await flushPromises();
   return wrapper;
@@ -177,5 +184,55 @@ describe('MatchesAndStandings.vue shared match deep link (?match=<code>)', () =>
     expect(decodeMatchId).not.toHaveBeenCalled();
     expect(findGroupForMatch).not.toHaveBeenCalled();
     expect(wrapper.vm.deepLinkMatchId).toBe('');
+  });
+});
+
+// Design v2 has a page per match: a shared or notification link opens it
+// instead of preselecting the match on the home list.
+describe('MatchesAndStandings.vue under design v2', () => {
+  beforeEach(() => {
+    decodeMatchId.mockReset();
+    findGroupForMatch.mockReset();
+    loadDesignV2.mockReset();
+  });
+
+  it('opens a ?match= link on the match page, without resolving it here', async () => {
+    loadDesignV2.mockResolvedValue(true);
+    decodeMatchId.mockReturnValue('match-uuid');
+    const router = { replace: jest.fn() };
+
+    await mountPage(['2026-2027'], { routeQuery: { match: 'abc123' }, router });
+
+    expect(router.replace).toHaveBeenCalledWith({ name: 'MatchView', params: { id: 'match-uuid' } });
+    expect(findGroupForMatch).not.toHaveBeenCalled();
+  });
+
+  it('keeps today\'s behaviour for a ?match= link when the flag is off', async () => {
+    loadDesignV2.mockResolvedValue(false);
+    decodeMatchId.mockReturnValue('match-uuid');
+    findGroupForMatch.mockResolvedValue(null);
+    const router = { replace: jest.fn() };
+
+    await mountPage(['2026-2027'], { routeQuery: { match: 'abc123' }, router });
+
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(findGroupForMatch).toHaveBeenCalled();
+  });
+
+  it('fills the shell\'s group and season selects when the flag lands after the page loaded', async () => {
+    const { ref } = require('vue');
+    const designV2On = ref(false);
+    const v2Context = { groups: [], seasons: [], groupId: '', season: '' };
+
+    const wrapper = await mountPage(['2026-2027'], { provide: { designV2On, v2Context } });
+    expect(v2Context.groups).toEqual([]);
+
+    designV2On.value = true;
+    await flushPromises();
+
+    expect(v2Context.groupId).toBe('group-uuid');
+    expect(v2Context.groups).toEqual([{ id: 'group-uuid', name: 'Test Group', role: 'admin' }]);
+    expect(v2Context.seasons).toEqual(['2026-2027']);
+    wrapper.unmount();
   });
 });

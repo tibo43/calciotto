@@ -112,5 +112,13 @@ func (h *StandingsHandler) GetPlayerProfile(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	// The route is scoped to the token's own player, so the address returned
+	// here is always the caller's own.
+	email, err := h.Service.PlayerService.GetEmailByID(playerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	profile.Email = email
 	c.JSON(http.StatusOK, profile)
 }

@@ -1,5 +1,6 @@
 <template>
-  <div class="home-container">
+  <PredictionsV2 v-if="designV2" />
+  <div v-else class="home-container">
     <!-- Same context-bar + sub-tabs pattern as MatchesAndStandings.vue: which
          group and season this page is scoped to, then which view of it. -->
     <section class="home-controls">
@@ -56,6 +57,7 @@ import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
 import { seasonOf } from '@/services/datetime';
 import PredictionsPanel from '@/components/PredictionsPanel.vue';
 import PredictionsStandingsTable from '@/components/PredictionsStandingsTable.vue';
+import PredictionsV2 from '@/components/v2/PredictionsV2.vue';
 
 // Its own top-level page now (see router/index.js), not a sub-tab of
 // MatchesAndStandings.vue any more — it owns the same active-group/season
@@ -66,7 +68,15 @@ import PredictionsStandingsTable from '@/components/PredictionsStandingsTable.vu
 // own standings tables.
 export default {
   name: 'PredictionsPage',
-  components: { PredictionsPanel, PredictionsStandingsTable },
+  components: { PredictionsPanel, PredictionsStandingsTable, PredictionsV2 },
+  inject: {
+    designV2On: { default: false },
+  },
+  computed: {
+    designV2() {
+      return Boolean(this.designV2On);
+    },
+  },
   data() {
     return {
       activeGroupId: '',
@@ -89,6 +99,7 @@ export default {
     }
   },
   async created() {
+    if (this.designV2) return;
     try {
       const { groups, activeGroupId } = await resolveActiveGroup();
       this.groups = groups;

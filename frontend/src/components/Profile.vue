@@ -1,5 +1,6 @@
 <template>
-  <div class="profile-container">
+  <ProfileV2 v-if="designV2" />
+  <div v-else class="profile-container">
     <section class="profile-section">
       <div class="container">
         <!-- Loading State -->
@@ -266,6 +267,7 @@ import GroupSettingsModal from '@/components/GroupSettingsModal.vue';
 import DeleteAccountModal from '@/components/DeleteAccountModal.vue';
 import InstallAppCard from '@/components/InstallAppCard.vue';
 import NotificationsCard from '@/components/NotificationsCard.vue';
+import ProfileV2 from '@/components/v2/ProfileV2.vue';
 
 // The JWT's own player_id claim is the only place the caller's player id is
 // available on this page (there's no "who am I" endpoint) — decoded locally,
@@ -288,7 +290,10 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'PlayerProfile',
-  components: { GroupSettingsModal, DeleteAccountModal, InstallAppCard, NotificationsCard },
+  components: { GroupSettingsModal, DeleteAccountModal, InstallAppCard, NotificationsCard, ProfileV2 },
+  inject: {
+    designV2On: { default: false },
+  },
   data() {
     return {
       overall: { Name: '', Played: 0, Won: 0, Drawn: 0, Lost: 0, GoalsFor: 0, OwnGoals: 0, Points: 0, MotmAwards: 0 },
@@ -335,6 +340,9 @@ export default {
     };
   },
   computed: {
+    designV2() {
+      return Boolean(this.designV2On);
+    },
     // Two explicit rows rather than letting the grid's own column count
     // decide where an 8th tile wraps to: the match outcome summary on top
     // (Played/Won/Drawn/Lost), everything else below it (Goals/Own Goals/
@@ -370,6 +378,11 @@ export default {
     }
   },
   async created() {
+    if (this.designV2) return;
+    if (this.$route.path !== '/profile') {
+      this.$router.replace('/profile');
+      return;
+    }
     this.currentPlayerId = currentPlayerIdFromToken();
     await Promise.all([this.loadProfile(), this.loadGroupMeta(), this.loadFeatures()]);
   },

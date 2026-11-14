@@ -2,8 +2,11 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router';
 import { getInstallTracker } from './services/pwaInstall';
+import { prefersDarkTheme } from './services/theme';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './assets/global-styles.css'
+import './assets/design-v2.css'
+import './assets/design-v2-ui.css'
 
 // Before mounting: Chrome's install offer can arrive right after load, long
 // before the Profile page that shows it is opened (see pwaInstall.js).
@@ -21,4 +24,19 @@ if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
 
 const app = createApp(App);
 app.use(router);
-app.mount('#app');
+// Mount only once the initial route has matched. App.vue decides in created()
+// whether this is a public page or a signed-in one, and the router's start
+// location has no name, so mounting earlier would decide on the wrong route.
+//
+// Until then nothing is rendered, and a route guard can make that wait last
+// (the v2-only routes ask GET /players/me/features first). The body carries
+// the theme meanwhile, so a dark-mode viewer gets the dark background rather
+// than a white page. App.vue owns the theme from mount on, on its own root.
+const darkBeforeMount = prefersDarkTheme();
+if (darkBeforeMount) {
+  document.body.classList.add('dark-mode');
+}
+router.isReady().then(() => {
+  app.mount('#app');
+  document.body.classList.remove('dark-mode');
+});

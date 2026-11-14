@@ -239,6 +239,93 @@ const groupMembersLongName = [
 
 // GET /groups/:id/invite-code — fetched by MatchDetails.vue for an admin
 // viewing a scheduled match, to append to its "Share on WhatsApp" message.
+// Scheduled, fully composed matches the predictions page can offer a pick on.
+// The clock is FIXED_NOW (4 Sep 2026), so the September kick-offs are still
+// open and the August ones are settled.
+const predictionOpenPicked = {
+  ID: 'eeeeeeee-0000-4000-8000-000000000001',
+  GroupID: GROUP_ID,
+  Date: '2026-09-06',
+  ScheduledAt: '2026-09-06T20:30:00+02:00',
+  Teams: [
+    { ...TEAM_BLUE, Score: 0, Players: [player(1, 'Marco Rossi', 0), player(2, 'Luca Bianchi', 0)] },
+    { ...TEAM_RED, Score: 0, Players: [player(5, 'Andrea Conti', 0), player(6, 'Matteo Ricci', 0)] },
+  ],
+};
+const predictionOpenEmpty = {
+  ID: 'eeeeeeee-0000-4000-8000-000000000002',
+  GroupID: GROUP_ID,
+  Date: '2026-09-13',
+  ScheduledAt: '2026-09-13T18:00:00+02:00',
+  Teams: [
+    { ...TEAM_BLUE, Score: 0, Players: [player(1, 'Marco Rossi', 0), player(2, 'Luca Bianchi', 0)] },
+    { ...TEAM_RED, Score: 0, Players: [player(5, 'Andrea Conti', 0), player(6, 'Matteo Ricci', 0)] },
+  ],
+};
+const predictionWon = {
+  ID: 'eeeeeeee-0000-4000-8000-000000000003',
+  GroupID: GROUP_ID,
+  Date: '2026-08-30',
+  ScheduledAt: '2026-08-30T20:30:00+02:00',
+  ResultRecordedAt: '2026-08-30T22:00:00+02:00',
+  Teams: [
+    { ...TEAM_BLUE, Score: 4, Players: [player(1, 'Marco Rossi', 0), player(2, 'Luca Bianchi', 0)] },
+    { ...TEAM_RED, Score: 2, Players: [player(5, 'Andrea Conti', 0), player(6, 'Matteo Ricci', 0)] },
+  ],
+};
+const predictionLost = {
+  ID: 'eeeeeeee-0000-4000-8000-000000000004',
+  GroupID: GROUP_ID,
+  Date: '2026-08-23',
+  ScheduledAt: '2026-08-23T20:30:00+02:00',
+  ResultRecordedAt: '2026-08-23T22:00:00+02:00',
+  Teams: [
+    { ...TEAM_BLUE, Score: 3, Players: [player(1, 'Marco Rossi', 0), player(2, 'Luca Bianchi', 0)] },
+    { ...TEAM_RED, Score: 3, Players: [player(5, 'Andrea Conti', 0), player(6, 'Matteo Ricci', 0)] },
+  ],
+};
+const predictionMatches = [predictionOpenPicked, predictionOpenEmpty, predictionWon, predictionLost];
+
+const predictionSummary = (odds, mine) => ({
+  Entries: mine === undefined ? [] : [{ PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', PredictedTeamID: mine }],
+  Count: mine === undefined ? 0 : 1,
+  Revealed: false,
+  Odds: odds,
+  MyPrediction: mine === undefined ? null : { PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', PredictedTeamID: mine },
+});
+const predictionSummaries = {
+  [predictionOpenPicked.ID]: predictionSummary({ TeamAOdds: 1.85, DrawOdds: 3.4, TeamBOdds: 2.1 }, TEAM_BLUE.ID),
+  [predictionOpenEmpty.ID]: predictionSummary({ TeamAOdds: 2.2, DrawOdds: 3.1, TeamBOdds: 2.4 }, undefined),
+  [predictionWon.ID]: predictionSummary({ TeamAOdds: 1.7, DrawOdds: 3.5, TeamBOdds: 2.3 }, TEAM_BLUE.ID),
+  [predictionLost.ID]: predictionSummary({ TeamAOdds: 2.05, DrawOdds: 3.2, TeamBOdds: 2.25 }, TEAM_RED.ID),
+};
+
+const predictionHistory = (flags) => flags.map((correct, index) => ({
+  MatchID: `ffffffff-0000-4000-8000-0000000000${index}`,
+  Date: '2026-08-01',
+  TeamAID: TEAM_BLUE.ID,
+  TeamAName: 'Les Bleus',
+  TeamBID: TEAM_RED.ID,
+  TeamBName: 'Les Rouges',
+  ScoreA: correct ? 2 : 1,
+  ScoreB: correct ? 1 : 2,
+  PredictedTeamID: TEAM_BLUE.ID,
+  Odds: 1.8,
+  Correct: correct,
+  Points: correct ? 0.8 : -1,
+}));
+const predictionStandings = [
+  { PlayerID: 'e1', Name: 'Andrea Conti', Points: 8.4, IsMember: true, History: predictionHistory([true, true, false, true, true]) },
+  { PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', Points: 6.1, IsMember: true, History: predictionHistory([true, false, true, true, false]) },
+  { PlayerID: 'e2', Name: 'Marco Rossi', Points: -0.9, IsMember: true, History: predictionHistory([false, true, true, false, true]) },
+  { PlayerID: 'e6', Name: 'Davide Fontana', Points: 0, IsMember: false, History: predictionHistory([false, false, true]) },
+];
+
+const teams = [
+  { id: 'aaaaaaaa-0000-4000-8000-000000000002', name: 'Les Bleus', colour: 'blue' },
+  { id: 'aaaaaaaa-0000-4000-8000-000000000001', name: 'Les Rouges', colour: 'red' },
+];
+
 const inviteCode = 'ABC23XYZ';
 
 // GET /players/me/features — no hidden feature enabled.
@@ -272,8 +359,12 @@ module.exports = {
   topScorers,
   motmStandings,
   motmVotes,
+  predictionMatches,
+  predictionSummaries,
+  predictionStandings,
   groupMembers,
   groupMembersLongName,
   playerStats,
+  teams,
   inviteCode,
 };

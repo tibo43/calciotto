@@ -205,6 +205,11 @@ func TestPlayerProfile_Integration(t *testing.T) {
 		if profile.Overall.MotmAwards != 1 {
 			t.Errorf("overall MotmAwards = %d, want 1", profile.Overall.MotmAwards)
 		}
+		// These matches are unscheduled, so none of them settle a prediction.
+		if profile.Overall.PredictionPoints != 0 {
+			t.Errorf("overall PredictionPoints = %v, want 0", profile.Overall.PredictionPoints)
+		}
+		assertSeasons(t, profile.Seasons, seasonOld, seasonNew)
 
 		if len(profile.PerGroup) != 3 {
 			t.Fatalf("PerGroup has %d entries, want 3 (one per group alice belongs to): %+v", len(profile.PerGroup), profile.PerGroup)
@@ -260,6 +265,8 @@ func TestPlayerProfile_Integration(t *testing.T) {
 		if got := groupRow(t, profile, groupA.ID).MotmAwards; got != 0 {
 			t.Errorf("group A %s MotmAwards = %d, want 0", seasonNew, got)
 		}
+		// The season list is the full set, not the filter that was asked for.
+		assertSeasons(t, profile.Seasons, seasonOld, seasonNew)
 	})
 
 	t.Run("requires authentication", func(t *testing.T) {
@@ -269,4 +276,181 @@ func TestPlayerProfile_Integration(t *testing.T) {
 			t.Errorf("unauthenticated GET /players/me/stats returned status %d, want 401", rec.Code)
 		}
 	})
+}
+
+func assertSeasons(t *testing.T, got []string, want ...string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("Seasons = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("Seasons = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestPlayerProfile_PredictionPointsAndSeasons(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	groupService := services.NewGroupService(tx)
+	teamService := services.NewTeamService(tx)
+	playerService := services.NewPlayerService(tx)
+	matchService := services.NewMatchService(tx)
+	membershipService := services.NewGroupMembershipService(tx)
+	authService := services.NewAuthService(tx, testProfileJWTSecret)
+	standings := services.NewStandingsService(tx, membershipService)
+
+	groupA, err := groupService.CreateGroup("Zzz Profile Predictions A", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group A: %v", err)
+	}
+	groupB, err := groupService.CreateGroup("Zzz Profile Predictions B", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatalf("failed to create group B: %v", err)
+	}
+	teamsOf := func(groupID uuid.UUID) []models.Team {
+		t.Helper()
+		teams, err := teamService.GetTeamsByGroupID(groupID)
+		if err != nil || len(teams) != 2 {
+			t.Fatalf("teams of %s: err=%v teams=%d", groupID, err, len(teams))
+		}
+		return teams
+	}
+	teamsA, teamsB := teamsOf(groupA.ID), teamsOf(groupB.ID)
+
+	aliceID, err := playerService.CreatePlayer("Zzz Profile Predictions Alice")
+	if err != nil {
+		t.Fatalf("failed to create alice: %v", err)
+	}
+	bobID, err := playerService.CreatePlayer("Zzz Profile Predictions Bob")
+	if err != nil {
+		t.Fatalf("failed to create bob: %v", err)
+	}
+	for _, membership := range []struct{ groupID, playerID uuid.UUID }{
+		{groupA.ID, aliceID}, {groupA.ID, bobID},
+		{groupB.ID, aliceID}, {groupB.ID, bobID},
+	} {
+		if err := membershipService.AddPlayerToGroup(membership.groupID, membership.playerID); err != nil {
+			t.Fatalf("failed to add membership: %v", err)
+		}
+	}
+	if err := authService.Signup(aliceID, "profile-predictions@example.com", "s3cret-pass"); err != nil {
+		t.Fatalf("failed to sign up alice: %v", err)
+	}
+	token, err := authService.Login("profile-predictions@example.com", "s3cret-pass")
+	if err != nil {
+		t.Fatalf("failed to log in alice: %v", err)
+	}
+
+	// A past kick-off so recording the score sets ResultRecordedAt, which is
+	// what makes the prediction settle. A future scheduled match contributes
+	// its season and nothing else.
+	playedAt := time.Date(2024, time.October, 1, 20, 0, 0, 0, time.UTC)
+	futureAt := time.Date(2027, time.October, 1, 20, 0, 0, 0, time.UTC)
+	schedule := func(groupID uuid.UUID, at time.Time) uuid.UUID {
+		t.Helper()
+		opens := at.Add(-24 * time.Hour)
+		maxPlayers := 10
+		id, err := matchService.CreateMatch(services.MatchSpec{
+			Date:                models.DateOf(at),
+			ScheduledAt:         &at,
+			RegistrationOpensAt: &opens,
+			MaxPlayers:          &maxPlayers,
+		}, groupID)
+		if err != nil {
+			t.Fatalf("failed to schedule %s: %v", at, err)
+		}
+		return id
+	}
+	score := func(matchID, groupID, winner, loser, winnerTeam, loserTeam uuid.UUID) {
+		t.Helper()
+		if err := matchService.UpdateMatch(matchID, groupID, []models.TeamWithPlayers{
+			{ID: winnerTeam, Players: []models.PlayerCustom{{ID: winner, GoalsScored: 2}}},
+			{ID: loserTeam, Players: []models.PlayerCustom{{ID: loser, GoalsScored: 0}}},
+		}); err != nil {
+			t.Fatalf("failed to record the score: %v", err)
+		}
+	}
+
+	matchA := schedule(groupA.ID, playedAt)
+	score(matchA, groupA.ID, aliceID, bobID, teamsA[0].ID, teamsA[1].ID)
+	matchB := schedule(groupB.ID, playedAt)
+	score(matchB, groupB.ID, aliceID, bobID, teamsB[0].ID, teamsB[1].ID)
+	schedule(groupA.ID, futureAt)
+
+	// Alice calls group A's winner and group B's loser. A miss is always -1;
+	// a hit is odds − 1, which is what GetPredictionStandings reports.
+	winnerA := teamsA[0].ID
+	loserB := teamsB[1].ID
+	if err := tx.Create(&models.MatchPrediction{MatchID: matchA, PlayerID: aliceID, PredictedTeamID: &winnerA}).Error; err != nil {
+		t.Fatalf("failed to store alice's hit: %v", err)
+	}
+	if err := tx.Create(&models.MatchPrediction{MatchID: matchB, PlayerID: aliceID, PredictedTeamID: &loserB}).Error; err != nil {
+		t.Fatalf("failed to store alice's miss: %v", err)
+	}
+
+	rowsA, err := standings.GetPredictionStandings(groupA.ID, "")
+	if err != nil {
+		t.Fatalf("GetPredictionStandings: %v", err)
+	}
+	var wantHit float64
+	found := false
+	for _, row := range rowsA {
+		if row.PlayerID == aliceID {
+			wantHit = row.Points
+			found = true
+		}
+	}
+	if !found || wantHit == -1 || wantHit == 0 {
+		t.Fatalf("group A leaderboard points for alice = %v (found %v), want a positive odds-1", wantHit, found)
+	}
+
+	router := newProfileTestRouter(tx, authService, membershipService)
+	get := func(path string) models.PlayerProfileStats {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, body %s", path, rec.Code, rec.Body.String())
+		}
+		var profile models.PlayerProfileStats
+		if err := json.Unmarshal(rec.Body.Bytes(), &profile); err != nil {
+			t.Fatalf("decode %s: %v", path, err)
+		}
+		return profile
+	}
+	pointsOf := func(profile models.PlayerProfileStats, groupID uuid.UUID) float64 {
+		t.Helper()
+		for _, row := range profile.PerGroup {
+			if row.GroupID == groupID {
+				return row.PredictionPoints
+			}
+		}
+		t.Fatalf("no row for %s", groupID)
+		return 0
+	}
+
+	profile := get("/players/me/stats")
+	assertSeasons(t, profile.Seasons, "2024-2025", "2027-2028")
+	if got := pointsOf(profile, groupA.ID); got != wantHit {
+		t.Errorf("group A PredictionPoints = %v, want %v (the group's own leaderboard)", got, wantHit)
+	}
+	if got := pointsOf(profile, groupB.ID); got != -1 {
+		t.Errorf("group B PredictionPoints = %v, want -1", got)
+	}
+	if profile.Overall.PredictionPoints != wantHit-1 {
+		t.Errorf("overall PredictionPoints = %v, want %v (sum of the groups, not a mixed Elo)", profile.Overall.PredictionPoints, wantHit-1)
+	}
+
+	// Filtering to the unplayed season does not drop it from Seasons, and
+	// does not settle the other season's predictions into this total.
+	filtered := get("/players/me/stats?season=2027-2028")
+	assertSeasons(t, filtered.Seasons, "2024-2025", "2027-2028")
+	if filtered.Overall.PredictionPoints != 0 || pointsOf(filtered, groupA.ID) != 0 {
+		t.Errorf("unplayed season PredictionPoints = overall %v group A %v, want 0", filtered.Overall.PredictionPoints, pointsOf(filtered, groupA.ID))
+	}
 }
