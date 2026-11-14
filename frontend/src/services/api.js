@@ -36,9 +36,20 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response && error.response.status === 401) {
+      // A session that ended without a logout (expired, revoked by a
+      // password change elsewhere) must not leave this device receiving the
+      // account's notifications. The backend can't be told any more (no
+      // token), so only the browser side is dropped; the backend's next send
+      // gets "gone" and deletes its row. Imported lazily: pushNotifications
+      // itself imports this module.
+      const hadSession = Boolean(getToken());
       clearToken();
+      if (hadSession) {
+        const { forgetPushOnThisBrowser } = await import('@/services/pushNotifications');
+        await forgetPushOnThisBrowser();
+      }
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }

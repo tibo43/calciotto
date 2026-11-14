@@ -178,7 +178,7 @@
 import { clearToken } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta } from '@/services/theme';
-import { disablePushOnLogout } from '@/services/pushNotifications';
+import { disablePushOnLogout, stopPushIfAppUninstalled } from '@/services/pushNotifications';
 
 // Routes reachable without a token — nothing group-related is shown there.
 const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
@@ -206,6 +206,11 @@ export default {
     }
   },
   mounted() {
+    // Android keeps an uninstalled app's notifications going through Chrome;
+    // this turns them off when the site is opened again in a tab (see
+    // stopPushIfAppUninstalled). Fire and forget: it never blocks the page.
+    stopPushIfAppUninstalled();
+
     // Check for saved theme preference
     const savedTheme = localStorage.getItem('calciotto-theme');
     if (savedTheme) {

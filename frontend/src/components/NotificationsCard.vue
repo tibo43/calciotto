@@ -89,7 +89,7 @@ function withDefaults(loaded) {
 const DESCRIPTIONS = {
   [PUSH_STATE.ON]: 'On for this device. Choose which ones you get.',
   [PUSH_STATE.OFF]: 'Get told about sign-ups, your team, kick-off and the result.',
-  [PUSH_STATE.NEEDS_INSTALL]: 'On iPhone, install the app first (Share, then Add to Home Screen) and turn them on from there.',
+  [PUSH_STATE.NEEDS_INSTALL]: 'Install the app on your home screen first, then turn them on from the app.',
   [PUSH_STATE.DENIED]: 'Blocked for Calciotto. Allow notifications in your phone or browser settings, then come back here.',
   [PUSH_STATE.UNSUPPORTED]: "This browser can't receive notifications."
 };
