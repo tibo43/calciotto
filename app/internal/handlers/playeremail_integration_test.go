@@ -20,8 +20,9 @@ const testPlayerEmailJWTSecret = "zzz-integration-test-player-email-secret"
 
 // TestPlayerEmail_Integration_OnlyOnTheCallersProfile pins where a player's
 // email address may appear: GET /players/me/stats returns the caller's own
-// address (the Account page shows it), while the points, scorers and MOTM
-// rankings, which list every player of the group, never carry an address.
+// address (the Account page shows it), while the group roster and the
+// points, scorers and MOTM rankings, which list every player of the group,
+// never carry an address.
 func TestPlayerEmail_Integration_OnlyOnTheCallersProfile(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -94,6 +95,9 @@ func TestPlayerEmail_Integration_OnlyOnTheCallersProfile(t *testing.T) {
 	authRequired := handlers.AuthMiddleware(authService)
 	requireGroupMember := handlers.RequireGroupMembership(membershipService)
 	router.GET("/players/me/stats", authRequired, standingsHandler.GetPlayerProfile)
+	router.GET("/groups/:id/players", authRequired,
+		handlers.RequireGroupMembershipByPathParam(membershipService, "id"),
+		handlers.NewGroupHandler(groupService, membershipService).GetGroupMembers)
 	router.GET("/standings/points", authRequired, requireGroupMember, standingsHandler.GetPointsStandings)
 	router.GET("/standings/scorers", authRequired, requireGroupMember, standingsHandler.GetScorers)
 	router.GET("/standings/motm", authRequired, requireGroupMember, standingsHandler.GetMotmStandings)
@@ -122,8 +126,13 @@ func TestPlayerEmail_Integration_OnlyOnTheCallersProfile(t *testing.T) {
 		t.Errorf("GET /players/me/stats leaks another player's address: %s", meBody)
 	}
 
-	for _, path := range []string{"/standings/points", "/standings/scorers", "/standings/motm"} {
-		body := get(t, path+"?group_id="+group.ID.String())
+	for _, path := range []string{
+		"/groups/" + group.ID.String() + "/players",
+		"/standings/points?group_id=" + group.ID.String(),
+		"/standings/scorers?group_id=" + group.ID.String(),
+		"/standings/motm?group_id=" + group.ID.String(),
+	} {
+		body := get(t, path)
 		if !strings.Contains(body, bobID.String()) {
 			t.Fatalf("GET %s has no row for bob, nothing to check: %s", path, body)
 		}

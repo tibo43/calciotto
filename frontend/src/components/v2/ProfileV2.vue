@@ -209,7 +209,7 @@
           </div>
           <div v-if="member.id !== playerId" class="member-actions withdraw-wrap">
             <button v-if="member.role === 'admin'" class="btn btn-ghost" type="button" :aria-expanded="(demoting === member.id).toString()" @click="askDemote(member)">Remove admin</button>
-            <button v-else-if="member.email" class="btn btn-ghost" type="button" @click="promote(member)">Make admin</button>
+            <button v-else-if="member.has_account" class="btn btn-ghost" type="button" @click="promote(member)">Make admin</button>
             <div v-if="demoting === member.id" class="confirm-pop" role="dialog">
               <h3>Remove the admin role?</h3>
               <p class="ref">{{ displayName(member.name) }} stays a member of the group. You can make them an admin again later.</p>
