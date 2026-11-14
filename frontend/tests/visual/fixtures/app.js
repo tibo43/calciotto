@@ -108,7 +108,17 @@ async function stubApi(page, overrides = {}) {
   await page.route(`${API}/standings/points*`, (route) => json(route, overrides.pointsStandings ?? data.pointsStandings));
   await page.route(`${API}/standings/scorers*`, (route) => json(route, overrides.topScorers ?? data.topScorers));
   await page.route(`${API}/standings/motm*`, (route) => json(route, overrides.motmStandings ?? data.motmStandings));
+  await page.route(`${API}/standings/predictions*`, (route) => json(route, overrides.predictionStandings ?? []));
   await page.route(`${API}/matches/details*`, (route) => json(route, overrides.matches ?? data.matches));
+  await page.route(`${API}/matches/*/predictions`, (route) => {
+    if (route.request().method() !== 'GET') {
+      unstubbed.push(`${route.request().method()} ${route.request().url()}`);
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
+    }
+    const id = new URL(route.request().url()).pathname.split('/')[2];
+    const summary = (overrides.predictionSummaries ?? {})[id];
+    return json(route, summary ?? { Entries: [], Count: 0, Revealed: false });
+  });
 
   // Keyed by id so one test can put a match in a state another test doesn't
   // have — the same URL shape serves every match.

@@ -36,6 +36,10 @@ test.describe('design v2 rankings', () => {
     await expect(page.locator('table.stand')).toBeHidden();
     await expect(page.locator('.pcard').first()).toBeVisible();
     await expect(page.getByText('P 9 · W 6 · D 2 · L 1 · GF 14')).toBeVisible();
+    const widths = await page.locator('label.ctx').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().width));
+    expect(widths[0]).toBeGreaterThan(widths[1]);
+    const pad = await page.locator('table.stand tr.is-me td.rk').evaluate((el) => getComputedStyle(el).paddingLeft);
+    expect(pad).toBe('8px');
     await expect(page).toHaveScreenshot('v2-rankings-points-mobile.png', { fullPage: true });
     await expectNoHorizontalOverflow(page);
     expectEverythingStubbed(unstubbed);
