@@ -128,22 +128,22 @@
       </section>
       <section class="sec">
         <div class="sec-head"><h2>Email</h2></div>
-        <div class="field">
-          <label class="label" for="account-email">Email</label>
-          <input id="account-email" type="email" value="" readonly>
-          <p class="hint">Changing your email isn't available yet.</p>
+        <div class="field account-email">
+          <p id="account-email-label" class="label">Email</p>
+          <p class="account-email-value" aria-labelledby="account-email-label">{{ email }}</p>
+          <p class="note">Changing your email isn't available yet.</p>
         </div>
       </section>
       <section class="sec">
         <div class="sec-head"><h2>Password</h2></div>
         <p class="scope">To choose a new one, we email you a reset link, the same path as forgot password.</p>
-        <p><button class="btn btn-ghost" type="button" @click="sendReset">Email the link</button></p>
+        <p><button class="btn btn-ghost" type="button" :disabled="sendingReset || !email" @click="sendReset">{{ sendingReset ? 'Sending…' : 'Email the link' }}</button></p>
         <p v-if="resetNote" class="scope">{{ resetNote }}</p>
       </section>
       <section class="danger">
         <p class="label">Danger zone</p>
         <h2 class="h2">Delete my account</h2>
-        <p>This can't be undone. Your name, email and password are erased, and you're removed from every group. Match history (goals, Man of the Match titles) stays for the other players, and is no longer tied to an account.</p>
+        <p>This can't be undone. Your name, email and password are erased, and you're removed from every group. Match history (goals, MOTM titles) stays for the other players, and is no longer tied to an account.</p>
         <span class="withdraw-wrap">
           <button class="btn btn-danger" type="button" :aria-expanded="deleting.toString()" @click="openDelete">Delete my account</button>
           <div v-if="deleting" class="confirm-pop" role="dialog" aria-labelledby="delete-title">
@@ -240,6 +240,7 @@ import {
   getPlayerProfile, getMyGroups, getSeasons, setFavoriteGroup, updateMyName,
   deleteMyAccount, clearToken, getToken, getTeamsByGroup, updateTeam, getInviteCode,
   getGroupMembers, updateMemberRole, getNotificationPreferences, updateNotificationPreferences,
+  forgotPassword,
 } from '@/services/api';
 import { getPushState, enablePush, disablePush, PUSH_STATE } from '@/services/pushNotifications';
 import { buildGroupInviteShareText, buildWhatsAppShareUrl } from '@/services/whatsappShare';
@@ -305,7 +306,9 @@ export default {
       nameInput: '',
       savingName: false,
       nameError: '',
+      email: '',
       resetNote: '',
+      sendingReset: false,
       deleting: false,
       deletePassword: '',
       deleteError: '',
@@ -456,6 +459,7 @@ export default {
         this.perGroup = Array.isArray(profile.PerGroup) ? profile.PerGroup : [];
         this.groups = Array.isArray(groups) ? groups : [];
         this.nameInput = this.overall.Name || '';
+        this.email = profile.Email || '';
         if (this.page === 'group') {
           this.seasons = await getSeasons(this.groupId).catch(() => []);
         } else {
@@ -531,8 +535,20 @@ export default {
         this.savingName = false;
       }
     },
-    sendReset() {
-      this.resetNote = 'Changing the password from here needs the account email, and that address is not available on this page yet.';
+    // Same request as the Forgot password page, with the signed-in player's
+    // own address; the backend's generic answer is shown as it comes back.
+    async sendReset() {
+      if (!this.email || this.sendingReset) return;
+      this.resetNote = '';
+      this.sendingReset = true;
+      try {
+        const { message } = await forgotPassword(this.email);
+        this.resetNote = message;
+      } catch (error) {
+        this.resetNote = (error.response && error.response.data && error.response.data.error) || 'Could not send the reset link. Please try again.';
+      } finally {
+        this.sendingReset = false;
+      }
     },
     openDelete() {
       this.deleting = true;

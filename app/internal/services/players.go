@@ -50,6 +50,20 @@ func (s *PlayerService) GetPlayerByID(id uuid.UUID) (*models.PlayerCustom, error
 	return &models.PlayerCustom{ID: player.ID, Name: player.Name, GoalsScored: 0}, nil
 }
 
+// GetEmailByID returns the player's own email address, or "" for a player
+// who has no account yet. It exists for GET /players/me/stats only: the
+// caller sees their own address there, and nowhere else is it looked up.
+func (s *PlayerService) GetEmailByID(id uuid.UUID) (string, error) {
+	var player models.Player
+	if err := s.DB.Select("email").First(&player, "id = ?", id).Error; err != nil {
+		return "", err
+	}
+	if player.Email == nil {
+		return "", nil
+	}
+	return *player.Email, nil
+}
+
 // UpdateName lets a player rename themselves (PATCH /players/me). Unlike
 // CreatePlayer, which allows name collisions on purpose (see the package doc
 // comment on ErrEmptyPlayerName / AuthService.SignupNewPlayer), a rename is

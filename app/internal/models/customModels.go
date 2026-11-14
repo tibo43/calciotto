@@ -360,6 +360,10 @@ type PlayerOverallStanding struct {
 // to: Overall counts all of those groups' matches together, PerGroup breaks
 // the same period down group by group.
 type PlayerProfileStats struct {
+	// Email is the signed-in player's own address, so the Account page can
+	// show it. It is only ever filled for the caller of GET /players/me/stats,
+	// never for another player, and stays empty for an account-less player.
+	Email    string                `json:"Email"`
 	Overall  PlayerOverallStanding `json:"Overall"`
 	PerGroup []PlayerGroupStanding `json:"PerGroup"`
 	// Seasons is every season label across all of the player's groups,

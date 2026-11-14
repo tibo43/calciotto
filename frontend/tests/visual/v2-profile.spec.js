@@ -10,6 +10,7 @@ stats.Seasons = ['2025-2026', '2026-2027'];
 stats.Overall.PredictionPoints = 4.2;
 stats.PerGroup[0].PredictionPoints = 5.1;
 stats.PerGroup[1].PredictionPoints = -0.9;
+stats.Email = 'thibaut@example.com';
 
 const V2 = { features: ['design-v2'], playerStats: stats };
 const GROUP = `/profile/groups/${data.GROUP_ID}`;
@@ -105,7 +106,8 @@ test.describe('design v2 profile', () => {
   test('account', async ({ page }) => {
     const { unstubbed } = await openProfile(page, '/profile/account');
     await expect(page.getByRole('heading', { name: 'Identity' })).toBeVisible();
-    await expect(page.getByLabel('Email')).toHaveValue('');
+    await expect(page.locator('.account-email-value')).toHaveText('thibaut@example.com');
+    await expect(page.locator('#account-email')).toHaveCount(0);
     await expect(page).toHaveScreenshot('v2-profile-account.png', { fullPage: true });
     expectEverythingStubbed(unstubbed);
   });
