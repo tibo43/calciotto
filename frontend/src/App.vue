@@ -35,7 +35,7 @@
           </div>
           <nav v-if="isAuthenticatedRoute && !v2Context.pageTitle" class="dnav" aria-label="Main">
             <router-link to="/" :class="{ 'is-on': isV2Home }"><span class="outline" :class="{ 'is-on': isV2Home }">Home</span></router-link>
-            <router-link to="/classements" :class="{ 'is-on': $route.name === 'Classements' }"><span class="outline" :class="{ 'is-on': $route.name === 'Classements' }">Rankings</span></router-link>
+            <router-link to="/rankings" :class="{ 'is-on': $route.name === 'Rankings' }"><span class="outline" :class="{ 'is-on': $route.name === 'Rankings' }">Rankings</span></router-link>
             <router-link to="/predictions" :class="{ 'is-on': $route.name === 'Predictions' }"><span class="outline" :class="{ 'is-on': $route.name === 'Predictions' }">Predictions</span></router-link>
             <router-link to="/profile" :class="{ 'is-on': isV2Profile }"><span class="outline" :class="{ 'is-on': isV2Profile }">Profile</span></router-link>
           </nav>
@@ -168,7 +168,7 @@
              and icons as the top nav-menu, so both bars read as one app. -->
         <nav v-if="designV2 && isAuthenticatedRoute" class="tabbar" aria-label="Main">
           <router-link to="/" :class="{ 'is-on': isV2Home }"><span class="outline" :class="{ 'is-on': isV2Home }">Home</span></router-link>
-          <router-link to="/classements" :class="{ 'is-on': $route.name === 'Classements' }"><span class="outline" :class="{ 'is-on': $route.name === 'Classements' }">Rankings</span></router-link>
+          <router-link to="/rankings" :class="{ 'is-on': $route.name === 'Rankings' }"><span class="outline" :class="{ 'is-on': $route.name === 'Rankings' }">Rankings</span></router-link>
           <router-link to="/predictions" :class="{ 'is-on': $route.name === 'Predictions' }"><span class="outline" :class="{ 'is-on': $route.name === 'Predictions' }">Predictions</span></router-link>
           <router-link to="/profile" :class="{ 'is-on': isV2Profile }"><span class="outline" :class="{ 'is-on': isV2Profile }">Profile</span></router-link>
         </nav>

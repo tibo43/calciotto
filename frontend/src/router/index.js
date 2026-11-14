@@ -69,8 +69,8 @@ const routes = [
     props: true
   },
   {
-    path: '/classements',
-    name: 'Classements',
+    path: '/rankings',
+    name: 'Rankings',
     component: () => import('@/components/v2/RankingsGate.vue'),
     // The Rankings link only exists in the v2 shell. Without the flag this
     // URL keeps today's behaviour: home. The guard asks the server (one

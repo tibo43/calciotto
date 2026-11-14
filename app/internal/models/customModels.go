@@ -372,7 +372,7 @@ type PlayerProfileStats struct {
 	Overall  PlayerOverallStanding `json:"Overall"`
 	PerGroup []PlayerGroupStanding `json:"PerGroup"`
 	// Seasons is every season label across all of the player's groups,
-	// newest-or-oldest sorted ascending, independent of the ?season= filter
+	// sorted ascending (oldest first), independent of the ?season= filter
 	// so the profile's season select stays complete while a filter is on.
 	// An empty slice (never null) means the player has no dated match yet.
 	Seasons []string `json:"Seasons"`

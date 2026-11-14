@@ -1,13 +1,13 @@
 <template>
   <main class="page">
     <nav class="subnav" aria-label="Rankings">
-      <router-link to="/classements" :class="{ 'is-on': tab === 'points' }">
+      <router-link to="/rankings" :class="{ 'is-on': tab === 'points' }">
         <span class="outline" :class="{ 'is-on': tab === 'points' }">Points</span>
       </router-link>
-      <router-link to="/classements?tab=scorers" :class="{ 'is-on': tab === 'scorers' }">
+      <router-link to="/rankings?tab=scorers" :class="{ 'is-on': tab === 'scorers' }">
         <span class="outline" :class="{ 'is-on': tab === 'scorers' }">Scorers</span>
       </router-link>
-      <router-link to="/classements?tab=motm" :class="{ 'is-on': tab === 'motm' }">
+      <router-link to="/rankings?tab=motm" :class="{ 'is-on': tab === 'motm' }">
         <span class="outline" :class="{ 'is-on': tab === 'motm' }">MOTM</span>
       </router-link>
     </nav>

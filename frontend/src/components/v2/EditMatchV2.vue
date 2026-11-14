@@ -14,7 +14,10 @@
     <template v-else>
       <p class="label">Editing · admin</p>
       <h1 class="display h-kick">{{ heading }}</h1>
-      <p class="reg-status" v-html="statusHtml"></p>
+      <p class="reg-status">
+        <template v-if="!isScheduled">No sign-up list</template>
+        <template v-else>Sign-ups <strong>{{ registrationWord }}</strong> · <template v-if="step === 'score' && bothSides">teams made</template><template v-else><strong>{{ confirmed.length }} confirmed / {{ cap }} places</strong> · {{ waitingLabel }}</template></template>
+      </p>
 
       <div class="share-wa">
         <a class="btn btn-ghost" :href="shareUrl" target="_blank" rel="noopener">
@@ -346,13 +349,15 @@ export default {
       const time = kickoffLabel(this.match.ScheduledAt);
       return time ? `${date} · ${time}` : date;
     },
-    statusHtml() {
-      if (!this.isScheduled) return 'No sign-up list';
-      const word = this.registrationState === REGISTRATION_OPEN ? 'open'
-        : this.registrationState === 'not-open-yet' ? 'not open yet' : 'closed';
-      if (this.step === 'score' && this.bothSides) return `Sign-ups <strong>${word}</strong> · teams made`;
-      const wait = this.waiting.length === 1 ? '1 waiting' : `${this.waiting.length} waiting`;
-      return `Sign-ups <strong>${word}</strong> · <strong>${this.confirmed.length} confirmed / ${this.cap} places</strong> · ${wait}`;
+    // The status line is built in the template, not as an HTML string: no
+    // v-html anywhere in the app keeps player-supplied text from ever being
+    // rendered as markup.
+    registrationWord() {
+      if (this.registrationState === REGISTRATION_OPEN) return 'open';
+      return this.registrationState === 'not-open-yet' ? 'not open yet' : 'closed';
+    },
+    waitingLabel() {
+      return this.waiting.length === 1 ? '1 waiting' : `${this.waiting.length} waiting`;
     },
     signupNote() {
       if (this.bothSides) return 'The teams are made. Sign-ups above stay as they are.';
