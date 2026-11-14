@@ -69,7 +69,7 @@ describe('NotificationsCard.vue', () => {
   });
 
   it.each([
-    [PUSH_STATE.NEEDS_INSTALL, 'Add to Home Screen'],
+    [PUSH_STATE.NEEDS_INSTALL, 'Install the app'],
     [PUSH_STATE.DENIED, 'settings'],
     [PUSH_STATE.UNSUPPORTED, "can't receive"]
   ])('explains %s with no switch', async (state, text) => {

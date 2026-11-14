@@ -1,5 +1,6 @@
 import {
-  PUSH_STATE, getPushState, enablePush, disablePush, urlBase64ToUint8Array
+  PUSH_STATE, getPushState, enablePush, disablePush, urlBase64ToUint8Array,
+  disablePushOnLogout, forgetPushOnThisBrowser, stopPushIfAppUninstalled
 } from '@/services/pushNotifications';
 import { getPushPublicKey, savePushSubscription, deletePushSubscription } from '@/services/api';
 
@@ -13,7 +14,10 @@ const ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 
 const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
 
 // A window with a registered worker whose push subscription the test controls.
-function fakeWindow({ userAgent = ANDROID_UA, standalone = false, permission = 'default', subscription = null, registered = true, push = true } = {}) {
+function fakeWindow({
+  userAgent = ANDROID_UA, standalone = false, permission = 'default', subscription = null, registered = true, push = true,
+  relatedApps = undefined, storage = {}
+} = {}) {
   const pushManager = {
     getSubscription: jest.fn(() => Promise.resolve(subscription)),
     subscribe: jest.fn(() => Promise.resolve({
@@ -28,8 +32,16 @@ function fakeWindow({ userAgent = ANDROID_UA, standalone = false, permission = '
       maxTouchPoints: 0,
       serviceWorker: { getRegistration: () => Promise.resolve(registered ? { pushManager } : undefined) }
     },
-    Notification: { permission, requestPermission: jest.fn(() => Promise.resolve(permission)) }
+    Notification: { permission, requestPermission: jest.fn(() => Promise.resolve(permission)) },
+    localStorage: {
+      getItem: (key) => (key in storage ? storage[key] : null),
+      setItem: (key, value) => { storage[key] = value; }
+    }
   };
+  // undefined: the browser has no getInstalledRelatedApps at all.
+  if (relatedApps !== undefined) {
+    win.navigator.getInstalledRelatedApps = jest.fn(() => Promise.resolve(relatedApps));
+  }
   if (push) win.PushManager = function PushManager() {};
   return { win, pushManager };
 }
@@ -52,8 +64,16 @@ describe('getPushState', () => {
 
   it('reports a blocked permission, then on or off from the subscription', async () => {
     expect(await getPushState(fakeWindow({ permission: 'denied' }).win)).toBe(PUSH_STATE.DENIED);
+    expect(await getPushState(fakeWindow({ standalone: true, subscription: { endpoint: 'x' } }).win)).toBe(PUSH_STATE.ON);
+    expect(await getPushState(fakeWindow({ standalone: true }).win)).toBe(PUSH_STATE.OFF);
+  });
+
+  it('only offers turning them on in the installed app, on Android and desktop too', async () => {
+    expect(await getPushState(fakeWindow().win)).toBe(PUSH_STATE.NEEDS_INSTALL);
+  });
+
+  it('still shows them on in a tab when the installed app subscribed, so they can be turned off', async () => {
     expect(await getPushState(fakeWindow({ subscription: { endpoint: 'x' } }).win)).toBe(PUSH_STATE.ON);
-    expect(await getPushState(fakeWindow().win)).toBe(PUSH_STATE.OFF);
   });
 });
 
@@ -92,5 +112,56 @@ describe('disablePush', () => {
 describe('urlBase64ToUint8Array', () => {
   it('decodes base64url without padding', () => {
     expect(urlBase64ToUint8Array('-_8')).toEqual(new Uint8Array([251, 255]));
+  });
+});
+
+describe('logging out and lost sessions', () => {
+  it('drops the browser subscription even when the backend cannot be told', async () => {
+    deletePushSubscription.mockRejectedValue(new Error('offline'));
+    const subscription = { endpoint: 'https://push.test/old', unsubscribe: jest.fn(() => Promise.resolve(true)) };
+    await disablePushOnLogout(fakeWindow({ subscription }).win);
+    expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('forgets the browser subscription without calling the backend', async () => {
+    const subscription = { endpoint: 'https://push.test/old', unsubscribe: jest.fn(() => Promise.resolve(true)) };
+    await forgetPushOnThisBrowser(fakeWindow({ subscription }).win);
+    expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(deletePushSubscription).not.toHaveBeenCalled();
+  });
+});
+
+describe('stopPushIfAppUninstalled', () => {
+  const subscribed = () => ({ endpoint: 'https://push.test/old', unsubscribe: jest.fn(() => Promise.resolve(true)) });
+
+  it('learns, in the installed app, that the check works on this device', async () => {
+    const storage = {};
+    const subscription = subscribed();
+    await expect(stopPushIfAppUninstalled(fakeWindow({ standalone: true, relatedApps: [{ platform: 'webapp' }], storage, subscription }).win)).resolves.toBe(false);
+    expect(storage['calciotto-installed-app-detection']).toBe('works');
+    expect(subscription.unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it('turns notifications off in a tab once the app is gone, when the check is proven', async () => {
+    deletePushSubscription.mockResolvedValue({});
+    const subscription = subscribed();
+    const storage = { 'calciotto-installed-app-detection': 'works' };
+    await expect(stopPushIfAppUninstalled(fakeWindow({ relatedApps: [], storage, subscription }).win)).resolves.toBe(true);
+    expect(deletePushSubscription).toHaveBeenCalledWith('https://push.test/old');
+    expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves them alone while the app is still installed', async () => {
+    const subscription = subscribed();
+    const storage = { 'calciotto-installed-app-detection': 'works' };
+    await expect(stopPushIfAppUninstalled(fakeWindow({ relatedApps: [{ platform: 'webapp' }], storage, subscription }).win)).resolves.toBe(false);
+    expect(subscription.unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it('never acts on a guess: no proof on this device, or no API at all', async () => {
+    const subscription = subscribed();
+    await expect(stopPushIfAppUninstalled(fakeWindow({ relatedApps: [], subscription }).win)).resolves.toBe(false);
+    await expect(stopPushIfAppUninstalled(fakeWindow({ subscription, storage: { 'calciotto-installed-app-detection': 'works' } }).win)).resolves.toBe(false);
+    expect(subscription.unsubscribe).not.toHaveBeenCalled();
   });
 });
