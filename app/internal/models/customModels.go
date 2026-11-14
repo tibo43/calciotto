@@ -276,12 +276,17 @@ type GroupWithRole struct {
 // group being listed — the shape GET /groups/:id/players returns. It embeds
 // Player rather than restating its fields (same "embed the base type, add a
 // Role field" pattern as GroupWithRole), which is why its JSON keeps Player's
-// own lowercase convention (id, name, email) with role riding alongside as a
-// plain lowercase field — a different casing convention than GroupWithRole,
-// which is fine since each embeds a different base type.
+// own lowercase convention (id, name) with role and has_account riding
+// alongside as plain lowercase fields — a different casing convention than
+// GroupWithRole, which is fine since each embeds a different base type.
+//
+// HasAccount is true when the player has claimed an account (has an email).
+// It is what a client uses to tell a ghost player from a real one; the email
+// itself is never part of this response, since every member can list it.
 type PlayerWithRole struct {
 	Player
-	Role string `json:"role"`
+	Role       string `json:"role"`
+	HasAccount bool   `json:"has_account"`
 }
 
 // PointsStandingRow is one player's row in the win/draw/loss points standings.
