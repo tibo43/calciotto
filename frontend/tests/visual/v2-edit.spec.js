@@ -39,9 +39,6 @@ function scoredMatch() {
 }
 
 async function openEdit(page, path, options = {}) {
-  await page.addInitScript(() => {
-    localStorage.setItem('calciotto-design-v2', '1');
-  });
   const { match, ...rest } = options;
   return gotoApp(page, path, {
     features: ['design-v2'],

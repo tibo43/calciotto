@@ -23,9 +23,9 @@ if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
 
 const app = createApp(App);
 app.use(router);
-// Mount only once the initial route has matched. App.vue applies the cached
-// design-v2 class in created(), and the router's start location has no name,
-// so mounting earlier would skip that cache and flash today's design.
+// Mount only once the initial route has matched. App.vue decides in created()
+// whether this is a public page or a signed-in one, and the router's start
+// location has no name, so mounting earlier would decide on the wrong route.
 router.isReady().then(() => {
   app.mount('#app');
 });

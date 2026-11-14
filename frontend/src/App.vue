@@ -226,15 +226,14 @@
 
 <script>
 import { computed } from 'vue';
-import { clearToken, getMyFeatures } from '@/services/api';
+import { clearToken } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta } from '@/services/theme';
 import { disablePushOnLogout } from '@/services/pushNotifications';
 import {
-  readDesignV2Cached,
-  writeDesignV2Cached,
-  clearDesignV2Cached,
-  hasDesignV2,
+  loadDesignV2,
+  knownDesignV2,
+  resetDesignV2,
   ensureDesignV2Fonts,
   removeDesignV2Fonts
 } from '@/services/designV2';
@@ -254,15 +253,10 @@ export default {
     return {
       isScrolled: false,
       isDarkMode: false,
-      // Set in created(), which runs before the first render — data() itself
-      // is too early for $route (it's a computed) and for methods.
+      // Only ever from the server's features response for this session;
+      // never true on a public page. Today's design renders until then.
       designV2: false,
-      // Set once a features response has landed this session. Later route
-      // changes reuse it; a failure leaves it false so the next navigation
-      // retries. Logout bumps the request id and resets this.
       v2Context: { label: '', confirming: false, pickingCsc: false, hide: false, pageTitle: '', backTo: '', groups: [], seasons: [], groupId: '', season: '', onGroup: null, onSeason: null },
-      designV2Loaded: false,
-      designV2InFlight: false,
       designV2Request: 0
     };
   },
@@ -290,11 +284,10 @@ export default {
     }
   },
   created() {
-    // Before the first render, so a page that already knows it is on the
-    // redesign doesn't paint the current design for a frame. Auth pages
-    // take the class too when the cache is set: they have no session to
-    // ask, and the mockups style them in v2 for someone who already has it.
-    this.applyCachedDesignV2();
+    // Before the first render: a signed-in page whose answer is already
+    // known (a router guard may have fetched it) paints in the right design
+    // straight away; otherwise today's design paints until the answer lands.
+    this.syncDesignV2();
   },
   mounted() {
     // Check for saved theme preference
@@ -307,7 +300,6 @@ export default {
 
     // Add scroll listener
     window.addEventListener('scroll', this.handleScroll);
-    this.syncDesignV2();
   },
   beforeUnmount() {
     window.removeEventListener('scroll', this.handleScroll);
@@ -335,75 +327,46 @@ export default {
       // as one would flash the redesign onto login.
       return Boolean(name) && !PUBLIC_ROUTE_NAMES.includes(name);
     },
-    // The cache is enough on its own: an authenticated page confirms it
-    // with the API, and an auth page (no token to ask with) keeps whatever
-    // this browser last learned. No cache means the current design.
-    applyCachedDesignV2() {
-      if (readDesignV2Cached()) {
-        this.designV2 = true;
+    applyDesignV2(enabled) {
+      this.designV2 = enabled;
+      if (enabled) {
         ensureDesignV2Fonts();
+      } else {
+        removeDesignV2Fonts();
       }
     },
-    // Cached class first (synchronous), then one features fetch per session
-    // to confirm it. Auth pages never fetch — there is no session.
+    // Public pages never take the class and never ask. A signed-in page
+    // uses the session's known answer if there is one, and otherwise asks
+    // the server once (shared with the router guards), staying on today's
+    // design until it answers. A failure stays on today's design and a
+    // later navigation asks again.
     syncDesignV2() {
       if (!this.isAuthenticatedRoute) {
-        this.designV2 = readDesignV2Cached();
-        if (this.designV2) {
-          ensureDesignV2Fonts();
-        }
+        this.applyDesignV2(false);
         return;
       }
-      this.applyCachedDesignV2();
-      if (this.designV2Loaded || this.designV2InFlight) {
+      const known = knownDesignV2();
+      if (known !== null) {
+        this.applyDesignV2(known);
         return;
       }
       this.fetchDesignV2();
     },
     async fetchDesignV2() {
       const requestId = ++this.designV2Request;
-      this.designV2InFlight = true;
-      try {
-        const features = await getMyFeatures();
-        // Logout (or a newer fetch) happened while this was in flight.
-        // Drop the response: it must not repaint the class or rewrite the
-        // cache that logout just cleared.
-        if (requestId !== this.designV2Request) {
-          return;
-        }
-        const enabled = hasDesignV2(features);
-        writeDesignV2Cached(enabled);
-        this.designV2Loaded = true;
-        if (!this.isAuthenticatedRoute) {
-          return;
-        }
-        this.designV2 = enabled;
-        if (enabled) {
-          ensureDesignV2Fonts();
-        } else {
-          removeDesignV2Fonts();
-        }
-      } catch (error) {
-        if (requestId !== this.designV2Request) {
-          return;
-        }
-        // Keep whatever the cache already painted. A blip must not turn the
-        // redesign off for someone who has it, and must not turn it on for
-        // someone who doesn't. The next authenticated navigation retries.
-        console.error('Error fetching features:', error);
-      } finally {
-        if (requestId === this.designV2Request) {
-          this.designV2InFlight = false;
-        }
+      const enabled = await loadDesignV2();
+      // Logout (or a newer request) happened while this was in flight.
+      if (requestId !== this.designV2Request) {
+        return;
       }
+      this.applyDesignV2(this.isAuthenticatedRoute && enabled);
     },
     async logout() {
       // Invalidate an in-flight features response before anything awaits, so
-      // it can't write the cache back after this clears it.
+      // it can't repaint this session's answer after logout.
       this.designV2Request += 1;
-      this.designV2 = false;
-      this.designV2Loaded = false;
-      this.designV2InFlight = false;
+      resetDesignV2();
+      this.applyDesignV2(false);
       // Before the token goes: the next account on this device must not get
       // this one's notifications, and the backend needs the token to forget
       // the device.
@@ -417,8 +380,6 @@ export default {
       // seeing the previous user's group memberships/roles. Without this, the
       // in-memory promise cache would survive the logout and return stale data.
       clearMyGroupsCache();
-      clearDesignV2Cached();
-      removeDesignV2Fonts();
       this.$router.push('/login');
     }
   }

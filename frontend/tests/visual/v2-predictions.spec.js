@@ -13,9 +13,6 @@ const V2 = {
 };
 
 async function openPredictions(page, path, options = {}) {
-  await page.addInitScript(() => {
-    localStorage.setItem('calciotto-design-v2', '1');
-  });
   return gotoApp(page, path, { ...V2, ...options });
 }
 

@@ -1,18 +1,13 @@
+import { getMyFeatures, getToken } from './api';
+
 // The redesign ships behind the same hidden-feature list as the install card
 // and push notifications (GET /players/me/features). The key matches
-// models.FeatureDesignV2. App.vue is the only reader: it paints a
-// `design-v2` class on the app root, and every v2 rule hangs off that class
-// so a player without the feature — and every screen not restyled yet —
-// keeps today's CSS.
+// models.FeatureDesignV2. App.vue paints a `design-v2` class on the app
+// root from it (the router's v2-only routes ask too), and every v2 rule
+// hangs off that class so a player without the feature — and every screen
+// not restyled yet — keeps today's CSS.
 
 export const DESIGN_V2_FEATURE = 'design-v2';
-
-// Per-browser memory of the last answer, so the class can be on for the
-// first paint instead of flashing the current design while the features
-// request is in flight. Not authoritative: the response overwrites it, and
-// logout / a 401 / account deletion clear it. A viewer convenience only.
-const STORAGE_KEY = 'calciotto-design-v2';
-const STORAGE_ON = '1';
 
 // Display, labels, body. The files live under public/fonts/v2 and are
 // injected only once the feature is actually on (see ensureDesignV2Fonts),
@@ -27,31 +22,51 @@ export const DESIGN_V2_FONT_CSS = `
 @font-face{font-family:"Space Mono";font-style:normal;font-weight:700;font-display:swap;src:url("/fonts/v2/SpaceMono-normal-700-latin.woff2") format("woff2");}
 `;
 
-export function readDesignV2Cached() {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === STORAGE_ON;
-  } catch {
-    // Storage can throw (blocked, or a privacy mode that disables it).
-    // Missing cache means "don't guess" — the class waits for the API.
-    return false;
+// The answer to GET /players/me/features for the current session, kept in
+// memory only: nothing about the redesign is written to the browser. The
+// entry is keyed by the token it was fetched with, so a different session
+// (logout, then another account; a 401 that ended this one) never reads
+// the previous one's answer, even if nothing cleared it explicitly.
+let session = { token: null, promise: null, enabled: null };
+
+// The flag for this session, from the server. Resolves false with no token
+// and on a failed request (today's design, never a hang); a failure also
+// forgets the entry so the next call asks again. Concurrent callers (the
+// router guards and App.vue) share one request.
+export function loadDesignV2() {
+  const token = getToken();
+  if (!token) {
+    return Promise.resolve(false);
   }
+  if (session.token === token && session.promise) {
+    return session.promise;
+  }
+  const entry = { token, promise: null, enabled: null };
+  entry.promise = getMyFeatures()
+    .then((features) => {
+      entry.enabled = hasDesignV2(features);
+      return entry.enabled;
+    })
+    .catch((error) => {
+      console.error('Error fetching features:', error);
+      if (session === entry) {
+        session = { token: null, promise: null, enabled: null };
+      }
+      return false;
+    });
+  session = entry;
+  return entry.promise;
 }
 
-export function writeDesignV2Cached(enabled) {
-  try {
-    if (enabled) {
-      localStorage.setItem(STORAGE_KEY, STORAGE_ON);
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  } catch {
-    // Same failure mode as the read. This view still follows the API;
-    // the next load just can't skip the flash.
-  }
+// The answer already known for this session, synchronously: true or false
+// once the response has landed, null while it hasn't (or for another token).
+export function knownDesignV2() {
+  const token = getToken();
+  return token && session.token === token ? session.enabled : null;
 }
 
-export function clearDesignV2Cached() {
-  writeDesignV2Cached(false);
+export function resetDesignV2() {
+  session = { token: null, promise: null, enabled: null };
 }
 
 export function hasDesignV2(features) {

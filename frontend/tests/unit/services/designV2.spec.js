@@ -1,71 +1,87 @@
 import {
   DESIGN_V2_FEATURE,
   DESIGN_V2_FONT_CSS,
-  readDesignV2Cached,
-  writeDesignV2Cached,
-  clearDesignV2Cached,
+  loadDesignV2,
+  knownDesignV2,
+  resetDesignV2,
   hasDesignV2,
   ensureDesignV2Fonts,
   removeDesignV2Fonts
 } from '@/services/designV2';
+import { getMyFeatures, getToken } from '@/services/api';
 
-const STORAGE_KEY = 'calciotto-design-v2';
+jest.mock('@/services/api', () => ({
+  getMyFeatures: jest.fn(),
+  getToken: jest.fn()
+}));
 
-describe('designV2 cache', () => {
+describe('designV2 session flag', () => {
   beforeEach(() => {
+    resetDesignV2();
     localStorage.clear();
+    getMyFeatures.mockReset();
+    getToken.mockReset();
+    getToken.mockReturnValue('token-a');
+    jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  it('reads false when nothing is stored', () => {
-    expect(readDesignV2Cached()).toBe(false);
-  });
-
-  it('round-trips an enabled flag through localStorage', () => {
-    writeDesignV2Cached(true);
-    expect(localStorage.getItem(STORAGE_KEY)).toBe('1');
-    expect(readDesignV2Cached()).toBe(true);
-  });
-
-  it('clears the flag when the feature is off, rather than storing a false value', () => {
-    writeDesignV2Cached(true);
-    writeDesignV2Cached(false);
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-    expect(readDesignV2Cached()).toBe(false);
-  });
-
-  it('clearDesignV2Cached removes a stored flag', () => {
-    writeDesignV2Cached(true);
-    clearDesignV2Cached();
-    expect(readDesignV2Cached()).toBe(false);
-  });
-
-  it('treats any value other than the on-flag as off', () => {
-    localStorage.setItem(STORAGE_KEY, 'true');
-    expect(readDesignV2Cached()).toBe(false);
-  });
-
-  it('returns false when reading storage throws', () => {
-    jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('SecurityError');
-    });
-    expect(readDesignV2Cached()).toBe(false);
+  afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  it('swallows a storage failure when writing', () => {
-    jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('QuotaExceededError');
-    });
-    expect(() => writeDesignV2Cached(true)).not.toThrow();
-    jest.restoreAllMocks();
+  it('resolves false without asking when there is no token', async () => {
+    getToken.mockReturnValue(null);
+    await expect(loadDesignV2()).resolves.toBe(false);
+    expect(getMyFeatures).not.toHaveBeenCalled();
+    expect(knownDesignV2()).toBeNull();
   });
 
-  it('swallows a storage failure when clearing', () => {
-    jest.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
-      throw new Error('SecurityError');
-    });
-    expect(() => clearDesignV2Cached()).not.toThrow();
-    jest.restoreAllMocks();
+  it('takes the flag from the features response', async () => {
+    getMyFeatures.mockResolvedValue(['pwa-install', 'design-v2']);
+    expect(knownDesignV2()).toBeNull();
+    await expect(loadDesignV2()).resolves.toBe(true);
+    expect(knownDesignV2()).toBe(true);
+  });
+
+  it('shares one request between concurrent callers and reuses it for the session', async () => {
+    getMyFeatures.mockResolvedValue([]);
+    const [a, b] = await Promise.all([loadDesignV2(), loadDesignV2()]);
+    await loadDesignV2();
+    expect(a).toBe(false);
+    expect(b).toBe(false);
+    expect(getMyFeatures).toHaveBeenCalledTimes(1);
+    expect(knownDesignV2()).toBe(false);
+  });
+
+  it('asks again for another token', async () => {
+    getMyFeatures.mockResolvedValueOnce(['design-v2']).mockResolvedValueOnce([]);
+    await expect(loadDesignV2()).resolves.toBe(true);
+    getToken.mockReturnValue('token-b');
+    expect(knownDesignV2()).toBeNull();
+    await expect(loadDesignV2()).resolves.toBe(false);
+    expect(getMyFeatures).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back to false on a failed request and asks again next time', async () => {
+    getMyFeatures.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(['design-v2']);
+    await expect(loadDesignV2()).resolves.toBe(false);
+    expect(knownDesignV2()).toBeNull();
+    expect(console.error).toHaveBeenCalled();
+    await expect(loadDesignV2()).resolves.toBe(true);
+    expect(getMyFeatures).toHaveBeenCalledTimes(2);
+  });
+
+  it('forgets the answer on reset', async () => {
+    getMyFeatures.mockResolvedValue(['design-v2']);
+    await loadDesignV2();
+    resetDesignV2();
+    expect(knownDesignV2()).toBeNull();
+  });
+
+  it('never writes anything to localStorage', async () => {
+    getMyFeatures.mockResolvedValue(['design-v2']);
+    await loadDesignV2();
+    expect(localStorage.length).toBe(0);
   });
 });
 

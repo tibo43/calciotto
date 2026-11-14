@@ -1,5 +1,5 @@
 // Rankings with the design-v2 feature on. /classements still redirects home
-// when the cache is unset, which is what a v1 player hits.
+// when the features response doesn't include it, which is what a v1 player hits.
 
 const { test, expect } = require('@playwright/test');
 const { gotoApp, expectEverythingStubbed, expectNoHorizontalOverflow } = require('./fixtures/app');
@@ -7,9 +7,6 @@ const { gotoApp, expectEverythingStubbed, expectNoHorizontalOverflow } = require
 const V2 = { features: ['design-v2'] };
 
 async function openRankings(page, path, options = {}) {
-  await page.addInitScript(() => {
-    localStorage.setItem('calciotto-design-v2', '1');
-  });
   return gotoApp(page, path, { ...V2, ...options });
 }
 

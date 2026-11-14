@@ -16,9 +16,6 @@ const V2 = { features: ['design-v2'], playerStats: stats };
 const GROUP = `/profile/groups/${data.GROUP_ID}`;
 
 async function openProfile(page, path, options = {}) {
-  await page.addInitScript(() => {
-    localStorage.setItem('calciotto-design-v2', '1');
-  });
   return gotoApp(page, path, { ...V2, ...options });
 }
 
