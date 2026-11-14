@@ -350,3 +350,31 @@ describe('the push notification calls', () => {
     await expect(api.updateNotificationPreferences({})).resolves.toEqual({});
   });
 });
+
+describe('a session that ends with a 401', () => {
+  // The response interceptor api.js registered at import time.
+  const onError = () => mockInstance.interceptors.response.use.mock.calls[0][1];
+
+  beforeEach(() => {
+    jest.resetModules();
+    window.localStorage.clear();
+    // Already on /login, so the interceptor doesn't navigate (jsdom can't).
+    window.history.pushState({}, '', '/login');
+  });
+
+  it('drops this browser\'s push subscription when a session was open', async () => {
+    const forget = jest.fn(() => Promise.resolve());
+    jest.doMock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forget }));
+    api.setToken('old-token');
+    await expect(onError()({ response: { status: 401 } })).rejects.toBeTruthy();
+    expect(forget).toHaveBeenCalledTimes(1);
+    expect(api.getToken()).toBeFalsy();
+  });
+
+  it('leaves it alone on a 401 with no session (a wrong password at login)', async () => {
+    const forget = jest.fn(() => Promise.resolve());
+    jest.doMock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forget }));
+    await expect(onError()({ response: { status: 401 } })).rejects.toBeTruthy();
+    expect(forget).not.toHaveBeenCalled();
+  });
+});

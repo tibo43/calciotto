@@ -125,23 +125,44 @@ test.describe('profile install card', () => {
 // blocked), so the page is handed a device that supports push and isn't
 // subscribed yet: the "off" state with its switch, the one a player sees
 // first.
-test.describe('profile notifications card', () => {
-  test('off, on a device that supports push @mobile', async ({ page }) => {
-    await page.addInitScript(() => {
-      window.PushManager = function PushManager() {};
-      window.Notification = { permission: 'default', requestPermission: () => Promise.resolve('default') };
-      Object.defineProperty(navigator, 'serviceWorker', {
-        configurable: true,
-        value: {
-          register: () => Promise.resolve(),
-          getRegistration: () => Promise.resolve({ pushManager: { getSubscription: () => Promise.resolve(null) } }),
-        },
-      });
+// A device that supports push (the test browser has none of its own, and
+// service workers are blocked), optionally running as the installed app,
+// which is the only place notifications can be turned on.
+function fakePushDevice(page, { installed }) {
+  return page.addInitScript((standalone) => {
+    window.PushManager = function PushManager() {};
+    window.Notification = { permission: 'default', requestPermission: () => Promise.resolve('default') };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: {
+        register: () => Promise.resolve(),
+        getRegistration: () => Promise.resolve({ pushManager: { getSubscription: () => Promise.resolve(null) } }),
+      },
     });
+    const realMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query) => (query.includes('display-mode: standalone')
+      ? { matches: standalone, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} }
+      : realMatchMedia(query));
+  }, installed);
+}
+
+test.describe('profile notifications card', () => {
+  test('off, in the installed app @mobile', async ({ page }) => {
+    await fakePushDevice(page, { installed: true });
     const { unstubbed } = await gotoApp(page, '/profile', { features: ['push-notifications'] });
     await expect(page.locator('.notifications-card [role="switch"]')).toBeVisible();
     await expect(page.locator('.notifications-card')).toHaveScreenshot('notifications-card-off-mobile.png');
     await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  // In a browser tab, even one that supports push: install first.
+  test('in a browser tab @mobile', async ({ page }) => {
+    await fakePushDevice(page, { installed: false });
+    const { unstubbed } = await gotoApp(page, '/profile', { features: ['push-notifications'] });
+    await expect(page.locator('.notifications-card')).toContainText('Install the app');
+    await expect(page.locator('.notifications-card [role="switch"]')).toHaveCount(0);
+    await expect(page.locator('.notifications-card')).toHaveScreenshot('notifications-card-tab-mobile.png');
     expectEverythingStubbed(unstubbed);
   });
 });

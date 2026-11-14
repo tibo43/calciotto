@@ -23,7 +23,8 @@ jest.mock('@/services/theme', () => ({
 }));
 
 jest.mock('@/services/pushNotifications', () => ({
-  disablePushOnLogout: jest.fn(() => Promise.resolve())
+  disablePushOnLogout: jest.fn(() => Promise.resolve()),
+  stopPushIfAppUninstalled: jest.fn(() => Promise.resolve(false))
 }));
 
 const mountAt = async (path) => {
