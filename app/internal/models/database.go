@@ -22,6 +22,10 @@ func (bm *BaseModel) BeforeCreate(tx *gorm.DB) error {
 // joueur n'a pas "réclamé" son compte via AuthService.Signup — un Player
 // peut donc exister sans jamais être associé à des identifiants de connexion.
 //
+// Email is account data and never goes out in JSON: a response that needs to
+// know whether a player has an account says so with its own field (see
+// PlayerWithRole.HasAccount) rather than carrying the address itself.
+//
 // TokenVersion is the whole JWT revocation mechanism: AuthService.GenerateToken
 // stamps a freshly-issued token with the player's current value, and ParseToken
 // rejects any token whose stamped value no longer matches the row's — see
@@ -34,7 +38,7 @@ func (bm *BaseModel) BeforeCreate(tx *gorm.DB) error {
 type Player struct {
 	BaseModel
 	Name             string        `gorm:"type:string" json:"name"`
-	Email            *string       `gorm:"type:string;uniqueIndex" json:"email,omitempty"`
+	Email            *string       `gorm:"type:string;uniqueIndex" json:"-"`
 	PasswordHash     string        `gorm:"type:string" json:"-"`
 	TokenVersion     int           `gorm:"not null;default:0" json:"-"`
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:PlayerID"`

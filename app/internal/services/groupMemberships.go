@@ -106,7 +106,7 @@ func (s *GroupMembershipService) GetPlayersByGroupID(groupID uuid.UUID) ([]model
 func (s *GroupMembershipService) GetPlayersWithRoleByGroupID(groupID uuid.UUID) ([]models.PlayerWithRole, error) {
 	var players []models.PlayerWithRole
 	result := s.DB.Model(&models.Player{}).
-		Select("players.*, group_memberships.role AS role").
+		Select("players.*, group_memberships.role AS role, (players.email IS NOT NULL AND players.email <> '') AS has_account").
 		Joins("JOIN group_memberships ON group_memberships.player_id = players.id").
 		Where("group_memberships.group_id = ?", groupID).
 		Order("group_memberships.created_at ASC").

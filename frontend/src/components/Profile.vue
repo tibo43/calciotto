@@ -168,7 +168,7 @@
                                an admin's name is coloured — one less thing
                                competing for space in the row. -->
                           <span class="member-name"
-                            :class="{ 'member-name-ghost': !member.email, 'member-name-admin': member.role === 'admin' }">
+                            :class="{ 'member-name-ghost': !member.has_account, 'member-name-admin': member.role === 'admin' }">
                             {{ member.name }}
                           </span>
                         </div>
@@ -188,7 +188,7 @@
                                  way, only its head flips — up promotes, down
                                  demotes — so it's one <svg> with a bound
                                  polyline rather than two v-if'd icons. -->
-                            <button v-if="member.email" class="member-action-btn"
+                            <button v-if="member.has_account" class="member-action-btn"
                               :disabled="memberActionLoading[member.id]" @click="toggleMemberRole(member)"
                               :title="member.role === 'admin' ? 'Demote to member' : 'Promote to admin'"
                               :aria-label="member.role === 'admin' ? 'Demote to member' : 'Promote to admin'">

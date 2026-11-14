@@ -220,9 +220,9 @@ const playerStats = {
 };
 
 const groupMembers = [
-  { id: CURRENT_PLAYER_ID, name: 'Thibaut Fabre', email: 'thibaut@example.com', role: 'admin' },
-  { id: 'e1', name: 'Andrea Conti', email: 'andrea@example.com', role: 'member' },
-  { id: 'e2', name: 'Marco Rossi', role: 'member' },
+  { id: CURRENT_PLAYER_ID, name: 'Thibaut Fabre', has_account: true, role: 'admin' },
+  { id: 'e1', name: 'Andrea Conti', has_account: true, role: 'member' },
+  { id: 'e2', name: 'Marco Rossi', has_account: false, role: 'member' },
 ];
 
 // Same roster, with one deliberately over-long name. Used only by
@@ -233,7 +233,7 @@ const groupMembers = [
 // match-details baseline also renders through the Add Player list.
 const groupMembersLongName = [
   groupMembers[0],
-  { id: 'e3', name: 'Alessandro Bartolomeo Della Fontana', email: 'ale@example.com', role: 'member' },
+  { id: 'e3', name: 'Alessandro Bartolomeo Della Fontana', has_account: true, role: 'member' },
   ...groupMembers.slice(1),
 ];
 
