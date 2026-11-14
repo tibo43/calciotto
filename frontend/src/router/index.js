@@ -70,7 +70,18 @@ const routes = [
   {
     path: '/classements',
     name: 'Classements',
-    redirect: '/',
+    component: () => import('@/components/v2/RankingsGate.vue'),
+    // The Rankings link only exists in the v2 shell. Without the cached flag
+    // this URL keeps today's behaviour: home. The cache is what the shell
+    // itself was painted from, so a v2 player following the link is let in.
+    beforeEnter() {
+      try {
+        if (localStorage.getItem('calciotto-design-v2') === '1') return true;
+      } catch {
+        // Storage blocked: there is no remembered flag, so stay on v1.
+      }
+      return { path: '/' };
+    },
   },
   {
     path: '/matches/:id',
