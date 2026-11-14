@@ -1,11 +1,10 @@
-/* Design v2 tokens. Every rule in this file is scoped to `.design-v2`, the
-   class App.vue puts on #app only for a player who has the hidden feature.
-   Nothing here restyles a screen yet: the custom properties are unused until
-   a surface is redesigned, so Profile, Predictions, and the current Matches
-   tab render exactly as they do today whether or not the class is present.
-   Do not repoint the global --primary-color / --bg-primary / … variables.
-   `.dark-mode` on the same element (the existing theme toggle) picks the
-   dark palette; without it, v2 is the light inversion. */
+/* Design v2 tokens, scoped to the .design-v2 class App.vue puts on #app.
+   Nothing in this file sets a property on an element yet: the custom
+   properties are unused until a surface is restyled, so a player with the
+   feature still sees today's screens. Do not repoint the global
+   --primary-color / --bg-primary / … variables.
+   .dark-mode on the same element selects the dark palette. Without it,
+   v2 is the light inversion. Accent and on-accent do not change. */
 
 .design-v2 {
   --v2-font-display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
@@ -13,17 +12,32 @@
   --v2-font-body: "DM Sans", sans-serif;
 
   --v2-accent: #e8743b;
+  --v2-on-accent: #141a33;
   --v2-bg: #eef0f7;
+  --v2-surface: #ffffff;
   --v2-text: #141a33;
   --v2-text-muted: #5c6578;
   --v2-rule: rgba(20, 26, 51, 0.14);
   --v2-outline: #5c6578;
+  --v2-danger: #a8362c;
+  --v2-success: #2f6b4f;
+  --v2-wait: #8a5a12;
+  --v2-on-wait: #eef0f7;
+  --v2-skel: rgba(20, 26, 51, 0.08);
+  --v2-topbar-h: 64px;
+  --v2-tabbar-h: 64px;
 }
 
 .design-v2.dark-mode {
   --v2-bg: #141a33;
+  --v2-surface: #1c2440;
   --v2-text: #eef0f7;
   --v2-text-muted: #8b93ad;
   --v2-rule: rgba(238, 240, 247, 0.12);
   --v2-outline: #9aa3bc;
+  --v2-danger: #ff8a80;
+  --v2-success: #7dcea0;
+  --v2-wait: #e8c37a;
+  --v2-on-wait: #141a33;
+  --v2-skel: rgba(238, 240, 247, 0.08);
 }

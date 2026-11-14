@@ -14,14 +14,18 @@ export const DESIGN_V2_FEATURE = 'design-v2';
 const STORAGE_KEY = 'calciotto-design-v2';
 const STORAGE_ON = '1';
 
-// Display, labels, body. Loaded only once the feature is actually on (see
-// ensureDesignV2Fonts); the families are referenced from design-v2.css and
-// nowhere else. Big Shoulders Display is the condensed sports gothic the
-// mock-up's titles and scores sit closest to; Space Mono is the tracked
-// label; DM Sans is the quiet geometric face for names and buttons.
-export const DESIGN_V2_FONTS_HREF = 'https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=DM+Sans:wght@400;500;600&family=Space+Mono&display=swap';
+// Display, labels, body. The files live under public/fonts/v2 and are
+// injected only once the feature is actually on (see ensureDesignV2Fonts),
+// so a player without it never downloads them. Big Shoulders Display is the
+// condensed display face, Space Mono the tracked label, DM Sans the body.
+const FONT_STYLE_ID = 'design-v2-fonts';
 
-const FONT_LINK_ID = 'design-v2-fonts';
+export const DESIGN_V2_FONT_CSS = `
+@font-face{font-family:"Big Shoulders Display";font-style:normal;font-weight:100 900;font-display:swap;src:url("/fonts/v2/BigShouldersDisplay-normal-800-latin.woff2") format("woff2");}
+@font-face{font-family:"DM Sans";font-style:normal;font-weight:100 900;font-display:swap;src:url("/fonts/v2/DMSans-normal-400-latin.woff2") format("woff2");}
+@font-face{font-family:"Space Mono";font-style:normal;font-weight:400;font-display:swap;src:url("/fonts/v2/SpaceMono-normal-400-latin.woff2") format("woff2");}
+@font-face{font-family:"Space Mono";font-style:normal;font-weight:700;font-display:swap;src:url("/fonts/v2/SpaceMono-normal-700-latin.woff2") format("woff2");}
+`;
 
 export function readDesignV2Cached() {
   try {
@@ -54,29 +58,28 @@ export function hasDesignV2(features) {
   return Array.isArray(features) && features.includes(DESIGN_V2_FEATURE);
 }
 
-// Inject the stylesheet the first time this viewer actually has the feature.
-// Players without it never request the font files. A second call is a no-op,
-// so a route change doesn't add another link.
+// Inject the @font-face rules the first time this viewer actually has the
+// feature. Players without it never request the font files. A second call
+// is a no-op, so a route change doesn't add another style tag.
 export function ensureDesignV2Fonts() {
   if (typeof document === 'undefined' || !document.head) {
     return;
   }
-  if (document.getElementById(FONT_LINK_ID)) {
+  if (document.getElementById(FONT_STYLE_ID)) {
     return;
   }
-  const link = document.createElement('link');
-  link.id = FONT_LINK_ID;
-  link.rel = 'stylesheet';
-  link.href = DESIGN_V2_FONTS_HREF;
-  document.head.appendChild(link);
+  const style = document.createElement('style');
+  style.id = FONT_STYLE_ID;
+  style.textContent = DESIGN_V2_FONT_CSS;
+  document.head.appendChild(style);
 }
 
 export function removeDesignV2Fonts() {
   if (typeof document === 'undefined') {
     return;
   }
-  const link = document.getElementById(FONT_LINK_ID);
-  if (link) {
-    link.remove();
+  const style = document.getElementById(FONT_STYLE_ID);
+  if (style) {
+    style.remove();
   }
 }

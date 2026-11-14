@@ -90,7 +90,7 @@ describe('App.vue design-v2', () => {
 
     expect(wrapper.classes()).toContain('design-v2');
     expect(localStorage.getItem(STORAGE_KEY)).toBe('1');
-    expect(document.getElementById('design-v2-fonts').href).toContain('fonts.googleapis.com');
+    expect(document.getElementById('design-v2-fonts').textContent).toContain('Big Shoulders Display');
   });
 
   it('leaves the class off, and does not request the fonts, when the feature is absent', async () => {
@@ -116,22 +116,21 @@ describe('App.vue design-v2', () => {
     expect(console.error).toHaveBeenCalled();
   });
 
-  it('does not apply the class or fetch features on a public route, even with a cached flag', async () => {
+  it('applies the cached class on a public route without fetching features', async () => {
     localStorage.setItem(STORAGE_KEY, '1');
 
     const { wrapper } = await mountAt('/login');
     await flushPromises();
 
-    expect(wrapper.classes()).not.toContain('design-v2');
+    expect(wrapper.classes()).toContain('design-v2');
     expect(getMyFeatures).not.toHaveBeenCalled();
     expect(localStorage.getItem(STORAGE_KEY)).toBe('1');
-    expect(document.getElementById('design-v2-fonts')).toBeNull();
+    expect(document.getElementById('design-v2-fonts')).not.toBeNull();
   });
 
   it.each(['/signup', '/forgot-password', '/reset-password'])(
-    'keeps %s on the current design',
+    'keeps %s on the current design when nothing is cached',
     async (path) => {
-      localStorage.setItem(STORAGE_KEY, '1');
       const { wrapper } = await mountAt(path);
       await flushPromises();
       expect(wrapper.classes()).not.toContain('design-v2');
@@ -139,7 +138,7 @@ describe('App.vue design-v2', () => {
     }
   );
 
-  it('drops the class on a public route without forgetting the cache or refetching', async () => {
+  it('keeps the class on a public route when the cache is set, without refetching', async () => {
     getMyFeatures.mockResolvedValue(['design-v2']);
     const { wrapper, router } = await mountAt('/');
     await flushPromises();
@@ -148,7 +147,7 @@ describe('App.vue design-v2', () => {
     await router.push('/login');
     await flushPromises();
 
-    expect(wrapper.classes()).not.toContain('design-v2');
+    expect(wrapper.classes()).toContain('design-v2');
     expect(localStorage.getItem(STORAGE_KEY)).toBe('1');
     expect(getMyFeatures).toHaveBeenCalledTimes(1);
 

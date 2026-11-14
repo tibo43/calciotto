@@ -1,6 +1,6 @@
 import {
   DESIGN_V2_FEATURE,
-  DESIGN_V2_FONTS_HREF,
+  DESIGN_V2_FONT_CSS,
   readDesignV2Cached,
   writeDesignV2Cached,
   clearDesignV2Cached,
@@ -90,20 +90,20 @@ describe('design v2 font stylesheet', () => {
     removeDesignV2Fonts();
   });
 
-  it('points at Google Fonts and the three chosen families', () => {
-    expect(DESIGN_V2_FONTS_HREF).toContain('https://fonts.googleapis.com/css2');
-    expect(DESIGN_V2_FONTS_HREF).toContain('Big+Shoulders+Display');
-    expect(DESIGN_V2_FONTS_HREF).toContain('Space+Mono');
-    expect(DESIGN_V2_FONTS_HREF).toContain('DM+Sans');
+  it('self-hosts the three chosen families and does not call Google Fonts', () => {
+    expect(DESIGN_V2_FONT_CSS).toContain('Big Shoulders Display');
+    expect(DESIGN_V2_FONT_CSS).toContain('Space Mono');
+    expect(DESIGN_V2_FONT_CSS).toContain('DM Sans');
+    expect(DESIGN_V2_FONT_CSS).toContain('/fonts/v2/');
+    expect(DESIGN_V2_FONT_CSS).not.toContain('fonts.googleapis.com');
   });
 
-  it('injects the stylesheet once', () => {
+  it('injects the font faces once', () => {
     ensureDesignV2Fonts();
     ensureDesignV2Fonts();
-    const links = document.querySelectorAll('#design-v2-fonts');
-    expect(links).toHaveLength(1);
-    expect(links[0].rel).toBe('stylesheet');
-    expect(links[0].href).toBe(DESIGN_V2_FONTS_HREF);
+    const styles = document.querySelectorAll('#design-v2-fonts');
+    expect(styles).toHaveLength(1);
+    expect(styles[0].textContent).toBe(DESIGN_V2_FONT_CSS);
   });
 
   it('removes the stylesheet', () => {

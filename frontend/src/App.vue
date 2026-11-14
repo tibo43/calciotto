@@ -226,9 +226,10 @@ export default {
     }
   },
   created() {
-    // Before the first render, so an authenticated page that already knows
-    // it is on the redesign doesn't paint the current design for a frame.
-    // Public routes stay off here too: created() sees the real route.
+    // Before the first render, so a page that already knows it is on the
+    // redesign doesn't paint the current design for a frame. Auth pages
+    // take the class too when the cache is set: they have no session to
+    // ask, and the mockups style them in v2 for someone who already has it.
     this.applyCachedDesignV2();
   },
   mounted() {
@@ -264,20 +265,23 @@ export default {
       // as one would flash the redesign onto login.
       return Boolean(name) && !PUBLIC_ROUTE_NAMES.includes(name);
     },
-    // Public routes never take the class, even when this browser last saw
-    // the redesign on — login/signup/forgot/reset stay on the current design.
-    // The cache is left in place so coming back doesn't flash.
+    // The cache is enough on its own: an authenticated page confirms it
+    // with the API, and an auth page (no token to ask with) keeps whatever
+    // this browser last learned. No cache means the current design.
     applyCachedDesignV2() {
-      if (this.isAuthenticatedRoute && readDesignV2Cached()) {
+      if (readDesignV2Cached()) {
         this.designV2 = true;
         ensureDesignV2Fonts();
       }
     },
     // Cached class first (synchronous), then one features fetch per session
-    // to confirm it.
+    // to confirm it. Auth pages never fetch — there is no session.
     syncDesignV2() {
       if (!this.isAuthenticatedRoute) {
-        this.designV2 = false;
+        this.designV2 = readDesignV2Cached();
+        if (this.designV2) {
+          ensureDesignV2Fonts();
+        }
         return;
       }
       this.applyCachedDesignV2();

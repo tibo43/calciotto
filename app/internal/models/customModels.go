@@ -336,6 +336,11 @@ type PlayerGroupStanding struct {
 	GroupID    uuid.UUID `json:"GroupID"`
 	GroupName  string    `json:"GroupName"`
 	MotmAwards int       `json:"MotmAwards"`
+	// PredictionPoints is this player's settled prediction return inside
+	// this one group (odds − 1 on a hit, −1 on a miss). It is computed per
+	// group because the odds come from that group's own Elo, and it stays
+	// 0 when the player has no settled prediction there.
+	PredictionPoints float64 `json:"PredictionPoints"`
 }
 
 // PlayerOverallStanding is the profile's Overall row: the same shape as
@@ -345,6 +350,10 @@ type PlayerGroupStanding struct {
 type PlayerOverallStanding struct {
 	PointsStandingRow
 	MotmAwards int `json:"MotmAwards"`
+	// PredictionPoints is the sum of the per-group totals, not a second
+	// settlement over every group mixed together: odds are a group's own
+	// Elo, so concatenating histories would price the bets wrong.
+	PredictionPoints float64 `json:"PredictionPoints"`
 }
 
 // PlayerProfileStats is one player's record across every group they belong
@@ -353,6 +362,11 @@ type PlayerOverallStanding struct {
 type PlayerProfileStats struct {
 	Overall  PlayerOverallStanding `json:"Overall"`
 	PerGroup []PlayerGroupStanding `json:"PerGroup"`
+	// Seasons is every season label across all of the player's groups,
+	// newest-or-oldest sorted ascending, independent of the ?season= filter
+	// so the profile's season select stays complete while a filter is on.
+	// An empty slice (never null) means the player has no dated match yet.
+	Seasons []string `json:"Seasons"`
 }
 
 // EloStandingRow is one player's row in a group's continuous, derive-fresh
