@@ -18,7 +18,8 @@ jest.mock('@/services/activeGroup', () => ({
 }));
 
 jest.mock('@/services/theme', () => ({
-  syncThemeColorMeta: jest.fn()
+  syncThemeColorMeta: jest.fn(),
+  prefersDarkTheme: jest.fn(() => true)
 }));
 
 jest.mock('@/services/pushNotifications', () => ({

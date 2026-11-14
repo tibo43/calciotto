@@ -228,7 +228,7 @@
 import { computed } from 'vue';
 import { clearToken } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
-import { syncThemeColorMeta } from '@/services/theme';
+import { syncThemeColorMeta, prefersDarkTheme } from '@/services/theme';
 import { disablePushOnLogout } from '@/services/pushNotifications';
 import {
   loadDesignV2,
@@ -291,12 +291,7 @@ export default {
   },
   mounted() {
     // Check for saved theme preference
-    const savedTheme = localStorage.getItem('calciotto-theme');
-    if (savedTheme) {
-      this.isDarkMode = savedTheme === 'dark';
-    } else {
-      this.isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
+    this.isDarkMode = prefersDarkTheme();
 
     // Add scroll listener
     window.addEventListener('scroll', this.handleScroll);

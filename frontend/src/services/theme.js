@@ -15,6 +15,17 @@ export function isDarkModeActive() {
   return document.querySelector('.dark-mode') !== null;
 }
 
+// The theme to start in: the saved choice (App.vue's toggle) or, without
+// one, the system's. App.vue applies it on mount; main.js also uses it for
+// the page background before mount (see there).
+export function prefersDarkTheme() {
+  const savedTheme = localStorage.getItem('calciotto-theme');
+  if (savedTheme) {
+    return savedTheme === 'dark';
+  }
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
 // The page background in each theme (global-styles.css's --bg-primary), which
 // is also what the phone's status bar should show above it.
 const THEME_COLORS = { light: '#ffffff', dark: '#0f172a' };
