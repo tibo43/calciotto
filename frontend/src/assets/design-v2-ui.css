@@ -96,4 +96,16 @@
   .design-v2 label.ctx:first-child select{width:100%;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
   .design-v2 .pcard>div:nth-child(2){min-width:0;}
   .design-v2 .pcard .nm,.design-v2 .pcard .st{overflow-wrap:anywhere;}
-}
+}/* The shared action toast (AppToast.vue) in v2: flat surface, a hairline
+   rule and a coloured edge instead of today's gradient pill; the tracked
+   mono label carries the type. Above the tab bar on a phone. */
+.design-v2 .toast-message{gap:12px;align-items:baseline;border-radius:0;box-shadow:none;backdrop-filter:none;background:var(--v2-surface);color:var(--v2-text);border:1px solid var(--v2-rule);border-left:3px solid var(--v2-accent);font-family:var(--v2-font-body);font-weight:500;font-size:15px;padding:14px 48px 14px 16px;}
+.design-v2 .toast-message.error{border-left-color:var(--v2-danger);}
+.design-v2 .toast-message::before{content:'Done';flex:none;font-family:var(--v2-font-label);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--v2-accent);}
+.design-v2 .toast-message.error::before{content:'Error';color:var(--v2-danger);}
+.design-v2 .toast-message .toast-close{color:var(--v2-text-muted);border-radius:0;}
+.design-v2 .toast-message .toast-close:hover{background:var(--v2-skel);color:var(--v2-text);}
+@media (max-width:899px){.design-v2 .toast-container.toast-bottom{left:12px;right:12px;width:auto;bottom:calc(var(--v2-tabbar-h) + 12px + env(safe-area-inset-bottom,0px));}.design-v2 .toast-message{min-width:0;max-width:none;width:100%;}}
+/* A Withdraw button wrapped with its own confirmation pop-up still takes a
+   full share of the action row, like the bare buttons beside it. */
+.design-v2 .actions > .withdraw-slot{display:flex;flex:1 1 160px;}.design-v2 .actions > .withdraw-slot > .btn{flex:1 1 auto;}

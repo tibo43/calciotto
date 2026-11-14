@@ -25,9 +25,21 @@
           <div class="cap">places<br>left<br>{{ confirmed.length }} / {{ cap }} signed up</div>
         </div>
         <div class="bar" aria-hidden="true"><i :style="{ '--pct': barPct }"></i></div>
+        <p v-if="mine" class="reg-you">You're signed up · {{ mine.IsWaiting ? 'waiting list' : 'confirmed' }}</p>
         <div class="actions">
-          <button v-if="!mine && open" class="btn" type="button" @click="signUp">Sign up</button>
-          <p v-else-if="mine" class="reg-you">You're signed up · {{ mine.IsWaiting ? 'waiting list' : 'confirmed' }}</p>
+          <button v-if="!mine && open" class="btn" type="button" :disabled="busy" @click="signUp">Sign up</button>
+          <span v-else-if="mine && open" class="withdraw-wrap withdraw-slot">
+            <button class="btn btn-ghost" type="button" :disabled="busy" @click="confirming = true">Withdraw</button>
+            <!-- Wide screens: anchored under the button, as on the home page. -->
+            <div class="confirm-pop" role="dialog" aria-labelledby="match-withdraw-pop-title">
+              <h3 id="match-withdraw-pop-title">Withdraw from this match?</h3>
+              <p class="ref">Your spot goes to the first player on the waiting list.</p>
+              <div class="confirm-actions">
+                <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">Withdraw</button>
+                <button class="btn btn-ghost" type="button" @click="confirming = false">Cancel</button>
+              </div>
+            </div>
+          </span>
           <router-link v-if="isAdmin" class="btn btn-ghost" :to="`/matches/${match.ID}/edit`">Manage match</router-link>
         </div>
       </section>
@@ -86,12 +98,28 @@
         <router-link class="btn btn-ghost" :to="`/matches/${match.ID}/edit`">Manage match</router-link>
       </div>
     </template>
+
+    <!-- Phones: the same bottom sheet as the home page, shown by the
+         shell's is-confirming class (the pop-up above is for wide screens). -->
+    <div class="confirm-scrim" @click="confirming = false"></div>
+    <div class="confirm-sheet" role="dialog" aria-labelledby="match-withdraw-title">
+      <h3 id="match-withdraw-title">Withdraw from this match?</h3>
+      <p class="ref">Your spot goes to the first player on the waiting list.</p>
+      <div class="confirm-actions">
+        <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">Withdraw</button>
+        <button class="btn btn-ghost" type="button" @click="confirming = false">Cancel</button>
+      </div>
+    </div>
+
+    <AppToast ref="toast" />
   </main>
 </template>
 
 <script>
-import { getMatchDetailsByID, getMatchRegistrations, registerForMatch, getMatchVotes, voteForMotm, getSeasons, getToken } from '@/services/api';
-import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
+import { getMatchRegistrations, registerForMatch, unregisterFromMatch, getMatchVotes, voteForMotm, removeMotmVote, getSeasons, getToken } from '@/services/api';
+import { setActiveGroupId } from '@/services/activeGroup';
+import { findMatchInMyGroups, actionErrorMessage } from '@/services/v2Match';
+import AppToast from '@/components/AppToast.vue';
 import { deriveRegistrationState, registrationsAreOpen, isPlayerOnRoster } from '@/services/matchRegistration';
 import { heroDateLabel, kickoffLabel, registrationMeta, placesLeft, isMatchOver, matchVoteCopy, motmWinners, goalLine } from '@/services/v2Home';
 import { isMotmVotingOpen } from '@/services/motmVoting';
@@ -112,6 +140,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'MatchView',
+  components: { AppToast },
   inject: {
     v2Context: { default: () => ({ label: '' }) },
   },
@@ -128,6 +157,8 @@ export default {
       playerId: '',
       nowMs: Date.now(),
       isAdmin: false,
+      busy: false,
+      confirming: false,
     };
   },
   computed: {
@@ -179,6 +210,14 @@ export default {
   },
   watch: {
     id() { this.load(); },
+    confirming(value) {
+      this.v2Context.confirming = value;
+    },
+  },
+  // The shell's confirmation overlay is driven by this flag; leaving the
+  // page with it open must not leave the overlay on the next one.
+  beforeUnmount() {
+    this.v2Context.confirming = false;
   },
   created() {
     this.playerId = currentPlayerIdFromToken();
@@ -211,18 +250,34 @@ export default {
     canVote(player) {
       return this.voteOpen && isPlayerOnRoster(this.match, this.playerId) && player.ID !== this.playerId;
     },
+    isMyVote(player) {
+      return Boolean(this.votes && this.votes.MyVoteFor === player.ID);
+    },
     voteAria(player) {
       const count = this.votesFor(player);
-      const mine = this.votes && this.votes.MyVoteFor === player.ID;
-      return mine ? `${count} votes, your vote` : `${count} votes`;
+      return this.isMyVote(player) ? `${count} votes, your vote (tap to remove it)` : `${count} votes`;
     },
+    // Tapping the player you voted for takes the vote back, as on today's
+    // Matches tab; any other player casts or moves it.
     async castVote(player) {
-      if (!this.canVote(player)) return;
+      if (!this.canVote(player) || this.busy) return;
+      this.busy = true;
+      const removing = this.isMyVote(player);
       try {
-        await voteForMotm(this.match.ID, player.ID);
-        this.votes = await getMatchVotes(this.match.ID);
+        if (removing) {
+          await removeMotmVote(this.match.ID);
+        } else {
+          await voteForMotm(this.match.ID, player.ID);
+        }
+        this.$refs.toast.show(removing
+          ? 'Your Man of the Match vote has been removed.'
+          : 'Your Man of the Match vote has been saved.', 'success');
       } catch (error) {
-        console.error(error);
+        console.error('Error updating Man of the Match vote:', error);
+        this.$refs.toast.show(actionErrorMessage(error, 'Error updating your Man of the Match vote.'), 'error');
+      } finally {
+        this.votes = await getMatchVotes(this.match.ID).catch(() => this.votes);
+        this.busy = false;
       }
     },
     async publishChrome(groups) {
@@ -248,22 +303,19 @@ export default {
       this.failed = false;
       this.nowMs = Date.now();
       try {
-        this.match = await getMatchDetailsByID(this.id);
+        // Looked up in the group it belongs to, not the caller's first one,
+        // so a player in several groups can open any of their matches.
+        const { group, details, groups } = await findMatchInMyGroups(this.id);
+        this.match = details;
         const [regs, votes] = await Promise.all([
           getMatchRegistrations(this.id).catch(() => []),
           getMatchVotes(this.id).catch(() => null),
         ]);
         this.registrations = Array.isArray(regs) ? regs : [];
         this.votes = votes;
-        try {
-          const { groups } = await resolveActiveGroup();
-          const group = groups.find((item) => item.id === this.match.GroupID);
-          this.isAdmin = Boolean(group && group.role === 'admin');
-          this.v2Context.groupId = group ? group.id : this.v2Context.groupId;
-          await this.publishChrome(groups);
-        } catch (error) {
-          this.isAdmin = false;
-        }
+        this.isAdmin = group.role === 'admin';
+        this.v2Context.groupId = group.id;
+        await this.publishChrome(groups).catch(() => {});
       } catch (error) {
         console.error(error);
         this.failed = true;
@@ -271,9 +323,47 @@ export default {
         this.loading = false;
       }
     },
+    // The registrations are re-read either way: a refusal usually means
+    // this page's view of the list was stale.
     async signUp() {
-      await registerForMatch(this.id);
-      await this.load();
+      if (this.busy) return;
+      this.busy = true;
+      try {
+        const entry = await registerForMatch(this.id);
+        if (entry && entry.IsWaiting) {
+          this.$refs.toast.show(`Signed up — you are #${entry.Position}, on the waiting list.`, 'success');
+        } else {
+          const position = entry && entry.Position ? ` You are #${entry.Position}.` : '';
+          this.$refs.toast.show(`You're in for this match.${position}`, 'success');
+        }
+      } catch (error) {
+        console.error('Error signing up for match:', error);
+        this.$refs.toast.show(actionErrorMessage(error, 'Error signing up for this match.'), 'error');
+      } finally {
+        await this.reloadRegistrations();
+        this.busy = false;
+      }
+    },
+    async withdraw() {
+      if (this.busy) return;
+      this.busy = true;
+      try {
+        await unregisterFromMatch(this.id);
+        this.$refs.toast.show('You have withdrawn from this match.', 'success');
+      } catch (error) {
+        console.error('Error withdrawing from match:', error);
+        this.$refs.toast.show(actionErrorMessage(error, 'Error withdrawing from this match.'), 'error');
+      } finally {
+        // Closed either way, so the toast saying what happened isn't hidden
+        // behind it.
+        this.confirming = false;
+        await this.reloadRegistrations();
+        this.busy = false;
+      }
+    },
+    async reloadRegistrations() {
+      const regs = await getMatchRegistrations(this.id).catch(() => null);
+      if (Array.isArray(regs)) this.registrations = regs;
     },
   },
 };

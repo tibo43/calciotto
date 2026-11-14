@@ -95,10 +95,14 @@
         </div>
       </template>
     </template>
+
+    <AppToast ref="toast" />
   </main>
 </template>
 
 <script>
+import AppToast from '@/components/AppToast.vue';
+import { actionErrorMessage } from '@/services/v2Match';
 import {
   getMatchesDetails, getMatchPredictions, predictForMatch, getPredictionStandings, getSeasons, getToken,
 } from '@/services/api';
@@ -129,6 +133,7 @@ function currentPlayerId() {
 
 export default {
   name: 'PredictionsV2',
+  components: { AppToast },
   inject: {
     v2Context: { default: () => ({}) },
   },
@@ -283,7 +288,12 @@ export default {
         const summary = await predictForMatch(match.ID, teamId);
         this.summaries = { ...this.summaries, [match.ID]: summary };
       } catch (error) {
+        // Same contract as today's Pronostic page: say why (kick-off has
+        // passed, say) and re-read the match's summary.
         console.error(error);
+        this.$refs.toast.show(actionErrorMessage(error, 'Failed to save your prediction. Please try again.'), 'error');
+        const summary = await getMatchPredictions(match.ID).catch(() => null);
+        if (summary) this.summaries = { ...this.summaries, [match.ID]: summary };
       }
     },
     async load() {

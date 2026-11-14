@@ -103,10 +103,14 @@
         <button class="btn btn-ghost" type="button" @click="confirming = false">Cancel</button>
       </div>
     </div>
+
+    <AppToast ref="toast" />
   </main>
 </template>
 
 <script>
+import AppToast from '@/components/AppToast.vue';
+import { actionErrorMessage } from '@/services/v2Match';
 import { getMatchesDetails, getMatchRegistrations, getMatchVotes, registerForMatch, unregisterFromMatch, getToken } from '@/services/api';
 import { deriveRegistrationState, registrationsAreOpen } from '@/services/matchRegistration';
 import {
@@ -128,6 +132,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'HomeV2',
+  components: { AppToast },
   inject: {
     v2Context: { default: () => ({ label: '', confirming: false }) },
   },
@@ -258,10 +263,18 @@ export default {
       if (!this.next) return;
       this.busy = true;
       try {
-        await registerForMatch(this.next.ID);
+        const entry = await registerForMatch(this.next.ID);
+        if (entry && entry.IsWaiting) {
+          this.$refs.toast.show(`Signed up — you are #${entry.Position}, on the waiting list.`, 'success');
+        } else {
+          const position = entry && entry.Position ? ` You are #${entry.Position}.` : '';
+          this.$refs.toast.show(`You're in for this match.${position}`, 'success');
+        }
         await this.load();
       } catch (error) {
         console.error(error);
+        this.$refs.toast.show(actionErrorMessage(error, 'Error signing up for this match.'), 'error');
+        await this.load();
       } finally {
         this.busy = false;
       }
@@ -271,11 +284,15 @@ export default {
       this.busy = true;
       try {
         await unregisterFromMatch(this.next.ID);
-        this.confirming = false;
+        this.$refs.toast.show('You have withdrawn from this match.', 'success');
         await this.load();
       } catch (error) {
         console.error(error);
+        this.$refs.toast.show(actionErrorMessage(error, 'Error withdrawing from this match.'), 'error');
+        await this.load();
       } finally {
+        // Closed either way, so the toast isn't hidden behind it.
+        this.confirming = false;
         this.busy = false;
       }
     },

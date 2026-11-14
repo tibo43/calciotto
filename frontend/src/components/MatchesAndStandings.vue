@@ -66,6 +66,7 @@ import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
 import { seasonOf, parseCalendarDay } from '@/services/datetime';
 import { decodeMatchId } from '@/services/shortLink';
 import { findGroupForMatch } from '@/router/index';
+import { loadDesignV2 } from '@/services/designV2';
 import MatchesPanel from '@/components/MatchesPanel.vue';
 import HomeV2 from '@/components/v2/HomeV2.vue';
 import PointsStandingsTable from '@/components/PointsStandingsTable.vue';
@@ -131,7 +132,18 @@ export default {
       return group ? group.name : '';
     },
   },
+  // The flag can land after created() has finished (it is fetched in
+  // parallel on a cold load): the shell's group/season selects are filled
+  // then, once this page's own data is in.
+  watch: {
+    designV2(on) {
+      if (on && !this.isInitializing) this.publishV2Context();
+    },
+  },
   async created() {
+    if (await this.openDeepLinkedMatchInV2()) {
+      return;
+    }
     try {
       const { groups, activeGroupId } = await resolveActiveGroup();
       this.groups = groups;
@@ -204,6 +216,27 @@ export default {
     // mirroring the `/m/:code` redirect's own "malformed code falls back
     // home" philosophy: a shared link that doesn't resolve is not worth an
     // error toast.
+    // Design v2 has a page per match, so a `?match=<code>` link (a WhatsApp
+    // share, a push notification) opens that page instead of preselecting
+    // the match on the home list. The flag is asked for only when there is
+    // a link to follow (one request per session, shared with App.vue); the
+    // match page finds the match's own group itself. Returns true when it
+    // navigated away.
+    async openDeepLinkedMatchInV2() {
+      const code = this.$route?.query?.match;
+      if (!code || !(await loadDesignV2())) {
+        return false;
+      }
+      let matchId;
+      try {
+        matchId = decodeMatchId(code);
+      } catch (error) {
+        return false;
+      }
+      this.$router.replace({ name: 'MatchView', params: { id: matchId } });
+      return true;
+    },
+
     async resolveDeepLinkedMatch() {
       const code = this.$route?.query?.match;
       if (!code) {

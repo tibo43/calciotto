@@ -74,13 +74,23 @@
           </div>
           <button class="switch" :class="{ 'is-on': dark }" type="button" role="switch" :aria-checked="dark.toString()" aria-label="Dark mode" @click="toggleTheme"><span class="track"></span></button>
         </div>
-        <router-link class="pref-row" to="/profile/notifications">
+        <router-link v-if="hasPush" class="pref-row" to="/profile/notifications">
           <div>
             <div class="who">Notifications</div>
             <div class="note">{{ pushOn ? 'On on this device' : 'Off on this device' }}</div>
           </div>
           <span class="switch" :class="{ 'is-on': pushOn }" aria-hidden="true"><span class="track"></span></span>
         </router-link>
+        <!-- Hidden feature pwa-install, like today's install card: shown only
+             where the browser can install the app (see pwaInstall.js). -->
+        <div v-if="hasInstall && (installState === 'prompt' || installState === 'ios')" class="pref-row">
+          <div>
+            <div class="who">Install Calciotto</div>
+            <div v-if="installState === 'prompt'" class="note">Open it from your home screen, like any other app</div>
+            <div v-else class="note">Tap Share, then Add to Home Screen</div>
+          </div>
+          <button v-if="installState === 'prompt'" class="btn btn-ghost" type="button" @click="install">Install</button>
+        </div>
         <router-link class="pref-row" to="/profile/account">
           <div>
             <div class="who">Account</div>
@@ -103,6 +113,7 @@
           </div>
           <button class="switch" :class="{ 'is-on': pushOn }" type="button" role="switch" :aria-checked="pushOn.toString()" aria-label="Notifications on this device" @click="togglePush"><span class="track"></span></button>
         </div>
+        <p v-if="pushError" class="scope">{{ pushError }}</p>
       </section>
       <section class="sec">
         <div class="sec-head"><h2>Types</h2></div>
@@ -210,6 +221,15 @@
           <div v-if="member.id !== playerId" class="member-actions withdraw-wrap">
             <button v-if="member.role === 'admin'" class="btn btn-ghost" type="button" :aria-expanded="(demoting === member.id).toString()" @click="askDemote(member)">Remove admin</button>
             <button v-else-if="member.has_account" class="btn btn-ghost" type="button" @click="promote(member)">Make admin</button>
+            <button class="btn btn-ghost btn-remove" type="button" :aria-expanded="(removing === member.id).toString()" @click="askRemove(member)">Remove</button>
+            <div v-if="removing === member.id" class="confirm-pop" role="dialog">
+              <h3>Remove from the group?</h3>
+              <p class="ref">{{ displayName(member.name) }} leaves the group. Their match history stays. They need a new invite to come back.</p>
+              <div class="confirm-actions actions">
+                <button class="btn btn-ghost" type="button" @click="removing = ''">Cancel</button>
+                <button class="btn btn-danger" type="button" @click="confirmRemove(member)">Remove</button>
+              </div>
+            </div>
             <div v-if="demoting === member.id" class="confirm-pop" role="dialog">
               <h3>Remove the admin role?</h3>
               <p class="ref">{{ displayName(member.name) }} stays a member of the group. You can make them an admin again later.</p>
@@ -222,6 +242,15 @@
         </div>
         <p v-if="roleError" class="scope">{{ roleError }}</p>
       </section>
+      <div v-if="removing" class="confirm-scrim" @click="removing = ''"></div>
+      <div v-if="removing" class="confirm-sheet" role="dialog">
+        <h3>Remove from the group?</h3>
+        <p class="ref">{{ displayName(removeMemberRow.name) }} leaves the group. Their match history stays. They need a new invite to come back.</p>
+        <div class="confirm-actions">
+          <button class="btn btn-danger" type="button" @click="confirmRemove(removeMemberRow)">Remove</button>
+          <button class="btn btn-ghost" type="button" @click="removing = ''">Cancel</button>
+        </div>
+      </div>
       <div v-if="demoting" class="confirm-scrim" @click="demoting = ''"></div>
       <div v-if="demoting" class="confirm-sheet" role="dialog">
         <h3>Remove the admin role?</h3>
@@ -239,10 +268,11 @@
 import {
   getPlayerProfile, getMyGroups, getSeasons, setFavoriteGroup, updateMyName,
   deleteMyAccount, clearToken, getToken, getTeamsByGroup, updateTeam, getInviteCode,
-  getGroupMembers, updateMemberRole, getNotificationPreferences, updateNotificationPreferences,
-  forgotPassword,
+  getGroupMembers, updateMemberRole, removeMember, getNotificationPreferences, updateNotificationPreferences,
+  forgotPassword, getMyFeatures,
 } from '@/services/api';
-import { getPushState, enablePush, disablePush, PUSH_STATE } from '@/services/pushNotifications';
+import { getPushState, enablePush, disablePush, PUSH_STATE, PUSH_FEATURE } from '@/services/pushNotifications';
+import { getInstallTracker, INSTALL_STATE, PWA_INSTALL_FEATURE } from '@/services/pwaInstall';
 import { buildGroupInviteShareText, buildWhatsAppShareUrl } from '@/services/whatsappShare';
 import TeamColourPicker from '@/components/TeamColourPicker.vue';
 
@@ -317,7 +347,14 @@ export default {
       members: [],
       teamNote: '',
       demoting: '',
+      removing: '',
       roleError: '',
+      pushError: '',
+      // Hidden features (GET /players/me/features): notifications and the
+      // install row only show for players they were enabled for, as on
+      // today's profile.
+      features: [],
+      installState: INSTALL_STATE.UNAVAILABLE,
     };
   },
   computed: {
@@ -387,6 +424,15 @@ export default {
     demoteName() {
       return this.demoteMember.name || '';
     },
+    removeMemberRow() {
+      return this.members.find((member) => member.id === this.removing) || {};
+    },
+    hasPush() {
+      return this.features.includes(PUSH_FEATURE);
+    },
+    hasInstall() {
+      return this.features.includes(PWA_INSTALL_FEATURE);
+    },
   },
   watch: {
     '$route.fullPath'() {
@@ -394,18 +440,27 @@ export default {
       if (this.page === 'settings') this.loadSettings();
       if (this.page === 'notifications') this.loadNotifications();
     },
-    demoting(value) {
-      if (this.v2Context) this.v2Context.confirming = Boolean(value) || this.deleting;
+    demoting() {
+      this.syncConfirming();
     },
-    deleting(value) {
-      if (this.v2Context) this.v2Context.confirming = Boolean(value) || Boolean(this.demoting);
+    removing() {
+      this.syncConfirming();
+    },
+    deleting() {
+      this.syncConfirming();
     },
   },
   created() {
     this.playerId = playerIdFromToken();
+    const tracker = getInstallTracker();
+    this.installState = tracker.state();
+    this.unsubscribeInstall = tracker.subscribe((state) => {
+      this.installState = state;
+    });
     this.load();
   },
   beforeUnmount() {
+    if (this.unsubscribeInstall) this.unsubscribeInstall();
     if (!this.v2Context) return;
     this.v2Context.hide = false;
     this.v2Context.pageTitle = '';
@@ -413,6 +468,12 @@ export default {
     this.v2Context.confirming = false;
   },
   methods: {
+    syncConfirming() {
+      if (this.v2Context) this.v2Context.confirming = Boolean(this.demoting || this.removing || this.deleting);
+    },
+    install() {
+      getInstallTracker().prompt();
+    },
     displayName(name) {
       return String(name || '').split(' ').filter(Boolean)
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
@@ -451,10 +512,12 @@ export default {
       this.loading = true;
       this.failed = false;
       try {
-        const [profile, groups] = await Promise.all([
+        const [profile, groups, features] = await Promise.all([
           getPlayerProfile(this.season),
           getMyGroups(),
+          getMyFeatures().catch(() => []),
         ]);
+        this.features = Array.isArray(features) ? features : [];
         this.overall = profile.Overall || {};
         this.perGroup = Array.isArray(profile.PerGroup) ? profile.PerGroup : [];
         this.groups = Array.isArray(groups) ? groups : [];
@@ -468,7 +531,14 @@ export default {
         this.pushState = await getPushState().catch(() => PUSH_STATE.UNSUPPORTED);
         this.syncChrome();
         if (this.page === 'settings') await this.loadSettings();
-        if (this.page === 'notifications') await this.loadNotifications();
+        if (this.page === 'notifications') {
+          // Reached by URL without the feature: nothing to turn on here.
+          if (!this.hasPush) {
+            this.$router.replace('/profile');
+            return;
+          }
+          await this.loadNotifications();
+        }
       } catch (error) {
         console.error(error);
         this.failed = true;
@@ -521,7 +591,13 @@ export default {
       }
     },
     async togglePush() {
-      this.pushState = this.pushOn ? await disablePush() : await enablePush();
+      this.pushError = '';
+      try {
+        this.pushState = this.pushOn ? await disablePush() : await enablePush();
+      } catch (error) {
+        console.error(error);
+        this.pushError = (error.response && error.response.data && error.response.data.error) || error.message || 'Could not change the notifications.';
+      }
     },
     async saveName() {
       this.savingName = true;
@@ -610,8 +686,27 @@ export default {
       window.open(buildWhatsAppShareUrl(text), '_blank', 'noopener');
     },
     askDemote(member) {
+      this.removing = '';
       this.demoting = member.id;
       this.roleError = '';
+    },
+    askRemove(member) {
+      this.demoting = '';
+      this.removing = member.id;
+      this.roleError = '';
+    },
+    // Same as today's roster panel: offered on every row but your own (the
+    // backend refuses that one too), behind a confirmation.
+    async confirmRemove(member) {
+      if (!member || !member.id) return;
+      try {
+        await removeMember(this.groupId, member.id);
+        this.removing = '';
+        await this.loadSettings();
+      } catch (error) {
+        this.removing = '';
+        this.roleError = (error.response && error.response.data && error.response.data.error) || 'Could not remove the member.';
+      }
     },
     async confirmDemote(member) {
       if (!member || !member.id) return;

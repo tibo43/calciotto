@@ -12,7 +12,9 @@ stats.PerGroup[0].PredictionPoints = 5.1;
 stats.PerGroup[1].PredictionPoints = -0.9;
 stats.Email = 'thibaut@example.com';
 
-const V2 = { features: ['design-v2'], playerStats: stats };
+// push-notifications too: the Notifications row and page only exist for
+// players with that feature, as on today's profile.
+const V2 = { features: ['design-v2', 'push-notifications'], playerStats: stats };
 const GROUP = `/profile/groups/${data.GROUP_ID}`;
 
 async function openProfile(page, path, options = {}) {

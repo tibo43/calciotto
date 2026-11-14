@@ -220,15 +220,19 @@
         </template>
       </template>
     </template>
+
+    <AppToast ref="toast" />
   </main>
 </template>
 
 <script>
 import {
-  getMatchDetailsByID, getMatchRegistrations, closeMatchRegistrations, reopenMatchRegistrations,
+  getMatchRegistrations, closeMatchRegistrations, reopenMatchRegistrations,
   setMatchMaxPlayers, updateMatch, deleteMatch, getInviteCode, getGroupMembers, getSeasons,
 } from '@/services/api';
-import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
+import { setActiveGroupId } from '@/services/activeGroup';
+import { findMatchInMyGroups, actionErrorMessage } from '@/services/v2Match';
+import AppToast from '@/components/AppToast.vue';
 import {
   deriveRegistrationState, REGISTRATION_OPEN, REGISTRATION_CLOSED_BY_ADMIN,
   fillTeamsFromRegistrations,
@@ -256,6 +260,7 @@ function copyPlayer(player, position) {
 
 export default {
   name: 'EditMatchV2',
+  components: { AppToast },
   inject: {
     v2Context: { default: () => ({}) },
   },
@@ -506,16 +511,18 @@ export default {
       this.nowMs = Date.now();
       this.message = '';
       try {
-        this.match = await getMatchDetailsByID(this.id);
+        // In the group the match belongs to, not the caller's first one: an
+        // admin of several groups edits matches in all of them.
+        const found = await findMatchInMyGroups(this.id);
+        this.match = found.details;
         const regs = await getMatchRegistrations(this.id).catch(() => []);
         this.registrations = Array.isArray(regs) ? regs : [];
         this.guests = [];
         this.held = {};
         this.initDraft();
         try {
-          const { groups } = await resolveActiveGroup();
-          const group = groups.find((item) => item.id === this.match.GroupID) || groups[0];
-          this.groupId = group ? group.id : '';
+          const { groups, group } = found;
+          this.groupId = group.id;
           if (this.v2Context && group) {
             this.v2Context.groupId = group.id;
             this.v2Context.hide = false;
@@ -548,23 +555,40 @@ export default {
         this.loading = false;
       }
     },
+    // Action outcomes go to the shared toast, like everywhere else in the
+    // app; a refusal shows the backend's own reason.
     async closeList() {
-      await closeMatchRegistrations(this.match.ID);
-      this.match = { ...this.match, RegistrationsClosedAt: new Date().toISOString() };
-      this.message = 'Sign-ups closed.';
+      try {
+        await closeMatchRegistrations(this.match.ID);
+        this.match = { ...this.match, RegistrationsClosedAt: new Date().toISOString() };
+        this.$refs.toast.show('Sign-ups closed.', 'success');
+      } catch (error) {
+        console.error('Error closing sign-ups:', error);
+        this.$refs.toast.show(actionErrorMessage(error, 'Could not close sign-ups.'), 'error');
+      }
     },
     async reopenList() {
-      await reopenMatchRegistrations(this.match.ID);
-      this.match = { ...this.match, RegistrationsClosedAt: null };
-      this.message = 'Sign-ups reopened.';
+      try {
+        await reopenMatchRegistrations(this.match.ID);
+        this.match = { ...this.match, RegistrationsClosedAt: null };
+        this.$refs.toast.show('Sign-ups reopened.', 'success');
+      } catch (error) {
+        console.error('Error reopening sign-ups:', error);
+        this.$refs.toast.show(actionErrorMessage(error, 'Could not reopen sign-ups.'), 'error');
+      }
     },
     async updateCap() {
       if (!this.canUpdateCap) return;
       const requested = Number(this.maxPlayersInput);
-      const entries = await setMatchMaxPlayers(this.match.ID, requested);
-      this.registrations = Array.isArray(entries) ? entries : this.registrations;
-      this.match = { ...this.match, MaxPlayers: requested };
-      this.message = `Confirmed places set to ${requested}.`;
+      try {
+        const entries = await setMatchMaxPlayers(this.match.ID, requested);
+        this.registrations = Array.isArray(entries) ? entries : this.registrations;
+        this.match = { ...this.match, MaxPlayers: requested };
+        this.$refs.toast.show(`Confirmed places set to ${requested}.`, 'success');
+      } catch (error) {
+        console.error('Error updating the confirmed places:', error);
+        this.$refs.toast.show(actionErrorMessage(error, 'Could not change the confirmed places.'), 'error');
+      }
     },
     split() {
       const { rosters, addedCount } = fillTeamsFromRegistrations(
@@ -655,10 +679,10 @@ export default {
       try {
         await updateMatch(this.match.ID, this.payload());
         this.hadScore = this.hadScore || this.teamPlayers.flat().some((player) => player.GoalNumber || player.OwnGoals);
-        this.message = this.step === 'score' ? 'Changes saved.' : 'Saved.';
+        this.$refs.toast.show(this.step === 'score' ? 'Changes saved.' : 'Saved.', 'success');
       } catch (error) {
         console.error(error);
-        this.message = 'Could not save the match.';
+        this.$refs.toast.show(actionErrorMessage(error, 'Could not save the match.'), 'error');
       } finally {
         this.saving = false;
       }
@@ -673,7 +697,7 @@ export default {
         this.$router.push('/');
       } catch (error) {
         console.error(error);
-        this.message = 'Could not delete the match.';
+        this.$refs.toast.show(actionErrorMessage(error, 'Could not delete the match.'), 'error');
       }
     },
   },
