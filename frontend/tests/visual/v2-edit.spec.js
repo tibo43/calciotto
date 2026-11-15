@@ -258,6 +258,40 @@ test.describe('design v2 admin editing', () => {
     });
   }
 
+  // Teams opens once sign-ups are closed, Score and goals once the teams are
+  // saved: until then they stay greyed, aria-disabled and inert.
+  for (const [stage, match] of [
+    ['not open yet', () => closedMatch({ RegistrationsClosedAt: undefined, RegistrationOpensAt: '2026-09-05T12:00:00+02:00' })],
+    ['open', STAGES.open],
+  ]) {
+    test(`steps, sign-ups ${stage}, teams and score inactive`, async ({ page }) => {
+      const { unstubbed } = await openEdit(page, EDIT, { match: match() });
+      for (const name of ['2 Teams', '3 Score and goals']) {
+        const item = page.getByRole('button', { name });
+        await expect(item).toHaveAttribute('aria-disabled', 'true');
+        await expect(item).toHaveClass(/is-inactive/);
+        await item.click({ force: true });
+        await expect(page).toHaveURL(new RegExp(`/matches/${ID}/edit$`));
+      }
+      await expect(page.locator('.step-i.is-todo')).toHaveCount(0);
+      expectEverythingStubbed(unstubbed);
+    });
+  }
+
+  test('steps, a link to a step not open yet shows the last open one', async ({ page }) => {
+    const { unstubbed } = await openEdit(page, `${EDIT}?step=score`, { match: STAGES.open() });
+    await expect(page.getByRole('button', { name: '1 Sign-ups' })).toHaveAttribute('aria-current', 'step');
+    await expect(page).toHaveURL(new RegExp(`/matches/${ID}/edit$`));
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('steps, score stays inactive while the teams are only drafted', async ({ page }) => {
+    const { unstubbed } = await openEdit(page, `${EDIT}?step=teams`);
+    await splitTeams(page);
+    await expect(page.getByRole('button', { name: '3 Score and goals' })).toHaveAttribute('aria-disabled', 'true');
+    expectEverythingStubbed(unstubbed);
+  });
+
   test('steps, score not possible before the teams', async ({ page }) => {
     const { unstubbed } = await openEdit(page, EDIT);
     const score = page.getByRole('button', { name: '3 Score and goals' });
