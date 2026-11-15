@@ -569,6 +569,7 @@ Nothing in the backend branches on the key. `GET /players/me/features` already r
 - **The group/season selects in the top bar** show their value in a span (`.ctx-name`) with the real `<select>` laid invisibly over the whole box. A select sizes itself from its text without counting letter-spacing, so the tracked mono label was clipped ("2026-202") and a long group name never got an ellipsis; the span gets both right, and the select still does the picking and the keyboard focus (outlined through `:focus-within`).
 - **One place for each account-level control.** The theme is a setting on the Account page (Appearance), not a button in the top bar of every page. Account management is reached from "Manage account" under the name only; there is no second Account row in Settings, which now holds only device features (notifications, install) and is hidden when it has neither. The match page has no "Back to home" link: the Home tab is the same thing.
 - **Home with nothing scheduled.** The hero shows the last match played, so "Latest matches" starts at the one before it rather than listing it twice.
+- **No team colours.** v2 names teams and never shows a colour: no swatch on the match page, the edit page or the prediction cards, and no colour picker in a group's Teams settings (name only). Saving a team sends its stored `Colour` back unchanged, since the API requires one and v1 still shows it; an admin on v2 therefore can't change a team's colour any more, and v1 players keep the last one set.
 - **Design rules.** These hold for every v2 screen:
   - All UI copy is in English. No venue is shown. Times are in the viewer's own local zone.
   - MOTM: ★ marks your own vote and a grey ☆ the others; once voting is closed the winner's count turns orange. No badge, no legend, no vote breakdown.
@@ -588,6 +589,7 @@ The styles stay in `global-styles.css` (`.toast-container`, `.toast-bottom`, `.t
 
 Ideas raised but not decided yet. Each needs a product call before any code.
 
+- **Dropping team colours from the data.** Decided for the UI (design v2 shows none, see "Design v2" above), not yet for the data: `Team.Colour`, its `ErrTeamColourRequired` check, `TeamWithPlayers.Colour` on the API, the colour-based team ordering in `matches.go`, and v1's `getTeamColor()`/`TeamColourPicker.vue` can only go once v1 is retired, since v1 still renders them. Removing the column then needs an explicit `ALTER TABLE ... DROP COLUMN`, as `AutoMigrate` never drops one.
 - **Signing in with a passkey** (fingerprint, face or the phone's code, through WebAuthn) instead of the password. It works in a browser tab as well as in the installed app, and the passkey lives in Google's or Apple's password manager, so it can't tell whether the app is installed (it came up as a way to detect that, and doesn't do it). As a sign-in method it would be a real backend feature: registration and assertion routes, a credential table per player, and a decision on whether the password stays as a fallback.
 
 ## Gotchas
