@@ -304,7 +304,10 @@ export default {
     starFor(player) {
       return this.votes && this.votes.MyVoteFor === player.ID ? '★' : '☆';
     },
+    // The accent goes to the winner once the vote is closed. While it is
+    // open, the one ahead is no winner yet: every count stays muted.
     isWinner(player) {
+      if (this.voteOpen) return false;
       return this.winners.some((row) => row.PlayerID === player.ID);
     },
     canVote(player) {

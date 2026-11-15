@@ -81,6 +81,21 @@ describe('MatchView.vue (design v2)', () => {
     expect(wrapper.text()).not.toMatch(/Sign up|Withdraw|Sign-ups|places left/);
   });
 
+  it('keeps every MOTM count muted while the vote is open, the one ahead included', async () => {
+    const votes = { Tally: [{ PlayerID: 'p2', Name: 'Paolo', Votes: 2 }], MyVoteFor: null };
+    const { wrapper } = await mountView(playedMatch(), { votes });
+    expect(wrapper.text()).toContain('MOTM vote open');
+    expect(wrapper.findAll('.player.is-winner')).toHaveLength(0);
+  });
+
+  it('marks the winner once the vote is closed', async () => {
+    const votes = { Tally: [{ PlayerID: 'p2', Name: 'Paolo', Votes: 2 }], MyVoteFor: null };
+    const { wrapper } = await mountView({ ...playedMatch(), Date: day(-5 * DAY) }, { votes });
+    const winners = wrapper.findAll('.player.is-winner');
+    expect(winners).toHaveLength(1);
+    expect(winners[0].text()).toContain('Paolo');
+  });
+
   it('lists the waiting list by name only', async () => {
     const registrations = [{ PlayerID: 'w1', Name: 'Gigi', Position: 17, IsWaiting: true }];
     const { wrapper } = await mountView(upcomingMatch(), { registrations });

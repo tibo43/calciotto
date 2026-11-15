@@ -204,6 +204,42 @@ test.describe('design v2 menu', () => {
   });
 });
 
+// The MOTM counts: muted for everyone while the vote is open (the one ahead
+// too), the accent only on the winner once it is closed.
+test.describe('design v2 MOTM counts', () => {
+  const colours = (page) => page.locator('.player').evaluateAll((rows) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--v2-text-muted)';
+    rows[0].appendChild(probe);
+    const muted = getComputedStyle(probe).color;
+    probe.remove();
+    return rows.map((row) => ({ name: row.querySelector('.nm').textContent.trim(), votes: getComputedStyle(row.querySelector('.votes')).color, star: getComputedStyle(row.querySelector('.votes .star')).color, muted }));
+  });
+
+  for (const theme of ['light', 'dark']) {
+    test(`vote open, every count muted, ${theme}`, async ({ page }) => {
+      const { unstubbed } = await gotoApp(page, `/matches/${recorded.ID}`, { ...V2, theme, matches: [...data.matches, recorded] });
+      await expect(page.locator('.motm-line')).toContainText('MOTM vote open');
+      for (const row of await colours(page)) {
+        expect(row.votes).toBe(row.muted);
+        expect(row.star).toBe(row.muted);
+      }
+      expectEverythingStubbed(unstubbed);
+    });
+  }
+
+  test('vote closed, the winner in the accent', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, `/matches/${PLAYED}`, V2);
+    await expect(page.getByText('MOTM vote closed', { exact: true })).toBeVisible();
+    const rows = await colours(page);
+    for (const row of rows) {
+      if (row.name === 'Marco Rossi') expect(row.votes).not.toBe(row.muted);
+      else expect(row.votes).toBe(row.muted);
+    }
+    expectEverythingStubbed(unstubbed);
+  });
+});
+
 test.describe('design v2 home spacing', () => {
   test('16px between the MOTM line and Latest matches @mobile', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches.slice(0, 2), recorded] });
