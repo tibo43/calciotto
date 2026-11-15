@@ -655,3 +655,128 @@ func TestComputePredictionStandings_HistoryOldestFirst(t *testing.T) {
 		t.Errorf("row points %.3f != sum of history %.3f", row.Points, hit.Points+miss.Points)
 	}
 }
+
+// TestIsMatchCounted pins when a match starts counting in the points,
+// scorers, profile and Elo standings: the moment its result is recorded,
+// or — for a match created without a schedule, which never gets a
+// ResultRecordedAt — at midnight after its day.
+func TestIsMatchCounted(t *testing.T) {
+	day := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
+	kickoff := day.Add(20 * time.Hour)
+	recordedAt := kickoff.Add(2 * time.Hour)
+
+	tests := []struct {
+		name  string
+		match models.MatchWithDetails
+		now   time.Time
+		want  bool
+	}{
+		{"scheduled, score recorded, same evening", models.MatchWithDetails{Date: models.Date(day), ScheduledAt: &kickoff, ResultRecordedAt: &recordedAt}, recordedAt.Add(time.Minute), true},
+		{"scheduled, score recorded, days later", models.MatchWithDetails{Date: models.Date(day), ScheduledAt: &kickoff, ResultRecordedAt: &recordedAt}, day.AddDate(0, 0, 10), true},
+		{"scheduled, score not recorded, after kick-off", models.MatchWithDetails{Date: models.Date(day), ScheduledAt: &kickoff}, kickoff.Add(time.Hour), false},
+		{"scheduled, score not recorded, days later", models.MatchWithDetails{Date: models.Date(day), ScheduledAt: &kickoff}, day.AddDate(0, 0, 10), false},
+		{"unscheduled, on its day", models.MatchWithDetails{Date: models.Date(day)}, day.Add(23 * time.Hour), false},
+		{"unscheduled, at midnight after", models.MatchWithDetails{Date: models.Date(day)}, day.AddDate(0, 0, 1), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsMatchCounted(tt.match, tt.now); got != tt.want {
+				t.Errorf("IsMatchCounted() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestIsMotmVoteClosed uses VotingWindowError's own deadline: midnight two
+// days after the match day.
+func TestIsMotmVoteClosed(t *testing.T) {
+	day := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
+	match := models.MatchWithDetails{Date: models.Date(day)}
+	for _, tt := range []struct {
+		name string
+		now  time.Time
+		want bool
+	}{
+		{"the day after", day.AddDate(0, 0, 1).Add(12 * time.Hour), false},
+		{"one second before the deadline", day.AddDate(0, 0, 2).Add(-time.Second), false},
+		{"at the deadline", day.AddDate(0, 0, 2), true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsMotmVoteClosed(match, tt.now); got != tt.want {
+				t.Errorf("IsMotmVoteClosed() = %v, want %v", got, tt.want)
+			}
+			if gotErr := VotingWindowError(models.Match{Date: models.Date(day)}, tt.now) != nil; gotErr != tt.want {
+				t.Errorf("VotingWindowError closed = %v, IsMotmVoteClosed = %v: the two deadlines disagree", gotErr, tt.want)
+			}
+		})
+	}
+}
+
+// TestFilterCountedMatches_CountsARecordedScoreAtOnce: points and goals of a
+// scheduled match count the moment its score is recorded, on its own day,
+// and not at all while it isn't.
+func TestFilterCountedMatches_CountsARecordedScoreAtOnce(t *testing.T) {
+	alice, bob := uuid.New(), uuid.New()
+	now := time.Date(2026, 9, 3, 22, 30, 0, 0, time.UTC)
+	kickoff := time.Date(2026, 9, 3, 20, 0, 0, 0, time.UTC)
+	recordedAt := now.Add(-10 * time.Minute)
+	teams := func() []models.TeamWithPlayers {
+		return []models.TeamWithPlayers{
+			newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
+			newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+		}
+	}
+	recorded := models.MatchWithDetails{ID: uuid.New(), Date: models.Date(kickoff), ScheduledAt: &kickoff, ResultRecordedAt: &recordedAt, Teams: teams()}
+	pending := models.MatchWithDetails{ID: uuid.New(), Date: models.Date(kickoff.AddDate(0, 0, -7)), ScheduledAt: &kickoff, Teams: teams()}
+
+	filtered := FilterCountedMatches([]models.MatchWithDetails{recorded, pending}, now)
+	if len(filtered) != 1 || filtered[0].ID != recorded.ID {
+		t.Fatalf("FilterCountedMatches = %+v, want only the recorded match", filtered)
+	}
+	rows := pointsRowsByID(ComputePointsStandings(filtered))
+	if r := rows[alice]; r.Played != 1 || r.Points == 0 {
+		t.Errorf("alice = %+v, want the recorded win counted at once", r)
+	}
+	scorers := ComputeScorers(filtered)
+	if len(scorers) == 0 {
+		t.Errorf("ComputeScorers = %+v, want the recorded goals counted at once", scorers)
+	}
+}
+
+// TestFilterMotmCountedMatches: a MOTM award counts only once the vote is
+// closed, and only for a recorded result or an unscheduled match.
+func TestFilterMotmCountedMatches(t *testing.T) {
+	day := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
+	kickoff := day.Add(20 * time.Hour)
+	recordedAt := kickoff.Add(2 * time.Hour)
+	recorded := models.MatchWithDetails{ID: uuid.New(), Date: models.Date(day), ScheduledAt: &kickoff, ResultRecordedAt: &recordedAt}
+	pending := models.MatchWithDetails{ID: uuid.New(), Date: models.Date(day), ScheduledAt: &kickoff}
+	unscheduled := models.MatchWithDetails{ID: uuid.New(), Date: models.Date(day)}
+	all := []models.MatchWithDetails{recorded, pending, unscheduled}
+
+	ids := func(matches []models.MatchWithDetails) map[uuid.UUID]bool {
+		set := map[uuid.UUID]bool{}
+		for _, match := range matches {
+			set[match.ID] = true
+		}
+		return set
+	}
+	if got := FilterMotmCountedMatches(all, recordedAt.Add(time.Hour)); len(got) != 0 {
+		t.Errorf("vote open on match night: got %d matches, want none", len(got))
+	}
+	if got := FilterMotmCountedMatches(all, day.AddDate(0, 0, 2).Add(-time.Second)); len(got) != 0 {
+		t.Errorf("vote still open the day after: got %d matches, want none", len(got))
+	}
+	got := ids(FilterMotmCountedMatches(all, day.AddDate(0, 0, 2)))
+	if !got[recorded.ID] || !got[unscheduled.ID] || got[pending.ID] || len(got) != 2 {
+		t.Errorf("vote closed: got %v, want the recorded and the unscheduled match, not the unrecorded one", got)
+	}
+	// Threaded through: the leader of a still-open vote wins nothing yet.
+	votes := map[uuid.UUID][]models.MatchVoteTally{recorded.ID: {{PlayerID: uuid.New(), Name: "alice", Votes: 3}}}
+	if rows := ComputeMotmStandings(FilterMotmCountedMatches(all, day.AddDate(0, 0, 1)), votes); len(rows) != 0 {
+		t.Errorf("ComputeMotmStandings with the vote open = %+v, want no award", rows)
+	}
+	if rows := ComputeMotmStandings(FilterMotmCountedMatches(all, day.AddDate(0, 0, 2)), votes); len(rows) != 1 || rows[0].Awards != 1 {
+		t.Errorf("ComputeMotmStandings with the vote closed = %+v, want alice's award", rows)
+	}
+}

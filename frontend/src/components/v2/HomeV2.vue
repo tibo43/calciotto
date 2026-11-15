@@ -19,16 +19,15 @@
     </section>
 
     <template v-else>
-      <section v-if="next" class="hero">
+      <section v-if="next" class="hero hero-home">
         <router-link class="hero-go" :to="matchTo(next)">
           <p class="label">Next match</p>
           <h1 class="display hero-date">{{ heroDateLabel(next.Date) }}</h1>
           <p v-if="kickoffLabel(next.ScheduledAt)" class="display hero-time">{{ kickoffLabel(next.ScheduledAt) }}</p>
         </router-link>
-        <!-- The sign-up status, and on the same line the way into the match:
-             its page for a member, its editing page for an admin. -->
+        <!-- The way into the match, on the right: its page for a member, its
+             editing page for an admin. -->
         <div class="hero-status">
-          <p class="hero-meta">{{ registrationLine(next, nowMs) }}</p>
           <router-link v-if="isAdmin" class="btn btn-ghost hero-status-btn" :to="`/matches/${next.ID}/edit`">Manage match</router-link>
           <router-link v-else class="btn btn-ghost hero-status-btn" :to="matchTo(next)">View match</router-link>
         </div>
@@ -70,16 +69,27 @@
         </div>
       </section>
 
-      <!-- Nothing ahead: a match that is over is under Latest matches with
-           its score, and an admin has the + to create the next one. -->
-      <section v-else class="hero hero-none">
-        <p class="label">Next match</p>
-        <p class="hero-meta">No upcoming match</p>
+      <!-- Nothing ahead: the last match keeps the header, with its score,
+           until the next one is created (then it heads Latest matches). -->
+      <section v-else class="hero hero-home hero-last" :class="{ 'has-motm': voteLine }">
+        <router-link class="hero-go" :to="matchTo(last)">
+          <p class="label">Last match</p>
+          <h1 class="display hero-date">{{ heroDateLabel(last.Date) }}</h1>
+        </router-link>
+        <div class="board-teams hero-board">
+          <div class="board-team"><span class="name">{{ teamName(last, 0) }}</span></div>
+          <div class="board-score">{{ scoreOf(last) }}</div>
+          <div class="board-team"><span class="name">{{ teamName(last, 1) }}</span></div>
+        </div>
+        <div class="hero-status">
+          <router-link v-if="isAdmin" class="btn btn-ghost hero-status-btn" :to="`/matches/${last.ID}/edit`">Manage match</router-link>
+          <router-link v-else class="btn btn-ghost hero-status-btn" :to="matchTo(last)">View match</router-link>
+        </div>
+        <!-- Part of the header: its vote, while open, under the score. -->
+        <router-link v-if="voteLine" class="motm-row hero-motm" :to="matchTo(voteMatch)">
+          <span class="main">{{ voteLine }}</span>
+        </router-link>
       </section>
-
-      <router-link v-if="voteLine" class="motm-row" :to="matchTo(voteMatch)">
-        <span class="main">{{ voteLine }}</span>
-      </router-link>
 
       <section v-if="later.length" class="sec">
         <div class="sec-head"><h2>Later</h2></div>
@@ -98,11 +108,18 @@
       <section v-if="latest.length" class="sec">
         <div class="sec-head"><h2>Latest matches</h2></div>
         <div class="list">
-          <router-link v-for="match in latest" :key="match.ID" class="row" :to="matchTo(match)">
+          <!-- The score only on the right; the accessible name still reads it,
+               with the day, and the sub-line describes the row. -->
+          <router-link
+            v-for="match in latest" :key="match.ID" class="row" :to="matchTo(match)"
+            :aria-label="rowAriaLabel(match)" :aria-describedby="rowSubLine(match, nowMs) ? `row-sub-${match.ID}` : null"
+          >
             <div class="row-date">{{ rowDateLabel(match.Date) }}</div>
             <div class="row-main">
-              <div class="row-title">{{ teamName(match, 0) }} {{ scorePair(match) }} {{ teamName(match, 1) }}</div>
-              <div v-if="weekdayTimeLabel(match.ScheduledAt)" class="row-sub">{{ weekdayTimeLabel(match.ScheduledAt) }}</div>
+              <div class="row-title row-teams"><span class="row-team">{{ teamName(match, 0) }}</span> <span class="row-vs">vs</span> <span class="row-team">{{ teamName(match, 1) }}</span></div>
+              <!-- One grey line: « MOTM vote open » while its vote is open,
+                   else its weekday and kick-off time; the row leads to it. -->
+              <div v-if="rowSubLine(match, nowMs)" :id="`row-sub-${match.ID}`" class="row-sub" :class="{ 'row-sub-vote': rowSubLine(match, nowMs) === 'MOTM vote open' }">{{ rowSubLine(match, nowMs) }}</div>
             </div>
             <div class="score">{{ scoreOf(match) }}</div>
           </router-link>
@@ -133,11 +150,11 @@
 <script>
 import AppToast from '@/components/AppToast.vue';
 import { actionErrorMessage } from '@/services/v2Match';
-import { getMatchesDetails, getMatchRegistrations, getMatchVotes, registerForMatch, unregisterFromMatch, getToken } from '@/services/api';
+import { getMatchesDetails, getMatchRegistrations, registerForMatch, unregisterFromMatch, getToken } from '@/services/api';
 import { deriveRegistrationState, registrationsAreOpen, teamsAreComposed } from '@/services/matchRegistration';
 import {
-  splitHomeMatches, heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel,
-  registrationMeta, registrationLine, placesLeft, homeVoteLine, myTeam, nextWaitingPosition,
+  splitHomeMatches, heroDateLabel, rowDateLabel, dayMonthLabel, kickoffLabel, weekdayTimeLabel,
+  registrationMeta, placesLeft, homeVoteLine, rowSubLine, myTeam, nextWaitingPosition,
 } from '@/services/v2Home';
 
 function currentPlayerIdFromToken() {
@@ -170,7 +187,6 @@ export default {
       failed: false,
       matches: [],
       registrations: [],
-      recentVotes: null,
       confirming: false,
       busy: false,
       nowMs: Date.now(),
@@ -187,7 +203,9 @@ export default {
     next() { return this.split.next; },
     later() { return this.split.later; },
     recent() { return this.split.recent; },
-    latest() { return this.recent; },
+    // The last match is in the header until the next one is created: it
+    // is never listed twice.
+    latest() { return this.next ? this.recent : this.recent.slice(1); },
     regState() {
       return this.next ? deriveRegistrationState(this.next, this.nowMs) : '';
     },
@@ -222,14 +240,16 @@ export default {
     mine() {
       return this.registrations.find((entry) => entry.PlayerID === this.playerId) || null;
     },
-    voteMatch() {
-      return this.recent[0] || null;
+    // The header match: the next one, or else the last one played.
+    last() {
+      return this.next ? null : (this.recent[0] || null);
     },
-    // Only while nothing new is scheduled: once it is, the next match is
-    // the news, and the vote has its own notification.
+    voteMatch() {
+      return this.next || this.last;
+    },
+    // Only about the header match, and only while its vote is open.
     voteLine() {
-      if (this.next) return null;
-      return homeVoteLine(this.voteMatch, this.recentVotes, this.nowMs);
+      return homeVoteLine(this.voteMatch, this.nowMs);
     },
   },
   watch: {
@@ -247,7 +267,7 @@ export default {
     this.load();
   },
   methods: {
-    heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel, registrationsAreOpen, registrationLine,
+    heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel, rowSubLine, registrationsAreOpen,
     publishContext() {
       this.v2Context.hide = false;
     },
@@ -267,6 +287,11 @@ export default {
       const b = teams[1] ? teams[1].Score : 0;
       return `${a}–${b}`;
     },
+    // « Les Bleus 4–6 Les Rouges, 4 Sep »: the score the row shows on the
+    // right, read with the teams and the day.
+    rowAriaLabel(match) {
+      return `${this.teamName(match, 0)} ${this.scorePair(match)} ${this.teamName(match, 1)}, ${dayMonthLabel(match.Date)}`;
+    },
     scoreOf(match) {
       const text = this.scorePair(match);
       const [a, b] = text.split('–');
@@ -281,13 +306,9 @@ export default {
         this.matches = Array.isArray(matches) ? matches : [];
         const heroSplit = splitHomeMatches(this.matches, this.nowMs);
         this.registrations = [];
-        this.recentVotes = null;
         if (heroSplit.next) {
           const list = await getMatchRegistrations(heroSplit.next.ID);
           this.registrations = Array.isArray(list) ? list : [];
-        }
-        if (!heroSplit.next && heroSplit.recent[0]) {
-          this.recentVotes = await getMatchVotes(heroSplit.recent[0].ID).catch(() => null);
         }
       } catch (error) {
         console.error('Error fetching matches:', error);

@@ -140,8 +140,9 @@ test.describe('design v2 once the teams are set', () => {
 });
 
 // A match is over as soon as its score is recorded, here on its own day
-// (kick-off 08:00, the clock at 10:00): no longer the next match, and its
-// page shows the result with nothing about sign-ups.
+// (kick-off 08:00, the clock at 10:00). It keeps the home header, as "Last
+// match" with its score, until the next match is created; then it heads
+// Latest matches. Its page shows the result with nothing about sign-ups.
 const recorded = {
   ...data.playedMatch, ID: 'cccccccc-0000-4000-8000-0000000000f1', Date: '2026-09-04', ScheduledAt: '2026-09-04T08:00:00+02:00',
   RegistrationOpensAt: '2026-09-01T18:00:00+02:00', RegistrationsClosedAt: '2026-09-04T07:00:00+02:00',
@@ -150,21 +151,59 @@ const recorded = {
 const NAV = '.nav-text, .nav-ico';
 
 test.describe('design v2 once the score is recorded', () => {
-  test('home, no upcoming match, as an admin', async ({ page }) => {
+  test('home, the last match keeps the header, as an admin', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches.slice(0, 2), recorded] });
-    await expect(page.locator('.hero-none')).toContainText('No upcoming match');
-    await expect(page.getByText('Sign-ups closed')).toHaveCount(0);
-    const first = page.locator('.list .row').first();
-    await expect(first).toHaveAttribute('href', `/matches/${recorded.ID}`);
-    await expect(first.locator('.score')).toHaveText('4–6');
+    const hero = page.locator('.hero-last');
+    await expect(hero.locator('.label')).toHaveText('Last match');
+    await expect(hero.locator('.hero-date')).toHaveText('Fri 4 Sep');
+    await expect(hero.locator('.board-score')).toHaveText('4–6');
+    await expect(hero.getByRole('link', { name: 'Manage match' })).toHaveAttribute('href', `/matches/${recorded.ID}/edit`);
+    await expect(hero).not.toContainText(/Sign up|Withdraw|Sign-ups|places/);
+    // Never listed twice: Latest matches starts with the one before.
+    await expect(page.locator(`.list .row[href="/matches/${recorded.ID}"]`)).toHaveCount(0);
+    await expect(page.locator('.list .row').first()).toHaveAttribute('href', `/matches/${data.matches[0].ID}`);
+    // Its vote is open: the MOTM line points at it.
+    await expect(page.locator('.motm-row')).toHaveAttribute('href', `/matches/${recorded.ID}`);
     await expect(page.getByRole('link', { name: 'New match' })).toBeVisible();
     expectEverythingStubbed(unstubbed);
   });
 
   test('home, the next scheduled match after it', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches, recorded] });
+    await expect(page.locator('.hero .label').first()).toHaveText('Next match');
     await expect(page.locator('.hero .hero-date')).toHaveText('Sun 6 Sep');
+    await expect(page.locator('.hero-last')).toHaveCount(0);
     await expect(page.locator('.list .row').first()).toHaveAttribute('href', `/matches/${recorded.ID}`);
+    // The vote of a match no longer in the header has no line under it...
+    await expect(page.locator('.motm-row')).toHaveCount(0);
+    // ...but its row says so, in grey in place of its kick-off time, and
+    // leads to it.
+    const row = page.locator(`.list .row[href="/matches/${recorded.ID}"]`);
+    await expect(row.locator('.row-sub')).toHaveText('MOTM vote open');
+    await expect(row).not.toContainText('08:00');
+    const vote = row.locator('.row-sub-vote');
+    const [colour, muted] = await vote.evaluate((node) => {
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--v2-text-muted)';
+      node.appendChild(probe);
+      const result = [getComputedStyle(node).color, getComputedStyle(probe).color];
+      probe.remove();
+      return result;
+    });
+    expect(colour).toBe(muted);
+    await expect(page.locator('.list .row-sub-vote')).toHaveCount(1);
+    await vote.click();
+    await expect(page).toHaveURL(new RegExp(`/matches/${recorded.ID}$`));
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('home, the match button alone on the right, no sign-up status line', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/', V2);
+    await expect(page.locator('.hero-status .hero-meta')).toHaveCount(0);
+    await expect(page.locator('.hero-status')).toHaveText('Manage match');
+    const button = await page.locator('.hero-status-btn').boundingBox();
+    const hero = await page.locator('.hero').boundingBox();
+    expect(Math.abs(button.x + button.width - (hero.x + hero.width))).toBeLessThanOrEqual(1);
     expectEverythingStubbed(unstubbed);
   });
 
@@ -241,11 +280,67 @@ test.describe('design v2 MOTM counts', () => {
 });
 
 test.describe('design v2 home spacing', () => {
-  test('16px between the MOTM line and Latest matches @mobile', async ({ page }) => {
+  // The MOTM line belongs to the header: 16px under the score (under the
+  // match button on a phone), 16px to the rule, and the header 16px over
+  // Latest matches.
+  for (const tag of ['', ' @mobile']) test(`the MOTM line in the header, 16px above and below${tag}`, async ({ page }) => {
     const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches.slice(0, 2), recorded] });
-    const line = await page.locator('.motm-row').boundingBox();
+    const hero = page.locator('.hero-last');
+    const line = hero.locator('.hero-motm');
+    await expect(line).toHaveAttribute('href', `/matches/${recorded.ID}`);
+    const box = await line.boundingBox();
+    const heroBox = await hero.boundingBox();
+    const above = await Promise.all([hero.locator('.board-score'), hero.locator('.hero-status-btn')].map((item) => item.boundingBox()));
+    const lowest = Math.max(...above.map((item) => item.y + item.height));
+    expect(Math.round(box.y - lowest)).toBe(16);
+    expect(Math.round(heroBox.y + heroBox.height - 1 - (box.y + box.height))).toBe(16);
     const heading = await page.locator('.sec').filter({ hasText: 'Latest matches' }).boundingBox();
-    expect(Math.round(heading.y - (line.y + line.height))).toBe(16);
+    expect(Math.round(heading.y - (heroBox.y + heroBox.height))).toBe(16);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('web, the match button on the date line, centred on it', async ({ page }) => {
+    test.skip(page.viewportSize().width < 900, 'web only');
+    const { unstubbed } = await gotoApp(page, '/', V2);
+    const date = await page.locator('.hero-date').boundingBox();
+    const button = await page.locator('.hero-status-btn').boundingBox();
+    const hero = await page.locator('.hero').boundingBox();
+    expect(Math.abs((button.y + button.height / 2) - (date.y + date.height / 2))).toBeLessThanOrEqual(1);
+    expect(Math.abs(button.x + button.width - (hero.x + hero.width))).toBeLessThanOrEqual(1);
+    expectEverythingStubbed(unstubbed);
+  });
+});
+
+// Latest matches rows: the teams with « vs » in the middle, the score only
+// on the right; the name still reads the score with the day, and the teams
+// fit on one line on phones, down to 360px.
+test.describe('design v2 Latest matches rows', () => {
+  const rowsOf = (page) => page.locator('.list .row').evaluateAll((rows) => rows.map((row) => {
+    const title = row.querySelector('.row-title');
+    return {
+      title: title.innerText.trim(), label: row.getAttribute('aria-label'), score: row.querySelector('.score').innerText.trim(),
+      cut: title.scrollWidth > title.clientWidth + 0.5, lines: Math.round(title.getBoundingClientRect().height / parseFloat(getComputedStyle(title).lineHeight)),
+    };
+  }));
+  for (const [tag, width] of [['', 1280], [' @mobile', 390], [' @mobile', 360]]) {
+    test(`the score once, on the right, ${width}px${tag}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches, recorded] });
+      const rows = await rowsOf(page);
+      expect(rows[0]).toMatchObject({ title: 'Les Bleus vs Les Rouges', label: 'Les Bleus 4–6 Les Rouges, 4 Sep', score: '4–6', cut: false, lines: 1 });
+      for (const row of rows) {
+        expect(row.title).not.toMatch(/\d/);
+        expect(row.cut).toBe(false);
+        expect(row.lines).toBe(1);
+      }
+      expectEverythingStubbed(unstubbed);
+    });
+  }
+
+  test('match page, the score only in the score block', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, `/matches/${recorded.ID}`, { ...V2, matches: [...data.matches, recorded] });
+    await expect(page.locator('.board-score')).toHaveText('4–6');
+    expect((await page.locator('main.page').innerText()).match(/\d+\s*–\s*\d+/g)).toEqual(['4–6']);
     expectEverythingStubbed(unstubbed);
   });
 });

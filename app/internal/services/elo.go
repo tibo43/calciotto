@@ -262,10 +262,10 @@ func ComputeEloStandings(matches []models.MatchWithDetails) []models.EloStanding
 // It follows GetPointsStandings/GetScorers/GetMotmStandings' exact shape
 // minus the season parameter: load the group's matches (an empty season
 // means no filtering, same as every other caller in this file),
-// FilterCompletedMatches for the same reason GetPointsStandings does (a
+// FilterCountedMatches for the same reason GetPointsStandings does (a
 // scheduled match's roster can be composed, and therefore "playable" by
-// ComputeEloStandings' own definition, before its own kick-off — see
-// IsMatchCompleted's comment), sort chronologically, run the pure
+// ComputeEloStandings' own definition, before its result is in — see
+// IsMatchCounted's comment), sort chronologically, run the pure
 // aggregator, then tag IsMember as a post-processing step via the same
 // currentMemberIDs helper the other Get*Standings methods already share.
 // FilterMatchesBySeason is deliberately never called here — there is no
@@ -275,7 +275,7 @@ func (s *StandingsService) GetEloStandings(groupID uuid.UUID) ([]models.EloStand
 	if err != nil {
 		return nil, err
 	}
-	matches = FilterCompletedMatches(matches, time.Now())
+	matches = FilterCountedMatches(matches, time.Now())
 	matches = sortMatchesChronologically(matches)
 	rows := ComputeEloStandings(matches)
 

@@ -33,27 +33,63 @@ async function mountHome(matches, isAdmin = false) {
 }
 
 describe('HomeV2.vue with nothing scheduled', () => {
-  it('says there is no upcoming match and lists every finished one under Latest matches', async () => {
+  it('keeps the last match in the header, with its score, and lists the others under Latest matches', async () => {
     const wrapper = await mountHome([played('last', 3), played('before', 10), played('oldest', 17)]);
-    expect(wrapper.find('.hero-none .label').text()).toBe('Next match');
-    expect(wrapper.find('.hero-none .hero-meta').text()).toBe('No upcoming match');
+    const hero = wrapper.find('.hero-last');
+    expect(hero.find('.label').text()).toBe('Last match');
+    expect(hero.find('.board-score').text()).toBe('1–0');
+    expect(hero.find('.hero-status-btn').text()).toBe('View match');
+    expect(hero.find('.hero-spots').exists()).toBe(false);
+    expect(hero.text()).not.toMatch(/Sign up|Withdraw|Sign-ups|places/);
     const listed = wrapper.findAll('.list .row').map((row) => JSON.parse(row.attributes('data-to')).params.id);
-    expect(listed).toEqual(['last', 'before', 'oldest']);
+    expect(listed).toEqual(['before', 'oldest']);
   });
 
-  it('moves a match whose score is recorded out of Next match, to the top of Latest matches', async () => {
+  it('keeps a match whose score is just recorded in the header, Manage match for an admin', async () => {
     const recorded = {
       ...played('today', 0), ScheduledAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
       ResultRecordedAt: new Date(Date.now() - 60 * 1000).toISOString(), MaxPlayers: 16,
     };
     const wrapper = await mountHome([recorded, played('before', 7)], true);
-    expect(wrapper.find('.hero-none').exists()).toBe(true);
-    expect(wrapper.text()).not.toContain('Manage match');
+    const hero = wrapper.find('.hero-last');
+    expect(hero.find('.label').text()).toBe('Last match');
+    expect(JSON.parse(hero.find('.hero-status-btn').attributes('data-to'))).toBe('/matches/today/edit');
     expect(wrapper.text()).not.toContain('Sign-ups');
-    const rows = wrapper.findAll('.list .row');
-    expect(JSON.parse(rows[0].attributes('data-to')).params.id).toBe('today');
-    expect(rows[0].find('.score').text()).toBe('1–0');
+    const listed = wrapper.findAll('.list .row').map((row) => JSON.parse(row.attributes('data-to')).params.id);
+    expect(listed).toEqual(['before']);
     expect(wrapper.find('.fab').exists()).toBe(true);
+  });
+
+  it('shows the MOTM line only while the header match vote is open', async () => {
+    const yesterday = { ...played('y', 1), ResultRecordedAt: new Date(Date.now() - DAY).toISOString() };
+    const open = await mountHome([yesterday]);
+    expect(open.find('.motm-row').text()).toBe('MOTM vote open · Vote in match details');
+    expect(JSON.parse(open.find('.motm-row').attributes('data-to')).params.id).toBe('y');
+    const closed = await mountHome([played('last', 3)]);
+    expect(closed.find('.motm-row').exists()).toBe(false);
+  });
+});
+
+describe('HomeV2.vue Latest matches rows', () => {
+  it('shows the teams with vs in the middle and the score only on the right, read with the day', async () => {
+    const before = { ...played('before', 8), Date: '2026-09-04' };
+    const wrapper = await mountHome([played('last', 3), before]);
+    const row = wrapper.find('.list .row');
+    expect(row.find('.row-title').text()).toBe('Black vs White');
+    expect(row.find('.row-vs').text()).toBe('vs');
+    expect(row.find('.row-title').text()).not.toMatch(/\d/);
+    expect(row.find('.score').text()).toBe('1–0');
+    expect(row.attributes('aria-label')).toBe('Black 1–0 White, 4 Sep');
+  });
+
+  it('describes a row by its sub-line when it has one', async () => {
+    const yesterday = { ...played('y', 1), ResultRecordedAt: new Date(Date.now() - DAY).toISOString() };
+    const next = { ...played('next', -3), ScheduledAt: new Date(Date.now() + 3 * DAY).toISOString(), RegistrationOpensAt: new Date(Date.now() - DAY).toISOString(), MaxPlayers: 2 };
+    const wrapper = await mountHome([next, yesterday, played('old', 9)]);
+    const [row, old] = wrapper.findAll('.list .row');
+    expect(row.attributes('aria-describedby')).toBe('row-sub-y');
+    expect(row.find('#row-sub-y').text()).toBe('MOTM vote open');
+    expect(old.attributes('aria-describedby')).toBeUndefined();
   });
 });
 
@@ -69,7 +105,7 @@ describe('HomeV2.vue New match button', () => {
     const member = await mountHome([], false);
     expect(member.find('.fab').exists()).toBe(false);
     expect(member.text()).toContain('No matches yet');
-    expect((await mountHome([played('last', 3)], false)).text()).toContain('No upcoming match');
+    expect((await mountHome([played('last', 3)], false)).text()).toContain('Last match');
   });
 });
 
@@ -81,10 +117,30 @@ describe('HomeV2.vue with a match scheduled', () => {
     RegistrationOpensAt: new Date(Date.now() - DAY).toISOString(), MaxPlayers: 2, ...extra
   });
 
-  it('drops the Man of the Match line and does not load the votes', async () => {
-    const wrapper = await mountHome([scheduled(), played('last', 3)]);
+  it("moves the last match under Latest matches, and leaves out its MOTM vote even while it's open", async () => {
+    const yesterday = { ...played('y', 1), ResultRecordedAt: new Date(Date.now() - DAY).toISOString() };
+    const wrapper = await mountHome([scheduled(), yesterday]);
+    expect(wrapper.find('.hero .label').text()).toBe('Next match');
+    expect(wrapper.find('.hero-last').exists()).toBe(false);
+    expect(JSON.parse(wrapper.find('.list .row').attributes('data-to')).params.id).toBe('y');
     expect(wrapper.find('.motm-row').exists()).toBe(false);
     expect(getMatchVotes).not.toHaveBeenCalled();
+  });
+
+  it('marks that match row « MOTM vote open » in grey, in place of its kick-off time, while its vote is open', async () => {
+    const yesterday = {
+      ...played('y', 1), ScheduledAt: new Date(Date.now() - DAY).toISOString(),
+      ResultRecordedAt: new Date(Date.now() - DAY).toISOString(),
+    };
+    const before = { ...played('before', 8), ScheduledAt: new Date(Date.now() - 8 * DAY).toISOString() };
+    const wrapper = await mountHome([scheduled(), yesterday, before]);
+    const [row, older] = wrapper.findAll('.list .row');
+    expect(JSON.parse(row.attributes('data-to')).params.id).toBe('y');
+    expect(row.findAll('.row-sub')).toHaveLength(1);
+    expect(row.find('.row-sub').text()).toBe('MOTM vote open');
+    expect(row.find('.row-sub').classes()).toContain('row-sub-vote');
+    expect(older.find('.row-sub').text()).toMatch(/^\w+ \d{2}:\d{2}$/);
+    expect(older.find('.row-sub-vote').exists()).toBe(false);
   });
 
   it('turns Sign up into Join the waiting list once the places are taken', async () => {
@@ -107,7 +163,7 @@ describe('HomeV2.vue with a match scheduled', () => {
   });
 });
 
-describe('HomeV2.vue sign-up status line', () => {
+describe('HomeV2.vue match button', () => {
   const upcoming = (extra = {}) => ({
     ...played('next', -3), Teams: [], ScheduledAt: new Date(Date.now() + 3 * DAY).toISOString(),
     RegistrationOpensAt: new Date(Date.now() - DAY).toISOString(), MaxPlayers: 16, ...extra,
@@ -118,7 +174,8 @@ describe('HomeV2.vue sign-up status line', () => {
     const button = wrapper.find('.hero-status .hero-status-btn');
     expect(button.text()).toBe('View match');
     expect(JSON.parse(button.attributes('data-to'))).toEqual({ name: 'MatchView', params: { id: 'next' } });
-    expect(wrapper.find('.hero-status .hero-meta').text()).toMatch(/^Sign-ups opened \w{3} \d{1,2} \w{3} · \d{2}:\d{2}$/);
+    // No sign-up status line under the date any more: only the button.
+    expect(wrapper.find('.hero-status .hero-meta').exists()).toBe(false);
   });
 
   it('offers an admin the editing page', async () => {
@@ -126,10 +183,5 @@ describe('HomeV2.vue sign-up status line', () => {
     const button = wrapper.find('.hero-status .hero-status-btn');
     expect(button.text()).toBe('Manage match');
     expect(JSON.parse(button.attributes('data-to'))).toBe('/matches/next/edit');
-  });
-
-  it('says when sign-ups will open', async () => {
-    const wrapper = await mountHome([upcoming({ RegistrationOpensAt: new Date(Date.now() + DAY).toISOString() })]);
-    expect(wrapper.find('.hero-status .hero-meta').text()).toMatch(/^Sign-ups open \w{3} \d{1,2} \w{3} · \d{2}:\d{2}$/);
   });
 });

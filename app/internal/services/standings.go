@@ -39,7 +39,7 @@ func (s *StandingsService) GetPointsStandings(groupID uuid.UUID, season string) 
 	if err != nil {
 		return nil, err
 	}
-	matches = FilterCompletedMatches(FilterMatchesBySeason(matches, season), time.Now())
+	matches = FilterCountedMatches(FilterMatchesBySeason(matches, season), time.Now())
 	rows := ComputePointsStandings(matches)
 
 	currentMembers, err := s.currentMemberIDs(groupID)
@@ -57,7 +57,7 @@ func (s *StandingsService) GetScorers(groupID uuid.UUID, season string) ([]model
 	if err != nil {
 		return nil, err
 	}
-	matches = FilterCompletedMatches(FilterMatchesBySeason(matches, season), time.Now())
+	matches = FilterCountedMatches(FilterMatchesBySeason(matches, season), time.Now())
 	rows := ComputeScorers(matches)
 
 	currentMembers, err := s.currentMemberIDs(groupID)
@@ -83,7 +83,7 @@ func (s *StandingsService) GetMotmStandings(groupID uuid.UUID, season string) ([
 	if err != nil {
 		return nil, err
 	}
-	matches = FilterCompletedMatches(FilterMatchesBySeason(matches, season), time.Now())
+	matches = FilterMotmCountedMatches(FilterMatchesBySeason(matches, season), time.Now())
 
 	matchIDs := make([]uuid.UUID, len(matches))
 	for i, match := range matches {
@@ -222,6 +222,7 @@ func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (
 	}
 
 	var allMatches []models.MatchWithDetails
+	var allMotmMatches []models.MatchWithDetails
 	// Match ids are globally unique, so merging each group's votesByMatch
 	// into one combined map for the Overall computation below can never
 	// collide two different groups' entries under the same key.
@@ -239,16 +240,20 @@ func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (
 			seasonSet[label] = struct{}{}
 		}
 
-		matches := FilterCompletedMatches(FilterMatchesBySeason(raw, season), time.Now())
+		now := time.Now()
+		matches := FilterCountedMatches(FilterMatchesBySeason(raw, season), now)
 		allMatches = append(allMatches, matches...)
+		// MOTM awards only once the vote is closed (FilterMotmCountedMatches).
+		motmMatches := FilterMotmCountedMatches(FilterMatchesBySeason(raw, season), now)
+		allMotmMatches = append(allMotmMatches, motmMatches...)
 
 		row := zeroRow
 		if found := findPointsRow(ComputePointsStandings(matches), playerID); found != nil {
 			row = *found
 		}
 
-		matchIDs := make([]uuid.UUID, len(matches))
-		for i, match := range matches {
+		matchIDs := make([]uuid.UUID, len(motmMatches))
+		for i, match := range motmMatches {
 			matchIDs[i] = match.ID
 		}
 		votesByMatch, err := s.VoteService.TallyVotesForMatches(matchIDs)
@@ -278,7 +283,7 @@ func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (
 			PointsStandingRow: row,
 			GroupID:           group.ID,
 			GroupName:         group.Name,
-			MotmAwards:        findMotmAwards(ComputeMotmStandings(matches, votesByMatch), playerID),
+			MotmAwards:        findMotmAwards(ComputeMotmStandings(motmMatches, votesByMatch), playerID),
 			PredictionPoints:  predictionPoints,
 		})
 	}
@@ -286,7 +291,7 @@ func (s *StandingsService) GetPlayerProfile(playerID uuid.UUID, season string) (
 	if found := findPointsRow(ComputePointsStandings(allMatches), playerID); found != nil {
 		profile.Overall.PointsStandingRow = *found
 	}
-	profile.Overall.MotmAwards = findMotmAwards(ComputeMotmStandings(allMatches, allVotesByMatch), playerID)
+	profile.Overall.MotmAwards = findMotmAwards(ComputeMotmStandings(allMotmMatches, allVotesByMatch), playerID)
 	// Sum of the per-group returns, not a cross-group resettle: mixing the
 	// groups would price each bet against the wrong Elo pool.
 	profile.Overall.PredictionPoints = predictionTotal
@@ -381,10 +386,61 @@ func FilterResultRecorded(matches []models.MatchWithDetails) []models.MatchWithD
 	return filtered
 }
 
+// IsMatchCounted reports whether a match counts in the points, scorers,
+// player profile and Elo standings at instant now: as soon as its result is
+// recorded (ResultRecordedAt, set when an admin saves the score of a
+// scheduled match after kick-off), so the standings move the moment the
+// score is saved instead of at midnight. A match created without a
+// schedule never gets a ResultRecordedAt, so it keeps IsMatchCompleted's
+// midnight-after rule. A scheduled match whose score isn't recorded yet
+// does not count, whatever the date: its roster can be composed, and its
+// score still 0-0, before anyone has entered the result.
+func IsMatchCounted(match models.MatchWithDetails, now time.Time) bool {
+	if match.ResultRecordedAt != nil {
+		return true
+	}
+	return !match.IsScheduled() && IsMatchCompleted(match, now)
+}
+
+// IsMotmVoteClosed reports whether a match's Man of the Match vote is over
+// at instant now: the same deadline VotingWindowError enforces, midnight
+// two days after the match day.
+func IsMotmVoteClosed(match models.MatchWithDetails, now time.Time) bool {
+	return !now.Before(time.Time(match.Date).AddDate(0, 0, 2))
+}
+
+// FilterCountedMatches keeps only the matches IsMatchCounted reports true for
+// at instant now. Applied wherever points, goals or Elo are aggregated
+// (GetPointsStandings, GetScorers, GetPlayerProfile, GetEloStandings).
+func FilterCountedMatches(matches []models.MatchWithDetails, now time.Time) []models.MatchWithDetails {
+	filtered := make([]models.MatchWithDetails, 0, len(matches))
+	for _, match := range matches {
+		if IsMatchCounted(match, now) {
+			filtered = append(filtered, match)
+		}
+	}
+	return filtered
+}
+
+// FilterMotmCountedMatches keeps only the matches whose Man of the Match
+// award counts at instant now: counted (IsMatchCounted) and with the vote
+// closed (IsMotmVoteClosed), so a leader can't be awarded while the vote
+// can still change. Used by GetMotmStandings and GetPlayerProfile.
+func FilterMotmCountedMatches(matches []models.MatchWithDetails, now time.Time) []models.MatchWithDetails {
+	filtered := make([]models.MatchWithDetails, 0, len(matches))
+	for _, match := range matches {
+		if IsMatchCounted(match, now) && IsMotmVoteClosed(match, now) {
+			filtered = append(filtered, match)
+		}
+	}
+	return filtered
+}
+
 // FilterCompletedMatches keeps only the matches IsMatchCompleted reports true
-// for at instant now. Applied in every StandingsService method that feeds a
-// Compute* aggregator (GetPointsStandings, GetScorers, GetMotmStandings,
-// GetPlayerProfile) — deliberately not in GetSeasons/ComputeSeasons, whose
+// for at instant now: the plain midnight-after rule. The standings no longer
+// use it directly — FilterCountedMatches and FilterMotmCountedMatches apply
+// it only to matches created without a schedule. Like those, it is
+// deliberately not used in GetSeasons/ComputeSeasons, whose
 // season list is documented to include an unplayed scheduled match on
 // purpose (see CLAUDE.md's "Seasons" section), a different, unrelated
 // decision this one must not disturb.

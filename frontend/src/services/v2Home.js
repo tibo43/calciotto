@@ -67,6 +67,13 @@ export function rowDateLabel(date) {
   return `${String(day.getDate()).padStart(2, '0')} ${MONTHS[day.getMonth()]}`;
 }
 
+// « 4 Sep »: the day as read out in a Latest matches row's name.
+export function dayMonthLabel(date) {
+  const day = parseCalendarDay(date);
+  if (!day) return '';
+  return `${day.getDate()} ${MONTHS[day.getMonth()]}`;
+}
+
 // A calendar day with no kick-off returns nothing, so a played match never
 // prints 00:00. The clock is the viewer's local zone (see localParts).
 export function kickoffLabel(scheduledAt) {
@@ -85,24 +92,6 @@ export function weekdayTimeLabel(scheduledAt) {
   const parts = localParts(scheduledAt);
   const weekday = parts && parts.find((part) => part.type === 'weekday');
   return weekday ? `${weekday.value} ${time}` : time;
-}
-
-// The hero's line under the kick-off. The opening is an instant, shown in the
-// viewer's own zone (local getters, no timeZone), like the kick-off.
-export function signupOpeningLabel(value) {
-  const at = new Date(value || '');
-  if (!value || Number.isNaN(at.getTime())) return '';
-  const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
-  return `${WEEKDAYS[at.getDay()]} ${at.getDate()} ${MONTHS[at.getMonth()]} · ${time}`;
-}
-
-export function registrationLine(match, nowMs) {
-  const state = deriveRegistrationState(match, nowMs);
-  const when = signupOpeningLabel(match && match.RegistrationOpensAt);
-  if (state === REGISTRATION_NOT_OPEN_YET) return when ? `Sign-ups open ${when}` : 'Sign-ups not open yet';
-  if (state === REGISTRATION_OPEN) return when ? `Sign-ups opened ${when}` : 'Sign-ups open';
-  if (state === 'closed-by-admin' || state === 'closed-at-kickoff') return 'Sign-ups closed';
-  return '';
 }
 
 export function registrationMeta(match, nowMs) {
@@ -135,14 +124,20 @@ export function motmWinners(votes) {
   return rows.filter((row) => Number(row.Votes) === max);
 }
 
-export function homeVoteLine(match, votes, nowMs) {
+// The home's MOTM line: only for a match that is over and whose vote is
+// still open. A closed vote, or another match's, says nothing there.
+export function homeVoteLine(match, nowMs) {
   if (!match || !isMatchOver(match, nowMs)) return null;
-  if (isMotmVotingOpen(match, nowMs)) {
-    return 'MOTM vote open · Vote in match details';
-  }
-  const winners = motmWinners(votes);
-  if (!winners.length) return null;
-  return `MOTM: ${winners.map((row) => row.Name).join(', ')}`;
+  return isMotmVotingOpen(match, nowMs) ? 'MOTM vote open · Vote in match details' : null;
+}
+
+// A Latest matches row's grey sub-line: « MOTM vote open » while that
+// match's vote is still open, in place of its weekday and kick-off time
+// (never both); else that time, or nothing.
+export function rowSubLine(match, nowMs) {
+  if (!match) return '';
+  if (isMatchOver(match, nowMs) && isMotmVotingOpen(match, nowMs)) return 'MOTM vote open';
+  return weekdayTimeLabel(match.ScheduledAt);
 }
 
 export function matchVoteCopy(match, votes, nowMs) {

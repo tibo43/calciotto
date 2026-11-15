@@ -352,23 +352,31 @@ export default {
     },
     // Where the match stands, from what the server has saved (not this
     // page's draft): sign-ups closed, then teams saved, then the score.
+    signupsClosed() {
+      return !this.isScheduled || this.registrationState === REGISTRATION_CLOSED_BY_ADMIN
+        || this.registrationState === REGISTRATION_CLOSED_AT_KICKOFF;
+    },
+    teamsSaved() {
+      const saved = (this.match && this.match.Teams) || [];
+      return [0, 1].every((index) => ((saved[index] || {}).Players || []).length > 0);
+    },
     progress() {
       const match = this.match || {};
       const saved = match.Teams || [];
       const scoreSaved = Boolean(match.ResultRecordedAt)
         || saved.some((team) => (team.Players || []).some((player) => player.GoalNumber || player.OwnGoals));
-      const teamsSaved = [0, 1].every((index) => ((saved[index] || {}).Players || []).length > 0);
-      const closed = !this.isScheduled || this.registrationState === REGISTRATION_CLOSED_BY_ADMIN
-        || this.registrationState === REGISTRATION_CLOSED_AT_KICKOFF;
       if (scoreSaved) return null;
-      if (teamsSaved) return 'score';
-      return closed ? 'teams' : null;
+      if (this.teamsSaved) return 'score';
+      return this.signupsClosed ? 'teams' : null;
     },
+    // The same rule as the next step's colour: Teams opens once sign-ups are
+    // closed, Score and goals once the teams are saved. Until then a step
+    // stays in place, greyed and inert.
     stepItems() {
       return [
         { key: 'signups', n: 1, label: 'Sign-ups' },
-        { key: 'teams', n: 2, label: 'Teams' },
-        { key: 'score', n: 3, label: 'Score and goals', inactive: !this.bothSides },
+        { key: 'teams', n: 2, label: 'Teams', inactive: !this.signupsClosed },
+        { key: 'score', n: 3, label: 'Score and goals', inactive: !this.signupsClosed || !this.teamsSaved },
       ].map((item) => ({ ...item, todo: this.progress === item.key && !item.inactive }));
     },
     sizeCount() {
@@ -437,6 +445,15 @@ export default {
     },
   },
   watch: {
+    // A link to a step that isn't open yet shows the last one that is.
+    stepItems(items) {
+      if (!this.match) return;
+      const current = items.find((item) => item.key === this.step);
+      if (current && current.inactive) {
+        const open = items.filter((item) => !item.inactive);
+        this.goStep(open[open.length - 1].key);
+      }
+    },
     '$route.query.step': function onStep() {
       this.step = this.stepFromRoute();
     },
@@ -718,6 +735,13 @@ export default {
       this.message = '';
       try {
         await updateMatch(this.match.ID, this.payload());
+        // What was just saved is what the server now holds: the steps read it.
+        this.match = {
+          ...this.match,
+          Teams: (this.match.Teams || []).map((team, index) => (index < 2
+            ? { ...team, Players: this.teamPlayers[index].map((player) => ({ ...player })) }
+            : team)),
+        };
         this.hadScore = this.hadScore || this.teamPlayers.flat().some((player) => player.GoalNumber || player.OwnGoals);
         this.$refs.toast.show(this.step === 'score' ? 'Changes saved.' : 'Saved.', 'success');
       } catch (error) {
