@@ -186,3 +186,29 @@
 .design-v2 .fab{border-radius:16px;}
 /* The sign-up status toggles: their label centred in the box, not at its top. */
 .design-v2 .tog{display:inline-flex;align-items:center;justify-content:center;}
+/* Avatar: the profile's initial is a box like the other filled squares. */
+.design-v2 .avatar{border-radius:var(--v2-radius-lg);}
+/* Desktop menu: the tab bar's icons, left of each label, in its colour. */
+.design-v2 .dnav a.nav-text{gap:8px;}
+.design-v2 .dnav a.nav-text svg{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+/* From 768px: the page, the tab bar and the pinned bars keep to one centred
+   800px column; the top bar's content and the New match button to a wider
+   960px one (20px margins below 1000px). Backgrounds stay full width.
+   Below 768px nothing changes. */
+@media (min-width:768px){
+  .design-v2{--v2-col:800px;--v2-gutter:max(20px, calc((100% - var(--v2-col)) / 2));
+    --v2-col-wide:960px;--v2-gutter-wide:max(20px, calc((100% - var(--v2-col-wide)) / 2));}
+  .design-v2 .page{max-width:calc(var(--v2-col) + 40px);padding-left:20px;padding-right:20px;}
+  .design-v2 .tabbar, .design-v2 .sticky-cta{padding-left:var(--v2-gutter);padding-right:var(--v2-gutter);}
+  .design-v2 .topbar{padding-left:var(--v2-gutter-wide);padding-right:var(--v2-gutter-wide);}
+  .design-v2 .fab{right:var(--v2-gutter-wide);}
+  /* In the narrower top bar the menu keeps its width and the group name
+     gives way (ellipsis), as on a phone; the season stays whole. */
+  .design-v2 .dnav{flex:none;}
+  .design-v2 .ctx-pair{flex:1;min-width:0;}
+  .design-v2 label.ctx:first-child{flex:0 1 auto;min-width:0;overflow:hidden;}
+  .design-v2 label.ctx:last-child{flex:none;}
+}
+@media (min-width:900px){
+  .design-v2 .sticky-cta{padding-left:0;padding-right:0;}
+}

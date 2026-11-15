@@ -38,6 +38,7 @@
           <nav v-if="isAuthenticatedRoute && !v2Context.pageTitle" class="dnav" aria-label="Main">
             <router-link v-for="item in v2NavItems" :key="item.to" :to="item.to" class="nav-text" :class="{ 'is-on': item.on }"
               :aria-current="item.on ? 'page' : null">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="item.icon" /></svg>
               {{ item.label }}
             </router-link>
           </nav>
@@ -277,8 +278,8 @@ export default {
     isV2Profile() {
       return String(this.$route.path || '').startsWith('/profile');
     },
-    // The v2 menu: named in the desktop top bar, icons only in the phone tab
-    // bar (named there for screen readers).
+    // The v2 menu: icon and name in the desktop top bar, icons only in the
+    // phone tab bar (named there for screen readers).
     v2NavItems() {
       return [
         { to: '/', label: 'Home', on: this.isV2Home, icon: 'M3 9a9 3 0 1 0 18 0 9 3 0 1 0-18 0zM3 9v6a9 3 0 0 0 18 0V9M7 9a5 1.4 0 1 0 10 0 5 1.4 0 1 0-10 0zM7.5 17.6v-3M12 18v-3M16.5 17.6v-3' },
