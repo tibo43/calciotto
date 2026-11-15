@@ -24,13 +24,13 @@
                 </select>
                 <svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4l4 4 4-4"/></svg>
               </label>
-              <label class="ctx">
+              <label class="ctx" :class="{ 'is-disabled': !v2HasSeasons }">
                 <span class="sr-only">Season</span>
-                <span class="ctx-name" aria-hidden="true">{{ v2Context.season }}</span>
-                <select :value="v2Context.season" @change="onV2Season">
+                <span class="ctx-name" aria-hidden="true">{{ v2SeasonLabel }}</span>
+                <select :value="v2Context.season" :disabled="!v2HasSeasons" @change="onV2Season">
                   <option v-for="season in v2Context.seasons" :key="season" :value="season">{{ season }}</option>
                 </select>
-                <svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4l4 4 4-4"/></svg>
+                <svg v-if="v2HasSeasons" class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg>
               </label>
             </div>
             </template>
@@ -276,6 +276,15 @@ export default {
     v2GroupLabel() {
       const group = (this.v2Context.groups || []).find((item) => item.id === this.v2Context.groupId);
       return group ? group.name : '';
+    },
+    v2HasSeasons() {
+      return (this.v2Context.seasons || []).length > 0;
+    },
+    // Keep the season control in the same place when a group has no
+    // matches yet, so the header does not jump. The visible label is
+    // "No season yet" and the select is disabled.
+    v2SeasonLabel() {
+      return this.v2HasSeasons ? (this.v2Context.season || '') : 'No season yet';
     },
     isV2Profile() {
       return String(this.$route.path || '').startsWith('/profile');

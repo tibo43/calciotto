@@ -109,6 +109,32 @@ describe('HomeV2.vue New match button', () => {
   });
 });
 
+describe('HomeV2.vue empty group', () => {
+  it('shows the start-the-season empty state, a Create match button, and the FAB for an admin', async () => {
+    const wrapper = await mountHome([], true);
+    expect(wrapper.find('.label').text()).toBe('No matches yet');
+    expect(wrapper.find('h1').text()).toBe('Start the season');
+    expect(wrapper.text()).toContain('Create the first match to open sign-ups.');
+    expect(wrapper.text()).not.toContain('An admin will create the first match.');
+    const create = wrapper.findAll('a').find((link) => link.text() === 'Create match');
+    expect(create).toBeTruthy();
+    expect(JSON.parse(create.attributes('data-to'))).toEqual({ name: 'NewMatch' });
+    expect(wrapper.find('.fab').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('Latest matches');
+  });
+
+  it('tells a member an admin will create the first match, with no button and no FAB', async () => {
+    const wrapper = await mountHome([], false);
+    expect(wrapper.find('.label').text()).toBe('No matches yet');
+    expect(wrapper.find('h1').text()).toBe('Start the season');
+    expect(wrapper.text()).toContain('An admin will create the first match.');
+    expect(wrapper.text()).not.toContain('Create the first match to open sign-ups.');
+    expect(wrapper.findAll('a').every((link) => link.text() !== 'Create match')).toBe(true);
+    expect(wrapper.find('.fab').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Latest matches');
+  });
+});
+
 describe('HomeV2.vue with a match scheduled', () => {
   beforeEach(() => jest.clearAllMocks());
 

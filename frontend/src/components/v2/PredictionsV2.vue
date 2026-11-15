@@ -1,6 +1,6 @@
 <template>
   <main class="page">
-    <nav class="subnav" aria-label="Predictions">
+    <nav v-if="!isEmptyGroup" class="subnav" aria-label="Predictions">
       <router-link to="/predictions" :class="{ 'is-on': tab === 'matches' }">
         Matches
       </router-link>
@@ -21,6 +21,11 @@
         <h1>Couldn't load the predictions</h1>
         <p>Your saved picks are kept. Check your connection, then try again.</p>
         <button class="btn" type="button" @click="load">Try again</button>
+      </section>
+      <section v-else-if="isEmptyGroup" class="state">
+        <p class="label">No matches yet</p>
+        <h1>Predictions</h1>
+        <p>Predictions open when the first match is created.</p>
       </section>
       <section v-else-if="eligible.length === 0" class="state">
         <h1>No predictions yet</h1>
@@ -64,6 +69,11 @@
         <h1>Couldn't load the predictions</h1>
         <p>Your saved picks are kept. Check your connection, then try again.</p>
         <button class="btn" type="button" @click="loadBoard">Try again</button>
+      </section>
+      <section v-else-if="isEmptyGroup" class="state">
+        <p class="label">No matches yet</p>
+        <h1>Predictions</h1>
+        <p>Predictions open when the first match is created.</p>
       </section>
       <section v-else-if="standings.length === 0" class="state">
         <h1>No predictions yet</h1>
@@ -146,12 +156,16 @@ export default {
       playerId: '',
       groupId: '',
       season: '',
+      seasons: [],
       nowMs: Date.now(),
     };
   },
   computed: {
     tab() {
       return this.$route.query.tab === 'leaderboard' ? 'leaderboard' : 'matches';
+    },
+    isEmptyGroup() {
+      return this.seasons.length === 0;
     },
     eligible() {
       return this.matches.filter((match) => isScheduledMatch(match) && rosterFullyComposed(match));
@@ -294,8 +308,9 @@ export default {
       try {
         const { groups, activeGroupId } = await resolveActiveGroup();
         this.groupId = activeGroupId || '';
-        const seasons = await getSeasons(this.groupId).catch(() => []);
+        const seasons = this.groupId ? await getSeasons(this.groupId).catch(() => []) : [];
         const seasonList = Array.isArray(seasons) ? seasons : [];
+        this.seasons = seasonList;
         const pinned = sessionStorage.getItem('calciotto-v2-season');
         this.season = pinned && seasonList.includes(pinned)
           ? pinned
