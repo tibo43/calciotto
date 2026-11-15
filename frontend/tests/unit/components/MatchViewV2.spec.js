@@ -68,6 +68,19 @@ const toastText = (wrapper) => wrapper.find('.toast-message span').text();
 beforeEach(() => jest.clearAllMocks());
 
 describe('MatchView.vue (design v2)', () => {
+  it('shows the result once the score is recorded, even on the match day, and nothing about sign-ups', async () => {
+    const recorded = {
+      ...upcomingMatch(), Date: day(0), ScheduledAt: iso(-2 * 60 * 60 * 1000), RegistrationsClosedAt: iso(-3 * 60 * 60 * 1000),
+      ResultRecordedAt: iso(-60 * 1000),
+      Teams: playedMatch().Teams,
+    };
+    const { wrapper } = await mountView(recorded);
+    expect(wrapper.find('.board .board-score').exists()).toBe(true);
+    expect(wrapper.find('.hero').exists()).toBe(false);
+    expect(wrapper.find('.motm-line').exists()).toBe(true);
+    expect(wrapper.text()).not.toMatch(/Sign up|Withdraw|Sign-ups|places left/);
+  });
+
   it('loads the match through the group it belongs to', async () => {
     const { wrapper } = await mountView(upcomingMatch());
     expect(findMatchInMyGroups).toHaveBeenCalledWith('match');

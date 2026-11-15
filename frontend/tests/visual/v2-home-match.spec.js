@@ -138,3 +138,50 @@ test.describe('design v2 once the teams are set', () => {
     expectEverythingStubbed(unstubbed);
   });
 });
+
+// A match is over as soon as its score is recorded, here on its own day
+// (kick-off 08:00, the clock at 10:00): no longer the next match, and its
+// page shows the result with nothing about sign-ups.
+const recorded = {
+  ...data.playedMatch, ID: 'cccccccc-0000-4000-8000-0000000000f1', Date: '2026-09-04', ScheduledAt: '2026-09-04T08:00:00+02:00',
+  RegistrationOpensAt: '2026-09-01T18:00:00+02:00', RegistrationsClosedAt: '2026-09-04T07:00:00+02:00',
+  ResultRecordedAt: '2026-09-04T09:30:00+02:00', MaxPlayers: 8,
+};
+
+test.describe('design v2 once the score is recorded', () => {
+  test('home, no upcoming match, as an admin', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches.slice(0, 2), recorded] });
+    await expect(page.locator('.hero-none')).toContainText('No upcoming match');
+    await expect(page.getByText('Sign-ups closed')).toHaveCount(0);
+    const first = page.locator('.list .row').first();
+    await expect(first).toHaveAttribute('href', `/matches/${recorded.ID}`);
+    await expect(first.locator('.score')).toHaveText('4–6');
+    await expect(page.getByRole('link', { name: 'New match' })).toBeVisible();
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('home, the next scheduled match after it', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches, recorded] });
+    await expect(page.locator('.hero .hero-date')).toHaveText('Sun 6 Sep');
+    await expect(page.locator('.list .row').first()).toHaveAttribute('href', `/matches/${recorded.ID}`);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('match page, the result and no sign-ups', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, `/matches/${recorded.ID}`, { ...V2, matches: [...data.matches, recorded] });
+    await expect(page.locator('.board .board-score')).toHaveText('4–6');
+    await expect(page.locator('.motm-line')).toBeVisible();
+    await expect(page.locator('main.page')).not.toContainText(/Sign up|Withdraw|Sign-ups|places left/);
+    expectEverythingStubbed(unstubbed);
+  });
+});
+
+test.describe('design v2 home spacing', () => {
+  test('16px between the MOTM line and Latest matches @mobile', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches.slice(0, 2), recorded] });
+    const line = await page.locator('.motm-row').boundingBox();
+    const heading = await page.locator('.sec').filter({ hasText: 'Latest matches' }).boundingBox();
+    expect(Math.round(heading.y - (line.y + line.height))).toBe(16);
+    expectEverythingStubbed(unstubbed);
+  });
+});

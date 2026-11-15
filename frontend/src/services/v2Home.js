@@ -11,14 +11,17 @@ const completedAt = (match) => {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime();
 };
 
+// A match is over once its score is recorded (ResultRecordedAt, set by the
+// server on the first save after kick-off), or else from the day after it.
 export const isMatchOver = (match, nowMs) => {
+  if (match && match.ResultRecordedAt) return true;
   const at = completedAt(match);
   return !Number.isNaN(at) && nowMs >= at;
 };
 
 // The home hero is the soonest match that is not over yet. Everything else
-// still ahead goes under "Later". When nothing is ahead, the hero is the
-// most recent match that is over.
+// still ahead goes under "Later", and the matches that are over, newest
+// first, under "Latest matches".
 export function splitHomeMatches(matches, nowMs) {
   const list = Array.isArray(matches) ? matches : [];
   const upcoming = [];

@@ -20,10 +20,17 @@ describe('splitHomeMatches', () => {
     expect(split.recent.map((m) => m.ID)).toEqual(['p']);
   });
 
-  it('uses the most recent finished match as the hero when nothing is ahead', () => {
+  it('leaves the hero empty when nothing is ahead, the finished match going under Latest', () => {
     const split = splitHomeMatches([played], NOW);
     expect(split.next).toBeNull();
     expect(split.recent[0].ID).toBe('p');
+  });
+
+  it('counts a match as over once its score is recorded, even before its day ends', () => {
+    const today = { ...next, ID: 'today', ResultRecordedAt: new Date(NOW).toISOString() };
+    const split = splitHomeMatches([today, later], NOW);
+    expect(split.next.ID).toBe('l');
+    expect(split.recent.map((m) => m.ID)).toEqual(['today']);
   });
 });
 

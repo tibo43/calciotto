@@ -70,17 +70,11 @@
         </div>
       </section>
 
-      <section v-else class="hero hero-last">
-        <p class="label">No upcoming match yet</p>
-        <p class="hero-meta">{{ heroDateLabel(recent[0].Date) }}</p>
-        <div class="board-teams">
-          <div class="board-team"><span class="name">{{ teamName(recent[0], 0) }}</span></div>
-          <div class="board-score">{{ scoreOf(recent[0]) }}</div>
-          <div class="board-team"><span class="name">{{ teamName(recent[0], 1) }}</span></div>
-        </div>
-        <div class="actions">
-          <router-link class="btn" :to="matchTo(recent[0])">See match</router-link>
-        </div>
+      <!-- Nothing ahead: a match that is over is under Latest matches with
+           its score, and an admin has the + to create the next one. -->
+      <section v-else class="hero hero-none">
+        <p class="label">Next match</p>
+        <p class="hero-meta">No upcoming match</p>
       </section>
 
       <router-link v-if="voteLine" class="motm-row" :to="matchTo(voteMatch)">
@@ -193,9 +187,7 @@ export default {
     next() { return this.split.next; },
     later() { return this.split.later; },
     recent() { return this.split.recent; },
-    // With nothing scheduled, the hero already shows the last match played,
-    // so the "Latest matches" list starts at the one before it.
-    latest() { return this.next ? this.recent : this.recent.slice(1); },
+    latest() { return this.recent; },
     regState() {
       return this.next ? deriveRegistrationState(this.next, this.nowMs) : '';
     },
