@@ -134,11 +134,9 @@
 .design-v2 .fab svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:square;}
 .design-v2 .fab:focus-visible{outline:2px solid var(--v2-text);outline-offset:3px;}
 @media (min-width:900px){.design-v2 .fab{right:32px;bottom:32px;width:64px;height:64px;}.design-v2 .page.has-fab{padding-bottom:112px;}}
-/* Home hero once the teams are set: the player's side, in the display face. */
+/* Home and match page once the teams are set: the player's side. */
 .design-v2 .hero-team{padding:4px 0 0;}
 .design-v2 .hero-team .label{margin-bottom:6px;}
-.design-v2 .hero-team-name{font-family:var(--v2-font-display);font-weight:800;font-size:clamp(40px,11vw,64px);text-transform:uppercase;line-height:0.95;color:var(--v2-accent);margin:0 0 6px;}
-.design-v2:not(.dark-mode) .hero-team-name{color:var(--v2-text);}
 .design-v2 .hero-team .hero-meta{margin:0;}
 /* Upcoming match page once the teams are set: the two line-ups, the
    player's own row marked like theirs elsewhere. */
@@ -232,7 +230,9 @@
 .design-v2 .hero-status{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 20px;}
 .design-v2 .hero-status .hero-meta{margin:0;min-width:0;}
 .design-v2 .hero-status-btn{flex:none;margin-left:auto;min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 16px;}
-/* Home: "You play for <team>" on one line, the team in the accent. */
+/* Home and match page: "You play for <team>" in the mono label face,
+   the team in the accent. A long name wraps, no ellipsis. */
+.design-v2 .hero-team-line{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;}
 .design-v2 .hero-team-mine{color:var(--v2-accent);}
 /* Editing steps, the same in both themes. Done (open to correct): the
    surface, no outline. Not possible yet: no fill, no outline, muted text,

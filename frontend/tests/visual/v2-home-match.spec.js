@@ -231,13 +231,13 @@ test.describe('design v2 menu', () => {
     });
   }
 
-  test('home, Home highlighted', async ({ page }) => {
+  test('home, Matches highlighted', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, '/', V2);
     await expect(page.locator('.hero')).toBeVisible();
     const on = page.locator(`:is(${NAV}).is-on`);
     await expect(on.first()).toHaveAttribute('aria-current', 'page');
     for (const label of await on.evaluateAll((items) => items.map((item) => item.getAttribute('aria-label') || item.textContent.trim()))) {
-      expect(label).toBe('Home');
+      expect(label).toBe('Matches');
     }
     expectEverythingStubbed(unstubbed);
   });
