@@ -89,7 +89,6 @@
         <ul class="signup-ro">
           <li v-for="entry in waiting" :key="entry.PlayerID">
             <span class="nm">{{ entry.Name }}</span>
-            <span class="wait">Waiting</span>
           </li>
         </ul>
       </section>
@@ -132,9 +131,10 @@
     </template>
 
     <!-- Phones: the same bottom sheet as the home page, shown by the
-         shell's is-confirming class (the pop-up above is for wide screens). -->
-    <div class="confirm-scrim" @click="confirming = false"></div>
-    <div class="confirm-sheet" role="dialog" aria-labelledby="match-withdraw-title">
+         shell's is-confirming class (the pop-up above is for wide screens).
+         Only while the match is ahead: once over, nothing is about sign-ups. -->
+    <div v-if="upcoming" class="confirm-scrim" @click="confirming = false"></div>
+    <div v-if="upcoming" class="confirm-sheet" role="dialog" aria-labelledby="match-withdraw-title">
       <h3 id="match-withdraw-title">Withdraw from this match?</h3>
       <p class="ref">Your spot goes to the first player on the waiting list.</p>
       <div class="confirm-actions">
@@ -304,7 +304,10 @@ export default {
     starFor(player) {
       return this.votes && this.votes.MyVoteFor === player.ID ? '★' : '☆';
     },
+    // The accent goes to the winner once the vote is closed. While it is
+    // open, the one ahead is no winner yet: every count stays muted.
     isWinner(player) {
+      if (this.voteOpen) return false;
       return this.winners.some((row) => row.PlayerID === player.ID);
     },
     canVote(player) {

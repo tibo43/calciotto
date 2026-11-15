@@ -24,14 +24,20 @@
           <p class="label">Next match</p>
           <h1 class="display hero-date">{{ heroDateLabel(next.Date) }}</h1>
           <p v-if="kickoffLabel(next.ScheduledAt)" class="display hero-time">{{ kickoffLabel(next.ScheduledAt) }}</p>
-          <p v-if="metaOf(next)" class="hero-meta">{{ metaOf(next) }}</p>
         </router-link>
+        <!-- The sign-up status, and on the same line the way into the match:
+             its page for a member, its editing page for an admin. -->
+        <div class="hero-status">
+          <p class="hero-meta">{{ registrationLine(next, nowMs) }}</p>
+          <router-link v-if="isAdmin" class="btn btn-ghost hero-status-btn" :to="`/matches/${next.ID}/edit`">Manage match</router-link>
+          <router-link v-else class="btn btn-ghost hero-status-btn" :to="matchTo(next)">View match</router-link>
+        </div>
         <!-- Once the teams are set the places are history: what matters is
              which side the player is on. -->
         <div v-if="teamsSet" class="hero-team">
           <template v-if="myTeam">
-            <p class="label">You play for</p>
-            <p class="display hero-team-name">{{ myTeam }}</p>
+            <!-- One line, one face: only the team takes the accent. -->
+            <p class="label hero-team-line">You play for <span class="hero-team-mine">{{ myTeam }}</span></p>
           </template>
           <template v-else>
             <p class="label">Teams are set</p>
@@ -64,17 +70,11 @@
         </div>
       </section>
 
-      <section v-else class="hero hero-last">
-        <p class="label">No upcoming match yet</p>
-        <p class="hero-meta">{{ heroDateLabel(recent[0].Date) }}</p>
-        <div class="board-teams">
-          <div class="board-team"><span class="name">{{ teamName(recent[0], 0) }}</span></div>
-          <div class="board-score">{{ scoreOf(recent[0]) }}</div>
-          <div class="board-team"><span class="name">{{ teamName(recent[0], 1) }}</span></div>
-        </div>
-        <div class="actions">
-          <router-link class="btn" :to="matchTo(recent[0])">See match</router-link>
-        </div>
+      <!-- Nothing ahead: a match that is over is under Latest matches with
+           its score, and an admin has the + to create the next one. -->
+      <section v-else class="hero hero-none">
+        <p class="label">Next match</p>
+        <p class="hero-meta">No upcoming match</p>
       </section>
 
       <router-link v-if="voteLine" class="motm-row" :to="matchTo(voteMatch)">
@@ -137,7 +137,7 @@ import { getMatchesDetails, getMatchRegistrations, getMatchVotes, registerForMat
 import { deriveRegistrationState, registrationsAreOpen, teamsAreComposed } from '@/services/matchRegistration';
 import {
   splitHomeMatches, heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel,
-  registrationMeta, placesLeft, homeVoteLine, myTeam, nextWaitingPosition,
+  registrationMeta, registrationLine, placesLeft, homeVoteLine, myTeam, nextWaitingPosition,
 } from '@/services/v2Home';
 
 function currentPlayerIdFromToken() {
@@ -187,9 +187,7 @@ export default {
     next() { return this.split.next; },
     later() { return this.split.later; },
     recent() { return this.split.recent; },
-    // With nothing scheduled, the hero already shows the last match played,
-    // so the "Latest matches" list starts at the one before it.
-    latest() { return this.next ? this.recent : this.recent.slice(1); },
+    latest() { return this.recent; },
     regState() {
       return this.next ? deriveRegistrationState(this.next, this.nowMs) : '';
     },
@@ -249,7 +247,7 @@ export default {
     this.load();
   },
   methods: {
-    heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel, registrationsAreOpen,
+    heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel, registrationsAreOpen, registrationLine,
     publishContext() {
       this.v2Context.hide = false;
     },

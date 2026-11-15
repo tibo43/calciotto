@@ -68,6 +68,41 @@ const toastText = (wrapper) => wrapper.find('.toast-message span').text();
 beforeEach(() => jest.clearAllMocks());
 
 describe('MatchView.vue (design v2)', () => {
+  it('shows the result once the score is recorded, even on the match day, and nothing about sign-ups', async () => {
+    const recorded = {
+      ...upcomingMatch(), Date: day(0), ScheduledAt: iso(-2 * 60 * 60 * 1000), RegistrationsClosedAt: iso(-3 * 60 * 60 * 1000),
+      ResultRecordedAt: iso(-60 * 1000),
+      Teams: playedMatch().Teams,
+    };
+    const { wrapper } = await mountView(recorded);
+    expect(wrapper.find('.board .board-score').exists()).toBe(true);
+    expect(wrapper.find('.hero').exists()).toBe(false);
+    expect(wrapper.find('.motm-line').exists()).toBe(true);
+    expect(wrapper.text()).not.toMatch(/Sign up|Withdraw|Sign-ups|places left/);
+  });
+
+  it('keeps every MOTM count muted while the vote is open, the one ahead included', async () => {
+    const votes = { Tally: [{ PlayerID: 'p2', Name: 'Paolo', Votes: 2 }], MyVoteFor: null };
+    const { wrapper } = await mountView(playedMatch(), { votes });
+    expect(wrapper.text()).toContain('MOTM vote open');
+    expect(wrapper.findAll('.player.is-winner')).toHaveLength(0);
+  });
+
+  it('marks the winner once the vote is closed', async () => {
+    const votes = { Tally: [{ PlayerID: 'p2', Name: 'Paolo', Votes: 2 }], MyVoteFor: null };
+    const { wrapper } = await mountView({ ...playedMatch(), Date: day(-5 * DAY) }, { votes });
+    const winners = wrapper.findAll('.player.is-winner');
+    expect(winners).toHaveLength(1);
+    expect(winners[0].text()).toContain('Paolo');
+  });
+
+  it('lists the waiting list by name only', async () => {
+    const registrations = [{ PlayerID: 'w1', Name: 'Gigi', Position: 17, IsWaiting: true }];
+    const { wrapper } = await mountView(upcomingMatch(), { registrations });
+    const row = wrapper.findAll('.signup-ro li').find((li) => li.text().includes('Gigi'));
+    expect(row.text()).toBe('Gigi');
+  });
+
   it('loads the match through the group it belongs to', async () => {
     const { wrapper } = await mountView(upcomingMatch());
     expect(findMatchInMyGroups).toHaveBeenCalledWith('match');

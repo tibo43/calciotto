@@ -11,14 +11,17 @@ const completedAt = (match) => {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime();
 };
 
+// A match is over once its score is recorded (ResultRecordedAt, set by the
+// server on the first save after kick-off), or else from the day after it.
 export const isMatchOver = (match, nowMs) => {
+  if (match && match.ResultRecordedAt) return true;
   const at = completedAt(match);
   return !Number.isNaN(at) && nowMs >= at;
 };
 
 // The home hero is the soonest match that is not over yet. Everything else
-// still ahead goes under "Later". When nothing is ahead, the hero is the
-// most recent match that is over.
+// still ahead goes under "Later", and the matches that are over, newest
+// first, under "Latest matches".
 export function splitHomeMatches(matches, nowMs) {
   const list = Array.isArray(matches) ? matches : [];
   const upcoming = [];
@@ -82,6 +85,24 @@ export function weekdayTimeLabel(scheduledAt) {
   const parts = localParts(scheduledAt);
   const weekday = parts && parts.find((part) => part.type === 'weekday');
   return weekday ? `${weekday.value} ${time}` : time;
+}
+
+// The hero's line under the kick-off. The opening is an instant, shown in the
+// viewer's own zone (local getters, no timeZone), like the kick-off.
+export function signupOpeningLabel(value) {
+  const at = new Date(value || '');
+  if (!value || Number.isNaN(at.getTime())) return '';
+  const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+  return `${WEEKDAYS[at.getDay()]} ${at.getDate()} ${MONTHS[at.getMonth()]} · ${time}`;
+}
+
+export function registrationLine(match, nowMs) {
+  const state = deriveRegistrationState(match, nowMs);
+  const when = signupOpeningLabel(match && match.RegistrationOpensAt);
+  if (state === REGISTRATION_NOT_OPEN_YET) return when ? `Sign-ups open ${when}` : 'Sign-ups not open yet';
+  if (state === REGISTRATION_OPEN) return when ? `Sign-ups opened ${when}` : 'Sign-ups open';
+  if (state === 'closed-by-admin' || state === 'closed-at-kickoff') return 'Sign-ups closed';
+  return '';
 }
 
 export function registrationMeta(match, nowMs) {

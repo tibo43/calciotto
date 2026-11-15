@@ -138,3 +138,114 @@ test.describe('design v2 once the teams are set', () => {
     expectEverythingStubbed(unstubbed);
   });
 });
+
+// A match is over as soon as its score is recorded, here on its own day
+// (kick-off 08:00, the clock at 10:00): no longer the next match, and its
+// page shows the result with nothing about sign-ups.
+const recorded = {
+  ...data.playedMatch, ID: 'cccccccc-0000-4000-8000-0000000000f1', Date: '2026-09-04', ScheduledAt: '2026-09-04T08:00:00+02:00',
+  RegistrationOpensAt: '2026-09-01T18:00:00+02:00', RegistrationsClosedAt: '2026-09-04T07:00:00+02:00',
+  ResultRecordedAt: '2026-09-04T09:30:00+02:00', MaxPlayers: 8,
+};
+const NAV = '.nav-text, .nav-ico';
+
+test.describe('design v2 once the score is recorded', () => {
+  test('home, no upcoming match, as an admin', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches.slice(0, 2), recorded] });
+    await expect(page.locator('.hero-none')).toContainText('No upcoming match');
+    await expect(page.getByText('Sign-ups closed')).toHaveCount(0);
+    const first = page.locator('.list .row').first();
+    await expect(first).toHaveAttribute('href', `/matches/${recorded.ID}`);
+    await expect(first.locator('.score')).toHaveText('4–6');
+    await expect(page.getByRole('link', { name: 'New match' })).toBeVisible();
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('home, the next scheduled match after it', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches, recorded] });
+    await expect(page.locator('.hero .hero-date')).toHaveText('Sun 6 Sep');
+    await expect(page.locator('.list .row').first()).toHaveAttribute('href', `/matches/${recorded.ID}`);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('match page, the result and no sign-ups', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, `/matches/${recorded.ID}`, { ...V2, matches: [...data.matches, recorded] });
+    await expect(page.locator('.board .board-score')).toHaveText('4–6');
+    await expect(page.locator('.motm-line')).toBeVisible();
+    await expect(page.locator('main.page')).not.toContainText(/Sign up|Withdraw|Sign-ups|places left/);
+    expectEverythingStubbed(unstubbed);
+  });
+});
+
+// Only a tab's own page highlights its entry in the menu.
+test.describe('design v2 menu', () => {
+  for (const [name, path] of [['match page', `/matches/${PLAYED}`], ['edit page', `/matches/${data.scheduledClosedMatch.ID}/edit`], ['new match', '/matches/new']]) {
+    test(`${name}, no tab highlighted`, async ({ page }) => {
+      const closed = data.scheduledClosedMatch;
+      const { unstubbed } = await gotoApp(page, path, { ...V2, matchDetails: { [closed.ID]: closed } });
+      await expect(page).toHaveURL(new RegExp(`${path}$`));
+      await expect(page.locator('main.page')).toBeVisible();
+      await expect(page.locator(`${NAV}`).first()).toBeAttached();
+      await expect(page.locator(`:is(${NAV}).is-on`)).toHaveCount(0);
+      await expect(page.locator(`:is(${NAV})[aria-current="page"]`)).toHaveCount(0);
+      expectEverythingStubbed(unstubbed);
+    });
+  }
+
+  test('home, Home highlighted', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/', V2);
+    await expect(page.locator('.hero')).toBeVisible();
+    const on = page.locator(`:is(${NAV}).is-on`);
+    await expect(on.first()).toHaveAttribute('aria-current', 'page');
+    for (const label of await on.evaluateAll((items) => items.map((item) => item.getAttribute('aria-label') || item.textContent.trim()))) {
+      expect(label).toBe('Home');
+    }
+    expectEverythingStubbed(unstubbed);
+  });
+});
+
+// The MOTM counts: muted for everyone while the vote is open (the one ahead
+// too), the accent only on the winner once it is closed.
+test.describe('design v2 MOTM counts', () => {
+  const colours = (page) => page.locator('.player').evaluateAll((rows) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--v2-text-muted)';
+    rows[0].appendChild(probe);
+    const muted = getComputedStyle(probe).color;
+    probe.remove();
+    return rows.map((row) => ({ name: row.querySelector('.nm').textContent.trim(), votes: getComputedStyle(row.querySelector('.votes')).color, star: getComputedStyle(row.querySelector('.votes .star')).color, muted }));
+  });
+
+  for (const theme of ['light', 'dark']) {
+    test(`vote open, every count muted, ${theme}`, async ({ page }) => {
+      const { unstubbed } = await gotoApp(page, `/matches/${recorded.ID}`, { ...V2, theme, matches: [...data.matches, recorded] });
+      await expect(page.locator('.motm-line')).toContainText('MOTM vote open');
+      for (const row of await colours(page)) {
+        expect(row.votes).toBe(row.muted);
+        expect(row.star).toBe(row.muted);
+      }
+      expectEverythingStubbed(unstubbed);
+    });
+  }
+
+  test('vote closed, the winner in the accent', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, `/matches/${PLAYED}`, V2);
+    await expect(page.getByText('MOTM vote closed', { exact: true })).toBeVisible();
+    const rows = await colours(page);
+    for (const row of rows) {
+      if (row.name === 'Marco Rossi') expect(row.votes).not.toBe(row.muted);
+      else expect(row.votes).toBe(row.muted);
+    }
+    expectEverythingStubbed(unstubbed);
+  });
+});
+
+test.describe('design v2 home spacing', () => {
+  test('16px between the MOTM line and Latest matches @mobile', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches.slice(0, 2), recorded] });
+    const line = await page.locator('.motm-row').boundingBox();
+    const heading = await page.locator('.sec').filter({ hasText: 'Latest matches' }).boundingBox();
+    expect(Math.round(heading.y - (line.y + line.height))).toBe(16);
+    expectEverythingStubbed(unstubbed);
+  });
+});

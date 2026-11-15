@@ -33,17 +33,27 @@ async function mountHome(matches, isAdmin = false) {
 }
 
 describe('HomeV2.vue with nothing scheduled', () => {
-  it('shows the last match once: in the hero, not again at the top of Latest matches', async () => {
+  it('says there is no upcoming match and lists every finished one under Latest matches', async () => {
     const wrapper = await mountHome([played('last', 3), played('before', 10), played('oldest', 17)]);
-    expect(wrapper.find('.hero-last').exists()).toBe(true);
+    expect(wrapper.find('.hero-none .label').text()).toBe('Next match');
+    expect(wrapper.find('.hero-none .hero-meta').text()).toBe('No upcoming match');
     const listed = wrapper.findAll('.list .row').map((row) => JSON.parse(row.attributes('data-to')).params.id);
-    expect(listed).toEqual(['before', 'oldest']);
+    expect(listed).toEqual(['last', 'before', 'oldest']);
   });
 
-  it('hides Latest matches when the hero is the only match', async () => {
-    const wrapper = await mountHome([played('only', 3)]);
-    expect(wrapper.find('.hero-last').exists()).toBe(true);
-    expect(wrapper.text()).not.toContain('Latest matches');
+  it('moves a match whose score is recorded out of Next match, to the top of Latest matches', async () => {
+    const recorded = {
+      ...played('today', 0), ScheduledAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      ResultRecordedAt: new Date(Date.now() - 60 * 1000).toISOString(), MaxPlayers: 16,
+    };
+    const wrapper = await mountHome([recorded, played('before', 7)], true);
+    expect(wrapper.find('.hero-none').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('Manage match');
+    expect(wrapper.text()).not.toContain('Sign-ups');
+    const rows = wrapper.findAll('.list .row');
+    expect(JSON.parse(rows[0].attributes('data-to')).params.id).toBe('today');
+    expect(rows[0].find('.score').text()).toBe('1–0');
+    expect(wrapper.find('.fab').exists()).toBe(true);
   });
 });
 
@@ -59,7 +69,7 @@ describe('HomeV2.vue New match button', () => {
     const member = await mountHome([], false);
     expect(member.find('.fab').exists()).toBe(false);
     expect(member.text()).toContain('No matches yet');
-    expect((await mountHome([played('last', 3)], false)).text()).toContain('No upcoming match yet');
+    expect((await mountHome([played('last', 3)], false)).text()).toContain('No upcoming match');
   });
 });
 
@@ -90,8 +100,36 @@ describe('HomeV2.vue with a match scheduled', () => {
     getToken.mockReturnValue(`x.${btoa(JSON.stringify({ player_id: 'me' }))}.y`);
     const teams = [{ ID: 'a', Name: 'Black', Players: [{ ID: 'me' }] }, { ID: 'b', Name: 'White', Players: [{ ID: 'q' }] }];
     const wrapper = await mountHome([scheduled({ RegistrationsClosedAt: new Date().toISOString(), Teams: teams })]);
-    expect(wrapper.find('.hero-team-name').text()).toBe('Black');
+    expect(wrapper.find('.hero-team-line').text()).toBe('You play for Black');
+    expect(wrapper.find('.hero-team-mine').text()).toBe('Black');
     expect(wrapper.find('.hero-spots').exists()).toBe(false);
     getToken.mockReturnValue('');
+  });
+});
+
+describe('HomeV2.vue sign-up status line', () => {
+  const upcoming = (extra = {}) => ({
+    ...played('next', -3), Teams: [], ScheduledAt: new Date(Date.now() + 3 * DAY).toISOString(),
+    RegistrationOpensAt: new Date(Date.now() - DAY).toISOString(), MaxPlayers: 16, ...extra,
+  });
+
+  it('offers a member the match page', async () => {
+    const wrapper = await mountHome([upcoming()], false);
+    const button = wrapper.find('.hero-status .hero-status-btn');
+    expect(button.text()).toBe('View match');
+    expect(JSON.parse(button.attributes('data-to'))).toEqual({ name: 'MatchView', params: { id: 'next' } });
+    expect(wrapper.find('.hero-status .hero-meta').text()).toMatch(/^Sign-ups opened \w{3} \d{1,2} \w{3} · \d{2}:\d{2}$/);
+  });
+
+  it('offers an admin the editing page', async () => {
+    const wrapper = await mountHome([upcoming()], true);
+    const button = wrapper.find('.hero-status .hero-status-btn');
+    expect(button.text()).toBe('Manage match');
+    expect(JSON.parse(button.attributes('data-to'))).toBe('/matches/next/edit');
+  });
+
+  it('says when sign-ups will open', async () => {
+    const wrapper = await mountHome([upcoming({ RegistrationOpensAt: new Date(Date.now() + DAY).toISOString() })]);
+    expect(wrapper.find('.hero-status .hero-meta').text()).toMatch(/^Sign-ups open \w{3} \d{1,2} \w{3} · \d{2}:\d{2}$/);
   });
 });
