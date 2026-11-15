@@ -28,11 +28,11 @@
           <h1 class="display hero-date">{{ heroDateLabel(next.Date) }}</h1>
           <p v-if="kickoffLabel(next.ScheduledAt)" class="display hero-time">{{ kickoffLabel(next.ScheduledAt) }}</p>
         </router-link>
-        <!-- The way into the match, on the right: its page for a member, its
-             editing page for an admin. -->
+        <!-- The way into the match, on the right: View match for everyone,
+             plus Manage (gear) for an admin. -->
         <div class="hero-status">
-          <router-link v-if="isAdmin" class="btn btn-ghost hero-status-btn" :to="`/matches/${next.ID}/edit`">Manage match</router-link>
-          <router-link v-else class="btn btn-ghost hero-status-btn" :to="matchTo(next)">View match</router-link>
+          <router-link class="btn btn-ghost hero-status-btn" :to="matchTo(next)">View match</router-link>
+          <ManageMatchLink v-if="isAdmin" :id="next.ID" />
         </div>
         <!-- Once the teams are set the places are history: what matters is
              which side the player is on. -->
@@ -85,8 +85,8 @@
           <div class="board-team"><span class="name">{{ teamName(last, 1) }}</span></div>
         </div>
         <div class="hero-status">
-          <router-link v-if="isAdmin" class="btn btn-ghost hero-status-btn" :to="`/matches/${last.ID}/edit`">Manage match</router-link>
-          <router-link v-else class="btn btn-ghost hero-status-btn" :to="matchTo(last)">View match</router-link>
+          <router-link class="btn btn-ghost hero-status-btn" :to="matchTo(last)">View match</router-link>
+          <ManageMatchLink v-if="isAdmin" :id="last.ID" />
         </div>
         <!-- Part of the header: its vote, while open, under the score. -->
         <router-link v-if="voteLine" class="motm-row hero-motm" :to="matchTo(voteMatch)">
@@ -154,6 +154,7 @@
 
 <script>
 import AppToast from '@/components/AppToast.vue';
+import ManageMatchLink from '@/components/v2/ManageMatchLink.vue';
 import { actionErrorMessage } from '@/services/v2Match';
 import { getMatchesDetails, getMatchRegistrations, registerForMatch, unregisterFromMatch, getToken } from '@/services/api';
 import { deriveRegistrationState, registrationsAreOpen, teamsAreComposed } from '@/services/matchRegistration';
@@ -178,7 +179,7 @@ function currentPlayerIdFromToken() {
 export default {
   name: 'HomeV2',
   directives: { fitTwoLines },
-  components: { AppToast },
+  components: { AppToast, ManageMatchLink },
   inject: {
     v2Context: { default: () => ({ label: '', confirming: false }) },
   },
