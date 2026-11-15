@@ -89,7 +89,6 @@
         <ul class="signup-ro">
           <li v-for="entry in waiting" :key="entry.PlayerID">
             <span class="nm">{{ entry.Name }}</span>
-            <span class="wait">Waiting</span>
           </li>
         </ul>
       </section>

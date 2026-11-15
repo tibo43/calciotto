@@ -90,7 +90,11 @@ test.describe('design v2 admin editing', () => {
     const { unstubbed } = await openEdit(page, EDIT);
     await expect(page.getByRole('button', { name: 'Reopen sign-ups' })).toBeVisible();
     await expect(page.getByText('Share on WhatsApp')).toBeVisible();
-    await expect(page.locator('.tog.is-on').first()).toHaveText('Confirmed');
+    // The section title says it; the rows carry only the name.
+    await expect(page.getByText('Confirmed', { exact: true })).toHaveCount(1);
+    await expect(page.getByText('Waiting list', { exact: true })).toHaveCount(1);
+    await expect(page.locator('.sign-row .tog')).toHaveCount(0);
+    await expect(page.locator('.sign-row').first()).toHaveText('Andrea Conti');
     await expect(page.getByRole('button', { name: 'Promote' })).toHaveCount(0);
     await expect(page).toHaveScreenshot('v2-edit-signups.png', { fullPage: true });
     expectEverythingStubbed(unstubbed);

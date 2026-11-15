@@ -56,13 +56,11 @@
           <p class="label">Confirmed</p>
           <div v-for="entry in confirmed" :key="entry.PlayerID" class="sign-row">
             <div class="who">{{ entry.Name }}</div>
-            <span class="tog is-on">Confirmed</span>
           </div>
           <p v-if="!confirmed.length" class="note">No confirmed players.</p>
           <p class="label">Waiting list</p>
           <div v-for="entry in waiting" :key="entry.PlayerID" class="sign-row">
             <div class="who">{{ entry.Name }}</div>
-            <span class="tog">Waiting list</span>
           </div>
           <p v-if="!waiting.length" class="note">No one is waiting.</p>
         </section>

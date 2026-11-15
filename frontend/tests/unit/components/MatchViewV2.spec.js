@@ -81,6 +81,13 @@ describe('MatchView.vue (design v2)', () => {
     expect(wrapper.text()).not.toMatch(/Sign up|Withdraw|Sign-ups|places left/);
   });
 
+  it('lists the waiting list by name only', async () => {
+    const registrations = [{ PlayerID: 'w1', Name: 'Gigi', Position: 17, IsWaiting: true }];
+    const { wrapper } = await mountView(upcomingMatch(), { registrations });
+    const row = wrapper.findAll('.signup-ro li').find((li) => li.text().includes('Gigi'));
+    expect(row.text()).toBe('Gigi');
+  });
+
   it('loads the match through the group it belongs to', async () => {
     const { wrapper } = await mountView(upcomingMatch());
     expect(findMatchInMyGroups).toHaveBeenCalledWith('match');
