@@ -146,7 +146,7 @@
         </template>
         <template v-else>
           <section class="score-board" aria-label="Computed score">
-            <div class="board-teams">
+            <div v-fit-two-lines class="board-teams">
               <div class="board-team"><span class="name">{{ teamName(0) }}</span></div>
               <div class="board-score">{{ sides[0].score }}<span class="sep">–</span>{{ sides[1].score }}</div>
               <div class="board-team"><span class="name">{{ teamName(1) }}</span></div>
@@ -235,6 +235,7 @@ import { heroDateLabel, kickoffLabel } from '@/services/v2Home';
 import { encodeMatchId } from '@/services/shortLink';
 import { buildWhatsAppShareText, buildWhatsAppShareUrl, buildTeamsShareText } from '@/services/whatsappShare';
 import { scoreSides, teamScoreLine, sizeCounter, recapEntries, lineupsReady, shareSubtitle } from '@/services/v2Edit';
+import fitTwoLines from '@/directives/fitTwoLines';
 
 function copyPlayer(player, position) {
   return {
@@ -248,6 +249,7 @@ function copyPlayer(player, position) {
 
 export default {
   name: 'EditMatchV2',
+  directives: { fitTwoLines },
   components: { AppToast },
   inject: {
     v2Context: { default: () => ({}) },

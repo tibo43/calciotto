@@ -79,7 +79,7 @@
           <p class="label">Last match</p>
           <h1 class="display hero-date">{{ heroDateLabel(last.Date) }}</h1>
         </router-link>
-        <div class="board-teams hero-board">
+        <div v-fit-two-lines class="board-teams hero-board">
           <div class="board-team"><span class="name">{{ teamName(last, 0) }}</span></div>
           <div class="board-score">{{ scoreOf(last) }}</div>
           <div class="board-team"><span class="name">{{ teamName(last, 1) }}</span></div>
@@ -119,7 +119,9 @@
           >
             <div class="row-date">{{ rowDateLabel(match.Date) }}</div>
             <div class="row-main">
-              <div class="row-title row-teams"><span class="row-team">{{ teamName(match, 0) }}</span> <span class="row-vs">vs</span> <span class="row-team">{{ teamName(match, 1) }}</span></div>
+              <!-- « A vs » then « B »: on one line when they fit, else B on
+                   the next line; a name too long for the column wraps. -->
+              <div class="row-title row-teams"><span class="row-side"><span class="row-team">{{ teamName(match, 0) }}</span>&nbsp;<span class="row-vs">vs</span>{{ ' ' }}</span><span class="row-side"><span class="row-team">{{ teamName(match, 1) }}</span></span></div>
               <!-- One grey line: « MOTM vote open » while its vote is open,
                    else its weekday and kick-off time; the row leads to it. -->
               <div v-if="rowSubLine(match, nowMs)" :id="`row-sub-${match.ID}`" class="row-sub" :class="{ 'row-sub-vote': rowSubLine(match, nowMs) === 'MOTM vote open' }">{{ rowSubLine(match, nowMs) }}</div>
@@ -159,6 +161,7 @@ import {
   splitHomeMatches, heroDateLabel, rowDateLabel, dayMonthLabel, kickoffLabel, weekdayTimeLabel,
   registrationMeta, placesLeft, homeVoteLine, rowSubLine, myTeam, nextWaitingPosition,
 } from '@/services/v2Home';
+import fitTwoLines from '@/directives/fitTwoLines';
 
 function currentPlayerIdFromToken() {
   const token = getToken();
@@ -174,6 +177,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'HomeV2',
+  directives: { fitTwoLines },
   components: { AppToast },
   inject: {
     v2Context: { default: () => ({ label: '', confirming: false }) },

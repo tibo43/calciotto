@@ -97,7 +97,7 @@
     <template v-else>
       <section class="board">
         <p class="label board-date">{{ heroDateLabel(match.Date) }}</p>
-        <div class="board-teams">
+        <div v-fit-two-lines class="board-teams">
           <div class="board-team"><span class="name">{{ teamName(0) }}</span></div>
           <div class="board-score">{{ scoreText }}</div>
           <div class="board-team"><span class="name">{{ teamName(1) }}</span></div>
@@ -156,6 +156,7 @@ import AppToast from '@/components/AppToast.vue';
 import { deriveRegistrationState, registrationsAreOpen, isPlayerOnRoster, teamsAreComposed } from '@/services/matchRegistration';
 import { heroDateLabel, kickoffLabel, registrationMeta, placesLeft, isMatchOver, matchVoteCopy, motmWinners, goalLine, myTeam, nextWaitingPosition } from '@/services/v2Home';
 import { isMotmVotingOpen } from '@/services/motmVoting';
+import fitTwoLines from '@/directives/fitTwoLines';
 
 function currentPlayerIdFromToken() {
   const token = getToken();
@@ -171,6 +172,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'MatchView',
+  directives: { fitTwoLines },
   components: { AppToast },
   inject: {
     v2Context: { default: () => ({ label: '' }) },

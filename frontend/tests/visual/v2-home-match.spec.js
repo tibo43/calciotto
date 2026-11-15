@@ -312,26 +312,41 @@ test.describe('design v2 home spacing', () => {
 });
 
 // Latest matches rows: the teams with « vs » in the middle, the score only
-// on the right; the name still reads the score with the day, and the teams
-// fit on one line on phones, down to 360px.
+// on the right; the name still reads the score with the day. Web: « A vs B »
+// on one line when it fits. Phones: one team per line, « A vs » then « B ».
+// Never cut, never under the score, whatever the length of the names.
+const rowsOf = (page) => page.locator('.list .row').evaluateAll((rows) => rows.map((row) => {
+  const rect = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom }; };
+  const textRect = (el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const all = [...range.getClientRects()];
+    return { l: Math.min(...all.map((x) => x.left)), r: Math.max(...all.map((x) => x.right)), t: Math.min(...all.map((x) => x.top)), b: Math.max(...all.map((x) => x.bottom)) };
+  };
+  const hits = (a, b) => a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
+  const title = row.querySelector('.row-title');
+  const score = rect(row.querySelector('.score'));
+  const sides = [...row.querySelectorAll('.row-side')].map(rect);
+  return {
+    title: title.textContent.replace(/\s+/g, ' ').trim(), label: row.getAttribute('aria-label'), score: row.querySelector('.score').innerText.trim(),
+    cut: [...row.querySelectorAll('.row-side, .row-title')].some((el) => el.scrollWidth > el.clientWidth + 0.5 || getComputedStyle(el).textOverflow === 'ellipsis'),
+    underScore: [...row.querySelectorAll('.row-team')].some((el) => hits(textRect(el), score)),
+    sameLine: sides.length === 2 && Math.abs(sides[0].t - sides[1].t) < 1,
+    scoreCentred: Math.abs((score.t + score.b) / 2 - (rect(row).t + rect(row).b) / 2) <= 2,
+  };
+}));
 test.describe('design v2 Latest matches rows', () => {
-  const rowsOf = (page) => page.locator('.list .row').evaluateAll((rows) => rows.map((row) => {
-    const title = row.querySelector('.row-title');
-    return {
-      title: title.innerText.trim(), label: row.getAttribute('aria-label'), score: row.querySelector('.score').innerText.trim(),
-      cut: title.scrollWidth > title.clientWidth + 0.5, lines: Math.round(title.getBoundingClientRect().height / parseFloat(getComputedStyle(title).lineHeight)),
-    };
-  }));
   for (const [tag, width] of [['', 1280], [' @mobile', 390], [' @mobile', 360]]) {
     test(`the score once, on the right, ${width}px${tag}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 844 });
       const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches, recorded] });
       const rows = await rowsOf(page);
-      expect(rows[0]).toMatchObject({ title: 'Les Bleus vs Les Rouges', label: 'Les Bleus 4–6 Les Rouges, 4 Sep', score: '4–6', cut: false, lines: 1 });
+      expect(rows[0]).toMatchObject({ title: 'Les Bleus vs Les Rouges', label: 'Les Bleus 4–6 Les Rouges, 4 Sep', score: '4–6', cut: false, underScore: false });
       for (const row of rows) {
         expect(row.title).not.toMatch(/\d/);
         expect(row.cut).toBe(false);
-        expect(row.lines).toBe(1);
+        // One line on the web, one team per line on phones.
+        expect(row.sameLine).toBe(width >= 600);
       }
       expectEverythingStubbed(unstubbed);
     });
@@ -343,4 +358,62 @@ test.describe('design v2 Latest matches rows', () => {
     expect((await page.locator('main.page').innerText()).match(/\d+\s*–\s*\d+/g)).toEqual(['4–6']);
     expectEverythingStubbed(unstubbed);
   });
+});
+
+// Real team names from a club (37 and 19 characters) and two ~20-character
+// ones: the rows wrap and grow, the header names stay in their column, on at
+// most three lines, one size smaller beyond two; nothing is cut, nothing
+// overlaps the score, nothing overflows the page.
+const LONG_NAMES = [['Association Sportive de Saint Etienne', 'Paris Saint-Germain'], ['Real Sociedad Fútbol', 'Borussia Mönchengladb']];
+const named = (match, [a, b]) => ({ ...match, Teams: match.Teams.map((team, i) => ({ ...team, Name: i === 0 ? a : b })) });
+test.describe('design v2 long team names', () => {
+  for (const [tag, width] of [['', 1280], [' @mobile', 390], [' @mobile', 360]]) {
+    for (const names of LONG_NAMES) {
+      test(`Latest matches rows and header, ${names[0]}, ${width}px${tag}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 844 });
+        const matches = [...data.matches.slice(0, 2), recorded].map((match) => named(match, names));
+        const { unstubbed } = await gotoApp(page, '/', { ...V2, matches });
+        await page.evaluate(() => document.fonts.ready);
+        for (const row of await rowsOf(page)) {
+          expect(row).toMatchObject({ cut: false, underScore: false, scoreCentred: true });
+          if (width < 600) expect(row.sameLine).toBe(false);
+        }
+        const header = await page.locator('.hero-last .board-teams').evaluate((board) => {
+          const rect = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom }; };
+          const score = rect(board.querySelector('.board-score'));
+          return [...board.querySelectorAll('.board-team .name')].map((name) => {
+            const range = document.createRange();
+            range.selectNodeContents(name);
+            const all = [...range.getClientRects()];
+            const text = { l: Math.min(...all.map((x) => x.left)), r: Math.max(...all.map((x) => x.right)), t: Math.min(...all.map((x) => x.top)), b: Math.max(...all.map((x) => x.bottom)) };
+            const col = rect(name.closest('.board-team'));
+            return {
+              lines: Math.round(name.getBoundingClientRect().height / parseFloat(getComputedStyle(name).lineHeight)),
+              inColumn: text.l >= col.l - 1 && text.r <= col.r + 1,
+              overScore: text.l < score.r && text.r > score.l && text.t < score.b && text.b > score.t,
+              colWidth: Math.round(col.r - col.l),
+              font: getComputedStyle(name).fontSize,
+              bottom: text.b,
+              colLeft: col.l,
+              colRight: col.r,
+            };
+          });
+        });
+        expect(header[0].colWidth).toBe(header[1].colWidth);
+        // One size for both names.
+        expect(header[0].font).toBe(header[1].font);
+        if (width < 700) {
+          // Phones: both names sit on the score, 16px or more apart.
+          expect(Math.abs(header[0].bottom - header[1].bottom)).toBeLessThanOrEqual(1);
+          expect(header[1].colLeft - header[0].colRight).toBeGreaterThanOrEqual(16);
+        }
+        for (const name of header) {
+          expect(name).toMatchObject({ inColumn: true, overScore: false });
+          expect(name.lines).toBeLessThanOrEqual(3);
+        }
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        expectEverythingStubbed(unstubbed);
+      });
+    }
+  }
 });
