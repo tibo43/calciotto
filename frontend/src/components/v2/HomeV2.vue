@@ -71,10 +71,10 @@
         </div>
       </section>
 
-      <section v-if="recent.length" class="sec">
+      <section v-if="latest.length" class="sec">
         <div class="sec-head"><h2>Latest matches</h2></div>
         <div class="list">
-          <router-link v-for="match in recent" :key="match.ID" class="row" :to="matchTo(match)">
+          <router-link v-for="match in latest" :key="match.ID" class="row" :to="matchTo(match)">
             <div class="row-date">{{ rowDateLabel(match.Date) }}</div>
             <div class="row-main">
               <div class="row-title">{{ teamName(match, 0) }} {{ scorePair(match) }} {{ teamName(match, 1) }}</div>
@@ -165,6 +165,9 @@ export default {
     next() { return this.split.next; },
     later() { return this.split.later; },
     recent() { return this.split.recent; },
+    // With nothing scheduled, the hero already shows the last match played,
+    // so the "Latest matches" list starts at the one before it.
+    latest() { return this.next ? this.recent : this.recent.slice(1); },
     regState() {
       return this.next ? deriveRegistrationState(this.next, this.nowMs) : '';
     },
