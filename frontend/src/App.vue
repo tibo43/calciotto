@@ -167,8 +167,9 @@
              and icons as the top nav-menu, so both bars read as one app. -->
         <nav v-if="designV2 && isAuthenticatedRoute" class="tabbar" aria-label="Main">
           <router-link v-for="item in v2NavItems" :key="item.to" :to="item.to" class="nav-ico" :class="{ 'is-on': item.on }"
-            :aria-label="item.label" :title="item.label" :aria-current="item.on ? 'page' : null">
+            :aria-current="item.on ? 'page' : null">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="item.icon" /></svg>
+            <span class="nav-ico-label">{{ item.label }}</span>
           </router-link>
         </nav>
         <nav v-if="isAuthenticatedRoute && !designV2" class="bottom-tab-bar">
@@ -289,8 +290,8 @@ export default {
     isV2Profile() {
       return String(this.$route.path || '').startsWith('/profile');
     },
-    // The v2 menu: icon and name in the desktop top bar, icons only in the
-    // phone tab bar (named there for screen readers).
+    // The v2 menu: icon and name in the desktop top bar, icon and name in
+    // the phone tab bar. The visible label is the accessible name.
     v2NavItems() {
       return [
         { to: '/', label: 'Matches', on: this.isV2Home, icon: 'M3 9a9 3 0 1 0 18 0 9 3 0 1 0-18 0zM3 9v6a9 3 0 0 0 18 0V9M7 9a5 1.4 0 1 0 10 0 5 1.4 0 1 0-10 0zM7.5 17.6v-3M12 18v-3M16.5 17.6v-3' },

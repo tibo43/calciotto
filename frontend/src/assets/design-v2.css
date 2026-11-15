@@ -25,7 +25,7 @@
   --v2-on-wait: #eef0f7;
   --v2-skel: rgba(20, 26, 51, 0.08);
   --v2-topbar-h: 64px;
-  --v2-tabbar-h: 64px;
+  --v2-tabbar-h: calc(56px + env(safe-area-inset-bottom, 0px));
 }
 
 .design-v2.dark-mode {
