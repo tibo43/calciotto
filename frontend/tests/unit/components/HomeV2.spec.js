@@ -53,7 +53,11 @@ describe('HomeV2.vue with nothing scheduled', () => {
     const wrapper = await mountHome([recorded, played('before', 7)], true);
     const hero = wrapper.find('.hero-last');
     expect(hero.find('.label').text()).toBe('Last match');
-    expect(JSON.parse(hero.find('.hero-status-btn').attributes('data-to'))).toBe('/matches/today/edit');
+    expect(hero.find('.hero-status-btn').text()).toBe('View match');
+    expect(JSON.parse(hero.find('.hero-status-btn').attributes('data-to'))).toEqual({ name: 'MatchView', params: { id: 'today' } });
+    expect(hero.find('.hero-manage').attributes('aria-label')).toBe('Manage match');
+    expect(hero.find('.hero-manage').attributes('title')).toBe('Manage match');
+    expect(JSON.parse(hero.find('.hero-manage').attributes('data-to'))).toBe('/matches/today/edit');
     expect(wrapper.text()).not.toContain('Sign-ups');
     const listed = wrapper.findAll('.list .row').map((row) => JSON.parse(row.attributes('data-to')).params.id);
     expect(listed).toEqual(['before']);
@@ -221,10 +225,24 @@ describe('HomeV2.vue match button', () => {
     expect(wrapper.find('.hero-status .hero-meta').exists()).toBe(false);
   });
 
-  it('offers an admin the editing page', async () => {
+  it('offers a member only View match', async () => {
+    const wrapper = await mountHome([upcoming()], false);
+    expect(wrapper.find('.hero-status .hero-manage').exists()).toBe(false);
+    expect(wrapper.findAll('.hero-status .hero-status-btn')).toHaveLength(1);
+  });
+
+  it('offers an admin View match and a Manage gear', async () => {
     const wrapper = await mountHome([upcoming()], true);
-    const button = wrapper.find('.hero-status .hero-status-btn');
-    expect(button.text()).toBe('Manage match');
-    expect(JSON.parse(button.attributes('data-to'))).toBe('/matches/next/edit');
+    const view = wrapper.find('.hero-status .hero-status-btn');
+    expect(view.text()).toBe('View match');
+    expect(JSON.parse(view.attributes('data-to'))).toEqual({ name: 'MatchView', params: { id: 'next' } });
+    const manage = wrapper.find('.hero-status .hero-manage');
+    expect(manage.attributes('aria-label')).toBe('Manage match');
+    expect(manage.attributes('title')).toBe('Manage match');
+    expect(JSON.parse(manage.attributes('data-to'))).toBe('/matches/next/edit');
+    const kids = wrapper.find('.hero-status').findAll('a');
+    expect(kids).toHaveLength(2);
+    expect(kids.at(0).text()).toBe('View match');
+    expect(kids.at(1).classes()).toContain('hero-manage');
   });
 });
