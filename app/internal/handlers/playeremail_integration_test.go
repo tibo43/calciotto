@@ -73,8 +73,9 @@ func TestPlayerEmail_Integration_OnlyOnTheCallersProfile(t *testing.T) {
 		t.Fatalf("failed to log in alice: %v", err)
 	}
 
-	// One match yesterday (still inside the MOTM voting window), both players scoring, Bob voted MOTM by Alice, so
-	// every ranking below has a row for each of them.
+	// One match yesterday (still inside the MOTM voting window, so the vote
+	// can be cast), both players scoring, Bob voted MOTM by Alice, then moved
+	// past the window so every ranking below has a row for each of them.
 	matchID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now().AddDate(0, 0, -1))}, group.ID)
 	if err != nil {
 		t.Fatalf("failed to create match: %v", err)
@@ -87,6 +88,12 @@ func TestPlayerEmail_Integration_OnlyOnTheCallersProfile(t *testing.T) {
 	}
 	if err := voteService.Vote(matchID, aliceID, bobID); err != nil {
 		t.Fatalf("failed to vote: %v", err)
+	}
+	// The MOTM ranking counts an award only once the vote is closed: move
+	// the match back past its voting window now the vote is cast.
+	if err := tx.Model(&models.Match{}).Where("id = ?", matchID).
+		Update("date", time.Now().AddDate(0, 0, -3)).Error; err != nil {
+		t.Fatalf("failed to close the vote: %v", err)
 	}
 
 	gin.SetMode(gin.TestMode)

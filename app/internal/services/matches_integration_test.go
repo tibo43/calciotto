@@ -203,8 +203,9 @@ func TestGetMatchDetailsByID_Integration_WrongGroupNotFound(t *testing.T) {
 // scheduled match's roster ahead of its own kick-off (via "Fill teams from
 // sign-ups"), which already satisfies ComputePointsStandings'/
 // ComputeScorers' own "both teams have players" check — without
-// FilterCompletedMatches (standings.go), that match's goals would count
-// immediately, before it has actually been played.
+// FilterCountedMatches (standings.go), that match's goals would count
+// immediately, before it has actually been played. Its goals count the
+// moment the score is saved after kick-off, never from the date alone.
 func TestGetPointsStandings_Integration_ExcludesUpcomingComposedMatch(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -271,19 +272,46 @@ func TestGetPointsStandings_Integration_ExcludesUpcomingComposedMatch(t *testing
 		t.Errorf("alice already appears in scorers for a match that hasn't been played yet: %+v", row)
 	}
 
-	// Once the match's own Date is safely in the past, the exact same roster
-	// must count — nothing here changes except how much time has passed.
+	// The date alone doesn't make it count any more: a scheduled match
+	// counts once its result is recorded (ResultRecordedAt).
 	if err := tx.Model(&models.Match{}).Where("id = ?", matchID).
 		Update("date", time.Now().AddDate(0, 0, -2)).Error; err != nil {
 		t.Fatalf("failed to backdate the match: %v", err)
 	}
+	points, err = standingsService.GetPointsStandings(group.ID, "")
+	if err != nil {
+		t.Fatalf("GetPointsStandings returned error: %v", err)
+	}
+	if row := pointsRowByID(points, aliceID); row != nil {
+		t.Errorf("alice counted for a scheduled match whose score was never recorded: %+v", row)
+	}
 
+	// Kick-off passes and the admin saves the score: it counts at once, on
+	// the match's own day, without waiting for midnight.
+	pastKickoff := time.Now().Add(-2 * time.Hour)
+	if err := tx.Model(&models.Match{}).Where("id = ?", matchID).
+		Updates(map[string]interface{}{"date": pastKickoff, "scheduled_at": pastKickoff}).Error; err != nil {
+		t.Fatalf("failed to move the kick-off into the past: %v", err)
+	}
+	if err := matchService.UpdateMatch(matchID, group.ID, []models.TeamWithPlayers{
+		{ID: black.ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
+		{ID: white.ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 1}}},
+	}); err != nil {
+		t.Fatalf("failed to save the score: %v", err)
+	}
 	points, err = standingsService.GetPointsStandings(group.ID, "")
 	if err != nil {
 		t.Fatalf("GetPointsStandings returned error: %v", err)
 	}
 	if row := pointsRowByID(points, aliceID); row == nil || row.Points != 3 || row.GoalsFor != 2 {
-		t.Errorf("alice points row after completion = %+v, want 3 points / 2 goals", row)
+		t.Errorf("alice points row once the score is saved = %+v, want 3 points / 2 goals", row)
+	}
+	scorers, err = standingsService.GetScorers(group.ID, "")
+	if err != nil {
+		t.Fatalf("GetScorers returned error: %v", err)
+	}
+	if row := scorerRowByID(scorers, aliceID); row == nil {
+		t.Errorf("alice missing from scorers once the score is saved")
 	}
 }
 
