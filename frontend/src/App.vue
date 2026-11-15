@@ -268,7 +268,9 @@ export default {
       return this.isAuthenticatedRouteName(this.$route.name);
     },
     isV2Home() {
-      return this.$route.name === 'MatchesAndStandings' || this.$route.name === 'MatchView';
+      // Only the home itself: a match page is not a tab of the menu, so it
+      // highlights none (the same for the edit and new match pages).
+      return this.$route.name === 'MatchesAndStandings';
     },
     // What the group select shows (see .ctx-name in design-v2-ui.css).
     v2GroupLabel() {

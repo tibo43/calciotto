@@ -147,6 +147,7 @@ const recorded = {
   RegistrationOpensAt: '2026-09-01T18:00:00+02:00', RegistrationsClosedAt: '2026-09-04T07:00:00+02:00',
   ResultRecordedAt: '2026-09-04T09:30:00+02:00', MaxPlayers: 8,
 };
+const NAV = '.nav-text, .nav-ico';
 
 test.describe('design v2 once the score is recorded', () => {
   test('home, no upcoming match, as an admin', async ({ page }) => {
@@ -172,6 +173,33 @@ test.describe('design v2 once the score is recorded', () => {
     await expect(page.locator('.board .board-score')).toHaveText('4–6');
     await expect(page.locator('.motm-line')).toBeVisible();
     await expect(page.locator('main.page')).not.toContainText(/Sign up|Withdraw|Sign-ups|places left/);
+    expectEverythingStubbed(unstubbed);
+  });
+});
+
+// Only a tab's own page highlights its entry in the menu.
+test.describe('design v2 menu', () => {
+  for (const [name, path] of [['match page', `/matches/${PLAYED}`], ['edit page', `/matches/${data.scheduledClosedMatch.ID}/edit`], ['new match', '/matches/new']]) {
+    test(`${name}, no tab highlighted`, async ({ page }) => {
+      const closed = data.scheduledClosedMatch;
+      const { unstubbed } = await gotoApp(page, path, { ...V2, matchDetails: { [closed.ID]: closed } });
+      await expect(page).toHaveURL(new RegExp(`${path}$`));
+      await expect(page.locator('main.page')).toBeVisible();
+      await expect(page.locator(`${NAV}`).first()).toBeAttached();
+      await expect(page.locator(`:is(${NAV}).is-on`)).toHaveCount(0);
+      await expect(page.locator(`:is(${NAV})[aria-current="page"]`)).toHaveCount(0);
+      expectEverythingStubbed(unstubbed);
+    });
+  }
+
+  test('home, Home highlighted', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, '/', V2);
+    await expect(page.locator('.hero')).toBeVisible();
+    const on = page.locator(`:is(${NAV}).is-on`);
+    await expect(on.first()).toHaveAttribute('aria-current', 'page');
+    for (const label of await on.evaluateAll((items) => items.map((item) => item.getAttribute('aria-label') || item.textContent.trim()))) {
+      expect(label).toBe('Home');
+    }
     expectEverythingStubbed(unstubbed);
   });
 });
