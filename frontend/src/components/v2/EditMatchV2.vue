@@ -41,14 +41,17 @@
         <section class="block">
           <div class="sec-head"><h2>1. Sign-ups</h2></div>
           <p class="note">{{ signupNote }}</p>
-          <div class="actions" v-if="canClose || canReopen">
-            <button v-if="canClose" class="btn btn-ghost" type="button" @click="closeList">Close sign-ups</button>
-            <button v-if="canReopen" class="btn btn-ghost" type="button" @click="reopenList">Reopen sign-ups</button>
-          </div>
-          <div v-if="isScheduled" class="places-row">
-            <label class="label" for="confirmed-places">Confirmed places</label>
-            <input id="confirmed-places" type="number" min="1" v-model="maxPlayersInput">
-            <button class="btn btn-ghost" type="button" :disabled="!canUpdateCap" @click="updateCap">Update</button>
+          <!-- One row from 768px: the sign-up buttons, then the places. -->
+          <div class="signup-controls">
+            <div class="actions" v-if="canClose || canReopen">
+              <button v-if="canClose" class="btn btn-ghost" type="button" @click="closeList">Close sign-ups</button>
+              <button v-if="canReopen" class="btn btn-ghost" type="button" aria-label="Reopen sign-ups" @click="reopenList"><span class="when-roomy">Reopen sign-ups</span><span class="when-narrow" aria-hidden="true">Reopen</span></button>
+            </div>
+            <div v-if="isScheduled" class="places-row">
+              <label class="label" for="confirmed-places">Places</label>
+              <input id="confirmed-places" type="number" aria-label="Number of places" min="1" v-model="maxPlayersInput">
+              <button class="btn btn-ghost" type="button" :disabled="!canUpdateCap" @click="updateCap">Update</button>
+            </div>
           </div>
           <p class="label">Confirmed</p>
           <div v-for="entry in confirmed" :key="entry.PlayerID" class="sign-row">
@@ -589,10 +592,10 @@ export default {
         const entries = await setMatchMaxPlayers(this.match.ID, requested);
         this.registrations = Array.isArray(entries) ? entries : this.registrations;
         this.match = { ...this.match, MaxPlayers: requested };
-        this.$refs.toast.show(`Confirmed places set to ${requested}.`, 'success');
+        this.$refs.toast.show(`Places set to ${requested}.`, 'success');
       } catch (error) {
-        console.error('Error updating the confirmed places:', error);
-        this.$refs.toast.show(actionErrorMessage(error, 'Could not change the confirmed places.'), 'error');
+        console.error('Error updating the places:', error);
+        this.$refs.toast.show(actionErrorMessage(error, 'Could not change the places.'), 'error');
       }
     },
     split() {

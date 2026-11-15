@@ -112,6 +112,52 @@ test.describe('design v2 admin editing', () => {
     expectEverythingStubbed(unstubbed);
   });
 
+  // The sign-up button and the places share one 44px line at every width,
+  // 16px below the note. The label sits left of the field from 768px and
+  // above it below; under 390px "Reopen sign-ups" reads "Reopen" but keeps its
+  // full accessible name.
+  for (const width of [1280, 768, 390, 360]) {
+    test(`sign-ups, the controls on one row at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const { unstubbed } = await openEdit(page, EDIT);
+      const status = page.getByRole('button', { name: 'Reopen sign-ups' });
+      await expect(status).toBeVisible();
+      // innerText, not the text content: the label not shown is still in the DOM.
+      expect((await status.innerText()).trim()).toBe(width < 390 ? 'Reopen' : 'Reopen sign-ups');
+      const places = page.locator('.places-row');
+      await expect(places.locator('label')).toHaveText('Places');
+      const field = page.getByRole('spinbutton', { name: 'Number of places' });
+      await expect(field).toBeVisible();
+      await expect(page.getByText('Confirmed places')).toHaveCount(0);
+      const box = async (locator) => locator.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, height: r.height };
+      });
+      const [b, f, u, l, row, note] = await Promise.all([status, field, places.getByRole('button', { name: 'Update' }),
+        places.locator('label'), page.locator('.signup-controls'), page.locator('.signup-controls').locator('xpath=preceding-sibling::p[1]')].map(box));
+      for (const target of [b, f, u]) {
+        expect(target.height).toBeGreaterThanOrEqual(44);
+        expect(Math.abs((target.top + target.bottom) / 2 - (b.top + b.bottom) / 2)).toBeLessThanOrEqual(1);
+      }
+      expect(b.right).toBeLessThanOrEqual(f.left - 8);
+      expect(f.right).toBeLessThanOrEqual(u.left);
+      expect(row.top - note.bottom).toBeGreaterThanOrEqual(16);
+      if (width >= 768) {
+        expect(l.right).toBeLessThanOrEqual(f.left);
+        // The status button keeps its own width, the places sit on the right.
+        expect(b.right - b.left).toBeLessThan((row.right - row.left) / 2);
+        expect(Math.abs(u.right - row.right)).toBeLessThanOrEqual(1);
+      } else {
+        expect(l.bottom).toBeLessThanOrEqual(f.top);
+        expect(Math.abs(l.left - f.left)).toBeLessThanOrEqual(1);
+        expect(f.right - f.left).toBe(64);
+        expect(f.left - b.right).toBe(8);
+      }
+      await expectNoHorizontalOverflow(page);
+      expectEverythingStubbed(unstubbed);
+    });
+  }
+
   test('teams, nobody placed', async ({ page }) => {
     const { unstubbed } = await openEdit(page, `${EDIT}?step=teams`);
     await expect(page.locator('.size-count')).toHaveText('0 v 0');
