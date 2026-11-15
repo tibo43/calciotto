@@ -75,11 +75,28 @@ describe('HomeV2.vue Latest matches rows', () => {
     const before = { ...played('before', 8), Date: '2026-09-04' };
     const wrapper = await mountHome([played('last', 3), before]);
     const row = wrapper.find('.list .row');
-    expect(row.find('.row-title').text()).toBe('Black vs White');
+    expect(row.find('.row-title').text().replace(/\s+/g, ' ')).toBe('Black vs White');
     expect(row.find('.row-vs').text()).toBe('vs');
     expect(row.find('.row-title').text()).not.toMatch(/\d/);
     expect(row.find('.score').text()).toBe('1–0');
     expect(row.attributes('aria-label')).toBe('Black 1–0 White, 4 Sep');
+  });
+
+  it('keeps « A vs » and « B » as two parts, the whole of a long name, never cut', async () => {
+    const long = { ...played('long', 3), Teams: [
+      { ID: 'a', Name: 'Association Sportive de Saint Etienne', Score: 4, Players: [{ ID: 'p' }] },
+      { ID: 'b', Name: 'Paris Saint-Germain', Score: 6, Players: [{ ID: 'q' }] },
+    ] };
+    const wrapper = await mountHome([played('last', 1), long]);
+    const row = wrapper.find('.list .row');
+    const sides = row.findAll('.row-side');
+    expect(sides).toHaveLength(2);
+    expect(sides[0].text().replace(/\s+/g, ' ')).toBe('Association Sportive de Saint Etienne vs');
+    expect(sides[0].find('.row-vs').text()).toBe('vs');
+    expect(sides[1].text()).toBe('Paris Saint-Germain');
+    expect(row.text()).not.toContain('…');
+    expect(row.find('.score').text()).toBe('4–6');
+    expect(row.attributes('aria-label')).toMatch(/^Association Sportive de Saint Etienne 4–6 Paris Saint-Germain, /);
   });
 
   it('describes a row by its sub-line when it has one', async () => {
