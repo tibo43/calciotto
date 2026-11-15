@@ -53,18 +53,20 @@ async function splitTeams(page) {
   await expect(page.locator('.size-count')).toHaveText('6 v 5');
 }
 
-// Moves the first player of the second team onto the first, then picks them
-// again. The assign sheet is hidden at desktop width (the design only shows
-// it on a phone), so that click is forced there.
+// Moves the first player of the second team onto the first through the
+// player's menu, with real clicks (a tap on a phone), then picks them again
+// so the menu is open for the screenshot.
 async function pickUneven(page) {
   await splitTeams(page);
   const row = page.locator('.compose-col').nth(2).locator('.p-row').first();
   const name = (await row.locator('.nm').innerText()).trim();
   await row.click();
-  // The sheet is display:none on a wide screen, so a pointer click has no box.
-  await page.locator('.sheet button', { hasText: 'Les Bleus' }).first().evaluate((button) => button.click());
-  await page.locator('.compose-col').nth(1).locator('.p-row', { hasText: name }).click();
+  const menu = page.getByRole('menu', { name: `Move ${name} to` });
+  await expect(menu.getByRole('menuitem')).toHaveText(['Les Bleus', 'Reserve']);
+  await menu.getByRole('menuitem', { name: 'Les Bleus' }).click();
   await expect(page.locator('.size-count')).toHaveText('7 v 4');
+  await page.locator('.compose-col').nth(1).locator('.p-row', { hasText: name }).click();
+  await expect(page.getByRole('menu', { name: `Move ${name} to` }).getByRole('menuitem')).toHaveText(['Les Rouges', 'Reserve']);
 }
 
 test.describe('design v2 admin editing', () => {
@@ -123,10 +125,29 @@ test.describe('design v2 admin editing', () => {
   test('teams, a player picked @mobile', async ({ page }) => {
     const { unstubbed } = await openEdit(page, `${EDIT}?step=teams`);
     await pickUneven(page);
-    await expect(page.locator('.sheet')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Reserve' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Reserve' })).toBeVisible();
     await expect(page).toHaveScreenshot('v2-edit-teams-choice-mobile.png', { fullPage: true });
     await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('teams, moving a player with the keyboard', async ({ page }) => {
+    const { unstubbed } = await openEdit(page, `${EDIT}?step=teams`);
+    const row = page.locator('.compose-col').first().locator('.p-row').first();
+    await row.focus();
+    await page.keyboard.press('Enter');
+    const items = page.locator('.move-menu .move-opt');
+    await expect(items).toHaveText(['Les Bleus', 'Les Rouges']);
+    await expect(items.first()).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(items.nth(1)).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.size-count')).toHaveText('0 v 1');
+    await expect(page.locator('.compose-col').nth(2).locator('.p-row')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.move-menu')).toHaveCount(0);
+    await expect(page.locator('.compose-col').nth(2).locator('.p-row')).toBeFocused();
     expectEverythingStubbed(unstubbed);
   });
 

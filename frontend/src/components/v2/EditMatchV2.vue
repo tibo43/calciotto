@@ -1,5 +1,5 @@
 <template>
-  <main class="page edit-page has-sticky" :class="{ 'is-choix': pickedId }">
+  <main class="page edit-page has-sticky">
     <router-link class="back" :to="step === 'signups' ? `/matches/${id}` : { path: `/matches/${id}/edit` }">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg>
       {{ step === 'signups' ? 'Back to the match' : 'Back to editing' }}
@@ -90,28 +90,38 @@
         <p class="tap-hint">Tap a player to move them onto a team, or back to the reserve.</p>
         <p class="size-count">{{ sizeCount }}</p>
         <div class="compose-board">
-          <section class="compose-col" aria-label="Reserve">
+          <section class="compose-col" :class="{ 'is-drop': pickedId && teamOf(pickedId) !== null }" aria-label="Reserve">
             <div class="col-head"><h2>Reserve</h2></div>
             <p class="col-count">{{ reserve.length }}</p>
             <p v-if="!reserve.length" class="col-empty">Every confirmed player is placed.</p>
-            <button v-for="player in reserve" :key="player.ID" class="p-row" :class="{ 'is-picked': pickedId === player.ID }" type="button" @click="pick(player)">
-              <svg class="grip" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6" cy="4" r="1.2" fill="currentColor"/><circle cx="10" cy="4" r="1.2" fill="currentColor"/><circle cx="6" cy="8" r="1.2" fill="currentColor"/><circle cx="10" cy="8" r="1.2" fill="currentColor"/><circle cx="6" cy="12" r="1.2" fill="currentColor"/><circle cx="10" cy="12" r="1.2" fill="currentColor"/></svg>
-              <span class="pos">{{ posLabel(player) }}</span>
-              <span class="nm">{{ player.Name }}</span>
-            </button>
+            <template v-for="player in reserve" :key="player.ID">
+              <button class="p-row" :class="{ 'is-picked': pickedId === player.ID }" type="button" :data-player="player.ID"
+                aria-haspopup="menu" :aria-expanded="pickedId === player.ID ? 'true' : 'false'" @click="pick(player)">
+                <span class="pos">{{ posLabel(player) }}</span>
+                <span class="nm">{{ player.Name }}</span>
+              </button>
+              <div v-if="pickedId === player.ID" class="move-menu" role="menu" :aria-label="`Move ${player.Name} to`" @keydown="onMenuKey">
+                <button v-for="dest in destinations" :key="dest.key" class="move-opt" role="menuitem" type="button" @click="assign(dest.index)">{{ dest.label }}</button>
+              </div>
+            </template>
           </section>
-          <section v-for="index in [0, 1]" :key="teamId(index)" class="compose-col" :class="{ 'is-drop': pickedId && teamOf(pickedId) === index }" :aria-label="teamName(index)">
+          <section v-for="index in [0, 1]" :key="teamId(index)" class="compose-col" :class="{ 'is-drop': pickedId && teamOf(pickedId) !== index }" :aria-label="teamName(index)">
             <div class="col-head">
               
               <h2>{{ teamName(index) }}</h2>
             </div>
             <p class="col-count">{{ teamPlayers[index].length }}</p>
             <p v-if="!teamPlayers[index].length" class="col-empty">No players yet.</p>
-            <button v-for="player in teamPlayers[index]" :key="player.ID" class="p-row" :class="{ 'is-picked': pickedId === player.ID }" type="button" @click="pick(player)">
-              <svg class="grip" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6" cy="4" r="1.2" fill="currentColor"/><circle cx="10" cy="4" r="1.2" fill="currentColor"/><circle cx="6" cy="8" r="1.2" fill="currentColor"/><circle cx="10" cy="8" r="1.2" fill="currentColor"/><circle cx="6" cy="12" r="1.2" fill="currentColor"/><circle cx="10" cy="12" r="1.2" fill="currentColor"/></svg>
-              <span class="pos">{{ posLabel(player) }}</span>
-              <span class="nm">{{ player.Name }}</span>
-            </button>
+            <template v-for="player in teamPlayers[index]" :key="player.ID">
+              <button class="p-row" :class="{ 'is-picked': pickedId === player.ID }" type="button" :data-player="player.ID"
+                aria-haspopup="menu" :aria-expanded="pickedId === player.ID ? 'true' : 'false'" @click="pick(player)">
+                <span class="pos">{{ posLabel(player) }}</span>
+                <span class="nm">{{ player.Name }}</span>
+              </button>
+              <div v-if="pickedId === player.ID" class="move-menu" role="menu" :aria-label="`Move ${player.Name} to`" @keydown="onMenuKey">
+                <button v-for="dest in destinations" :key="dest.key" class="move-opt" role="menuitem" type="button" @click="assign(dest.index)">{{ dest.label }}</button>
+              </div>
+            </template>
           </section>
         </div>
         <section class="sec">
@@ -137,15 +147,6 @@
         <div class="sticky-cta">
           <p v-if="!bothSides" class="cta-msg">Put at least one player on each team to confirm.</p>
           <button class="btn" :class="{ 'is-off': !bothSides }" type="button" :disabled="!bothSides || saving" @click="saveDraft">Confirm the teams</button>
-        </div>
-        <div v-if="picked" class="sheet" role="dialog" aria-label="Choose the team">
-          <p class="label">Assign</p>
-          <h3>{{ picked.Name }}</h3>
-          <p class="ref">{{ pickedWhere }}</p>
-          <button class="btn" type="button" @click="assign(0)">{{ teamName(0) }}</button>
-          <button class="btn btn-ghost" type="button" @click="assign(1)">{{ teamName(1) }}</button>
-          <button class="btn btn-ghost" type="button" @click="assign(null)">Reserve</button>
-          <button class="btn btn-ghost" type="button" @click="pickedId = null">Cancel</button>
         </div>
       </template>
 
@@ -375,12 +376,16 @@ export default {
         || this.reserve.find((player) => player.ID === this.pickedId)
         || null;
     },
-    pickedWhere() {
-      if (!this.picked) return '';
-      const team = this.teamOf(this.picked.ID);
-      const spot = this.picked.Position ? `Confirmed · #${this.picked.Position}` : 'Added by an admin';
-      if (team === null) return `${spot} · in the reserve`;
-      return `${spot} · currently on ${this.teamName(team)}`;
+    // Where the picked player can go: the two teams and the reserve, minus
+    // where they already are. All alike; none is a default.
+    destinations() {
+      if (!this.picked) return [];
+      const here = this.teamOf(this.picked.ID);
+      return [
+        { key: 'team-0', index: 0, label: this.teamName(0) },
+        { key: 'team-1', index: 1, label: this.teamName(1) },
+        { key: 'reserve', index: null, label: 'Reserve' },
+      ].filter((dest) => dest.index !== here);
     },
     draftTeams() {
       return [0, 1].map((index) => ({
@@ -607,8 +612,37 @@ export default {
       this.teamPlayers = [[], []];
       this.pickedId = null;
     },
+    // A click, a tap or Enter on a player opens their menu (or closes it
+    // again) and moves the focus onto its first choice.
     pick(player) {
       this.pickedId = this.pickedId === player.ID ? null : player.ID;
+      if (this.pickedId) {
+        this.$nextTick(() => {
+          const first = this.$el.querySelector('.move-menu .move-opt');
+          if (first) first.focus();
+        });
+      }
+    },
+    // Up/Down (and Home/End) walk the choices, Enter picks one, Escape
+    // closes the menu and gives the focus back to the player.
+    onMenuKey(event) {
+      const items = Array.from(event.currentTarget.querySelectorAll('.move-opt'));
+      const at = items.indexOf(document.activeElement);
+      let next = null;
+      if (event.key === 'ArrowDown') next = (at + 1) % items.length;
+      else if (event.key === 'ArrowUp') next = (at - 1 + items.length) % items.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = items.length - 1;
+      else if (event.key === 'Escape') {
+        event.preventDefault();
+        const row = event.currentTarget.previousElementSibling;
+        this.pickedId = null;
+        if (row) row.focus();
+        return;
+      }
+      if (next === null) return;
+      event.preventDefault();
+      items[next].focus();
     },
     assign(dest) {
       const player = this.picked;
@@ -621,6 +655,11 @@ export default {
         this.remember(next);
       }
       this.pickedId = null;
+      // Back on the player, in their new place.
+      this.$nextTick(() => {
+        const row = this.$el.querySelector(`.p-row[data-player="${player.ID}"]`);
+        if (row) row.focus();
+      });
     },
     async toggleGuests() {
       this.addingGuest = !this.addingGuest;
