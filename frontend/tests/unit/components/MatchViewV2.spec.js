@@ -1,7 +1,8 @@
 import { mount, flushPromises } from '@vue/test-utils';
 import MatchView from '@/components/v2/MatchView.vue';
 import {
-  getMatchRegistrations, registerForMatch, unregisterFromMatch, getMatchVotes, voteForMotm, removeMotmVote, getSeasons
+  getMatchRegistrations, registerForMatch, unregisterFromMatch, getMatchVotes, voteForMotm, removeMotmVote, getSeasons,
+  getMatchPredictions, predictForMatch
 } from '@/services/api';
 import { findMatchInMyGroups } from '@/services/v2Match';
 
@@ -13,6 +14,8 @@ jest.mock('@/services/api', () => ({
   voteForMotm: jest.fn(),
   removeMotmVote: jest.fn(),
   getSeasons: jest.fn(),
+  getMatchPredictions: jest.fn(),
+  predictForMatch: jest.fn(),
   // A token whose player_id is 'me'.
   getToken: jest.fn(() => `x.${btoa(JSON.stringify({ player_id: 'me' }))}.y`)
 }));
@@ -120,5 +123,63 @@ describe('MatchView.vue (design v2)', () => {
     await flushPromises();
 
     expect(voteForMotm).toHaveBeenCalledWith('match', 'p3');
+  });
+});
+
+// Teams set before kick-off: the player's side, the line-ups and the
+// prediction, all on the page the notification opens.
+describe('MatchView.vue once the teams are set', () => {
+  const composed = (withMe) => ({
+    ...upcomingMatch(),
+    RegistrationsClosedAt: iso(-DAY / 2),
+    Teams: [
+      { ID: 'a', Name: 'Black', Players: [{ ID: withMe ? 'me' : 'p1', Name: 'Me' }, { ID: 'p2', Name: 'Paolo' }] },
+      { ID: 'b', Name: 'White', Players: [{ ID: 'p3', Name: 'Luca' }, { ID: 'p4', Name: 'Gino' }] }
+    ]
+  });
+  const ODDS = { TeamAOdds: 1.85, DrawOdds: 3.4, TeamBOdds: 2.1 };
+
+  it("says which team the player is on and lists both, instead of the places", async () => {
+    getMatchPredictions.mockResolvedValue({ Odds: ODDS });
+    const { wrapper } = await mountView(composed(true));
+    expect(wrapper.find('.hero-team').text()).toContain('You play for');
+    expect(wrapper.find('.hero-team-name').text()).toBe('Black');
+    expect(wrapper.find('.hero-spots').exists()).toBe(false);
+    expect(wrapper.findAll('.lineups-upcoming .lineup')).toHaveLength(2);
+    expect(wrapper.find('.lineups-upcoming li.is-me').text()).toContain('You');
+  });
+
+  it('only says the teams are set to a player in neither', async () => {
+    getMatchPredictions.mockResolvedValue({ Odds: ODDS });
+    const { wrapper } = await mountView(composed(false));
+    expect(wrapper.find('.hero-team').text()).toContain('Teams are set');
+    expect(wrapper.find('.hero-team-name').exists()).toBe(false);
+  });
+
+  it('offers the prediction next to the teams, and saves a pick', async () => {
+    getMatchPredictions.mockResolvedValue({ Odds: ODDS });
+    predictForMatch.mockResolvedValue({ Odds: ODDS, MyPrediction: { PredictedTeamID: null } });
+    const { wrapper } = await mountView(composed(true));
+    const picks = wrapper.findAll('.bet-bar .pick');
+    expect(picks.map((pick) => pick.text())).toEqual(['Black1.85', 'Draw3.40', 'White2.10']);
+
+    await picks[1].trigger('click');
+    await flushPromises();
+    expect(predictForMatch).toHaveBeenCalledWith('match', null);
+    expect(wrapper.find('.bet-bar .pick.is-on').text()).toContain('Draw');
+    expect(wrapper.find('.bet-bar .cta-msg').text()).toBe('Your prediction · Draw · 3.40');
+  });
+
+  it('has no prediction bar while the teams are not set', async () => {
+    const { wrapper } = await mountView(upcomingMatch());
+    expect(getMatchPredictions).not.toHaveBeenCalled();
+    expect(wrapper.find('.bet-bar').exists()).toBe(false);
+  });
+
+  it('offers the waiting list once the places are taken', async () => {
+    const full = Array.from({ length: 17 }, (_, index) => ({ PlayerID: `p${index}`, Name: `P${index}`, Position: index + 1, IsWaiting: index >= 16 }));
+    const { wrapper } = await mountView(upcomingMatch(), { registrations: full });
+    expect(wrapper.find('.actions .btn').text()).toBe('Join the waiting list');
+    expect(wrapper.find('.reg-you').text()).toContain('#2');
   });
 });

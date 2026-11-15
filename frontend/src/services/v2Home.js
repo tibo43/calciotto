@@ -151,3 +151,19 @@ export function goalLine(player) {
   else if (own > 1) parts.push(`${own} OG`);
   return parts.join(' · ');
 }
+
+// The name of the team the player is on once the hero match's teams are
+// set; null when they aren't in either.
+export function myTeam(match, playerId) {
+  const teams = (match && match.Teams) || [];
+  if (!playerId || teams.length !== 2) return null;
+  const index = teams.findIndex((team) => (team.Players || []).some((player) => player.ID === playerId));
+  if (index === -1) return null;
+  return teams[index].Name;
+}
+
+// Where a new sign-up would land on a full list: right after the players
+// already waiting.
+export function nextWaitingPosition(registrations) {
+  return (registrations || []).filter((entry) => entry.IsWaiting).length + 1;
+}

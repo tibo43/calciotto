@@ -2,10 +2,10 @@
   <main class="page">
     <nav class="subnav" aria-label="Predictions">
       <router-link to="/predictions" :class="{ 'is-on': tab === 'matches' }">
-        <span class="outline" :class="{ 'is-on': tab === 'matches' }">Matches</span>
+        Matches
       </router-link>
       <router-link to="/predictions?tab=leaderboard" :class="{ 'is-on': tab === 'leaderboard' }">
-        <span class="outline" :class="{ 'is-on': tab === 'leaderboard' }">Leaderboard</span>
+        Leaderboard
       </router-link>
     </nav>
 
@@ -48,6 +48,8 @@
             </button>
           </div>
           <p v-if="resultLine(match)" class="pred-state" :class="resultKind(match)">{{ resultLine(match) }}</p>
+          <!-- The line-ups live on the match page rather than folded in here. -->
+          <router-link class="pred-teams" :to="{ name: 'MatchView', params: { id: match.ID } }">See the teams</router-link>
         </article>
       </template>
     </template>
