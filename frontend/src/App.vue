@@ -36,10 +36,10 @@
             </template>
           </div>
           <nav v-if="isAuthenticatedRoute && !v2Context.pageTitle" class="dnav" aria-label="Main">
-            <router-link to="/" :class="{ 'is-on': isV2Home }"><span class="outline" :class="{ 'is-on': isV2Home }">Home</span></router-link>
-            <router-link to="/rankings" :class="{ 'is-on': $route.name === 'Rankings' }"><span class="outline" :class="{ 'is-on': $route.name === 'Rankings' }">Rankings</span></router-link>
-            <router-link to="/predictions" :class="{ 'is-on': $route.name === 'Predictions' }"><span class="outline" :class="{ 'is-on': $route.name === 'Predictions' }">Predictions</span></router-link>
-            <router-link to="/profile" :class="{ 'is-on': isV2Profile }"><span class="outline" :class="{ 'is-on': isV2Profile }">Profile</span></router-link>
+            <router-link v-for="item in v2NavItems" :key="item.to" :to="item.to" class="nav-text" :class="{ 'is-on': item.on }"
+              :aria-current="item.on ? 'page' : null">
+              {{ item.label }}
+            </router-link>
           </nav>
           <!-- No theme toggle here: in v2 the theme is a setting, on the
                Account page (ProfileV2), not a control on every page. -->
@@ -165,10 +165,10 @@
              account lives, out of the way everywhere else. Same three destinations, labels
              and icons as the top nav-menu, so both bars read as one app. -->
         <nav v-if="designV2 && isAuthenticatedRoute" class="tabbar" aria-label="Main">
-          <router-link to="/" :class="{ 'is-on': isV2Home }"><span class="outline" :class="{ 'is-on': isV2Home }">Home</span></router-link>
-          <router-link to="/rankings" :class="{ 'is-on': $route.name === 'Rankings' }"><span class="outline" :class="{ 'is-on': $route.name === 'Rankings' }">Rankings</span></router-link>
-          <router-link to="/predictions" :class="{ 'is-on': $route.name === 'Predictions' }"><span class="outline" :class="{ 'is-on': $route.name === 'Predictions' }">Predictions</span></router-link>
-          <router-link to="/profile" :class="{ 'is-on': isV2Profile }"><span class="outline" :class="{ 'is-on': isV2Profile }">Profile</span></router-link>
+          <router-link v-for="item in v2NavItems" :key="item.to" :to="item.to" class="nav-ico" :class="{ 'is-on': item.on }"
+            :aria-label="item.label" :title="item.label" :aria-current="item.on ? 'page' : null">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="item.icon" /></svg>
+          </router-link>
         </nav>
         <nav v-if="isAuthenticatedRoute && !designV2" class="bottom-tab-bar">
           <router-link to="/" :class="['bottom-tab-button', { active: $route.name === 'MatchesAndStandings' }]"
@@ -276,6 +276,16 @@ export default {
     },
     isV2Profile() {
       return String(this.$route.path || '').startsWith('/profile');
+    },
+    // The v2 menu: named in the desktop top bar, icons only in the phone tab
+    // bar (named there for screen readers).
+    v2NavItems() {
+      return [
+        { to: '/', label: 'Home', on: this.isV2Home, icon: 'M3 9a9 3 0 1 0 18 0 9 3 0 1 0-18 0zM3 9v6a9 3 0 0 0 18 0V9M7 9a5 1.4 0 1 0 10 0 5 1.4 0 1 0-10 0zM7.5 17.6v-3M12 18v-3M16.5 17.6v-3' },
+        { to: '/rankings', label: 'Rankings', on: this.$route.name === 'Rankings', icon: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3' },
+        { to: '/predictions', label: 'Predictions', on: this.$route.name === 'Predictions', icon: 'M11 12a1 1 0 1 0 2 0 1 1 0 1 0-2 0M12 7a5 5 0 1 0 5 5M13 3.055a9 9 0 1 0 7.941 7.945M15 6v3h3l3-3h-3V3zM15 9l-3 3' },
+        { to: '/profile', label: 'Profile', on: this.isV2Profile, icon: 'M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 21a8 8 0 0 1 16 0' },
+      ];
     }
   },
   watch: {

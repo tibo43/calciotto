@@ -26,14 +26,29 @@
           <p v-if="kickoffLabel(next.ScheduledAt)" class="display hero-time">{{ kickoffLabel(next.ScheduledAt) }}</p>
           <p v-if="metaOf(next)" class="hero-meta">{{ metaOf(next) }}</p>
         </router-link>
-        <div class="hero-spots">
-          <div class="num big">{{ places }}</div>
-          <div class="cap">places<br>left<br>{{ confirmedCount }} / {{ cap }} signed up</div>
+        <!-- Once the teams are set the places are history: what matters is
+             which side the player is on. -->
+        <div v-if="teamsSet" class="hero-team">
+          <template v-if="myTeam">
+            <p class="label">You play for</p>
+            <p class="display hero-team-name">{{ myTeam }}</p>
+          </template>
+          <template v-else>
+            <p class="label">Teams are set</p>
+            <p class="hero-meta">{{ teamName(next, 0) }} vs {{ teamName(next, 1) }}</p>
+          </template>
         </div>
-        <div class="bar" aria-hidden="true"><i :style="{ '--pct': barPct }"></i></div>
+        <template v-else>
+          <div class="hero-spots">
+            <div class="num big">{{ places }}</div>
+            <div class="cap">places<br>left<br>{{ confirmedCount }} / {{ cap }} signed up</div>
+          </div>
+          <div class="bar" aria-hidden="true"><i :style="{ '--pct': barPct }"></i></div>
+        </template>
         <p v-if="mine && registrationsAreOpen(regState)" class="reg-you">You're signed up · {{ mine.IsWaiting ? 'waiting list' : 'confirmed' }}</p>
+        <p v-else-if="full && registrationsAreOpen(regState)" class="reg-you">Full · you'd be <strong>#{{ waitingPosition }}</strong> on the waiting list</p>
         <div class="actions" v-if="registrationsAreOpen(regState)">
-          <button v-if="!mine" class="btn" type="button" :disabled="busy" @click="signUp">Sign up</button>
+          <button v-if="!mine" class="btn" type="button" :disabled="busy" @click="signUp">{{ full ? 'Join the waiting list' : 'Sign up' }}</button>
           <div v-else class="withdraw-wrap">
             <button class="btn btn-ghost" type="button" @click="confirming = true">Withdraw</button>
           </div>
@@ -118,10 +133,10 @@
 import AppToast from '@/components/AppToast.vue';
 import { actionErrorMessage } from '@/services/v2Match';
 import { getMatchesDetails, getMatchRegistrations, getMatchVotes, registerForMatch, unregisterFromMatch, getToken } from '@/services/api';
-import { deriveRegistrationState, registrationsAreOpen } from '@/services/matchRegistration';
+import { deriveRegistrationState, registrationsAreOpen, teamsAreComposed } from '@/services/matchRegistration';
 import {
   splitHomeMatches, heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel,
-  registrationMeta, placesLeft, homeVoteLine,
+  registrationMeta, placesLeft, homeVoteLine, myTeam, nextWaitingPosition,
 } from '@/services/v2Home';
 
 function currentPlayerIdFromToken() {
@@ -193,13 +208,28 @@ export default {
       if (!this.cap) return '0%';
       return `${Math.min(100, Math.round((this.confirmedCount / this.cap) * 100))}%`;
     },
+    full() {
+      return Boolean(this.cap) && this.places === 0;
+    },
+    waitingPosition() {
+      return nextWaitingPosition(this.registrations);
+    },
+    teamsSet() {
+      return Boolean(this.next) && teamsAreComposed(this.next);
+    },
+    myTeam() {
+      return this.teamsSet ? myTeam(this.next, this.playerId) : null;
+    },
     mine() {
       return this.registrations.find((entry) => entry.PlayerID === this.playerId) || null;
     },
     voteMatch() {
       return this.recent[0] || null;
     },
+    // Only while nothing new is scheduled: once it is, the next match is
+    // the news, and the vote has its own notification.
     voteLine() {
+      if (this.next) return null;
       return homeVoteLine(this.voteMatch, this.recentVotes, this.nowMs);
     },
   },
@@ -257,7 +287,7 @@ export default {
           const list = await getMatchRegistrations(heroSplit.next.ID);
           this.registrations = Array.isArray(list) ? list : [];
         }
-        if (heroSplit.recent[0]) {
+        if (!heroSplit.next && heroSplit.recent[0]) {
           this.recentVotes = await getMatchVotes(heroSplit.recent[0].ID).catch(() => null);
         }
       } catch (error) {

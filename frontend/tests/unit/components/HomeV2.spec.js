@@ -1,6 +1,6 @@
 import { mount, flushPromises } from '@vue/test-utils';
 import HomeV2 from '@/components/v2/HomeV2.vue';
-import { getMatchesDetails, getMatchVotes } from '@/services/api';
+import { getMatchesDetails, getMatchVotes, getMatchRegistrations, getToken } from '@/services/api';
 
 jest.mock('@/services/api', () => ({
   getMatchesDetails: jest.fn(),
@@ -60,5 +60,38 @@ describe('HomeV2.vue New match button', () => {
     expect(member.find('.fab').exists()).toBe(false);
     expect(member.text()).toContain('No matches yet');
     expect((await mountHome([played('last', 3)], false)).text()).toContain('No upcoming match yet');
+  });
+});
+
+describe('HomeV2.vue with a match scheduled', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  const scheduled = (extra = {}) => ({
+    ...played('next', -3), ScheduledAt: new Date(Date.now() + 3 * DAY).toISOString(),
+    RegistrationOpensAt: new Date(Date.now() - DAY).toISOString(), MaxPlayers: 2, ...extra
+  });
+
+  it('drops the Man of the Match line and does not load the votes', async () => {
+    const wrapper = await mountHome([scheduled(), played('last', 3)]);
+    expect(wrapper.find('.motm-row').exists()).toBe(false);
+    expect(getMatchVotes).not.toHaveBeenCalled();
+  });
+
+  it('turns Sign up into Join the waiting list once the places are taken', async () => {
+    getMatchRegistrations.mockResolvedValueOnce([
+      { PlayerID: 'x', IsWaiting: false }, { PlayerID: 'y', IsWaiting: false }, { PlayerID: 'z', IsWaiting: true }
+    ]);
+    const wrapper = await mountHome([scheduled()]);
+    expect(wrapper.find('.hero .actions .btn').text()).toBe('Join the waiting list');
+    expect(wrapper.find('.reg-you').text()).toContain('#2');
+  });
+
+  it("names the player's team once the teams are set", async () => {
+    getToken.mockReturnValue(`x.${btoa(JSON.stringify({ player_id: 'me' }))}.y`);
+    const teams = [{ ID: 'a', Name: 'Black', Players: [{ ID: 'me' }] }, { ID: 'b', Name: 'White', Players: [{ ID: 'q' }] }];
+    const wrapper = await mountHome([scheduled({ RegistrationsClosedAt: new Date().toISOString(), Teams: teams })]);
+    expect(wrapper.find('.hero-team-name').text()).toBe('Black');
+    expect(wrapper.find('.hero-spots').exists()).toBe(false);
+    getToken.mockReturnValue('');
   });
 });

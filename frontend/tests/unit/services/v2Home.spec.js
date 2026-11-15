@@ -1,4 +1,4 @@
-import { splitHomeMatches, heroDateLabel, placesLeft, registrationMeta, kickoffLabel, homeVoteLine, matchVoteCopy, goalLine } from '@/services/v2Home';
+import { splitHomeMatches, heroDateLabel, placesLeft, registrationMeta, kickoffLabel, homeVoteLine, matchVoteCopy, goalLine, myTeam, nextWaitingPosition } from '@/services/v2Home';
 
 const NOW = new Date('2026-09-04T10:00:00+02:00').getTime();
 
@@ -77,5 +77,21 @@ describe('MOTM copy', () => {
     expect(matchVoteCopy(openMatch, tally, NOW)).toBe('MOTM vote open until 4 Sep midnight · tap a player to change');
     expect(matchVoteCopy(closedMatch, tie, NOW)).toBe('MOTM vote closed · tie, both receive the award');
     expect(matchVoteCopy(closedMatch, { Tally: [] }, NOW)).toBe('MOTM vote closed · no votes, no winner');
+  });
+});
+
+describe('myTeam', () => {
+  const match = { Teams: [{ Name: 'Black', Players: [{ ID: 'me' }] }, { Name: 'White', Players: [{ ID: 'q' }] }] };
+  it("names the player's team, or nothing when they are in neither", () => {
+    expect(myTeam(match, 'me')).toBe('Black');
+    expect(myTeam(match, 'other')).toBeNull();
+    expect(myTeam(match, '')).toBeNull();
+  });
+});
+
+describe('nextWaitingPosition', () => {
+  it('lands right after the players already waiting', () => {
+    expect(nextWaitingPosition([{ IsWaiting: false }, { IsWaiting: true }, { IsWaiting: true }])).toBe(3);
+    expect(nextWaitingPosition([])).toBe(1);
   });
 });

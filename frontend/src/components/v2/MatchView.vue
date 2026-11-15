@@ -1,5 +1,5 @@
 <template>
-  <main class="page" :class="{ 'match-upcoming': upcoming }">
+  <main class="page" :class="{ 'match-upcoming': upcoming, 'has-sticky': betOpen }">
 
     <section v-if="loading" class="state">
       <div class="skel lg"></div>
@@ -16,14 +16,26 @@
         <h1 class="display hero-date">{{ heroDateLabel(match.Date) }}</h1>
         <p v-if="kickoffLabel(match.ScheduledAt)" class="display hero-time">{{ kickoffLabel(match.ScheduledAt) }}</p>
         <p v-if="meta" class="hero-meta">{{ meta }}</p>
-        <div class="hero-spots">
-          <div class="num big">{{ places }}</div>
-          <div class="cap">places<br>left<br>{{ confirmed.length }} / {{ cap }} signed up</div>
+        <!-- Once the teams are set, the player's side replaces the places
+             count, as on the home page. -->
+        <div v-if="teamsSet" class="hero-team">
+          <template v-if="myTeam">
+            <p class="label">You play for</p>
+            <p class="display hero-team-name">{{ myTeam }}</p>
+          </template>
+          <p v-else class="label">Teams are set</p>
         </div>
-        <div class="bar" aria-hidden="true"><i :style="{ '--pct': barPct }"></i></div>
-        <p v-if="mine" class="reg-you">You're signed up · {{ mine.IsWaiting ? 'waiting list' : 'confirmed' }}</p>
+        <template v-else>
+          <div class="hero-spots">
+            <div class="num big">{{ places }}</div>
+            <div class="cap">places<br>left<br>{{ confirmed.length }} / {{ cap }} signed up</div>
+          </div>
+          <div class="bar" aria-hidden="true"><i :style="{ '--pct': barPct }"></i></div>
+        </template>
+        <p v-if="mine && !teamsSet" class="reg-you">You're signed up · {{ mine.IsWaiting ? 'waiting list' : 'confirmed' }}</p>
+        <p v-else-if="full && open" class="reg-you">Full · you'd be <strong>#{{ waitingPosition }}</strong> on the waiting list</p>
         <div class="actions">
-          <button v-if="!mine && open" class="btn" type="button" :disabled="busy" @click="signUp">Sign up</button>
+          <button v-if="!mine && open" class="btn" type="button" :disabled="busy" @click="signUp">{{ full ? 'Join the waiting list' : 'Sign up' }}</button>
           <span v-else-if="mine && open" class="withdraw-wrap withdraw-slot">
             <button class="btn btn-ghost" type="button" :disabled="busy" @click="confirming = true">Withdraw</button>
             <!-- Wide screens: anchored under the button, as on the home page. -->
@@ -39,7 +51,19 @@
           <router-link v-if="isAdmin" class="btn btn-ghost" :to="`/matches/${match.ID}/edit`">Manage match</router-link>
         </div>
       </section>
-      <section class="sec">
+      <!-- The teams, once set, are what the sign-up list was for. -->
+      <div v-if="teamsSet" class="lineups lineups-upcoming">
+        <section v-for="team in teams" :key="team.ID" class="lineup">
+          <h3>{{ team.Name }}</h3>
+          <ul class="signup-ro">
+            <li v-for="player in team.Players" :key="player.ID" :class="{ 'is-me': player.ID === playerId }">
+              <span class="nm">{{ player.Name }}</span>
+              <span v-if="player.ID === playerId" class="pos">You</span>
+            </li>
+          </ul>
+        </section>
+      </div>
+      <section v-else class="sec">
         <div class="sec-head"><h2>Confirmed</h2><span class="label">{{ confirmed.length }} / {{ cap }}</span></div>
         <ul class="signup-ro">
           <li v-for="entry in confirmed" :key="entry.PlayerID">
@@ -48,6 +72,18 @@
           </li>
         </ul>
       </section>
+      <!-- The prediction, next to the teams it's about: pinned above the tab
+           bar on a phone, in the flow on a desktop. -->
+      <div v-if="betOpen" class="sticky-cta bet-bar">
+        <p class="cta-msg">{{ myPick ? `Your prediction · ${myPick}` : 'Your prediction' }}</p>
+        <div class="picks">
+          <button v-for="option in betOptions" :key="option.key" class="pick" type="button"
+            :class="{ 'is-on': option.on }" :disabled="betBusy" @click="predict(option.teamId)">
+            <span class="who">{{ option.label }}</span>
+            <span v-if="option.odds" class="odd">{{ option.odds }}</span>
+          </button>
+        </div>
+      </div>
       <section v-if="waiting.length" class="sec">
         <div class="sec-head"><h2>Waiting list</h2><span class="label">{{ waiting.length }}</span></div>
         <ul class="signup-ro">
@@ -112,12 +148,13 @@
 </template>
 
 <script>
-import { getMatchRegistrations, registerForMatch, unregisterFromMatch, getMatchVotes, voteForMotm, removeMotmVote, getSeasons, getToken } from '@/services/api';
+import { getMatchRegistrations, registerForMatch, unregisterFromMatch, getMatchVotes, voteForMotm, removeMotmVote, getSeasons, getToken, getMatchPredictions, predictForMatch } from '@/services/api';
+import { predictionsAreOpen } from '@/services/matchPrediction';
 import { setActiveGroupId } from '@/services/activeGroup';
 import { findMatchInMyGroups, actionErrorMessage } from '@/services/v2Match';
 import AppToast from '@/components/AppToast.vue';
-import { deriveRegistrationState, registrationsAreOpen, isPlayerOnRoster } from '@/services/matchRegistration';
-import { heroDateLabel, kickoffLabel, registrationMeta, placesLeft, isMatchOver, matchVoteCopy, motmWinners, goalLine } from '@/services/v2Home';
+import { deriveRegistrationState, registrationsAreOpen, isPlayerOnRoster, teamsAreComposed } from '@/services/matchRegistration';
+import { heroDateLabel, kickoffLabel, registrationMeta, placesLeft, isMatchOver, matchVoteCopy, motmWinners, goalLine, myTeam, nextWaitingPosition } from '@/services/v2Home';
 import { isMotmVotingOpen } from '@/services/motmVoting';
 
 function currentPlayerIdFromToken() {
@@ -153,6 +190,8 @@ export default {
       isAdmin: false,
       busy: false,
       confirming: false,
+      prediction: null,
+      betBusy: false,
     };
   },
   computed: {
@@ -180,6 +219,37 @@ export default {
     },
     mine() {
       return this.registrations.find((entry) => entry.PlayerID === this.playerId) || null;
+    },
+    teamsSet() {
+      return Boolean(this.match) && teamsAreComposed(this.match);
+    },
+    myTeam() {
+      return this.teamsSet ? myTeam(this.match, this.playerId) : null;
+    },
+    betOpen() {
+      return Boolean(this.match) && this.upcoming && Boolean(this.prediction) && predictionsAreOpen(this.match, this.nowMs);
+    },
+    betOptions() {
+      const odds = (this.prediction && this.prediction.Odds) || {};
+      const mine = this.prediction && this.prediction.MyPrediction;
+      const picked = mine ? (mine.PredictedTeamID || null) : undefined;
+      const fmt = (value) => (Number.isFinite(Number(value)) && value != null ? Number(value).toFixed(2) : '');
+      const [a, b] = this.teams;
+      return [
+        { key: 'a', teamId: a.ID, label: a.Name, odds: fmt(odds.TeamAOdds) },
+        { key: 'draw', teamId: null, label: 'Draw', odds: fmt(odds.DrawOdds) },
+        { key: 'b', teamId: b.ID, label: b.Name, odds: fmt(odds.TeamBOdds) },
+      ].map((option) => ({ ...option, on: picked !== undefined && picked === option.teamId }));
+    },
+    myPick() {
+      const chosen = this.betOptions.find((option) => option.on);
+      return chosen ? `${chosen.label} · ${chosen.odds}` : '';
+    },
+    full() {
+      return Boolean(this.cap) && this.places === 0;
+    },
+    waitingPosition() {
+      return nextWaitingPosition(this.registrations);
     },
     open() {
       return registrationsAreOpen(deriveRegistrationState(this.match, this.nowMs));
@@ -303,6 +373,9 @@ export default {
         ]);
         this.registrations = Array.isArray(regs) ? regs : [];
         this.votes = votes;
+        this.prediction = predictionsAreOpen(details, this.nowMs)
+          ? await getMatchPredictions(this.id).catch(() => null)
+          : null;
         this.isAdmin = group.role === 'admin';
         this.v2Context.groupId = group.id;
         await this.publishChrome(groups).catch(() => {});
@@ -311,6 +384,19 @@ export default {
         this.failed = true;
       } finally {
         this.loading = false;
+      }
+    },
+    async predict(teamId) {
+      if (this.betBusy) return;
+      this.betBusy = true;
+      try {
+        this.prediction = await predictForMatch(this.id, teamId);
+      } catch (error) {
+        console.error(error);
+        this.$refs.toast.show(actionErrorMessage(error, 'Failed to save your prediction. Please try again.'), 'error');
+        this.prediction = await getMatchPredictions(this.id).catch(() => this.prediction);
+      } finally {
+        this.betBusy = false;
       }
     },
     // The registrations are re-read either way: a refusal usually means
