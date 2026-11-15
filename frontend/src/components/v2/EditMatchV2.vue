@@ -27,10 +27,14 @@
         <p class="share-sub">{{ shareSub }}</p>
       </div>
 
+      <!-- The only way between the steps. The one to do next is orange,
+           the others can be reopened to correct them, and one that isn't
+           possible yet stays in place, greyed and inert. -->
       <nav class="steps" aria-label="Steps">
-        <button class="step-i" :class="{ 'is-on': step === 'signups' }" type="button" @click="goStep('signups')"><b>1</b> Sign-ups</button>
-        <button class="step-i" :class="{ 'is-on': step === 'teams' }" type="button" @click="goStep('teams')"><b>2</b> Teams</button>
-        <button class="step-i" :class="{ 'is-on': step === 'score' }" type="button" @click="goStep('score')"><b>3</b> Score and goals</button>
+        <button v-for="item in stepItems" :key="item.key" class="step-i"
+          :class="{ 'is-on': step === item.key, 'is-todo': item.todo, 'is-inactive': item.inactive }" type="button"
+          :aria-current="step === item.key ? 'step' : null" :aria-disabled="item.inactive ? 'true' : null"
+          @click="item.inactive || goStep(item.key)"><b>{{ item.n }}</b> {{ item.label }}</button>
       </nav>
 
       <template v-if="step === 'signups'">
@@ -58,21 +62,6 @@
             <span class="tog">Waiting list</span>
           </div>
           <p v-if="!waiting.length" class="note">No one is waiting.</p>
-        </section>
-        <section class="block">
-          <div class="sec-head"><h2>2. Teams</h2></div>
-          <p class="note">{{ teamsNote }}</p>
-          <div class="actions">
-            <button class="btn" type="button" @click="goStep('teams')">Compose the teams</button>
-          </div>
-        </section>
-        <section class="block">
-          <div class="sec-head"><h2>3. Score and goals</h2></div>
-          <p class="note">The score is not typed in. It is the sum of each team's goals, plus the other team's own goals. It opens once the teams are made.</p>
-          <div class="actions">
-            <button v-if="bothSides" class="btn" type="button" @click="goStep('score')">Enter the score</button>
-            <button v-else class="btn btn-ghost" type="button" @click="goStep('teams')">Make the teams first</button>
-          </div>
         </section>
         <p v-if="message" class="note">{{ message }}</p>
         <div class="sticky-cta">
@@ -153,7 +142,6 @@
       <template v-else>
         <template v-if="!bothSides">
           <p class="note">The score opens once each team has at least one player.</p>
-          <button class="btn" type="button" @click="goStep('teams')">Compose the teams</button>
         </template>
         <template v-else>
           <section class="score-board" aria-label="Computed score">
@@ -238,7 +226,7 @@ import { setActiveGroupId } from '@/services/activeGroup';
 import { findMatchInMyGroups, actionErrorMessage } from '@/services/v2Match';
 import AppToast from '@/components/AppToast.vue';
 import {
-  deriveRegistrationState, REGISTRATION_OPEN, REGISTRATION_CLOSED_BY_ADMIN,
+  deriveRegistrationState, REGISTRATION_OPEN, REGISTRATION_CLOSED_BY_ADMIN, REGISTRATION_CLOSED_AT_KICKOFF,
   fillTeamsFromRegistrations,
 } from '@/services/matchRegistration';
 import { formatDateTimeForDisplay, formatCalendarDayLong } from '@/services/datetime';
@@ -361,8 +349,26 @@ export default {
       const bench = names ? `, ${this.waiting.length} waiting (${names})` : '';
       return `Not composed yet. ${this.confirmed.length} confirmed players are in the reserve${bench}. The waiting list is not split automatically.`;
     },
-    teamsNote() {
-      return this.signupNote;
+    // Where the match stands, from what the server has saved (not this
+    // page's draft): sign-ups closed, then teams saved, then the score.
+    progress() {
+      const match = this.match || {};
+      const saved = match.Teams || [];
+      const scoreSaved = Boolean(match.ResultRecordedAt)
+        || saved.some((team) => (team.Players || []).some((player) => player.GoalNumber || player.OwnGoals));
+      const teamsSaved = [0, 1].every((index) => ((saved[index] || {}).Players || []).length > 0);
+      const closed = !this.isScheduled || this.registrationState === REGISTRATION_CLOSED_BY_ADMIN
+        || this.registrationState === REGISTRATION_CLOSED_AT_KICKOFF;
+      if (scoreSaved) return null;
+      if (teamsSaved) return 'score';
+      return closed ? 'teams' : null;
+    },
+    stepItems() {
+      return [
+        { key: 'signups', n: 1, label: 'Sign-ups' },
+        { key: 'teams', n: 2, label: 'Teams' },
+        { key: 'score', n: 3, label: 'Score and goals', inactive: !this.bothSides },
+      ].map((item) => ({ ...item, todo: this.progress === item.key && !item.inactive }));
     },
     sizeCount() {
       return sizeCounter(this.teamPlayers[0].length, this.teamPlayers[1].length);

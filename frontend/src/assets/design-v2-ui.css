@@ -227,3 +227,13 @@
 .design-v2 .hero-status-btn{flex:none;margin-left:auto;min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 16px;}
 /* Home: "You play for <team>" on one line, the team in the accent. */
 .design-v2 .hero-team-mine{color:var(--v2-accent);}
+/* Editing steps, the same in both themes. Done (open to correct): the
+   surface, no outline. Not possible yet: no fill, no outline, muted text,
+   inert. Next to do: the accent fill, the only orange here (never an outline,
+   never text). The step on screen adds a 1px text-colour outline to its own
+   fill. */
+.design-v2 .step-i{background:var(--v2-surface);border-color:transparent;color:var(--v2-text);cursor:pointer;}
+.design-v2 .step-i.is-todo{background:#e8743b;color:#141a33;}
+.design-v2 .step-i.is-inactive{background:transparent;color:var(--v2-text-muted);cursor:default;}
+.design-v2 .step-i.is-on, .design-v2 .step-i.is-todo.is-on, .design-v2 .step-i.is-inactive.is-on{border-color:var(--v2-text);}
+.design-v2 .step-i:focus-visible{outline:2px solid var(--v2-text);outline-offset:2px;}

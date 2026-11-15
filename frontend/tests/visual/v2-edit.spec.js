@@ -38,6 +38,22 @@ function scoredMatch() {
   };
 }
 
+// The four stages the steps reflect, from what the server has saved.
+function teamsSavedMatch() {
+  const base = scoredMatch();
+  return {
+    ...base,
+    ResultRecordedAt: undefined,
+    Teams: base.Teams.map((team) => ({ ...team, Players: team.Players.map((player) => ({ ...player, GoalNumber: 0, OwnGoals: 0 })) })),
+  };
+}
+const STAGES = {
+  open: () => closedMatch({ RegistrationsClosedAt: undefined }),
+  closed: () => closedMatch(),
+  'teams saved': teamsSavedMatch,
+  'score saved': scoredMatch,
+};
+
 async function openEdit(page, path, options = {}) {
   const { match, ...rest } = options;
   return gotoApp(page, path, {
@@ -128,6 +144,68 @@ test.describe('design v2 admin editing', () => {
     await expect(page.getByRole('menuitem', { name: 'Reserve' })).toBeVisible();
     await expect(page).toHaveScreenshot('v2-edit-teams-choice-mobile.png', { fullPage: true });
     await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  for (const [stage, todo] of [['open', null], ['closed', 'Teams'], ['teams saved', 'Score and goals'], ['score saved', null]]) {
+    test(`steps, ${stage}`, async ({ page }) => {
+      const { unstubbed } = await openEdit(page, EDIT, { match: STAGES[stage]() });
+      const steps = page.getByRole('navigation', { name: 'Steps' }).getByRole('button');
+      await expect(steps).toHaveCount(3);
+      await expect(page.locator('.step-i.is-todo')).toHaveCount(todo ? 1 : 0);
+      if (todo) await expect(page.locator('.step-i.is-todo')).toContainText(todo);
+      // No second set of buttons to move on: the steps are the only way.
+      await expect(page.getByRole('button', { name: 'Compose the teams' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Enter the score' })).toHaveCount(0);
+      for (const box of await steps.evaluateAll((items) => items.map((item) => item.getBoundingClientRect().height))) {
+        expect(box).toBeGreaterThanOrEqual(44);
+      }
+      expectEverythingStubbed(unstubbed);
+    });
+  }
+
+  // The step on screen is outlined in the text colour; when it is also the
+  // next one to do, it keeps the accent fill as well. Orange never outlines.
+  for (const [stage, path, shown] of [['closed', EDIT, '1 Sign-ups'], ['closed', `${EDIT}?step=teams`, '2 Teams'], ['teams saved', `${EDIT}?step=score`, '3 Score and goals']]) {
+    test(`steps, ${stage}, showing ${shown}`, async ({ page }) => {
+      const { unstubbed } = await openEdit(page, path, { match: STAGES[stage]() });
+      const current = page.getByRole('button', { name: shown });
+      await expect(current).toHaveAttribute('aria-current', 'step');
+      await expect(page.locator('.step-i[aria-current]')).toHaveCount(1);
+      const looks = await page.locator('.step-i').evaluateAll((items) => {
+        // The resolved text colour of the theme, to compare outlines with.
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--v2-text)';
+        items[0].parentElement.appendChild(probe);
+        const text = getComputedStyle(probe).color;
+        probe.remove();
+        return items.map((item) => {
+          const style = getComputedStyle(item);
+          return { on: item.classList.contains('is-on'), todo: item.classList.contains('is-todo'), border: style.borderTopColor, color: style.color, text };
+        });
+      });
+      for (const look of looks) {
+        expect(look.border).not.toBe('rgb(232, 116, 59)');
+        expect(look.color).not.toBe('rgb(232, 116, 59)');
+        if (look.on) expect(look.border).toBe(look.text);
+        else expect(look.border).not.toBe(look.text);
+      }
+      expect(looks.filter((look) => look.on && look.todo)).toHaveLength(shown === '1 Sign-ups' ? 0 : 1);
+      expectEverythingStubbed(unstubbed);
+    });
+  }
+
+  test('steps, score not possible before the teams', async ({ page }) => {
+    const { unstubbed } = await openEdit(page, EDIT);
+    const score = page.getByRole('button', { name: '3 Score and goals' });
+    await expect(score).toHaveAttribute('aria-disabled', 'true');
+    // Playwright waits for an aria-disabled button to be enabled; force the
+    // click to check it really does nothing.
+    await score.click({ force: true });
+    await expect(page).toHaveURL(new RegExp(`/matches/${ID}/edit$`));
+    await page.getByRole('button', { name: '2 Teams' }).click();
+    await expect(page).toHaveURL(/step=teams/);
+    await expect(page.getByRole('button', { name: '2 Teams' })).toHaveAttribute('aria-current', 'step');
     expectEverythingStubbed(unstubbed);
   });
 
