@@ -20,8 +20,8 @@
              count, as on the home page. -->
         <div v-if="teamsSet" class="hero-team">
           <template v-if="myTeam">
-            <p class="label">You play for</p>
-            <p class="display hero-team-name">{{ myTeam }}</p>
+            <!-- Same line as on the home: mono label, the team in the accent. -->
+            <p class="label hero-team-line">You play for <span class="hero-team-mine">{{ myTeam }}</span></p>
           </template>
           <p v-else class="label">Teams are set</p>
         </div>

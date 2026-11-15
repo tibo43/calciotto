@@ -28,8 +28,8 @@
   border-bottom:1px solid var(--v2-rule);}.design-v2 .topbar-left{display:flex;align-items:center;gap:12px;min-width:0;flex:1;}.design-v2 .topbar .brand, .design-v2 .topbar .wordmark{flex:none;}.design-v2 .ctx{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;
   border:1px solid var(--v2-outline);color:var(--v2-text);max-width:100%;
   font-family:var(--v2-font-label);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap;}.design-v2 .ctx .chev{width:10px;height:10px;flex:none;opacity:0.8;}.design-v2 .ctx-name{overflow:hidden;text-overflow:ellipsis;}.design-v2 .dnav{display:none;align-items:center;gap:18px;margin-left:auto;}.design-v2 .dnav a{font-size:22px;line-height:1;padding:8px 0;min-height:44px;display:inline-flex;align-items:center;}.design-v2 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(4,1fr);
-  min-height:var(--v2-tabbar-h);padding:4px 4px calc(4px + env(safe-area-inset-bottom));
-  background:var(--v2-bg);border-top:1px solid var(--v2-rule);}.design-v2 .tabbar a{display:flex;align-items:center;justify-content:center;min-height:44px;padding:6px 2px;text-align:center;}.design-v2 .tabbar .outline{font-size:15px;-webkit-text-stroke-width:1px;}.design-v2 .page{flex:1;width:100%;max-width:1080px;margin:0 auto;padding:24px 20px 96px;}.design-v2 .page.is-auth{max-width:440px;padding:48px 20px 64px;}@media (min-width:900px){.design-v2 .tabbar{display:none;}.design-v2 .dnav{display:flex;}.design-v2 .page{padding:32px 32px 64px;}.design-v2 .ctx{max-width:280px;}}.design-v2 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:var(--v2-tabbar-h);padding:0 4px env(safe-area-inset-bottom, 0px);
+  background:var(--v2-bg);border-top:1px solid var(--v2-rule);}.design-v2 .tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:44px;min-width:0;padding:6px 2px;text-align:center;color:var(--v2-text-muted);}.design-v2 .tabbar .outline{font-size:15px;-webkit-text-stroke-width:1px;}.design-v2 .page{flex:1;width:100%;max-width:1080px;margin:0 auto;padding:24px 20px 96px;}.design-v2 .page.is-auth{max-width:440px;padding:48px 20px 64px;}@media (min-width:900px){.design-v2 .tabbar{display:none;}.design-v2 .dnav{display:flex;}.design-v2 .page{padding:32px 32px 64px;}.design-v2 .ctx{max-width:280px;}}.design-v2 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
   min-height:44px;padding:0 18px;background:var(--v2-accent);color:var(--v2-on-accent);
   font-family:var(--v2-font-body);font-weight:600;font-size:15px;border:1px solid var(--v2-accent);
   text-align:center;width:auto;}
@@ -116,7 +116,7 @@
 .design-v2 .toast-message.error::before{content:'Error';color:var(--v2-danger);}
 .design-v2 .toast-message .toast-close{color:var(--v2-text-muted);border-radius:0;}
 .design-v2 .toast-message .toast-close:hover{background:var(--v2-skel);color:var(--v2-text);}
-@media (max-width:899px){.design-v2 .toast-container.toast-bottom{left:12px;right:12px;width:auto;bottom:calc(var(--v2-tabbar-h) + 12px + env(safe-area-inset-bottom,0px));}.design-v2 .toast-message{min-width:0;max-width:none;width:100%;}}
+@media (max-width:899px){.design-v2 .toast-container.toast-bottom{left:12px;right:12px;width:auto;bottom:calc(var(--v2-tabbar-h) + 12px);}.design-v2 .toast-message{min-width:0;max-width:none;width:100%;}}
 /* A Withdraw button wrapped with its own confirmation pop-up still takes a
    full share of the action row, like the bare buttons beside it. */
 .design-v2 .actions > .withdraw-slot{display:flex;flex:1 1 160px;}.design-v2 .actions > .withdraw-slot > .btn{flex:1 1 auto;}
@@ -129,16 +129,14 @@
    button, floating above the tab bar on a phone and in the corner on a
    desktop. The page keeps room below its last row so the button never
    covers it once scrolled to the end. */
-.design-v2 .fab{position:fixed;right:16px;bottom:calc(var(--v2-tabbar-h) + 16px + env(safe-area-inset-bottom,0px));z-index:18;width:56px;height:56px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--bs-btn-border-radius,6px);background:var(--v2-accent);color:var(--v2-on-accent);box-shadow:0 6px 18px rgba(8,10,20,0.35);}
-.design-v2 .page.has-fab{padding-bottom:160px;}
+.design-v2 .fab{position:fixed;right:16px;bottom:calc(var(--v2-tabbar-h) + 16px);z-index:18;width:56px;height:56px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--bs-btn-border-radius,6px);background:var(--v2-accent);color:var(--v2-on-accent);box-shadow:0 6px 18px rgba(8,10,20,0.35);}
+.design-v2 .page.has-fab{padding-bottom:calc(var(--v2-tabbar-h) + 56px + 16px);}
 .design-v2 .fab svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:square;}
 .design-v2 .fab:focus-visible{outline:2px solid var(--v2-text);outline-offset:3px;}
 @media (min-width:900px){.design-v2 .fab{right:32px;bottom:32px;width:64px;height:64px;}.design-v2 .page.has-fab{padding-bottom:112px;}}
-/* Home hero once the teams are set: the player's side, in the display face. */
+/* Home and match page once the teams are set: the player's side. */
 .design-v2 .hero-team{padding:4px 0 0;}
 .design-v2 .hero-team .label{margin-bottom:6px;}
-.design-v2 .hero-team-name{font-family:var(--v2-font-display);font-weight:800;font-size:clamp(40px,11vw,64px);text-transform:uppercase;line-height:0.95;color:var(--v2-accent);margin:0 0 6px;}
-.design-v2:not(.dark-mode) .hero-team-name{color:var(--v2-text);}
 .design-v2 .hero-team .hero-meta{margin:0;}
 /* Upcoming match page once the teams are set: the two line-ups, the
    player's own row marked like theirs elsewhere. */
@@ -149,9 +147,9 @@
 /* Menu icons (App.vue's v2NavItems): muted line icons, the current page in
    the accent with a bar under it. */
 .design-v2 .nav-ico{position:relative;color:var(--v2-text-muted);}
-.design-v2 .nav-ico svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.design-v2 .nav-ico svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 .design-v2 .nav-ico.is-on{color:var(--v2-accent);}
-.design-v2 .nav-ico.is-on::after{content:"";position:absolute;left:50%;bottom:2px;width:20px;height:2px;margin-left:-10px;background:currentColor;}
+.design-v2 .nav-ico-label{font-family:var(--v2-font-label);font-weight:400;font-size:10px;letter-spacing:0;line-height:1;text-transform:uppercase;white-space:nowrap;overflow:visible;text-overflow:clip;}
 .design-v2 .dnav a.nav-text{position:relative;font-family:var(--v2-font-body);font-weight:600;font-size:15px;color:var(--v2-text-muted);}
 .design-v2 .dnav a.nav-text:hover{color:var(--v2-text);}
 .design-v2 .dnav a.nav-text.is-on{color:var(--v2-accent);}
@@ -232,7 +230,9 @@
 .design-v2 .hero-status{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 20px;}
 .design-v2 .hero-status .hero-meta{margin:0;min-width:0;}
 .design-v2 .hero-status-btn{flex:none;margin-left:auto;min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 16px;}
-/* Home: "You play for <team>" on one line, the team in the accent. */
+/* Home and match page: "You play for <team>" in the mono label face,
+   the team in the accent. A long name wraps, no ellipsis. */
+.design-v2 .hero-team-line{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;}
 .design-v2 .hero-team-mine{color:var(--v2-accent);}
 /* Editing steps, the same in both themes. Done (open to correct): the
    surface, no outline. Not possible yet: no fill, no outline, muted text,

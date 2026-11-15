@@ -177,8 +177,8 @@ describe('MatchView.vue once the teams are set', () => {
   it("says which team the player is on and lists both, instead of the places", async () => {
     getMatchPredictions.mockResolvedValue({ Odds: ODDS });
     const { wrapper } = await mountView(composed(true));
-    expect(wrapper.find('.hero-team').text()).toContain('You play for');
-    expect(wrapper.find('.hero-team-name').text()).toBe('Black');
+    expect(wrapper.find('.hero-team-line').text()).toBe('You play for Black');
+    expect(wrapper.find('.hero-team-mine').text()).toBe('Black');
     expect(wrapper.find('.hero-spots').exists()).toBe(false);
     expect(wrapper.findAll('.lineups-upcoming .lineup')).toHaveLength(2);
     expect(wrapper.find('.lineups-upcoming li.is-me').text()).toContain('You');
@@ -188,6 +188,7 @@ describe('MatchView.vue once the teams are set', () => {
     getMatchPredictions.mockResolvedValue({ Odds: ODDS });
     const { wrapper } = await mountView(composed(false));
     expect(wrapper.find('.hero-team').text()).toContain('Teams are set');
+    expect(wrapper.find('.hero-team-line').exists()).toBe(false);
     expect(wrapper.find('.hero-team-name').exists()).toBe(false);
   });
 
