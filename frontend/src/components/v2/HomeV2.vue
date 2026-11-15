@@ -49,9 +49,18 @@
         <p v-else-if="full && registrationsAreOpen(regState)" class="reg-you">Full · you'd be <strong>#{{ waitingPosition }}</strong> on the waiting list</p>
         <div class="actions" v-if="registrationsAreOpen(regState)">
           <button v-if="!mine" class="btn" type="button" :disabled="busy" @click="signUp">{{ full ? 'Join the waiting list' : 'Sign up' }}</button>
-          <div v-else class="withdraw-wrap">
+          <span v-else class="withdraw-wrap withdraw-slot">
             <button class="btn btn-ghost" type="button" @click="confirming = true">Withdraw</button>
-          </div>
+            <!-- Wide screens: anchored under the button, as on the match page. -->
+            <div class="confirm-pop" role="dialog" aria-labelledby="home-withdraw-pop-title">
+              <h3 id="home-withdraw-pop-title">Withdraw from this match?</h3>
+              <p class="ref">Your spot goes to the first player on the waiting list.</p>
+              <div class="confirm-actions">
+                <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">Withdraw</button>
+                <button class="btn btn-ghost" type="button" @click="confirming = false">Cancel</button>
+              </div>
+            </div>
+          </span>
         </div>
       </section>
 
@@ -104,14 +113,6 @@
     <div class="confirm-scrim" @click="confirming = false"></div>
     <div class="confirm-sheet" role="dialog" aria-labelledby="withdraw-title">
       <h3 id="withdraw-title">Withdraw from this match?</h3>
-      <p class="ref">Your spot goes to the first player on the waiting list.</p>
-      <div class="confirm-actions">
-        <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">Withdraw</button>
-        <button class="btn btn-ghost" type="button" @click="confirming = false">Cancel</button>
-      </div>
-    </div>
-    <div class="confirm-pop" role="dialog">
-      <h3>Withdraw from this match?</h3>
       <p class="ref">Your spot goes to the first player on the waiting list.</p>
       <div class="confirm-actions">
         <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">Withdraw</button>
