@@ -1,8 +1,8 @@
 <template>
   <main class="page edit-page has-sticky">
-    <router-link class="back" :to="step === 'signups' ? `/matches/${id}` : { path: `/matches/${id}/edit` }">
+    <router-link class="back" :to="`/matches/${id}`">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg>
-      {{ step === 'signups' ? 'Back to the match' : 'Back to editing' }}
+      Back to the match
     </router-link>
 
     <section v-if="loading" class="state"><div class="skel lg"></div><div class="skel md"></div></section>

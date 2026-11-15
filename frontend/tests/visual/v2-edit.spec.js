@@ -195,6 +195,19 @@ test.describe('design v2 admin editing', () => {
     });
   }
 
+  // Every step links back to the match page, with the same label and style.
+  for (const [step, path] of [['sign-ups', EDIT], ['teams', `${EDIT}?step=teams`], ['score', `${EDIT}?step=score`]]) {
+    test(`back link, ${step}`, async ({ page }) => {
+      const { unstubbed } = await openEdit(page, path, { match: STAGES['teams saved']() });
+      const back = page.locator('a.back');
+      await expect(back).toHaveCount(1);
+      await expect(back).toHaveText('Back to the match');
+      await expect(back).toHaveAttribute('href', new RegExp(`/matches/${ID}$`));
+      await expect(page.getByText('Back to editing')).toHaveCount(0);
+      expectEverythingStubbed(unstubbed);
+    });
+  }
+
   test('steps, score not possible before the teams', async ({ page }) => {
     const { unstubbed } = await openEdit(page, EDIT);
     const score = page.getByRole('button', { name: '3 Score and goals' });
