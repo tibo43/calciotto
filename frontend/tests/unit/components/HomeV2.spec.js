@@ -70,6 +70,29 @@ describe('HomeV2.vue with nothing scheduled', () => {
   });
 });
 
+describe('HomeV2.vue Latest matches rows', () => {
+  it('shows the teams with vs in the middle and the score only on the right, read with the day', async () => {
+    const before = { ...played('before', 8), Date: '2026-09-04' };
+    const wrapper = await mountHome([played('last', 3), before]);
+    const row = wrapper.find('.list .row');
+    expect(row.find('.row-title').text()).toBe('Black vs White');
+    expect(row.find('.row-vs').text()).toBe('vs');
+    expect(row.find('.row-title').text()).not.toMatch(/\d/);
+    expect(row.find('.score').text()).toBe('1–0');
+    expect(row.attributes('aria-label')).toBe('Black 1–0 White, 4 Sep');
+  });
+
+  it('describes a row by its sub-line when it has one', async () => {
+    const yesterday = { ...played('y', 1), ResultRecordedAt: new Date(Date.now() - DAY).toISOString() };
+    const next = { ...played('next', -3), ScheduledAt: new Date(Date.now() + 3 * DAY).toISOString(), RegistrationOpensAt: new Date(Date.now() - DAY).toISOString(), MaxPlayers: 2 };
+    const wrapper = await mountHome([next, yesterday, played('old', 9)]);
+    const [row, old] = wrapper.findAll('.list .row');
+    expect(row.attributes('aria-describedby')).toBe('row-sub-y');
+    expect(row.find('#row-sub-y').text()).toBe('MOTM vote open');
+    expect(old.attributes('aria-describedby')).toBeUndefined();
+  });
+});
+
 describe('HomeV2.vue New match button', () => {
   it('floats for an admin, whatever the page shows', async () => {
     for (const matches of [[], [played('last', 3)], [{ ...played('next', -3), ScheduledAt: new Date(Date.now() + 3 * DAY).toISOString(), MaxPlayers: 16 }]]) {

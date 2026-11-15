@@ -280,3 +280,19 @@
 /* Home header once nothing is ahead: the last match and its score, as on
    the match page; the button stays on the right as for the next match. */
 .design-v2 .hero-last .hero-board{margin:8px 0 20px;}
+/* Latest matches rows: only the teams in the middle, « vs » grey in body
+   text; the score stays on the right. Long names wrap instead of being cut. */
+.design-v2 .row-title.row-teams{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;}
+.design-v2 .row-team{white-space:nowrap;}
+.design-v2 .row-vs{font-family:var(--v2-font-body);font-weight:400;color:var(--v2-text-muted);}
+/* Phones: a narrower date column leaves the teams room for one line; the
+   date keeps one line too, down to the narrowest phones (under 390px),
+   where it goes on two (day over month) rather than cut the teams. */
+@media (max-width:599px){
+  .design-v2 .row{grid-template-columns:60px 1fr auto;}
+  .design-v2 .row-date{white-space:nowrap;}
+}
+@media (max-width:389px){
+  .design-v2 .row{grid-template-columns:48px 1fr auto;column-gap:8px;}
+  .design-v2 .row-date{white-space:normal;}
+}

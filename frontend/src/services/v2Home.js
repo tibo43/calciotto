@@ -67,6 +67,13 @@ export function rowDateLabel(date) {
   return `${String(day.getDate()).padStart(2, '0')} ${MONTHS[day.getMonth()]}`;
 }
 
+// « 4 Sep »: the day as read out in a Latest matches row's name.
+export function dayMonthLabel(date) {
+  const day = parseCalendarDay(date);
+  if (!day) return '';
+  return `${day.getDate()} ${MONTHS[day.getMonth()]}`;
+}
+
 // A calendar day with no kick-off returns nothing, so a played match never
 // prints 00:00. The clock is the viewer's local zone (see localParts).
 export function kickoffLabel(scheduledAt) {

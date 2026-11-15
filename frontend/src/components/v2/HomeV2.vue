@@ -108,13 +108,18 @@
       <section v-if="latest.length" class="sec">
         <div class="sec-head"><h2>Latest matches</h2></div>
         <div class="list">
-          <router-link v-for="match in latest" :key="match.ID" class="row" :to="matchTo(match)">
+          <!-- The score only on the right; the accessible name still reads it,
+               with the day, and the sub-line describes the row. -->
+          <router-link
+            v-for="match in latest" :key="match.ID" class="row" :to="matchTo(match)"
+            :aria-label="rowAriaLabel(match)" :aria-describedby="rowSubLine(match, nowMs) ? `row-sub-${match.ID}` : null"
+          >
             <div class="row-date">{{ rowDateLabel(match.Date) }}</div>
             <div class="row-main">
-              <div class="row-title">{{ teamName(match, 0) }} {{ scorePair(match) }} {{ teamName(match, 1) }}</div>
+              <div class="row-title row-teams"><span class="row-team">{{ teamName(match, 0) }}</span> <span class="row-vs">vs</span> <span class="row-team">{{ teamName(match, 1) }}</span></div>
               <!-- One grey line: « MOTM vote open » while its vote is open,
                    else its weekday and kick-off time; the row leads to it. -->
-              <div v-if="rowSubLine(match, nowMs)" class="row-sub" :class="{ 'row-sub-vote': rowSubLine(match, nowMs) === 'MOTM vote open' }">{{ rowSubLine(match, nowMs) }}</div>
+              <div v-if="rowSubLine(match, nowMs)" :id="`row-sub-${match.ID}`" class="row-sub" :class="{ 'row-sub-vote': rowSubLine(match, nowMs) === 'MOTM vote open' }">{{ rowSubLine(match, nowMs) }}</div>
             </div>
             <div class="score">{{ scoreOf(match) }}</div>
           </router-link>
@@ -148,7 +153,7 @@ import { actionErrorMessage } from '@/services/v2Match';
 import { getMatchesDetails, getMatchRegistrations, registerForMatch, unregisterFromMatch, getToken } from '@/services/api';
 import { deriveRegistrationState, registrationsAreOpen, teamsAreComposed } from '@/services/matchRegistration';
 import {
-  splitHomeMatches, heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel,
+  splitHomeMatches, heroDateLabel, rowDateLabel, dayMonthLabel, kickoffLabel, weekdayTimeLabel,
   registrationMeta, placesLeft, homeVoteLine, rowSubLine, myTeam, nextWaitingPosition,
 } from '@/services/v2Home';
 
@@ -281,6 +286,11 @@ export default {
       const a = teams[0] ? teams[0].Score : 0;
       const b = teams[1] ? teams[1].Score : 0;
       return `${a}–${b}`;
+    },
+    // « Les Bleus 4–6 Les Rouges, 4 Sep »: the score the row shows on the
+    // right, read with the teams and the day.
+    rowAriaLabel(match) {
+      return `${this.teamName(match, 0)} ${this.scorePair(match)} ${this.teamName(match, 1)}, ${dayMonthLabel(match.Date)}`;
     },
     scoreOf(match) {
       const text = this.scorePair(match);

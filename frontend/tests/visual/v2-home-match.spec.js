@@ -310,3 +310,37 @@ test.describe('design v2 home spacing', () => {
     expectEverythingStubbed(unstubbed);
   });
 });
+
+// Latest matches rows: the teams with « vs » in the middle, the score only
+// on the right; the name still reads the score with the day, and the teams
+// fit on one line on phones, down to 360px.
+test.describe('design v2 Latest matches rows', () => {
+  const rowsOf = (page) => page.locator('.list .row').evaluateAll((rows) => rows.map((row) => {
+    const title = row.querySelector('.row-title');
+    return {
+      title: title.innerText.trim(), label: row.getAttribute('aria-label'), score: row.querySelector('.score').innerText.trim(),
+      cut: title.scrollWidth > title.clientWidth + 0.5, lines: Math.round(title.getBoundingClientRect().height / parseFloat(getComputedStyle(title).lineHeight)),
+    };
+  }));
+  for (const [tag, width] of [['', 1280], [' @mobile', 390], [' @mobile', 360]]) {
+    test(`the score once, on the right, ${width}px${tag}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      const { unstubbed } = await gotoApp(page, '/', { ...V2, matches: [...data.matches, recorded] });
+      const rows = await rowsOf(page);
+      expect(rows[0]).toMatchObject({ title: 'Les Bleus vs Les Rouges', label: 'Les Bleus 4–6 Les Rouges, 4 Sep', score: '4–6', cut: false, lines: 1 });
+      for (const row of rows) {
+        expect(row.title).not.toMatch(/\d/);
+        expect(row.cut).toBe(false);
+        expect(row.lines).toBe(1);
+      }
+      expectEverythingStubbed(unstubbed);
+    });
+  }
+
+  test('match page, the score only in the score block', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, `/matches/${recorded.ID}`, { ...V2, matches: [...data.matches, recorded] });
+    await expect(page.locator('.board-score')).toHaveText('4–6');
+    expect((await page.locator('main.page').innerText()).match(/\d+\s*–\s*\d+/g)).toEqual(['4–6']);
+    expectEverythingStubbed(unstubbed);
+  });
+});

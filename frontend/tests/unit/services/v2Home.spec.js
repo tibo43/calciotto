@@ -1,4 +1,4 @@
-import { splitHomeMatches, heroDateLabel, placesLeft, registrationMeta, kickoffLabel, homeVoteLine, rowSubLine, weekdayTimeLabel, matchVoteCopy, goalLine, myTeam, nextWaitingPosition } from '@/services/v2Home';
+import { splitHomeMatches, heroDateLabel, placesLeft, registrationMeta, kickoffLabel, homeVoteLine, rowSubLine, weekdayTimeLabel, dayMonthLabel, matchVoteCopy, goalLine, myTeam, nextWaitingPosition } from '@/services/v2Home';
 
 const NOW = new Date('2026-09-04T10:00:00+02:00').getTime();
 
@@ -79,6 +79,12 @@ describe('MOTM copy', () => {
     expect(homeVoteLine(closedMatch, NOW)).toBeNull();
     expect(homeVoteLine({ ID: 'n', Date: '2026-09-06', ScheduledAt: '2026-09-06T20:30:00+02:00' }, NOW)).toBeNull();
     expect(homeVoteLine(null, NOW)).toBeNull();
+  });
+
+  it('reads a row day as « 4 Sep »', () => {
+    expect(dayMonthLabel('2026-09-04')).toBe('4 Sep');
+    expect(dayMonthLabel('2026-08-30T00:00:00Z')).toBe('30 Aug');
+    expect(dayMonthLabel('')).toBe('');
   });
 
   it('puts MOTM vote open in place of a Latest row kick-off time while voting is open', () => {
