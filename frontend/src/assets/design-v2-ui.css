@@ -191,14 +191,17 @@
 /* Desktop menu: the tab bar's icons, left of each label, in its colour. */
 .design-v2 .dnav a.nav-text{gap:8px;}
 .design-v2 .dnav a.nav-text svg{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
-/* From 768px: one centred 800px column. The top bar, the page, the tab bar,
-   the pinned bars and the New match button keep to its edges; their
-   backgrounds stay full width. Below 768px nothing changes. */
+/* From 768px: the page, the tab bar and the pinned bars keep to one centred
+   800px column; the top bar's content and the New match button to a wider
+   960px one (20px margins below 1000px). Backgrounds stay full width.
+   Below 768px nothing changes. */
 @media (min-width:768px){
-  .design-v2{--v2-col:800px;--v2-gutter:max(20px, calc((100% - var(--v2-col)) / 2));}
+  .design-v2{--v2-col:800px;--v2-gutter:max(20px, calc((100% - var(--v2-col)) / 2));
+    --v2-col-wide:960px;--v2-gutter-wide:max(20px, calc((100% - var(--v2-col-wide)) / 2));}
   .design-v2 .page{max-width:calc(var(--v2-col) + 40px);padding-left:20px;padding-right:20px;}
-  .design-v2 .topbar, .design-v2 .tabbar, .design-v2 .sticky-cta{padding-left:var(--v2-gutter);padding-right:var(--v2-gutter);}
-  .design-v2 .fab{right:var(--v2-gutter);}
+  .design-v2 .tabbar, .design-v2 .sticky-cta{padding-left:var(--v2-gutter);padding-right:var(--v2-gutter);}
+  .design-v2 .topbar{padding-left:var(--v2-gutter-wide);padding-right:var(--v2-gutter-wide);}
+  .design-v2 .fab{right:var(--v2-gutter-wide);}
   /* In the narrower top bar the menu keeps its width and the group name
      gives way (ellipsis), as on a phone; the season stays whole. */
   .design-v2 .dnav{flex:none;}
