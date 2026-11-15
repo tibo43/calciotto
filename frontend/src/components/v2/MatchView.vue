@@ -13,9 +13,11 @@
     <template v-else-if="upcoming">
       <section class="hero">
         <p class="label">Next match</p>
-        <h1 class="display hero-date">{{ heroDateLabel(match.Date) }}</h1>
+        <div class="hero-date-row">
+          <h1 class="display hero-date">{{ heroDateLabel(match.Date) }}</h1>
+          <ManageMatchLink v-if="isAdmin" :id="match.ID" />
+        </div>
         <p v-if="kickoffLabel(match.ScheduledAt)" class="display hero-time">{{ kickoffLabel(match.ScheduledAt) }}</p>
-        <p v-if="meta" class="hero-meta">{{ meta }}</p>
         <!-- Once the teams are set, the player's side replaces the places
              count, as on the home page. -->
         <div v-if="teamsSet" class="hero-team">
@@ -48,7 +50,6 @@
               </div>
             </div>
           </span>
-          <router-link v-if="isAdmin" class="btn btn-ghost" :to="`/matches/${match.ID}/edit`">Manage match</router-link>
         </div>
       </section>
       <!-- The teams, once set, are what the sign-up list was for. -->
@@ -96,7 +97,10 @@
 
     <template v-else>
       <section class="board">
-        <p class="label board-date">{{ heroDateLabel(match.Date) }}</p>
+        <div class="board-date-row">
+          <p class="label board-date">{{ heroDateLabel(match.Date) }}</p>
+          <ManageMatchLink v-if="isAdmin" :id="match.ID" />
+        </div>
         <div v-fit-two-lines class="board-teams">
           <div class="board-team"><span class="name">{{ teamName(0) }}</span></div>
           <div class="board-score">{{ scoreText }}</div>
@@ -125,9 +129,6 @@
           </template>
         </section>
       </div>
-      <div v-if="isAdmin" class="actions" style="margin-top: 24px">
-        <router-link class="btn btn-ghost" :to="`/matches/${match.ID}/edit`">Manage match</router-link>
-      </div>
     </template>
 
     <!-- Phones: the same bottom sheet as the home page, shown by the
@@ -153,8 +154,9 @@ import { predictionsAreOpen } from '@/services/matchPrediction';
 import { setActiveGroupId } from '@/services/activeGroup';
 import { findMatchInMyGroups, actionErrorMessage } from '@/services/v2Match';
 import AppToast from '@/components/AppToast.vue';
+import ManageMatchLink from '@/components/v2/ManageMatchLink.vue';
 import { deriveRegistrationState, registrationsAreOpen, isPlayerOnRoster, teamsAreComposed } from '@/services/matchRegistration';
-import { heroDateLabel, kickoffLabel, registrationMeta, placesLeft, isMatchOver, matchVoteCopy, motmWinners, goalLine, myTeam, nextWaitingPosition } from '@/services/v2Home';
+import { heroDateLabel, kickoffLabel, placesLeft, isMatchOver, matchVoteCopy, motmWinners, goalLine, myTeam, nextWaitingPosition } from '@/services/v2Home';
 import { isMotmVotingOpen } from '@/services/motmVoting';
 import fitTwoLines from '@/directives/fitTwoLines';
 
@@ -173,7 +175,7 @@ function currentPlayerIdFromToken() {
 export default {
   name: 'MatchView',
   directives: { fitTwoLines },
-  components: { AppToast },
+  components: { AppToast, ManageMatchLink },
   inject: {
     v2Context: { default: () => ({ label: '' }) },
   },
@@ -255,9 +257,6 @@ export default {
     },
     open() {
       return registrationsAreOpen(deriveRegistrationState(this.match, this.nowMs));
-    },
-    meta() {
-      return registrationMeta(this.match, this.nowMs);
     },
     scoreText() {
       const a = this.teams[0] ? this.teams[0].Score : 0;

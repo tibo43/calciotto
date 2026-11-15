@@ -200,10 +200,11 @@ test.describe('design v2 once the score is recorded', () => {
   test('home, the match button alone on the right, no sign-up status line', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, '/', V2);
     await expect(page.locator('.hero-status .hero-meta')).toHaveCount(0);
-    await expect(page.locator('.hero-status')).toHaveText('Manage match');
-    const button = await page.locator('.hero-status-btn').boundingBox();
+    await expect(page.locator('.hero-status .hero-status-btn')).toHaveText('View match');
+    await expect(page.getByRole('link', { name: 'Manage match' })).toBeVisible();
+    const group = await page.locator('.hero-status').boundingBox();
     const hero = await page.locator('.hero').boundingBox();
-    expect(Math.abs(button.x + button.width - (hero.x + hero.width))).toBeLessThanOrEqual(1);
+    expect(Math.abs(group.x + group.width - (hero.x + hero.width))).toBeLessThanOrEqual(1);
     expectEverythingStubbed(unstubbed);
   });
 
@@ -303,10 +304,10 @@ test.describe('design v2 home spacing', () => {
     test.skip(page.viewportSize().width < 900, 'web only');
     const { unstubbed } = await gotoApp(page, '/', V2);
     const date = await page.locator('.hero-date').boundingBox();
-    const button = await page.locator('.hero-status-btn').boundingBox();
+    const group = await page.locator('.hero-status').boundingBox();
     const hero = await page.locator('.hero').boundingBox();
-    expect(Math.abs((button.y + button.height / 2) - (date.y + date.height / 2))).toBeLessThanOrEqual(1);
-    expect(Math.abs(button.x + button.width - (hero.x + hero.width))).toBeLessThanOrEqual(1);
+    expect(Math.abs((group.y + group.height / 2) - (date.y + date.height / 2))).toBeLessThanOrEqual(1);
+    expect(Math.abs(group.x + group.width - (hero.x + hero.width))).toBeLessThanOrEqual(1);
     expectEverythingStubbed(unstubbed);
   });
 });

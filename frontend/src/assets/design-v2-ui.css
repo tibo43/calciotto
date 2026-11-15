@@ -226,10 +226,21 @@
 .design-v2 .move-opt{min-height:44px;padding:0 14px;text-align:left;font:inherit;font-weight:600;font-size:15px;color:var(--v2-text);background:transparent;border:1px solid var(--v2-text);border-radius:var(--v2-radius);cursor:pointer;}
 .design-v2 .move-opt:hover{background:var(--v2-bg);}
 .design-v2 .move-opt:focus-visible{outline:2px solid var(--v2-text);outline-offset:2px;}
-/* Home: the sign-up status, and the way into the match on its right. */
-.design-v2 .hero-status{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 20px;}
+/* Home: the way into the match, right-aligned — under the time on a
+   phone, on the date line on a wide screen. Admin: View match + gear. */
+.design-v2 .hero-status{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:nowrap;margin:0 0 20px;}
 .design-v2 .hero-status .hero-meta{margin:0;min-width:0;}
-.design-v2 .hero-status-btn{flex:none;margin-left:auto;min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 16px;}
+.design-v2 .hero-status-btn{flex:none;min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 16px;white-space:nowrap;}
+/* Square 44px Manage gear, same ghost outline as View match. */
+.design-v2 .hero-manage{flex:none;box-sizing:border-box;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;color:var(--v2-text);}
+.design-v2 .hero-manage svg{width:20px;height:20px;display:block;}
+/* Match page: the gear sits on the date line, right-aligned. The finished
+   match keeps the date centred in the board. */
+.design-v2 .hero-date-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 6px;}
+.design-v2 .hero-date-row .hero-date{margin:0;min-width:0;flex:1;}
+.design-v2 .board-date-row{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;margin:0 0 8px;}
+.design-v2 .board-date-row .board-date{margin:0;grid-column:2;text-align:center;}
+.design-v2 .board-date-row .hero-manage{grid-column:3;justify-self:end;}
 /* Home and match page: "You play for <team>" in the mono label face,
    the team in the accent. A long name wraps, no ellipsis. */
 .design-v2 .hero-team-line{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;}

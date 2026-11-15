@@ -49,15 +49,19 @@ function playedMatch() {
   };
 }
 
-async function mountView(match, { registrations = [], votes = null } = {}) {
-  findMatchInMyGroups.mockResolvedValue({ group: GROUP, details: match, groups: [GROUP] });
+async function mountView(match, { registrations = [], votes = null, role = 'member' } = {}) {
+  const group = { ...GROUP, role };
+  findMatchInMyGroups.mockResolvedValue({ group, details: match, groups: [group] });
   getMatchRegistrations.mockResolvedValue(registrations);
   getMatchVotes.mockResolvedValue(votes);
   getSeasons.mockResolvedValue([]);
   const v2Context = { groups: [], seasons: [], confirming: false };
   const wrapper = mount(MatchView, {
     props: { id: 'match' },
-    global: { provide: { v2Context }, stubs: { 'router-link': true } }
+    global: {
+      provide: { v2Context },
+      stubs: { 'router-link': { template: '<a :data-to="JSON.stringify(to)" v-bind="$attrs"><slot /></a>', props: ['to'], inheritAttrs: false } }
+    }
   });
   await flushPromises();
   return { wrapper, v2Context };
@@ -217,5 +221,37 @@ describe('MatchView.vue once the teams are set', () => {
     const { wrapper } = await mountView(upcomingMatch(), { registrations: full });
     expect(wrapper.find('.actions .btn').text()).toBe('Join the waiting list');
     expect(wrapper.find('.reg-you').text()).toContain('#2');
+  });
+});
+
+describe('MatchView.vue admin manage gear', () => {
+  it('puts the Manage gear on the date line of an upcoming match, and hides Sign-ups closed', async () => {
+    const closed = { ...upcomingMatch(), RegistrationsClosedAt: iso(-60 * 1000) };
+    const { wrapper } = await mountView(closed, { role: 'admin' });
+    const manage = wrapper.find('.hero-date-row .hero-manage');
+    expect(manage.exists()).toBe(true);
+    expect(manage.attributes('aria-label')).toBe('Manage match');
+    expect(manage.attributes('title')).toBe('Manage match');
+    expect(JSON.parse(manage.attributes('data-to'))).toBe('/matches/match/edit');
+    expect(wrapper.find('.hero-meta').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Sign-ups closed');
+    expect(wrapper.text()).not.toContain('View match');
+    expect(wrapper.findAll('.actions .hero-manage')).toHaveLength(0);
+    expect(wrapper.text()).not.toMatch(/Manage match/);
+  });
+
+  it('puts the Manage gear on the date line of a finished match, not as a full-width button', async () => {
+    const { wrapper } = await mountView(playedMatch(), { role: 'admin' });
+    const manage = wrapper.find('.board-date-row .hero-manage');
+    expect(manage.exists()).toBe(true);
+    expect(manage.attributes('aria-label')).toBe('Manage match');
+    expect(JSON.parse(manage.attributes('data-to'))).toBe('/matches/match/edit');
+    expect(wrapper.find('.actions .hero-manage').exists()).toBe(false);
+    expect(wrapper.findAll('.hero-manage')).toHaveLength(1);
+  });
+
+  it('hides the gear from a member', async () => {
+    const { wrapper } = await mountView(upcomingMatch(), { role: 'member' });
+    expect(wrapper.find('.hero-manage').exists()).toBe(false);
   });
 });
