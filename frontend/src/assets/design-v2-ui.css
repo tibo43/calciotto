@@ -164,3 +164,22 @@
 .design-v2 .subnav a:hover{color:var(--v2-text);}
 .design-v2 .subnav a.is-on{color:var(--v2-accent);}
 .design-v2 .subnav a.is-on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:currentColor;}
+/* Rounded corners. Two sizes: controls (buttons, fields, picks, the top
+   bar's selects) and the larger surfaces (cards, pop-ups, toasts, the
+   bottom sheets' top edge). Row lists, tables and the accent rules stay
+   square: they are lines, not boxes. */
+.design-v2{--v2-radius:10px;--v2-radius-lg:16px;}
+.design-v2 .btn, .design-v2 .ctx, .design-v2 .field input, .design-v2 .field select, .design-v2 .field textarea,
+.design-v2 .season-field select, .design-v2 .pick, .design-v2 .vote-opt, .design-v2 .motm-pick, .design-v2 .tog,
+.design-v2 .stepper button, .design-v2 .group-gear, .design-v2 .invite-box code, .design-v2 .places-row input,
+.design-v2 .team-edit input, .design-v2 .admin-row input[type="number"], .design-v2 .col-head input[type="text"],
+.design-v2 .swatch, .design-v2 .fab, .design-v2 .toast-message .toast-close{border-radius:var(--v2-radius);}
+.design-v2 .compose-col, .design-v2 .guest-list, .design-v2 .toast-message,
+.design-v2 .wrap.is-confirming .confirm-pop, .design-v2 .csc-pop{border-radius:var(--v2-radius-lg);}
+.design-v2 .wrap.is-confirming .confirm-sheet, .design-v2 .wrap.is-picking-csc .csc-sheet,
+.design-v2 .page.is-choix .sheet{border-radius:var(--v2-radius-lg) var(--v2-radius-lg) 0 0;}
+.design-v2 .bar, .design-v2 .bar i{border-radius:2px;}
+/* The stepper's three parts read as one rounded control. */
+.design-v2 .stepper button:first-child{border-radius:var(--v2-radius) 0 0 var(--v2-radius);}
+.design-v2 .stepper button:last-child{border-radius:0 var(--v2-radius) var(--v2-radius) 0;}
+.design-v2 .fab{border-radius:16px;}
