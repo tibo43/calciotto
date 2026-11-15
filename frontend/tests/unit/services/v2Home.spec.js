@@ -1,4 +1,4 @@
-import { splitHomeMatches, heroDateLabel, placesLeft, registrationMeta, registrationLine, signupOpeningLabel, kickoffLabel, homeVoteLine, matchVoteCopy, goalLine, myTeam, nextWaitingPosition } from '@/services/v2Home';
+import { splitHomeMatches, heroDateLabel, placesLeft, registrationMeta, kickoffLabel, homeVoteLine, rowSubLine, weekdayTimeLabel, matchVoteCopy, goalLine, myTeam, nextWaitingPosition } from '@/services/v2Home';
 
 const NOW = new Date('2026-09-04T10:00:00+02:00').getTime();
 
@@ -72,12 +72,24 @@ describe('MOTM copy', () => {
   };
 
   it('points home at the match while voting is open', () => {
-    expect(homeVoteLine(openMatch, tally, NOW)).toBe('MOTM vote open · Vote in match details');
+    expect(homeVoteLine(openMatch, NOW)).toBe('MOTM vote open · Vote in match details');
   });
 
-  it('names the winner once voting has closed, and stays quiet when nobody voted', () => {
-    expect(homeVoteLine(closedMatch, tally, NOW)).toBe('MOTM: Marco Rossi');
-    expect(homeVoteLine(closedMatch, { Tally: [] }, NOW)).toBeNull();
+  it('says nothing once voting has closed, or for a match still ahead', () => {
+    expect(homeVoteLine(closedMatch, NOW)).toBeNull();
+    expect(homeVoteLine({ ID: 'n', Date: '2026-09-06', ScheduledAt: '2026-09-06T20:30:00+02:00' }, NOW)).toBeNull();
+    expect(homeVoteLine(null, NOW)).toBeNull();
+  });
+
+  it('puts MOTM vote open in place of a Latest row kick-off time while voting is open', () => {
+    const friday = { ...openMatch, ScheduledAt: '2026-09-04T08:00:00+02:00', ResultRecordedAt: '2026-09-04T09:30:00+02:00', Date: '2026-09-04' };
+    expect(rowSubLine(friday, NOW)).toBe('MOTM vote open');
+    expect(rowSubLine({ ...friday, ScheduledAt: null }, NOW)).toBe('MOTM vote open');
+    const at = '2026-08-28T08:00:00+02:00';
+    expect(rowSubLine({ ...closedMatch, ScheduledAt: at }, NOW)).toBe(weekdayTimeLabel(at));
+    expect(weekdayTimeLabel(at)).not.toBe('');
+    expect(rowSubLine(closedMatch, NOW)).toBe('');
+    expect(rowSubLine(null, NOW)).toBe('');
   });
 
   it('gives the deadline, a tie, and a no-vote close on the match page', () => {
@@ -103,35 +115,3 @@ describe('nextWaitingPosition', () => {
   });
 });
 
-describe('registrationLine', () => {
-  // Built from local parts, so the expected text holds in any test zone.
-  const opens = new Date(2026, 8, 3, 12, 0);
-  const match = {
-    ID: 'm', Date: '2026-09-06', ScheduledAt: new Date(2026, 8, 6, 20, 30).toISOString(),
-    RegistrationOpensAt: opens.toISOString(), MaxPlayers: 16,
-  };
-
-  it('formats the opening as weekday, day, month and local time', () => {
-    expect(signupOpeningLabel(opens.toISOString())).toBe('Thu 3 Sep · 12:00');
-    expect(signupOpeningLabel('')).toBe('');
-    expect(signupOpeningLabel('not a date')).toBe('');
-  });
-
-  it('says when sign-ups open, before they do', () => {
-    expect(registrationLine(match, new Date(2026, 8, 2).getTime())).toBe('Sign-ups open Thu 3 Sep · 12:00');
-  });
-
-  it('says when they opened, once open', () => {
-    expect(registrationLine(match, new Date(2026, 8, 4).getTime())).toBe('Sign-ups opened Thu 3 Sep · 12:00');
-  });
-
-  it('only says closed once an admin closed them or kick-off passed', () => {
-    const closed = { ...match, RegistrationsClosedAt: new Date(2026, 8, 5).toISOString() };
-    expect(registrationLine(closed, new Date(2026, 8, 5, 12).getTime())).toBe('Sign-ups closed');
-    expect(registrationLine(match, new Date(2026, 8, 6, 21).getTime())).toBe('Sign-ups closed');
-  });
-
-  it('has nothing to say about an unscheduled match', () => {
-    expect(registrationLine({ ID: 'u', Date: '2026-09-06' }, NOW)).toBe('');
-  });
-});

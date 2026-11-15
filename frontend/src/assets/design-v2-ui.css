@@ -260,7 +260,23 @@
   .design-v2 .signup-controls .when-roomy{display:none;}
   .design-v2 .signup-controls .when-narrow{display:inline;}
 }
-/* Home on a phone: room between the MOTM line and Latest matches. */
-@media (max-width:899px){
-  .design-v2 .motm-row + .sec{margin-top:16px;}
+/* Home header MOTM line: part of the header, under the score (under the
+   match button on a phone), 16px above and 16px to the rule below, and
+   the header sits 16px over Latest matches. The text line keeps a 44px
+   tap area without adding to the gaps. */
+.design-v2 .hero-home .hero-motm{display:block;position:relative;min-height:0;padding:0;border:0;margin:16px 0 0;line-height:20px;}
+.design-v2 .hero-motm::before{content:"";position:absolute;left:0;right:0;top:-12px;bottom:-12px;}
+.design-v2 .hero-last.has-motm{padding-bottom:16px;margin-bottom:16px;}
+.design-v2 .hero-last.has-motm > .hero-status{margin-bottom:0;}
+/* Web: the match button on the date's line, centred on the date (one
+   line of 96px display type under the 14.3px label and its 10px gap). */
+@media (min-width:900px){
+  .design-v2 .hero-home{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:24px;}
+  .design-v2 .hero-home > *{grid-column:1 / -1;}
+  .design-v2 .hero-home > .hero-go{grid-column:1;grid-row:1;}
+  .design-v2 .hero-last.has-motm > .hero-board{margin-bottom:0;}
+  .design-v2 .hero-home > .hero-status{grid-column:2;grid-row:1;align-self:start;margin:calc(11px * 1.3 + 10px + (96px * 0.9 - 44px) / 2) 0 0;}
 }
+/* Home header once nothing is ahead: the last match and its score, as on
+   the match page; the button stays on the right as for the next match. */
+.design-v2 .hero-last .hero-board{margin:8px 0 20px;}
