@@ -173,7 +173,8 @@
 .design-v2 .season-field select, .design-v2 .pick, .design-v2 .vote-opt, .design-v2 .motm-pick, .design-v2 .tog,
 .design-v2 .stepper button, .design-v2 .group-gear, .design-v2 .invite-box code, .design-v2 .places-row input,
 .design-v2 .team-edit input, .design-v2 .admin-row input[type="number"], .design-v2 .col-head input[type="text"],
-.design-v2 .swatch, .design-v2 .fab, .design-v2 .toast-message .toast-close{border-radius:var(--v2-radius);}
+.design-v2 .swatch, .design-v2 .fab, .design-v2 .toast-message .toast-close, .design-v2 .step-i{border-radius:var(--v2-radius);}
+.design-v2 .tag{border-radius:6px;}
 .design-v2 .compose-col, .design-v2 .guest-list, .design-v2 .toast-message,
 .design-v2 .wrap.is-confirming .confirm-pop, .design-v2 .csc-pop{border-radius:var(--v2-radius-lg);}
 .design-v2 .wrap.is-confirming .confirm-sheet, .design-v2 .wrap.is-picking-csc .csc-sheet,
@@ -183,3 +184,5 @@
 .design-v2 .stepper button:first-child{border-radius:var(--v2-radius) 0 0 var(--v2-radius);}
 .design-v2 .stepper button:last-child{border-radius:0 var(--v2-radius) var(--v2-radius) 0;}
 .design-v2 .fab{border-radius:16px;}
+/* The sign-up status toggles: their label centred in the box, not at its top. */
+.design-v2 .tog{display:inline-flex;align-items:center;justify-content:center;}
