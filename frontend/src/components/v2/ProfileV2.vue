@@ -188,9 +188,8 @@
     <template v-else-if="page === 'settings'">
       <section class="sec">
         <div class="sec-head"><h2>Teams</h2></div>
-        <p class="scope">Name and colour. Save each team on its own.</p>
+        <p class="scope">Save each team on its own.</p>
         <div v-for="team in teams" :key="team.id" class="team-edit">
-          <TeamColourPicker v-model="team.colour" />
           <input v-model="team.name" type="text" :aria-label="`Name of ${team.name}`">
           <button class="btn" type="button" @click="saveTeam(team)">Save</button>
         </div>
@@ -271,13 +270,6 @@ import {
 import { getPushState, enablePush, disablePush, PUSH_STATE, PUSH_FEATURE } from '@/services/pushNotifications';
 import { getInstallTracker, INSTALL_STATE, PWA_INSTALL_FEATURE } from '@/services/pwaInstall';
 import { buildGroupInviteShareText, buildWhatsAppShareUrl } from '@/services/whatsappShare';
-import TeamColourPicker from '@/components/TeamColourPicker.vue';
-
-const COLOURS = {
-  red: '#ef4444', blue: '#3b82f6', green: '#10b981', yellow: '#f59e0b',
-  purple: '#8b5cf6', orange: '#f97316', pink: '#ec4899', cyan: '#06b6d4',
-  white: '#f8fafc', black: '#1f2937',
-};
 
 const PREFERENCE_GROUPS = [
   { label: 'Match', items: [
@@ -306,14 +298,8 @@ function playerIdFromToken() {
   }
 }
 
-function toHex(colour) {
-  if (colour && String(colour).startsWith('#')) return colour;
-  return COLOURS[String(colour || '').toLowerCase()] || '#6b7280';
-}
-
 export default {
   name: 'ProfileV2',
-  components: { TeamColourPicker },
   inject: {
     v2Context: { default: () => ({}) },
   },
@@ -664,7 +650,9 @@ export default {
       this.teams = (Array.isArray(teams) ? teams : []).map((team) => ({
         id: team.id || team.ID,
         name: team.name || team.Name,
-        colour: toHex(team.colour || team.Colour),
+        // Team colours aren't shown in v2. The stored value is sent back
+        // unchanged on save (the API requires one), for players still on v1.
+        colour: team.colour || team.Colour,
       }));
       this.inviteCode = (code && (code.invite_code || code.InviteCode)) || '';
       this.members = Array.isArray(members) ? members : [];

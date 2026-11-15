@@ -30,10 +30,10 @@
         <article v-for="match in eligible" :key="match.ID" class="pred">
           <div class="pred-head">
             <div class="pred-title">
-              <span class="team"><span class="dot" :style="{ '--c': colour(match, 0) }"></span>{{ teamName(match, 0) }}</span>
+              <span class="team">{{ teamName(match, 0) }}</span>
               <span v-if="showScore(match)" class="pred-score">{{ scoreText(match) }}</span>
               <span v-else class="pred-vs">{{ ' \u00b7 ' }}</span>
-              <span class="team"><span class="dot" :style="{ '--c': colour(match, 1) }"></span>{{ teamName(match, 1) }}</span>
+              <span class="team">{{ teamName(match, 1) }}</span>
             </div>
             <div class="pred-when">{{ whenLabel(match) }}</div>
           </div>
@@ -114,11 +114,6 @@ import {
 } from '@/services/matchPrediction';
 import { heroDateLabel, kickoffLabel } from '@/services/v2Home';
 
-const COLOURS = {
-  red: '#c0392b', blue: '#2471a3', black: '#111', white: '#eef0f7',
-  green: '#1e8449', yellow: '#f4d03f', orange: '#e8743b',
-};
-
 function currentPlayerId() {
   const token = getToken();
   if (!token) return '';
@@ -182,12 +177,6 @@ export default {
     teamName(match, index) {
       const team = match.Teams && match.Teams[index];
       return (team && team.Name) || 'Team';
-    },
-    colour(match, index) {
-      const team = match.Teams && match.Teams[index];
-      const raw = (team && team.Colour) || '';
-      if (String(raw).startsWith('#')) return raw;
-      return COLOURS[String(raw).toLowerCase()] || '#8b93ad';
     },
     showScore(match) {
       return this.state(match) === PREDICTIONS_SETTLED;

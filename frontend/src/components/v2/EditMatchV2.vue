@@ -102,7 +102,7 @@
           </section>
           <section v-for="index in [0, 1]" :key="teamId(index)" class="compose-col" :class="{ 'is-drop': pickedId && teamOf(pickedId) === index }" :aria-label="teamName(index)">
             <div class="col-head">
-              <span class="dot" :style="{ '--c': colour(index) }"></span>
+              
               <h2>{{ teamName(index) }}</h2>
             </div>
             <p class="col-count">{{ teamPlayers[index].length }}</p>
@@ -157,9 +157,9 @@
         <template v-else>
           <section class="score-board" aria-label="Computed score">
             <div class="board-teams">
-              <div class="board-team"><span class="dot" :style="{ '--c': colour(0) }"></span><span class="name">{{ teamName(0) }}</span></div>
+              <div class="board-team"><span class="name">{{ teamName(0) }}</span></div>
               <div class="board-score">{{ sides[0].score }}<span class="sep">–</span>{{ sides[1].score }}</div>
-              <div class="board-team"><span class="dot" :style="{ '--c': colour(1) }"></span><span class="name">{{ teamName(1) }}</span></div>
+              <div class="board-team"><span class="name">{{ teamName(1) }}</span></div>
             </div>
             <p class="balance">{{ teamName(0) }} {{ teamPlayers[0].length }} · {{ teamName(1) }} {{ teamPlayers[1].length }}</p>
             <p class="score-status">{{ scoreStatus }}</p>
@@ -170,7 +170,7 @@
           </section>
           <div class="score-teams">
             <section v-for="index in [0, 1]" :key="teamId(index)" class="score-team" :aria-label="`Goals for ${teamName(index)}`">
-              <h2><span class="dot" :style="{ '--c': colour(index) }"></span>{{ teamName(index) }}</h2>
+              <h2>{{ teamName(index) }}</h2>
               <p class="team-sub">{{ teamScoreLine(sides[index]) }}</p>
               <div v-for="player in teamPlayers[index]" :key="player.ID" class="score-row">
                 <div class="who">
@@ -245,11 +245,6 @@ import { heroDateLabel, kickoffLabel } from '@/services/v2Home';
 import { encodeMatchId } from '@/services/shortLink';
 import { buildWhatsAppShareText, buildWhatsAppShareUrl, buildTeamsShareText } from '@/services/whatsappShare';
 import { scoreSides, teamScoreLine, sizeCounter, recapEntries, lineupsReady, shareSubtitle } from '@/services/v2Edit';
-
-const COLOURS = {
-  red: '#c0392b', blue: '#2471a3', black: '#111', white: '#eef0f7',
-  green: '#1e8449', yellow: '#f4d03f', orange: '#e8743b',
-};
 
 function copyPlayer(player, position) {
   return {
@@ -467,12 +462,6 @@ export default {
     teamId(index) {
       const team = this.match && this.match.Teams && this.match.Teams[index];
       return (team && team.ID) || index;
-    },
-    colour(index) {
-      const team = this.match && this.match.Teams && this.match.Teams[index];
-      const raw = (team && team.Colour) || '';
-      if (raw.startsWith('#')) return raw;
-      return COLOURS[raw.toLowerCase()] || '#8b93ad';
     },
     posLabel(player) {
       return player.Position ? `#${player.Position}` : 'Guest';

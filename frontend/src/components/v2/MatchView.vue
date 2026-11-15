@@ -63,15 +63,15 @@
       <section class="board">
         <p class="label board-date">{{ heroDateLabel(match.Date) }}</p>
         <div class="board-teams">
-          <div class="board-team"><span class="dot" :style="{ '--c': colour(0) }"></span><span class="name">{{ teamName(0) }}</span></div>
+          <div class="board-team"><span class="name">{{ teamName(0) }}</span></div>
           <div class="board-score">{{ scoreText }}</div>
-          <div class="board-team"><span class="dot" :style="{ '--c': colour(1) }"></span><span class="name">{{ teamName(1) }}</span></div>
+          <div class="board-team"><span class="name">{{ teamName(1) }}</span></div>
         </div>
       </section>
       <p class="motm-line">{{ voteCopy }}</p>
       <div class="lineups">
-        <section v-for="(team, index) in teams" :key="team.ID" class="lineup">
-          <h3><span class="dot" :style="{ '--c': colour(index) }"></span>{{ team.Name }}</h3>
+        <section v-for="team in teams" :key="team.ID" class="lineup">
+          <h3>{{ team.Name }}</h3>
           <template v-for="player in team.Players" :key="player.ID">
           <button v-if="canVote(player)" class="player" :class="{ 'is-winner': isWinner(player) }" type="button" :aria-label="voteAria(player)" @click="castVote(player)">
             <span class="nm">{{ player.Name }}</span>
@@ -119,8 +119,6 @@ import AppToast from '@/components/AppToast.vue';
 import { deriveRegistrationState, registrationsAreOpen, isPlayerOnRoster } from '@/services/matchRegistration';
 import { heroDateLabel, kickoffLabel, registrationMeta, placesLeft, isMatchOver, matchVoteCopy, motmWinners, goalLine } from '@/services/v2Home';
 import { isMotmVotingOpen } from '@/services/motmVoting';
-
-const COLOURS = { red: '#c0392b', blue: '#2471a3', black: '#111', white: '#eef0f7', green: '#1e8449', yellow: '#f4d03f', orange: '#e8743b' };
 
 function currentPlayerIdFromToken() {
   const token = getToken();
@@ -222,10 +220,6 @@ export default {
   methods: {
     heroDateLabel,
     kickoffLabel,
-    colour(index) {
-      const team = this.teams[index];
-      return COLOURS[(team && team.Colour) || ''] || '#8b93ad';
-    },
     teamName(index) {
       const team = this.teams[index];
       return (team && team.Name) || '—';
