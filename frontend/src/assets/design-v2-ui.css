@@ -118,4 +118,12 @@
 .design-v2 .field-error{color:var(--v2-danger);font-size:13px;margin:6px 0 0;}
 .design-v2.dark-mode .field input{color-scheme:dark;}
 .design-v2 .new-match .actions{margin-top:24px;}
-.design-v2 .home-new-match{margin:0 0 8px;}
+/* Home's "New match" button (admins): the same corners as every other v2
+   button, floating above the tab bar on a phone and in the corner on a
+   desktop. The page keeps room below its last row so the button never
+   covers it once scrolled to the end. */
+.design-v2 .fab{position:fixed;right:16px;bottom:calc(var(--v2-tabbar-h) + 16px + env(safe-area-inset-bottom,0px));z-index:18;width:56px;height:56px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--bs-btn-border-radius,6px);background:var(--v2-accent);color:var(--v2-on-accent);box-shadow:0 6px 18px rgba(8,10,20,0.35);}
+.design-v2 .page.has-fab{padding-bottom:160px;}
+.design-v2 .fab svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:square;}
+.design-v2 .fab:focus-visible{outline:2px solid var(--v2-text);outline-offset:3px;}
+@media (min-width:900px){.design-v2 .fab{right:32px;bottom:32px;width:64px;height:64px;}.design-v2 .page.has-fab{padding-bottom:112px;}}

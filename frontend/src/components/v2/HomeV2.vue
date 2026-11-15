@@ -1,5 +1,5 @@
 <template>
-  <main class="page">
+  <main class="page" :class="{ 'has-fab': isAdmin }">
     <template v-if="loading">
       <p class="label">Next match</p>
       <div class="skel lg"></div>
@@ -15,9 +15,7 @@
 
     <section v-else-if="!next && recent.length === 0" class="state">
       <p class="label">Season {{ seasonLabel }}</p>
-      <!-- An admin gets the way to fix it instead of the statement. -->
-      <router-link v-if="isAdmin" class="btn" :to="{ name: 'NewMatch' }">New match</router-link>
-      <h1 v-else>No matches yet</h1>
+      <h1>No matches yet</h1>
     </section>
 
     <template v-else>
@@ -43,8 +41,7 @@
       </section>
 
       <section v-else class="hero hero-last">
-        <router-link v-if="isAdmin" class="btn home-new-match" :to="{ name: 'NewMatch' }">New match</router-link>
-        <p v-else class="label">No upcoming match yet</p>
+        <p class="label">No upcoming match yet</p>
         <p class="hero-meta">{{ heroDateLabel(recent[0].Date) }}</p>
         <div class="board-teams">
           <div class="board-team"><span class="name">{{ teamName(recent[0], 0) }}</span></div>
@@ -52,9 +49,7 @@
           <div class="board-team"><span class="name">{{ teamName(recent[0], 1) }}</span></div>
         </div>
         <div class="actions">
-          <!-- Secondary for an admin, so "New match" stays the one primary
-               action on the page. -->
-          <router-link class="btn" :class="{ 'btn-ghost': isAdmin }" :to="matchTo(recent[0])">See match</router-link>
+          <router-link class="btn" :to="matchTo(recent[0])">See match</router-link>
         </div>
       </section>
 
@@ -110,6 +105,12 @@
     </div>
 
     <AppToast ref="toast" />
+
+    <!-- Floating, so it's there whatever the page shows, including when a
+         match is already scheduled. -->
+    <router-link v-if="isAdmin && !loading" class="fab" :to="{ name: 'NewMatch' }" aria-label="New match" title="New match">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16" /></svg>
+    </router-link>
   </main>
 </template>
 

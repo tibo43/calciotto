@@ -1,5 +1,5 @@
-// Creating a match with design v2 on: the home page's "New match" button
-// (admins, when nothing is scheduled) and the page it opens.
+// Creating a match with design v2 on: the home page's floating "New match"
+// button (admins) and the page it opens.
 
 const { test, expect } = require('@playwright/test');
 const data = require('./fixtures/data');
@@ -12,7 +12,7 @@ test.describe('design v2 new match', () => {
   test('home, nothing scheduled, as an admin @mobile', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, '/', NOTHING_SCHEDULED);
     await expect(page.getByRole('link', { name: 'New match' })).toBeVisible();
-    await expect(page).toHaveScreenshot('v2-home-new-match-mobile.png', { fullPage: true });
+    await expect(page).toHaveScreenshot('v2-home-new-match-mobile.png');
     await expectNoHorizontalOverflow(page);
     expectEverythingStubbed(unstubbed);
   });

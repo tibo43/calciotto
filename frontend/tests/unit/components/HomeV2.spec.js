@@ -48,22 +48,17 @@ describe('HomeV2.vue with nothing scheduled', () => {
 });
 
 describe('HomeV2.vue New match button', () => {
-  const newMatchLinks = (wrapper) => wrapper.findAll('a').filter((link) => link.text() === 'New match');
-
-  it('replaces "No matches yet" for an admin', async () => {
-    const admin = await mountHome([], true);
-    expect(newMatchLinks(admin)).toHaveLength(1);
-    expect(admin.text()).not.toContain('No matches yet');
-    const member = await mountHome([], false);
-    expect(newMatchLinks(member)).toHaveLength(0);
-    expect(member.text()).toContain('No matches yet');
+  it('floats for an admin, whatever the page shows', async () => {
+    for (const matches of [[], [played('last', 3)], [{ ...played('next', -3), ScheduledAt: new Date(Date.now() + 3 * DAY).toISOString(), MaxPlayers: 16 }]]) {
+      const admin = await mountHome(matches, true);
+      expect(admin.find('.fab').attributes('aria-label')).toBe('New match');
+    }
   });
 
-  it('replaces "No upcoming match yet" for an admin', async () => {
-    const admin = await mountHome([played('last', 3)], true);
-    expect(newMatchLinks(admin)).toHaveLength(1);
-    expect(admin.text()).not.toContain('No upcoming match yet');
-    const member = await mountHome([played('last', 3)], false);
-    expect(member.text()).toContain('No upcoming match yet');
+  it('is absent for a member, who keeps the usual texts', async () => {
+    const member = await mountHome([], false);
+    expect(member.find('.fab').exists()).toBe(false);
+    expect(member.text()).toContain('No matches yet');
+    expect((await mountHome([played('last', 3)], false)).text()).toContain('No upcoming match yet');
   });
 });
