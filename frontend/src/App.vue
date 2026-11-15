@@ -18,6 +18,7 @@
             <div v-if="isAuthenticatedRoute && !v2Context.hide" class="ctx-pair" aria-label="Choose the group and the season">
               <label class="ctx">
                 <span class="sr-only">Group</span>
+                <span class="ctx-name" aria-hidden="true">{{ v2GroupLabel }}</span>
                 <select :value="v2Context.groupId" @change="onV2Group">
                   <option v-for="group in v2Context.groups" :key="group.id" :value="group.id">{{ group.name }}</option>
                 </select>
@@ -25,6 +26,7 @@
               </label>
               <label class="ctx">
                 <span class="sr-only">Season</span>
+                <span class="ctx-name" aria-hidden="true">{{ v2Context.season }}</span>
                 <select :value="v2Context.season" @change="onV2Season">
                   <option v-for="season in v2Context.seasons" :key="season" :value="season">{{ season }}</option>
                 </select>
@@ -39,12 +41,8 @@
             <router-link to="/predictions" :class="{ 'is-on': $route.name === 'Predictions' }"><span class="outline" :class="{ 'is-on': $route.name === 'Predictions' }">Predictions</span></router-link>
             <router-link to="/profile" :class="{ 'is-on': isV2Profile }"><span class="outline" :class="{ 'is-on': isV2Profile }">Profile</span></router-link>
           </nav>
-          <div class="topbar-right">
-            <button class="icon-btn" type="button" @click="toggleTheme" :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'">
-              <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6.2 6.2l1.4 1.4M16.4 16.4l1.4 1.4M6.2 17.8l1.4-1.4M16.4 7.6l1.4-1.4"/></svg>
-              <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 3a8 8 0 1 0 5 13 7 7 0 0 1-5-13z"/></svg>
-            </button>
-          </div>
+          <!-- No theme toggle here: in v2 the theme is a setting, on the
+               Account page (ProfileV2), not a control on every page. -->
         </header>
         <!-- Top Navigation -->
         <!-- On a phone, an authenticated page has no top bar at all: the
@@ -270,6 +268,11 @@ export default {
     },
     isV2Home() {
       return this.$route.name === 'MatchesAndStandings' || this.$route.name === 'MatchView';
+    },
+    // What the group select shows (see .ctx-name in design-v2-ui.css).
+    v2GroupLabel() {
+      const group = (this.v2Context.groups || []).find((item) => item.id === this.v2Context.groupId);
+      return group ? group.name : '';
     },
     isV2Profile() {
       return String(this.$route.path || '').startsWith('/profile');

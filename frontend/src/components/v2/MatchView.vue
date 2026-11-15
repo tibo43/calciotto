@@ -1,9 +1,5 @@
 <template>
   <main class="page" :class="{ 'match-upcoming': upcoming }">
-    <router-link class="back" to="/">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg>
-      Back to home
-    </router-link>
 
     <section v-if="loading" class="state">
       <div class="skel lg"></div>

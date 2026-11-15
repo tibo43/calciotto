@@ -65,15 +65,9 @@
       <section v-else-if="isAdmin" class="sec">
         <router-link class="btn btn-ghost" :to="`/profile/groups/${groupId}/settings`">Group settings</router-link>
       </section>
-      <section v-if="page === 'home'" class="sec">
+      <!-- Only device features live here; the theme is on the Account page. -->
+      <section v-if="page === 'home' && (hasPush || installOffered)" class="sec">
         <div class="sec-head"><h2>Settings</h2></div>
-        <div class="pref-row">
-          <div>
-            <div class="who">Dark mode</div>
-            <div class="note">Applies across the site, on this device</div>
-          </div>
-          <button class="switch" :class="{ 'is-on': dark }" type="button" role="switch" :aria-checked="dark.toString()" aria-label="Dark mode" @click="toggleTheme"><span class="track"></span></button>
-        </div>
         <router-link v-if="hasPush" class="pref-row" to="/profile/notifications">
           <div>
             <div class="who">Notifications</div>
@@ -83,7 +77,7 @@
         </router-link>
         <!-- Hidden feature pwa-install, like today's install card: shown only
              where the browser can install the app (see pwaInstall.js). -->
-        <div v-if="hasInstall && (installState === 'prompt' || installState === 'ios')" class="pref-row">
+        <div v-if="installOffered" class="pref-row">
           <div>
             <div class="who">Install Calciotto</div>
             <div v-if="installState === 'prompt'" class="note">Open it from your home screen, like any other app</div>
@@ -91,13 +85,6 @@
           </div>
           <button v-if="installState === 'prompt'" class="btn btn-ghost" type="button" @click="install">Install</button>
         </div>
-        <router-link class="pref-row" to="/profile/account">
-          <div>
-            <div class="who">Account</div>
-            <div class="note">Name, email, password</div>
-          </div>
-          <svg class="chev" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 2l4 4-4 4"/></svg>
-        </router-link>
       </section>
       <div v-if="page === 'home'" class="logout-row">
         <button class="btn btn-ghost btn-block" type="button" @click="logout">Log out</button>
@@ -128,6 +115,16 @@
     </template>
 
     <template v-else-if="page === 'account'">
+      <section class="sec">
+        <div class="sec-head"><h2>Appearance</h2></div>
+        <div class="pref-row">
+          <div>
+            <div class="who">Dark mode</div>
+            <div class="note">Applies across the site, on this device</div>
+          </div>
+          <button class="switch" :class="{ 'is-on': dark }" type="button" role="switch" :aria-checked="dark.toString()" aria-label="Dark mode" @click="toggleTheme"><span class="track"></span></button>
+        </div>
+      </section>
       <section class="sec">
         <div class="sec-head"><h2>Identity</h2></div>
         <div class="field">
@@ -438,6 +435,9 @@ export default {
     },
     hasInstall() {
       return this.features.includes(PWA_INSTALL_FEATURE);
+    },
+    installOffered() {
+      return this.hasInstall && (this.installState === INSTALL_STATE.PROMPT || this.installState === INSTALL_STATE.IOS);
     },
   },
   watch: {
