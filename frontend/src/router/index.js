@@ -80,6 +80,17 @@ const routes = [
     },
   },
   {
+    // Design v2 only: creating a match (NewMatchV2.vue). Without the flag,
+    // today's home has its own "+" card, so this URL just goes home. The
+    // page itself sends a non-admin home too.
+    path: '/matches/new',
+    name: 'NewMatch',
+    component: () => import('@/components/v2/NewMatchV2.vue'),
+    async beforeEnter() {
+      return (await loadDesignV2()) ? true : { path: '/' };
+    },
+  },
+  {
     path: '/matches/:id',
     name: 'MatchView',
     component: () => import('@/components/v2/MatchView.vue'),

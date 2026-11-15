@@ -18,11 +18,11 @@ const played = (id, daysAgo) => ({
   Teams: [{ ID: 'a', Name: 'Black', Score: 1, Players: [{ ID: 'p' }] }, { ID: 'b', Name: 'White', Score: 0, Players: [{ ID: 'q' }] }]
 });
 
-async function mountHome(matches) {
+async function mountHome(matches, isAdmin = false) {
   getMatchesDetails.mockResolvedValue(matches);
   getMatchVotes.mockResolvedValue(null);
   const wrapper = mount(HomeV2, {
-    props: { activeGroupId: 'g', groupName: 'Group', season: '2026-2027', isAdmin: false },
+    props: { activeGroupId: 'g', groupName: 'Group', season: '2026-2027', isAdmin },
     global: {
       provide: { v2Context: { confirming: false } },
       stubs: { 'router-link': { template: '<a :data-to="JSON.stringify(to)"><slot /></a>', props: ['to'] } }
@@ -44,5 +44,26 @@ describe('HomeV2.vue with nothing scheduled', () => {
     const wrapper = await mountHome([played('only', 3)]);
     expect(wrapper.find('.hero-last').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('Latest matches');
+  });
+});
+
+describe('HomeV2.vue New match button', () => {
+  const newMatchLinks = (wrapper) => wrapper.findAll('a').filter((link) => link.text() === 'New match');
+
+  it('replaces "No matches yet" for an admin', async () => {
+    const admin = await mountHome([], true);
+    expect(newMatchLinks(admin)).toHaveLength(1);
+    expect(admin.text()).not.toContain('No matches yet');
+    const member = await mountHome([], false);
+    expect(newMatchLinks(member)).toHaveLength(0);
+    expect(member.text()).toContain('No matches yet');
+  });
+
+  it('replaces "No upcoming match yet" for an admin', async () => {
+    const admin = await mountHome([played('last', 3)], true);
+    expect(newMatchLinks(admin)).toHaveLength(1);
+    expect(admin.text()).not.toContain('No upcoming match yet');
+    const member = await mountHome([played('last', 3)], false);
+    expect(member.text()).toContain('No upcoming match yet');
   });
 });

@@ -113,3 +113,9 @@
 /* A Withdraw button wrapped with its own confirmation pop-up still takes a
    full share of the action row, like the bare buttons beside it. */
 .design-v2 .actions > .withdraw-slot{display:flex;flex:1 1 160px;}.design-v2 .actions > .withdraw-slot > .btn{flex:1 1 auto;}
+/* New match page (NewMatchV2.vue): a reason under the field it's about, and
+   native date/time pickers that follow the theme. */
+.design-v2 .field-error{color:var(--v2-danger);font-size:13px;margin:6px 0 0;}
+.design-v2.dark-mode .field input{color-scheme:dark;}
+.design-v2 .new-match .actions{margin-top:24px;}
+.design-v2 .home-new-match{margin:0 0 8px;}
