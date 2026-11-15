@@ -24,14 +24,20 @@
           <p class="label">Next match</p>
           <h1 class="display hero-date">{{ heroDateLabel(next.Date) }}</h1>
           <p v-if="kickoffLabel(next.ScheduledAt)" class="display hero-time">{{ kickoffLabel(next.ScheduledAt) }}</p>
-          <p v-if="metaOf(next)" class="hero-meta">{{ metaOf(next) }}</p>
         </router-link>
+        <!-- The sign-up status, and on the same line the way into the match:
+             its page for a member, its editing page for an admin. -->
+        <div class="hero-status">
+          <p class="hero-meta">{{ registrationLine(next, nowMs) }}</p>
+          <router-link v-if="isAdmin" class="btn btn-ghost hero-status-btn" :to="`/matches/${next.ID}/edit`">Manage match</router-link>
+          <router-link v-else class="btn btn-ghost hero-status-btn" :to="matchTo(next)">View match</router-link>
+        </div>
         <!-- Once the teams are set the places are history: what matters is
              which side the player is on. -->
         <div v-if="teamsSet" class="hero-team">
           <template v-if="myTeam">
-            <p class="label">You play for</p>
-            <p class="display hero-team-name">{{ myTeam }}</p>
+            <!-- One line, one face: only the team takes the accent. -->
+            <p class="label hero-team-line">You play for <span class="hero-team-mine">{{ myTeam }}</span></p>
           </template>
           <template v-else>
             <p class="label">Teams are set</p>
@@ -137,7 +143,7 @@ import { getMatchesDetails, getMatchRegistrations, getMatchVotes, registerForMat
 import { deriveRegistrationState, registrationsAreOpen, teamsAreComposed } from '@/services/matchRegistration';
 import {
   splitHomeMatches, heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel,
-  registrationMeta, placesLeft, homeVoteLine, myTeam, nextWaitingPosition,
+  registrationMeta, registrationLine, placesLeft, homeVoteLine, myTeam, nextWaitingPosition,
 } from '@/services/v2Home';
 
 function currentPlayerIdFromToken() {
@@ -249,7 +255,7 @@ export default {
     this.load();
   },
   methods: {
-    heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel, registrationsAreOpen,
+    heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel, registrationsAreOpen, registrationLine,
     publishContext() {
       this.v2Context.hide = false;
     },

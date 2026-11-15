@@ -84,6 +84,24 @@ export function weekdayTimeLabel(scheduledAt) {
   return weekday ? `${weekday.value} ${time}` : time;
 }
 
+// The hero's line under the kick-off. The opening is an instant, shown in the
+// viewer's own zone (local getters, no timeZone), like the kick-off.
+export function signupOpeningLabel(value) {
+  const at = new Date(value || '');
+  if (!value || Number.isNaN(at.getTime())) return '';
+  const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+  return `${WEEKDAYS[at.getDay()]} ${at.getDate()} ${MONTHS[at.getMonth()]} · ${time}`;
+}
+
+export function registrationLine(match, nowMs) {
+  const state = deriveRegistrationState(match, nowMs);
+  const when = signupOpeningLabel(match && match.RegistrationOpensAt);
+  if (state === REGISTRATION_NOT_OPEN_YET) return when ? `Sign-ups open ${when}` : 'Sign-ups not open yet';
+  if (state === REGISTRATION_OPEN) return when ? `Sign-ups opened ${when}` : 'Sign-ups open';
+  if (state === 'closed-by-admin' || state === 'closed-at-kickoff') return 'Sign-ups closed';
+  return '';
+}
+
 export function registrationMeta(match, nowMs) {
   const state = deriveRegistrationState(match, nowMs);
   if (state === REGISTRATION_OPEN) return 'Sign-ups open';

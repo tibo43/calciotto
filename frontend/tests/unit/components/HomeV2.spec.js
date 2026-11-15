@@ -90,8 +90,36 @@ describe('HomeV2.vue with a match scheduled', () => {
     getToken.mockReturnValue(`x.${btoa(JSON.stringify({ player_id: 'me' }))}.y`);
     const teams = [{ ID: 'a', Name: 'Black', Players: [{ ID: 'me' }] }, { ID: 'b', Name: 'White', Players: [{ ID: 'q' }] }];
     const wrapper = await mountHome([scheduled({ RegistrationsClosedAt: new Date().toISOString(), Teams: teams })]);
-    expect(wrapper.find('.hero-team-name').text()).toBe('Black');
+    expect(wrapper.find('.hero-team-line').text()).toBe('You play for Black');
+    expect(wrapper.find('.hero-team-mine').text()).toBe('Black');
     expect(wrapper.find('.hero-spots').exists()).toBe(false);
     getToken.mockReturnValue('');
+  });
+});
+
+describe('HomeV2.vue sign-up status line', () => {
+  const upcoming = (extra = {}) => ({
+    ...played('next', -3), Teams: [], ScheduledAt: new Date(Date.now() + 3 * DAY).toISOString(),
+    RegistrationOpensAt: new Date(Date.now() - DAY).toISOString(), MaxPlayers: 16, ...extra,
+  });
+
+  it('offers a member the match page', async () => {
+    const wrapper = await mountHome([upcoming()], false);
+    const button = wrapper.find('.hero-status .hero-status-btn');
+    expect(button.text()).toBe('View match');
+    expect(JSON.parse(button.attributes('data-to'))).toEqual({ name: 'MatchView', params: { id: 'next' } });
+    expect(wrapper.find('.hero-status .hero-meta').text()).toMatch(/^Sign-ups opened \w{3} \d{1,2} \w{3} · \d{2}:\d{2}$/);
+  });
+
+  it('offers an admin the editing page', async () => {
+    const wrapper = await mountHome([upcoming()], true);
+    const button = wrapper.find('.hero-status .hero-status-btn');
+    expect(button.text()).toBe('Manage match');
+    expect(JSON.parse(button.attributes('data-to'))).toBe('/matches/next/edit');
+  });
+
+  it('says when sign-ups will open', async () => {
+    const wrapper = await mountHome([upcoming({ RegistrationOpensAt: new Date(Date.now() + DAY).toISOString() })]);
+    expect(wrapper.find('.hero-status .hero-meta').text()).toMatch(/^Sign-ups open \w{3} \d{1,2} \w{3} · \d{2}:\d{2}$/);
   });
 });

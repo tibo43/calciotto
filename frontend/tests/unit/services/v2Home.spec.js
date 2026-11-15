@@ -1,4 +1,4 @@
-import { splitHomeMatches, heroDateLabel, placesLeft, registrationMeta, kickoffLabel, homeVoteLine, matchVoteCopy, goalLine, myTeam, nextWaitingPosition } from '@/services/v2Home';
+import { splitHomeMatches, heroDateLabel, placesLeft, registrationMeta, registrationLine, signupOpeningLabel, kickoffLabel, homeVoteLine, matchVoteCopy, goalLine, myTeam, nextWaitingPosition } from '@/services/v2Home';
 
 const NOW = new Date('2026-09-04T10:00:00+02:00').getTime();
 
@@ -93,5 +93,38 @@ describe('nextWaitingPosition', () => {
   it('lands right after the players already waiting', () => {
     expect(nextWaitingPosition([{ IsWaiting: false }, { IsWaiting: true }, { IsWaiting: true }])).toBe(3);
     expect(nextWaitingPosition([])).toBe(1);
+  });
+});
+
+describe('registrationLine', () => {
+  // Built from local parts, so the expected text holds in any test zone.
+  const opens = new Date(2026, 8, 3, 12, 0);
+  const match = {
+    ID: 'm', Date: '2026-09-06', ScheduledAt: new Date(2026, 8, 6, 20, 30).toISOString(),
+    RegistrationOpensAt: opens.toISOString(), MaxPlayers: 16,
+  };
+
+  it('formats the opening as weekday, day, month and local time', () => {
+    expect(signupOpeningLabel(opens.toISOString())).toBe('Thu 3 Sep · 12:00');
+    expect(signupOpeningLabel('')).toBe('');
+    expect(signupOpeningLabel('not a date')).toBe('');
+  });
+
+  it('says when sign-ups open, before they do', () => {
+    expect(registrationLine(match, new Date(2026, 8, 2).getTime())).toBe('Sign-ups open Thu 3 Sep · 12:00');
+  });
+
+  it('says when they opened, once open', () => {
+    expect(registrationLine(match, new Date(2026, 8, 4).getTime())).toBe('Sign-ups opened Thu 3 Sep · 12:00');
+  });
+
+  it('only says closed once an admin closed them or kick-off passed', () => {
+    const closed = { ...match, RegistrationsClosedAt: new Date(2026, 8, 5).toISOString() };
+    expect(registrationLine(closed, new Date(2026, 8, 5, 12).getTime())).toBe('Sign-ups closed');
+    expect(registrationLine(match, new Date(2026, 8, 6, 21).getTime())).toBe('Sign-ups closed');
+  });
+
+  it('has nothing to say about an unscheduled match', () => {
+    expect(registrationLine({ ID: 'u', Date: '2026-09-06' }, NOW)).toBe('');
   });
 });

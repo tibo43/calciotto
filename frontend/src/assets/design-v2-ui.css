@@ -212,3 +212,9 @@
 @media (min-width:900px){
   .design-v2 .sticky-cta{padding-left:0;padding-right:0;}
 }
+/* Home: the sign-up status, and the way into the match on its right. */
+.design-v2 .hero-status{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 20px;}
+.design-v2 .hero-status .hero-meta{margin:0;min-width:0;}
+.design-v2 .hero-status-btn{flex:none;margin-left:auto;min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 16px;}
+/* Home: "You play for <team>" on one line, the team in the accent. */
+.design-v2 .hero-team-mine{color:var(--v2-accent);}
