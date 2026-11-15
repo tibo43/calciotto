@@ -14,8 +14,11 @@
     </section>
 
     <section v-else-if="!next && recent.length === 0" class="state">
-      <p class="label">Season {{ seasonLabel }}</p>
-      <h1>No matches yet</h1>
+      <p class="label">No matches yet</p>
+      <h1>Start the season</h1>
+      <p v-if="isAdmin">Create the first match to open sign-ups.</p>
+      <p v-else>An admin will create the first match.</p>
+      <router-link v-if="isAdmin" class="btn" :to="{ name: 'NewMatch' }">Create match</router-link>
     </section>
 
     <template v-else>
@@ -191,6 +194,10 @@ export default {
       busy: false,
       nowMs: Date.now(),
       playerId: '',
+      // Incremented on every load() so a slower, earlier request cannot
+      // overwrite a newer result (in particular an unscoped first-group
+      // fetch arriving after the empty group has already loaded).
+      loadGeneration: 0,
     };
   },
   computed: {
@@ -298,24 +305,34 @@ export default {
       return `${a}–${b}`;
     },
     async load() {
+      // No group_id means the backend falls back to the player's first
+      // group. Wait until the parent has resolved the active one, and
+      // keep the skeleton up rather than painting another group's data.
+      if (!this.activeGroupId) {
+        return;
+      }
+      const generation = ++this.loadGeneration;
       this.loading = true;
       this.failed = false;
       this.nowMs = Date.now();
       try {
         const matches = await getMatchesDetails(this.activeGroupId, this.season);
+        if (generation !== this.loadGeneration) return;
         this.matches = Array.isArray(matches) ? matches : [];
         const heroSplit = splitHomeMatches(this.matches, this.nowMs);
         this.registrations = [];
         if (heroSplit.next) {
           const list = await getMatchRegistrations(heroSplit.next.ID);
+          if (generation !== this.loadGeneration) return;
           this.registrations = Array.isArray(list) ? list : [];
         }
       } catch (error) {
+        if (generation !== this.loadGeneration) return;
         console.error('Error fetching matches:', error);
         this.failed = true;
         this.matches = [];
       } finally {
-        this.loading = false;
+        if (generation === this.loadGeneration) this.loading = false;
       }
     },
     async signUp() {

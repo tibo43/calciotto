@@ -1,6 +1,6 @@
 <template>
   <main class="page">
-    <nav class="subnav" aria-label="Rankings">
+    <nav v-if="!isEmptyGroup" class="subnav" aria-label="Rankings">
       <router-link to="/rankings" :class="{ 'is-on': tab === 'points' }">
         Points
       </router-link>
@@ -20,6 +20,11 @@
     <section v-else-if="failed" class="state">
       <h1>Couldn't load the rankings</h1>
       <button class="btn" type="button" @click="load">Try again</button>
+    </section>
+    <section v-else-if="isEmptyGroup" class="state">
+      <p class="label">No matches played yet</p>
+      <h1>Rankings</h1>
+      <p>Standings appear once the first score is recorded.</p>
     </section>
     <section v-else-if="rows.length === 0" class="state">
       <h1>{{ emptyTitle }}</h1>
@@ -151,9 +156,13 @@ export default {
       motm: [],
       playerId: '',
       groupId: '',
+      seasons: [],
     };
   },
   computed: {
+    isEmptyGroup() {
+      return this.seasons.length === 0;
+    },
     tab() {
       const value = this.$route.query.tab;
       return value === 'scorers' || value === 'motm' ? value : 'points';
@@ -206,8 +215,9 @@ export default {
       try {
         const { groups, activeGroupId } = await resolveActiveGroup();
         this.groupId = activeGroupId || '';
-        const seasons = await getSeasons(this.groupId).catch(() => []);
+        const seasons = this.groupId ? await getSeasons(this.groupId).catch(() => []) : [];
         const seasonList = Array.isArray(seasons) ? seasons : [];
+        this.seasons = seasonList;
         const pinned = sessionStorage.getItem('calciotto-v2-season');
         const season = pinned && seasonList.includes(pinned)
           ? pinned

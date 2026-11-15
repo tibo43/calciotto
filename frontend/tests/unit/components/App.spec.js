@@ -225,3 +225,62 @@ describe('App.vue design-v2', () => {
     expect(Object.keys(localStorage)).toEqual(['calciotto-theme']);
   });
 });
+
+describe('App.vue v2 season selector', () => {
+  beforeEach(() => {
+    resetDesignV2();
+    localStorage.clear();
+    localStorage.setItem('calciotto-theme', 'dark');
+    document.getElementById('design-v2-fonts')?.remove();
+    getMyFeatures.mockReset();
+    getMyFeatures.mockResolvedValue(['design-v2']);
+    getToken.mockReset();
+    getToken.mockReturnValue('token-a');
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    document.getElementById('design-v2-fonts')?.remove();
+    jest.restoreAllMocks();
+  });
+
+  it('shows a disabled No season yet control when the group has no seasons, in the same place', async () => {
+    const { wrapper } = await mountAt('/');
+    await flushPromises();
+    wrapper.vm.v2Context.groups = [{ id: 'test-group', name: 'Test' }];
+    wrapper.vm.v2Context.groupId = 'test-group';
+    wrapper.vm.v2Context.seasons = [];
+    wrapper.vm.v2Context.season = '';
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.vm.v2SeasonLabel).toBe('No season yet');
+    expect(wrapper.vm.v2HasSeasons).toBe(false);
+    const seasonLabel = wrapper.findAll('label.ctx').at(1);
+    expect(seasonLabel.classes()).toContain('is-disabled');
+    expect(seasonLabel.find('.ctx-name').text()).toBe('No season yet');
+    expect(seasonLabel.find('select').element.disabled).toBe(true);
+    expect(seasonLabel.find('.chev').exists()).toBe(false);
+    const groupLabel = wrapper.findAll('label.ctx').at(0);
+    expect(groupLabel.find('.ctx-name').text()).toBe('Test');
+    expect(groupLabel.classes()).not.toContain('is-disabled');
+    expect(groupLabel.find('.chev').exists()).toBe(true);
+  });
+
+  it('keeps the live season label and an enabled select when seasons exist', async () => {
+    const { wrapper } = await mountAt('/');
+    await flushPromises();
+    wrapper.vm.v2Context.groups = [{ id: 'g', name: 'Giovedi' }];
+    wrapper.vm.v2Context.groupId = 'g';
+    wrapper.vm.v2Context.seasons = ['2025-2026', '2026-2027'];
+    wrapper.vm.v2Context.season = '2026-2027';
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.vm.v2SeasonLabel).toBe('2026-2027');
+    const seasonLabel = wrapper.findAll('label.ctx').at(1);
+    expect(seasonLabel.classes()).not.toContain('is-disabled');
+    expect(seasonLabel.find('.ctx-name').text()).toBe('2026-2027');
+    expect(seasonLabel.find('select').element.disabled).toBe(false);
+    expect(seasonLabel.find('.chev').exists()).toBe(true);
+  });
+});
+

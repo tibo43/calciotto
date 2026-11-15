@@ -1,5 +1,17 @@
 <template>
-  <HomeV2 v-if="designV2" :active-group-id="activeGroupId" :group-name="activeGroupName" :season="selectedSeason" :is-admin="isAdmin" />
+  <template v-if="designV2">
+    <!-- Same gate as v1's isInitializing: do not mount HomeV2 until the
+         active group is known, so it never fires GET /matches/details
+         without a group_id (that request would fall back to the player's
+         first group). -->
+    <div v-if="isInitializing" class="page" aria-busy="true">
+      <p class="label">Next match</p>
+      <div class="skel lg"></div>
+      <div class="skel md"></div>
+      <div class="skel sm"></div>
+    </div>
+    <HomeV2 v-else :active-group-id="activeGroupId" :group-name="activeGroupName" :season="selectedSeason" :is-admin="isAdmin" />
+  </template>
   <div v-else class="home-container">
     <!-- Context bar (which group/season we're scoped to) and sub-tab
          navigation, each on their own row — replaces the old gradient hero
