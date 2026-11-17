@@ -85,5 +85,5 @@ func sendViaBrevo(client *http.Client, apiKey string, payload brevoSendEmailRequ
 		return nil
 	}
 
-	return fmt.Errorf("Brevo returned HTTP %d", resp.StatusCode)
+	return fmt.Errorf("brevo returned HTTP %d", resp.StatusCode)
 }
