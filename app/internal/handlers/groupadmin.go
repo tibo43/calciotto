@@ -16,11 +16,8 @@ import (
 // after AuthMiddleware and resolves the target group the same way
 // (resolveGroupIDForMembership — query param, then JSON body, then the
 // caller's own group), but rejects with 403 unless the authenticated player
-// is one of that group's admins, not merely a member. Use it on routes that
-// carry the group_id in the query string or the request body: POST /matches
-// and PUT /matches/:id are gated with it, so only an admin can create a match
-// or edit its scores. Reading matches and standings deliberately stays open
-// to any member and keeps RequireGroupMembership.
+// is one of that group's admins. Use it for routes such as POST /matches,
+// where there is no existing resource from which to derive the group.
 func RequireGroupAdmin(membershipService *services.GroupMembershipService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		playerID, ok := playerIDFromContext(c)
@@ -78,5 +75,6 @@ func authorizeGroupAdmin(c *gin.Context, membershipService *services.GroupMember
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not an admin of this group"})
 		return
 	}
+	c.Set(authorizedGroupIDKey, groupID)
 	c.Next()
 }

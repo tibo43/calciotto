@@ -1,6 +1,6 @@
--- One-off cleanup for the perf load test (cmd/perfsetup + frontend/loadtest/run.js).
+-- Optional cleanup for fixtures in the disposable local calciotto_perf database.
 -- Run with:
---   psql "$DATABASE_URL" \
+--   psql -h 127.0.0.1 -p "$DB_PORT" -U "$DB_USER" -d calciotto_perf \
 --     -v group_id="'<the group id printed by perfsetup>'" \
 --     -v real_player_id="'<the -existing-player-id you passed to perfsetup, if any>'" \
 --     -f devops/perf-cleanup.sql
@@ -29,6 +29,14 @@
 -- group_memberships still removes *that* player's membership in this one
 -- throwaway group (the group itself is being deleted, so the row would be
 -- meaningless left behind), but never the player row.
+
+select current_database() = 'calciotto_perf'
+  and :'HOST' in ('127.0.0.1', '::1') as local_perf_target \gset
+\if :local_perf_target
+\else
+  \echo 'Cleanup requires a loopback connection to calciotto_perf.'
+  \quit
+\endif
 
 \echo 'Target group id:' :group_id
 \echo 'Test account email pattern: perfload%@perfload.test'

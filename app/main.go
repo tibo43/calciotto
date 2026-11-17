@@ -212,11 +212,7 @@ func main() {
 	// group B and rewrite that match's roster and scores (see
 	// MatchHandler.UpdateMatch / MatchService.UpdateMatch).
 	r.PUT("/matches/:id", authRequired, requireGroupAdminByMatchID, matchHandler.UpdateMatch)
-	// Deleting a match is admin-only too — group_id travels in the query
-	// string (a DELETE has no body), which requireGroupAdmin's
-	// resolveGroupIDForMembership already handles the same way resolveGroupID
-	// does in the handler itself.
-	r.DELETE("/matches/:id", authRequired, requireGroupAdmin, matchHandler.DeleteMatch)
+	r.DELETE("/matches/:id", authRequired, requireGroupAdminByMatchID, matchHandler.DeleteMatch)
 
 	// Sign-ups for a scheduled match. All six are gated by the match-scoped
 	// middlewares: the path carries a match id, so the group is derived from

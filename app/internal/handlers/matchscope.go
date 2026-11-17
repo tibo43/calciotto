@@ -28,18 +28,9 @@ import (
 // authorize against *that* group — the caller has no say in which group is
 // checked.
 //
-// They differ from the four existing middlewares in one deliberate way: they
-// publish the group they authorized into the Gin context (the way
-// AuthMiddleware publishes "player_id"), and the admin handlers read it back
-// with authorizedGroupIDFromContext instead of resolving a group themselves.
-// That saves a duplicate lookup, but the real reason is structural: it makes it
-// impossible for a handler to act on a group other than the authorized one —
-// exactly the bug MatchHandler.DeleteMatch has to avoid by hand, where "an
-// admin of group A deleting a match in group B" is only prevented by the
-// handler happening to re-run the middleware's own resolution.
+// The middleware stores the authorized group in the Gin context for the handler.
 
-// authorizedGroupIDKey is the Gin context key under which the match-scoped
-// middlewares below publish the group they authorized the caller against.
+// authorizedGroupIDKey holds the group the caller was authorized against.
 const authorizedGroupIDKey = "authorized_group_id"
 
 // RequireGroupMembershipByMatchPathParam authorizes a route whose path param

@@ -43,7 +43,8 @@ var (
 	// token inconnu, expiré, déjà consommé — sans les distinguer, exactement
 	// comme ErrInvalidCredentials ne distingue pas "email inconnu" de "mauvais
 	// mot de passe".
-	ErrInvalidResetToken = errors.New("invalid or expired reset token")
+	ErrInvalidResetToken        = errors.New("invalid or expired reset token")
+	ErrPasswordResetUnavailable = errors.New("password reset is temporarily unavailable")
 	// ErrInviteCodeRequired is SignupNewPlayer's rejection when no invite code
 	// is supplied at all: signing up without joining a group is no longer
 	// allowed — every player must land in a group the moment they sign up, per
@@ -118,6 +119,9 @@ type playerClaims struct {
 type AuthService struct {
 	DB     *gorm.DB
 	secret []byte
+	// PasswordResetMailer delivers the reset link to its intended recipient.
+	// Nil means recovery is unavailable for every account.
+	PasswordResetMailer func(email, link string) error
 }
 
 // NewAuthService takes the signing secret as a parameter rather than reading
@@ -125,7 +129,7 @@ type AuthService struct {
 // when the env var is missing, and tests can pass a fixed secret without
 // depending on the environment.
 func NewAuthService(db *gorm.DB, secret string) *AuthService {
-	return &AuthService{DB: db, secret: []byte(secret)}
+	return &AuthService{DB: db, secret: []byte(secret), PasswordResetMailer: newPasswordResetMailer()}
 }
 
 // Signup attaches email/password credentials to an existing Player. It never
@@ -274,9 +278,7 @@ func (s *AuthService) Login(email, password string) (string, error) {
 	return s.GenerateToken(player.ID)
 }
 
-// ForgotPassword issues a single-use reset link for the account registered
-// under email, and "sends" it (see sendPasswordResetLink — for now, a server
-// log line).
+// ForgotPassword issues and emails a reset link for the registered account.
 //
 // An unknown email returns nil, not an error: answering differently would turn
 // this endpoint into an email-enumeration oracle, the very thing Login avoids
@@ -285,6 +287,9 @@ func (s *AuthService) Login(email, password string) (string, error) {
 // branches cost roughly the same time — a best effort, not a constant-time
 // guarantee.
 func (s *AuthService) ForgotPassword(email string) error {
+	if s.PasswordResetMailer == nil {
+		return ErrPasswordResetUnavailable
+	}
 	email = normalizeEmail(email)
 
 	var player models.Player
@@ -303,16 +308,21 @@ func (s *AuthService) ForgotPassword(email string) error {
 		return err
 	}
 
-	sendPasswordResetLink(email, rawToken)
+	base := os.Getenv("FRONTEND_BASE_URL")
+	if base == "" {
+		base = defaultFrontendBaseURL
+	}
+	link := fmt.Sprintf("%s/reset-password?token=%s", strings.TrimSuffix(base, "/"), url.QueryEscape(rawToken))
+	// Keep the same caller-visible response when delivery to a registered
+	// account fails. Mail transport errors may contain the recipient or link.
+	if err := s.PasswordResetMailer(email, link); err != nil {
+		log.Print("[password reset] email delivery failed")
+	}
 	return nil
 }
 
 // issuePasswordResetToken persists a fresh single-use reset token for playerID
 // and returns the raw value to put in the link — only its digest is stored.
-// Shared by ForgotPassword and InviteExistingPlayer, which differ solely in
-// how they establish that the caller may set that player's password (knowing
-// the email vs. being an admin of one of their groups). db is a parameter
-// rather than s.DB so it can run inside a caller's transaction.
 func issuePasswordResetToken(db *gorm.DB, playerID uuid.UUID) (string, error) {
 	rawToken, tokenHash, err := generateResetToken()
 	if err != nil {
@@ -554,43 +564,6 @@ func generateResetToken() (rawToken string, tokenHash string, err error) {
 func hashResetToken(rawToken string) string {
 	digest := sha256.Sum256([]byte(rawToken))
 	return hex.EncodeToString(digest[:])
-}
-
-// sendPasswordResetLink "delivers" the reset link. With no BREVO_API_KEY set
-// it falls back to the original dev-only behavior — the link is only written
-// to the server log, the same thing Rails and Django do with their
-// development mailers — so nothing changes for local dev or CI. With
-// BREVO_API_KEY set, it sends a real email through Brevo's transactional
-// email API instead.
-//
-// Either way this is fire-and-forget from the caller's point of view: a
-// failed send (including a quota breach — Brevo's free plan caps at 300
-// emails/day) is only logged, never returned. ForgotPassword/
-// InviteExistingPlayer have already committed the token to the DB by the
-// time this runs, and neither must let mail delivery change what the caller
-// sees — a player can always fall back to asking an admin to re-invite them,
-// or requesting another reset, once delivery is actually working again.
-func sendPasswordResetLink(email, rawToken string) {
-	base := os.Getenv("FRONTEND_BASE_URL")
-	if base == "" {
-		base = defaultFrontendBaseURL
-	}
-	link := fmt.Sprintf("%s/reset-password?token=%s", strings.TrimSuffix(base, "/"), url.QueryEscape(rawToken))
-
-	apiKey := os.Getenv("BREVO_API_KEY")
-	if apiKey == "" {
-		log.Printf("[password reset] would email %s: %s", email, link)
-		return
-	}
-
-	subject := "Reset your Calciotto password"
-	htmlContent := fmt.Sprintf(
-		`<p>Click the link below to reset your Calciotto password:</p><p><a href="%s">%s</a></p><p>This link expires in one hour. If you didn't request this, you can ignore this email.</p>`,
-		link, link,
-	)
-	if err := sendViaBrevo(apiKey, email, subject, htmlContent); err != nil {
-		log.Printf("[password reset] failed to email %s via Brevo: %v", email, err)
-	}
 }
 
 // ParseToken validates a JWT, returns the player_id claim it carries, and

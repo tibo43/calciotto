@@ -3,10 +3,9 @@ package handlers_test
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"net/url"
 	"testing"
 
 	"app/internal/handlers"
@@ -41,23 +40,20 @@ func postJSON(t *testing.T, router *gin.Engine, path string, body map[string]str
 	return rec
 }
 
-// The reset link is only logged for now (no mail transport), so the HTTP tests
-// read the token back out of the server log just like the service tests do.
-func forgotPasswordAndCaptureToken(t *testing.T, router *gin.Engine, email string) (*httptest.ResponseRecorder, string) {
+func forgotPasswordAndCaptureToken(t *testing.T, authService *services.AuthService, router *gin.Engine, email string) (*httptest.ResponseRecorder, string) {
 	t.Helper()
 
-	var logs bytes.Buffer
-	previous := log.Writer()
-	log.SetOutput(&logs)
-	rec := postJSON(t, router, "/auth/forgot-password", map[string]string{"email": email})
-	log.SetOutput(previous)
-
-	_, after, found := strings.Cut(logs.String(), "?token=")
-	if !found {
-		return rec, ""
+	var token string
+	authService.PasswordResetMailer = func(_, link string) error {
+		resetURL, err := url.Parse(link)
+		if err != nil {
+			t.Fatal("the test mailer received an invalid reset link")
+		}
+		token = resetURL.Query().Get("token")
+		return nil
 	}
-	token, _, _ := strings.Cut(after, "\n")
-	return rec, strings.TrimSpace(token)
+	rec := postJSON(t, router, "/auth/forgot-password", map[string]string{"email": email})
+	return rec, token
 }
 
 func TestPasswordResetEndpoints_Integration_ForgotThenReset(t *testing.T) {
@@ -77,12 +73,12 @@ func TestPasswordResetEndpoints_Integration_ForgotThenReset(t *testing.T) {
 		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())
 	}
 
-	forgotRec, token := forgotPasswordAndCaptureToken(t, router, "quinn@example.com")
+	forgotRec, token := forgotPasswordAndCaptureToken(t, authService, router, "quinn@example.com")
 	if forgotRec.Code != http.StatusOK {
 		t.Fatalf("forgot-password returned status %d, body: %s", forgotRec.Code, forgotRec.Body.String())
 	}
 	if token == "" {
-		t.Fatal("no reset token was logged for a registered email")
+		t.Fatal("the test mailer did not receive a reset token for a registered email")
 	}
 
 	// A bad token is a 400, and the message must not say why it failed.
@@ -137,8 +133,8 @@ func TestPasswordResetEndpoints_Integration_ForgotPasswordAlwaysReturnsTheSameAn
 		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())
 	}
 
-	knownRec, _ := forgotPasswordAndCaptureToken(t, router, "rita@example.com")
-	unknownRec, unknownToken := forgotPasswordAndCaptureToken(t, router, "nobody-zzz-handler@example.com")
+	knownRec, _ := forgotPasswordAndCaptureToken(t, authService, router, "rita@example.com")
+	unknownRec, unknownToken := forgotPasswordAndCaptureToken(t, authService, router, "nobody-zzz-handler@example.com")
 
 	if knownRec.Code != http.StatusOK {
 		t.Errorf("forgot-password for a registered email returned status %d, want 200", knownRec.Code)
@@ -151,6 +147,23 @@ func TestPasswordResetEndpoints_Integration_ForgotPasswordAlwaysReturnsTheSameAn
 	}
 	if unknownToken != "" {
 		t.Error("forgot-password issued a reset link for an unregistered email")
+	}
+}
+
+func TestForgotPasswordWithoutMailerReturnsServiceUnavailable(t *testing.T) {
+	t.Setenv("BREVO_API_KEY", "")
+	// Missing configuration must be detected before any database lookup.
+	router := newPasswordResetTestRouter(services.NewAuthService(nil, testAuthJWTSecret))
+	rec := postJSON(t, router, "/auth/forgot-password", map[string]string{"email": "player@example.com"})
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("forgot-password returned status %d, want 503", rec.Code)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid error response: %v", err)
+	}
+	if body["error"] != services.ErrPasswordResetUnavailable.Error() {
+		t.Fatal("forgot-password returned an unexpected error")
 	}
 }
 

@@ -12,24 +12,18 @@
 //     signup-then-Participate flows driven through the UI have something to
 //     register for immediately.
 //
-// It is intended to run once against production, pointed at the real
-// database via DATABASE_URL — the same connection selection InitDB always
-// uses (see pkg/database/connect.go's appDSN, which prefers DATABASE_URL over
-// DB_HOST/... whenever it's set). Run it like:
-//
-//	DATABASE_URL="postgres://...neon.tech/..." go run ./cmd/perfsetup
-//
-// Every created row's ID is printed at the end specifically so
-// devops/perf-cleanup.sql can be filled in and run afterwards — there is no
-// automatic teardown here, on purpose: a load test needs a deliberate,
-// reviewed cleanup step, not one bundled into the setup script that created
-// the data in the first place.
+// Run it against a disposable local calciotto_perf database using the
+// DB_* variables. See frontend/loadtest/README.md for the local setup.
 package main
 
 import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
+	"net/url"
+	"os"
+	"strings"
 	"time"
 
 	"app/internal/models"
@@ -42,14 +36,30 @@ import (
 func main() {
 	groupName := flag.String("group-name", "Perf Load Test", "name of the throwaway group to create")
 	adminEmail := flag.String("admin-email", "perfload-admin@perfload.test", "email for the throwaway admin account (reserved .test TLD, never emailed)")
-	adminPassword := flag.String("admin-password", "PerfLoad!2026", "password for the throwaway admin account")
+	adminPassword := flag.String("admin-password", "", "password for the throwaway admin account (defaults to PERF_ADMIN_PASSWORD)")
 	maxPlayers := flag.Int("max-players", 60, "MaxPlayers on the scheduled match — keep it above the number of accounts you intend to sign up, or some will land on the waiting list on purpose")
 	kickoffInDays := flag.Int("kickoff-in-days", 7, "days from now for the match's kick-off — far enough out that it won't close registrations mid-test")
-	frontendURL := flag.String("frontend-url", "", "optional: your Vercel frontend URL, to print a ready-to-use signup link (e.g. https://calciotto.example.com)")
-	existingPlayerID := flag.String("existing-player-id", "", "optional: UUID of an already-existing real player (e.g. your own account) to add to the group as admin too, so you can log in on your normal account and watch the test live. This player is NEVER touched by devops/perf-cleanup.sql — only their membership in this throwaway group is, and even that only because the group itself is deleted.")
+	frontendURL := flag.String("frontend-url", "", "optional loopback frontend origin for printing a local signup link")
+	existingPlayerID := flag.String("existing-player-id", "", "optional UUID of a player in the local test database to add as an admin")
 	flag.Parse()
 
-	db, err := database.InitDB()
+	password := *adminPassword
+	if password == "" {
+		password = os.Getenv("PERF_ADMIN_PASSWORD")
+	}
+	if len(password) == 0 || len(password) > 72 {
+		log.Fatal("set PERF_ADMIN_PASSWORD to a password of 1 to 72 bytes for the local test admin")
+	}
+	if *frontendURL != "" {
+		frontend, err := url.Parse(*frontendURL)
+		if err != nil || (frontend.Scheme != "http" && frontend.Scheme != "https") ||
+			!net.ParseIP(frontend.Hostname()).IsLoopback() || frontend.User != nil ||
+			frontend.RawQuery != "" || frontend.Fragment != "" || (frontend.Path != "" && frontend.Path != "/") {
+			log.Fatal("-frontend-url must be a loopback HTTP(S) origin")
+		}
+	}
+
+	db, err := database.InitLocalPerfDB()
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
@@ -72,7 +82,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create admin player: %v", err)
 	}
-	if err := authService.Signup(adminID, *adminEmail, *adminPassword); err != nil {
+	if err := authService.Signup(adminID, *adminEmail, password); err != nil {
 		log.Fatalf("failed to attach credentials to admin player: %v", err)
 	}
 	if err := membershipService.AddPlayerToGroupWithRole(group.ID, adminID, models.RoleAdmin); err != nil {
@@ -117,7 +127,7 @@ func main() {
 	fmt.Println("=== Perf load-test fixtures created ===")
 	fmt.Printf("Group:        %s (id=%s)\n", group.Name, group.ID)
 	fmt.Printf("Invite code:  %s\n", group.InviteCode)
-	fmt.Printf("Admin login:  %s / %s\n", *adminEmail, *adminPassword)
+	fmt.Printf("Admin email:  %s\n", *adminEmail)
 	if *existingPlayerID != "" {
 		fmt.Printf("Also added:   %s (id=%s) as admin — log in on your normal account to watch\n", existingPlayerName, *existingPlayerID)
 	}
@@ -125,11 +135,11 @@ func main() {
 	fmt.Printf("Kick-off:     %s\n", kickoff.Format(time.RFC3339))
 	fmt.Printf("Max players:  %d\n", *maxPlayers)
 	if *frontendURL != "" {
-		fmt.Printf("Signup link:  %s/signup?invite=%s\n", *frontendURL, group.InviteCode)
+		fmt.Printf("Signup link:  %s/signup?invite=%s\n", strings.TrimRight(*frontendURL, "/"), group.InviteCode)
 	}
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Run the Playwright load script (frontend/loadtest/run.js) with this invite code.")
-	fmt.Println("  2. Once done, fill in the group id above into devops/perf-cleanup.sql and run it against the same database.")
+	fmt.Println("  2. Remove the disposable calciotto_perf database when finished.")
 	fmt.Println()
 }

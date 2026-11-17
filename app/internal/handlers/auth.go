@@ -91,9 +91,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
-// passwordResetRequestedMessage is returned by ForgotPassword whatever
-// happened, so the response body can't be used to tell a registered email from
-// an unregistered one.
+// passwordResetRequestedMessage is the same for known and unknown accounts.
 const passwordResetRequestedMessage = "if an account exists for this email, a reset link has been sent"
 
 func (h *AuthHandler) ForgotPassword(c *gin.Context) {
@@ -105,11 +103,12 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	// An unknown email is not an error here — AuthService.ForgotPassword
-	// returns nil for it on purpose — so only a genuine server-side failure
-	// (e.g. the DB being unreachable) can reach this branch.
 	if err := h.Service.ForgotPassword(req.Email); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		status := http.StatusInternalServerError
+		if errors.Is(err, services.ErrPasswordResetUnavailable) {
+			status = http.StatusServiceUnavailable
+		}
+		c.JSON(status, gin.H{"error": services.ErrPasswordResetUnavailable.Error()})
 		return
 	}
 

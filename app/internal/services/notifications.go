@@ -4,15 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
-	"strings"
 	"time"
 
 	"app/internal/models"
 
-	webpush "github.com/SherClockHolmes/webpush-go"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -93,7 +89,7 @@ const RegistrationOpenWindow = 6 * time.Hour
 var (
 	ErrPushFeatureNotEnabled   = errors.New("push notifications are not enabled for this player")
 	ErrUnknownNotificationType = errors.New("unknown notification type")
-	ErrInvalidPushSubscription = errors.New("a push subscription needs an endpoint and both keys")
+	ErrInvalidPushSubscription = errors.New("a push subscription needs a supported HTTPS endpoint and both keys")
 	// ErrPushSubscriptionGone is what a PushSender returns when the push
 	// service says the subscription no longer exists (the app was
 	// uninstalled, permission was revoked): the row is then deleted.
@@ -135,40 +131,6 @@ type PushSender interface {
 	Send(sub models.PushSubscription, payload []byte) error
 }
 
-// WebPushSender sends through the browsers' push services with VAPID.
-type WebPushSender struct {
-	PublicKey  string
-	PrivateKey string
-	Subject    string
-}
-
-func (w *WebPushSender) Send(sub models.PushSubscription, payload []byte) error {
-	resp, err := webpush.SendNotification(payload, &webpush.Subscription{
-		Endpoint: sub.Endpoint,
-		Keys:     webpush.Keys{P256dh: sub.P256dh, Auth: sub.Auth},
-	}, &webpush.Options{
-		Subscriber:      w.Subject,
-		VAPIDPublicKey:  w.PublicKey,
-		VAPIDPrivateKey: w.PrivateKey,
-		// A day: a phone that is off for the evening still gets the
-		// result the next morning, but not a reminder from last week.
-		TTL:     24 * 60 * 60,
-		Urgency: webpush.UrgencyHigh,
-	})
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
-		return ErrPushSubscriptionGone
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("push service answered %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return nil
-}
-
 type NotificationService struct {
 	DB *gorm.DB
 	// Sender is nil when VAPID keys aren't configured: subscriptions are
@@ -203,7 +165,7 @@ func (s *NotificationService) hasFeature(playerID uuid.UUID) (bool, error) {
 // again (a refreshed subscription, or another account on the same browser)
 // replaces the existing row.
 func (s *NotificationService) Subscribe(playerID uuid.UUID, input PushSubscriptionInput) error {
-	if strings.TrimSpace(input.Endpoint) == "" || input.Keys.P256dh == "" || input.Keys.Auth == "" {
+	if !isAllowedPushEndpoint(input.Endpoint) || input.Keys.P256dh == "" || input.Keys.Auth == "" {
 		return ErrInvalidPushSubscription
 	}
 	enabled, err := s.hasFeature(playerID)

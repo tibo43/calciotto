@@ -212,13 +212,12 @@ jobs:
           sync_secret DATABASE_URL_UNPOOLED "$DATABASE_URL_UNPOOLED"
           sync_secret JWT_SECRET "$JWT_SECRET"
 
-          # Brevo is optional: with no API key the app keeps logging reset links
-          # instead of emailing them (see services/mailer.go), which is a
-          # degraded but working state rather than a startup failure.
+          # Brevo is optional for startup. Password reset needs a configured
+          # mailer and returns 503 when it is unavailable.
           if [ -n "$BREVO_API_KEY" ]; then
             sync_secret BREVO_API_KEY "$BREVO_API_KEY"
           else
-            echo "::warning::BREVO_API_KEY is not set — password-reset and invite emails will only be written to the Koyeb logs"
+            echo "::warning::BREVO_API_KEY is not set — password reset will return HTTP 503"
           fi
 
           # Signup rate-limit override is optional and normally unset: only

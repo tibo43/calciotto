@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // One-off load-test driver: NOT part of `npm run test:unit` / `test:visual`.
-// It drives the real production build through the browser (not the API
-// directly) for N virtual users in parallel: sign up with an invite code,
+// It drives the local app through the browser for N virtual users in parallel:
+// sign up with an invite code,
 // select the scheduled match, click Participate, open the group roster on
 // the profile page, then log out. Per-step timing for every user is written
 // to a JSON report (plus a plain-text summary) under loadtest/reports/, and
@@ -12,15 +12,13 @@
 // invite code here.
 //
 // Usage:
-//   BASE_URL=https://calciotto.example.com \
+//   BASE_URL=http://127.0.0.1:4000 \
 //   INVITE_CODE=AB2N7TQR \
 //   USERS=50 \
 //   node frontend/loadtest/run.js
 //
 // Env vars (all but INVITE_CODE have a default):
-//   BASE_URL     frontend origin to hit               (default http://localhost:4000 — almost
-//                                                       certainly wrong for a real load test,
-//                                                       set it to the Vercel prod URL)
+//   BASE_URL     loopback frontend origin             (default http://127.0.0.1:4000)
 //   INVITE_CODE  the group's invite code               (required, no default — from perfsetup's output)
 //   USERS        how many accounts to create           (default 50)
 //   EMAIL_DOMAIN domain for the throwaway accounts      (default perfload.test — reserved TLD, never emailed)
@@ -28,8 +26,7 @@
 //   REPORT_DIR   where to write the report files        (default loadtest/reports, relative to this file)
 //   SIGNUP_TIMEOUT_MS  how long to wait for signup to resolve before giving up
 //                       (default 60000) — bcrypt hashing is deliberately slow,
-//                       and under N concurrent signups on a small/shared
-//                       Koyeb instance this can legitimately take much longer
+//                       and under N concurrent signups this can take much longer
 //                       than a single request would; a real load test wants
 //                       to *measure* that latency, not misreport it as a
 //                       hung request. If a run's failures all show a
@@ -43,8 +40,8 @@
 //   STEP_TIMEOUT_MS     every other wait (nav rendering, roster panel,
 //                       logout, ...) shares this one (default 120000).
 //
-// A failed signup/participate additionally logs the actual HTTP response
-// (status + body) or network error observed for that call, in [brackets] —
+// A failed signup/participate additionally logs the HTTP status or network
+// error observed for that call, in [brackets] —
 // the UI's own error text alone ("Signup failed. Please try again.") is a
 // generic fallback whenever the backend's response has no JSON error body
 // (a dropped connection, a bare 502/503 under load), so this is often the
@@ -59,15 +56,23 @@
 // request got a 429; (2) this is a re-run reusing the same
 // perfload+uN@<EMAIL_DOMAIN> emails from an earlier attempt, so the backend
 // rejects them as already-registered — bump EMAIL_DOMAIN or clean up first
-// (devops/perf-cleanup.sql); (3) BASE_URL/INVITE_CODE is wrong (e.g. left at
-// the localhost default) and the request never reaches the intended group.
+// (see README.md); (3) BASE_URL/INVITE_CODE is wrong and the request never
+// reaches the intended group.
 // A screenshot is saved alongside the report for every failure too.
 
+const { randomBytes } = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require('@playwright/test');
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:4000';
+const frontendURL = URL.parse(process.env.BASE_URL || 'http://127.0.0.1:4000');
+if (!frontendURL || !isLoopbackURL(frontendURL.href) ||
+    !['http:', 'https:'].includes(frontendURL.protocol) ||
+    frontendURL.pathname !== '/' || frontendURL.search || frontendURL.hash) {
+  console.error('BASE_URL must be an HTTP(S) origin on 127.0.0.1 or [::1].');
+  process.exit(1);
+}
+
+const BASE_URL = frontendURL.origin;
 const INVITE_CODE = process.env.INVITE_CODE;
 const USER_COUNT = parseInt(process.env.USERS || '50', 10);
 const EMAIL_DOMAIN = process.env.EMAIL_DOMAIN || 'perfload.test';
@@ -76,7 +81,7 @@ const REPORT_DIR = process.env.REPORT_DIR || path.join(__dirname, 'reports');
 const SIGNUP_TIMEOUT_MS = parseInt(process.env.SIGNUP_TIMEOUT_MS || '60000', 10);
 // Same reasoning as SIGNUP_TIMEOUT_MS: registering for the match is a second
 // write under concurrent load (not bcrypt-bound, but still competing for the
-// same limited Koyeb instance/DB connections), and a real run has already
+// same database connections), and a real run has already
 // shown it can resolve just past a shorter deadline — see the README's
 // "no navigation and no error message" note.
 const PARTICIPATE_TIMEOUT_MS = parseInt(process.env.PARTICIPATE_TIMEOUT_MS || '60000', 10);
@@ -86,11 +91,37 @@ const PARTICIPATE_TIMEOUT_MS = parseInt(process.env.PARTICIPATE_TIMEOUT_MS || '6
 // knob raises all of them together for a "just give it plenty of time and
 // see what actually happens" run, rather than chasing each one individually.
 const STEP_TIMEOUT_MS = parseInt(process.env.STEP_TIMEOUT_MS || '120000', 10);
-const PASSWORD = 'PerfLoad!2026';
+const PASSWORD = randomBytes(18).toString('base64url');
 
 if (!INVITE_CODE) {
   console.error('INVITE_CODE is required — copy it from `go run ./cmd/perfsetup`\'s output.');
   process.exit(1);
+}
+
+const { chromium } = require('@playwright/test');
+
+function isLoopbackURL(raw, base) {
+  const url = URL.parse(raw, base);
+  return url && ['127.0.0.1', '[::1]'].includes(url.hostname) &&
+    ['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol) && !url.username && !url.password;
+}
+
+async function routeLocalRequest(route) {
+  const url = route.request().url();
+  if (!isLoopbackURL(url)) return route.abort('blockedbyclient');
+
+  // Inspect redirects before the browser can follow them to a remote origin.
+  const response = await route.fetch({ maxRedirects: 0, timeout: STEP_TIMEOUT_MS }).catch(() => null);
+  if (!response) return route.abort('failed');
+  try {
+    const location = response.headers().location;
+    if (location && response.status() >= 300 && response.status() < 400 && !isLoopbackURL(location, url)) {
+      return await route.abort('blockedbyclient');
+    }
+    await route.fulfill({ response });
+  } finally {
+    await response.dispose();
+  }
 }
 
 // Records the wall-clock duration of each named step for one virtual user,
@@ -120,8 +151,11 @@ async function waitForOutcome(page, { successCheck, errorSelector, timeoutMs = 3
   while (Date.now() < deadline) {
     if (await successCheck()) return { ok: true };
     if (errorSelector) {
-      const text = await page.locator(errorSelector).first().textContent().catch(() => null);
-      if (text && text.trim()) return { ok: false, error: text.trim() };
+      const error = page.locator(errorSelector).first();
+      if (await error.isVisible()) {
+        const text = await error.textContent({ timeout: pollMs }).catch(() => null);
+        if (text && text.trim()) return { ok: false, error: text.trim() };
+      }
     }
     await page.waitForTimeout(pollMs);
   }
@@ -155,19 +189,14 @@ async function saveFailureScreenshot(page, index, stepName) {
 // server-side. Listening for the raw HTTP response (or its absence) alongside
 // that generic text is the only way to tell "the backend rejected this
 // cleanly" apart from "the backend or the connection to it broke".
-function trackApiResponse(page, urlSubstring) {
-  const state = { status: null, body: null, requestFailed: null };
-  page.on('response', async (response) => {
-    if (!response.url().includes(urlSubstring)) return;
-    state.status = response.status();
-    try {
-      state.body = (await response.text()).slice(0, 500);
-    } catch {
-      state.body = '(could not read response body)';
-    }
+function trackApiResponse(page, pathSuffix) {
+  const state = { status: null, requestFailed: null };
+  const matches = (request) => request.method() === 'POST' && new URL(request.url()).pathname.endsWith(pathSuffix);
+  page.on('response', (response) => {
+    if (matches(response.request())) state.status = response.status();
   });
   page.on('requestfailed', (request) => {
-    if (request.url().includes(urlSubstring)) {
+    if (matches(request)) {
       state.requestFailed = request.failure()?.errorText || 'unknown network error';
     }
   });
@@ -175,7 +204,7 @@ function trackApiResponse(page, urlSubstring) {
 }
 
 function describeApiState(state) {
-  if (state.status !== null) return `http ${state.status}: ${state.body}`;
+  if (state.status !== null) return `http ${state.status}`;
   if (state.requestFailed) return `network error: ${state.requestFailed}`;
   return 'no response observed at all (request may still be in flight)';
 }
@@ -185,7 +214,15 @@ async function runOneUser(browser, index) {
   const email = `perfload+u${index}@${EMAIL_DOMAIN}`;
   const startedAt = Date.now();
   const timer = stepTimer();
-  const context = await browser.newContext();
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  await context.route('**/*', routeLocalRequest);
+  await context.routeWebSocket('**/*', (route) => {
+    if (isLoopbackURL(route.url())) {
+      route.connectToServer();
+    } else {
+      return route.close();
+    }
+  });
   const page = await context.newPage();
   let currentStep = 'signup';
   const signupApi = trackApiResponse(page, '/auth/signup');

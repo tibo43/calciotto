@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"log"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -16,29 +17,25 @@ import (
 	"gorm.io/gorm"
 )
 
-// requestResetToken calls ForgotPassword and digs the raw token back out of the
-// server log. That indirection is the point of the current design: the token is
-// never returned to the caller and only its SHA-256 lives in the database, so
-// the log line written by sendPasswordResetLink is the only place the raw value
-// exists — exactly where a developer would look for it in dev today, and the
-// line a real mailer will eventually replace.
+// requestResetToken captures the link from the test mailer.
 func requestResetToken(t *testing.T, authService *services.AuthService, email string) string {
 	t.Helper()
 
-	logs := captureLogs(t, func() {
-		if err := authService.ForgotPassword(email); err != nil {
-			t.Fatalf("ForgotPassword(%q) returned error: %v", email, err)
-		}
-	})
-
-	_, after, found := strings.Cut(logs, "?token=")
-	if !found {
-		t.Fatalf("no reset link logged for %q, log output was: %q", email, logs)
+	var link string
+	authService.PasswordResetMailer = func(_, deliveredLink string) error {
+		link = deliveredLink
+		return nil
 	}
-	token, _, _ := strings.Cut(after, "\n")
-	token = strings.TrimSpace(token)
+	if err := authService.ForgotPassword(email); err != nil {
+		t.Fatalf("ForgotPassword returned error: %v", err)
+	}
+	resetURL, err := url.Parse(link)
+	if err != nil {
+		t.Fatal("the test mailer received an invalid reset link")
+	}
+	token := resetURL.Query().Get("token")
 	if token == "" {
-		t.Fatalf("logged reset link for %q carries an empty token: %q", email, logs)
+		t.Fatal("the test mailer did not receive a reset token")
 	}
 	return token
 }
@@ -89,15 +86,31 @@ func TestForgotPassword_Integration_UnknownEmailStaysSilent(t *testing.T) {
 	tx := testutil.BeginTx(t, db)
 
 	authService := services.NewAuthService(tx, testJWTSecret)
+	authService.PasswordResetMailer = func(_, _ string) error {
+		t.Fatal("the test mailer was called for an unknown email")
+		return nil
+	}
+	if err := authService.ForgotPassword("nobody-zzz-reset@example.com"); err != nil {
+		t.Fatalf("ForgotPassword on an unknown email returned error %v, want nil", err)
+	}
+}
 
+func TestForgotPassword_Integration_MailerFailureKeepsLinkOutOfLogs(t *testing.T) {
+	tx := testutil.BeginTx(t, testutil.OpenDB(t))
+	const email = "reset-delivery-failure@example.com"
+	newClaimedPlayer(t, tx, "Zzz Reset Delivery Failure", email, "old-pass")
+
+	authService := services.NewAuthService(tx, testJWTSecret)
+	authService.PasswordResetMailer = func(recipient, link string) error {
+		return errors.New(recipient + " " + link)
+	}
 	logs := captureLogs(t, func() {
-		if err := authService.ForgotPassword("nobody-zzz-reset@example.com"); err != nil {
-			t.Fatalf("ForgotPassword on an unknown email returned error %v, want nil (must not reveal that the email is unregistered)", err)
+		if err := authService.ForgotPassword(email); err != nil {
+			t.Fatalf("ForgotPassword returned error: %v", err)
 		}
 	})
-
-	if strings.Contains(logs, "?token=") {
-		t.Errorf("ForgotPassword issued a reset link for an unregistered email, log output was: %q", logs)
+	if !strings.Contains(logs, "email delivery failed") || strings.Contains(logs, "token=") || strings.Contains(logs, email) {
+		t.Fatal("delivery failures must log only a generic error")
 	}
 }
 
