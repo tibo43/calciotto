@@ -157,7 +157,7 @@ Every handler that reads an ID from the URL (`c.Param("id")`, etc.) parses it wi
 ### Auth (email/password, JWT), password reset and account deletion
 `POST /auth/signup` calls `AuthService.SignupSession` to create a new `Player`, group membership, and browser session in one transaction. The response returns the player ID and an access token. The player uses the same browser session flow as after login. Display names may be shared by several accounts.
 
-Signup requires an active group invitation. The service checks its code before hashing the password and rechecks it under the group row lock before writing the membership. Missing, expired, revoked, or unknown codes return 400. Codes are case-insensitive. A code lives 7 days (`groupInviteTTL`, `Group.InviteExpiresAt`); codes that existed before expiry was introduced got 7 days from that deploy, after which an admin has to generate a new one from the group settings.
+Signup requires an active group invitation. The service checks its code before hashing the password and rechecks it under the group row lock before writing the membership. Missing, expired, revoked, or unknown codes return 400. Codes are case-insensitive. Revoking a code (`Group.InviteExpiresAt`) stops it at once; see "Group bootstrapping" below for how long an active one lasts.
 
 `AuthService.Signup(playerID, email, password)` still attaches credentials to an existing test or seed player. HTTP login calls `LoginSession`. See [Browser sessions and group invitations](README.md#browser-sessions-and-group-invitations) for the session and deploy contract.
 
