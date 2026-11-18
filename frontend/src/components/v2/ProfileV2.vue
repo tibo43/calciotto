@@ -20,6 +20,18 @@
           <router-link class="account-link" to="/profile/account">Manage account</router-link>
         </div>
       </section>
+      <section v-if="page === 'group' && (currentGroup?.description || currentGroup?.website_url)" class="sec">
+        <div class="sec-head"><h2>About this group</h2></div>
+        <p v-if="currentGroup.description" class="group-description">{{ currentGroup.description }}</p>
+        <a v-if="currentGroup.website_url" class="group-website" :href="currentGroup.website_url"
+          target="_blank" rel="noopener noreferrer">
+          <span>{{ currentGroup.website_label || 'Open group link' }}</span>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 12l8-8M6 4h6v6" />
+          </svg>
+        </a>
+      </section>
       <section class="sec">
         <div class="sec-head"><h2>Record</h2></div>
         <div class="season-field">
@@ -186,6 +198,7 @@
     </template>
 
     <template v-else-if="page === 'settings'">
+      <GroupDetailsForm v-if="isAdmin" :key="groupId" :group="currentGroup" @saved="applyGroupDetails" />
       <section class="sec">
         <div class="sec-head"><h2>Teams</h2></div>
         <p class="scope">Save each team on its own.</p>
@@ -200,7 +213,7 @@
         <div class="invite-box">
           <code>{{ inviteCode || '—' }}</code>
           <button class="btn btn-ghost" type="button" :disabled="!inviteCode" @click="copyCode">Copy</button>
-          <button class="btn btn-ghost" type="button" :disabled="!inviteCode" @click="shareInvite">Invite on WhatsApp</button>
+          <ShareButton class="btn btn-ghost" :text="inviteShareText" label="Share invitation" />
         </div>
         <InvitationActions :group-id="groupId" :code="inviteCode" :expires-at="inviteExpiresAt"
           @updated="applyInvitation" />
@@ -271,8 +284,10 @@ import {
 } from '@/services/api';
 import { getPushState, enablePush, disablePush, PUSH_STATE, PUSH_FEATURE } from '@/services/pushNotifications';
 import { getInstallTracker, INSTALL_STATE, PWA_INSTALL_FEATURE } from '@/services/pwaInstall';
-import { buildGroupInviteShareText, buildWhatsAppShareUrl } from '@/services/whatsappShare';
+import { buildGroupInviteShareText } from '@/services/shareMessages';
 import InvitationActions from '@/components/InvitationActions.vue';
+import ShareButton from '@/components/ShareButton.vue';
+import GroupDetailsForm from './GroupDetailsForm.vue';
 
 const PREFERENCE_GROUPS = [
   { label: 'Match', items: [
@@ -303,7 +318,7 @@ function playerIdFromToken() {
 
 export default {
   name: 'ProfileV2',
-  components: { InvitationActions },
+  components: { GroupDetailsForm, InvitationActions, ShareButton },
   inject: {
     v2Context: { default: () => ({}) },
   },
@@ -357,6 +372,14 @@ export default {
     groupId() {
       return this.$route.params.id || '';
     },
+    currentGroup() {
+      return this.groups.find((group) => group.id === this.groupId);
+    },
+    inviteShareText() {
+      if (!this.inviteCode) return '';
+      const inviteUrl = `${window.location.origin}/signup?invite=${this.inviteCode}`;
+      return buildGroupInviteShareText({ inviteUrl, groupInviteCode: this.inviteCode });
+    },
     record() {
       if (this.page === 'group') {
         return this.perGroup.find((row) => row.GroupID === this.groupId) || {};
@@ -375,7 +398,7 @@ export default {
       return `${this.rows.length} groups combined`;
     },
     isAdmin() {
-      return this.roleOf(this.record) === 'admin';
+      return this.currentGroup?.role === 'admin';
     },
     initials() {
       return String(this.record.Name || '')
@@ -643,15 +666,18 @@ export default {
       }
     },
     async loadSettings() {
-      if (this.roleOf({ GroupID: this.groupId }) !== 'admin') {
-        this.$router.replace(`/profile/groups/${this.groupId}`);
+      const groupId = this.groupId;
+      this.applyInvitation(null);
+      if (!this.isAdmin) {
+        this.$router.replace(`/profile/groups/${groupId}`);
         return;
       }
       const [teams, code, members] = await Promise.all([
-        getTeamsByGroup(this.groupId).catch(() => []),
-        getInviteCode(this.groupId).catch(() => ({ invite_code: '' })),
-        getGroupMembers(this.groupId).catch(() => []),
+        getTeamsByGroup(groupId).catch(() => []),
+        getInviteCode(groupId).catch(() => ({ invite_code: '' })),
+        getGroupMembers(groupId).catch(() => []),
       ]);
+      if (this.page !== 'settings' || this.groupId !== groupId) return;
       this.teams = (Array.isArray(teams) ? teams : []).map((team) => ({
         id: team.id || team.ID,
         name: team.name || team.Name,
@@ -666,6 +692,9 @@ export default {
     applyInvitation(invitation) {
       this.inviteCode = invitation?.invite_code || invitation?.InviteCode || '';
       this.inviteExpiresAt = invitation?.expires_at || '';
+    },
+    applyGroupDetails(updated) {
+      this.groups = this.groups.map((group) => group.id === updated.id ? { ...group, ...updated } : group);
     },
     async saveTeam(team) {
       this.teamNote = '';
@@ -683,11 +712,6 @@ export default {
       } catch {
         this.teamNote = this.inviteCode;
       }
-    },
-    shareInvite() {
-      const inviteUrl = `${window.location.origin}/signup?invite=${this.inviteCode}`;
-      const text = buildGroupInviteShareText({ inviteUrl, groupInviteCode: this.inviteCode });
-      window.open(buildWhatsAppShareUrl(text), '_blank', 'noopener');
     },
     askDemote(member) {
       this.removing = '';
@@ -734,3 +758,27 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.group-description {
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.group-website {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  max-width: 100%;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
+.group-website svg {
+  flex: none;
+}
+</style>

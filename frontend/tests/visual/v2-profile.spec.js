@@ -16,6 +16,13 @@ stats.Email = 'thibaut@example.com';
 // players with that feature, as on today's profile.
 const V2 = { features: ['design-v2', 'push-notifications'], playerStats: stats };
 const GROUP = `/profile/groups/${data.GROUP_ID}`;
+const WEBSITE_LABEL = 'Request to join our group chat';
+const groupsWithDetails = data.groups.map((group) => group.id === data.GROUP_ID ? {
+  ...group,
+  description: 'We play on Thursday evenings. Use the group chat to coordinate arrivals.',
+  website_url: 'https://example.test/football-group',
+  website_label: WEBSITE_LABEL,
+} : group);
 
 async function openProfile(page, path, options = {}) {
   return gotoApp(page, path, { ...V2, ...options });
@@ -48,16 +55,18 @@ test.describe('design v2 profile', () => {
   });
 
   test('group', async ({ page }) => {
-    const { unstubbed } = await openProfile(page, GROUP);
+    const { unstubbed } = await openProfile(page, GROUP, { groups: groupsWithDetails });
     await expect(page.getByRole('link', { name: 'Group settings' })).toBeVisible();
+    await expect(page.getByRole('link', { name: WEBSITE_LABEL })).toHaveAttribute('href', 'https://example.test/football-group');
     await expect(page.locator('label.ctx')).toHaveCount(0);
     await expect(page).toHaveScreenshot('v2-profile-group.png', { fullPage: true });
     expectEverythingStubbed(unstubbed);
   });
 
   test('group @mobile', async ({ page }) => {
-    const { unstubbed } = await openProfile(page, GROUP);
+    const { unstubbed } = await openProfile(page, GROUP, { groups: groupsWithDetails });
     await expect(page.getByRole('link', { name: 'Group settings' })).toBeVisible();
+    await expect(page.getByRole('link', { name: WEBSITE_LABEL })).toBeVisible();
     await expect(page).toHaveScreenshot('v2-profile-group-mobile.png', { fullPage: true });
     await expectNoHorizontalOverflow(page);
     expectEverythingStubbed(unstubbed);
@@ -87,16 +96,18 @@ test.describe('design v2 profile', () => {
   });
 
   test('group settings', async ({ page }) => {
-    const { unstubbed } = await openProfile(page, `${GROUP}/settings`);
+    const { unstubbed } = await openProfile(page, `${GROUP}/settings`, { groups: groupsWithDetails });
     await expect(page.getByRole('heading', { name: 'Teams' })).toBeVisible();
+    await expect(page.getByLabel('Link label')).toHaveValue(WEBSITE_LABEL);
     await expect(page.getByText('ABC23XYZ')).toBeVisible();
     await expect(page).toHaveScreenshot('v2-profile-settings.png', { fullPage: true });
     expectEverythingStubbed(unstubbed);
   });
 
   test('group settings @mobile', async ({ page }) => {
-    const { unstubbed } = await openProfile(page, `${GROUP}/settings`);
+    const { unstubbed } = await openProfile(page, `${GROUP}/settings`, { groups: groupsWithDetails });
     await expect(page.getByRole('heading', { name: 'Teams' })).toBeVisible();
+    await expect(page.getByLabel('Link label')).toHaveValue(WEBSITE_LABEL);
     await expect(page).toHaveScreenshot('v2-profile-settings-mobile.png', { fullPage: true });
     await expectNoHorizontalOverflow(page);
     expectEverythingStubbed(unstubbed);

@@ -140,6 +140,12 @@ type AuthSession struct {
 	ExpiresAt    time.Time `gorm:"not null;index" json:"-"`
 }
 
+type GroupDetails struct {
+	Description  string `gorm:"not null;default:''" json:"description"`
+	WebsiteURL   string `gorm:"not null;default:''" json:"website_url"`
+	WebsiteLabel string `gorm:"not null;default:''" json:"website_label"`
+}
+
 // Group représente un groupe de joueurs (ex: un club, une salle). Team et
 // Match sont scopés par groupe ; un Player peut appartenir à plusieurs
 // groupes via GroupMembership.
@@ -147,6 +153,7 @@ type AuthSession struct {
 // The invitation is available only through the admin invitation endpoints.
 type Group struct {
 	BaseModel
+	GroupDetails
 	Name            string    `gorm:"type:string" json:"name"`
 	InviteCode      string    `gorm:"type:string;uniqueIndex" json:"-"`
 	InviteExpiresAt time.Time `gorm:"not null;default:(CURRENT_TIMESTAMP + INTERVAL '7 days')" json:"-"`

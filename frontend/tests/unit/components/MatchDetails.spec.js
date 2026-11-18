@@ -1,5 +1,6 @@
 import { mount, flushPromises } from '@vue/test-utils';
 import MatchDetails from '@/components/MatchDetails.vue';
+import ShareButton from '@/components/ShareButton.vue';
 import {
   getMatchDetailsByID,
   updateMatch,
@@ -37,8 +38,8 @@ vi.mock('@/services/activeGroup', () => ({
 
 const ME = '11111111-1111-1111-1111-111111111111';
 const SOMEONE_ELSE = '22222222-2222-2222-2222-222222222222';
-// A real-looking UUID rather than a placeholder string: whatsappShareUrl
-// (see the "Share on WhatsApp" describe block) base62-encodes match.ID, which
+// A real-looking UUID rather than a placeholder string: matchShareText
+// (see the "Share match" describe block) base62-encodes match.ID, which
 // only works on an actual UUID.
 const MATCH_ID = 'cccccccc-0000-4000-8000-000000000001';
 
@@ -466,7 +467,7 @@ describe('MatchDetails.vue admin editing the number of confirmed places', () => 
   });
 });
 
-describe('MatchDetails.vue "Share on WhatsApp"', () => {
+describe('MatchDetails.vue "Share match"', () => {
   it('offers it to an admin while sign-ups are open', async () => {
     const wrapper = await mountDetails({
       match: scheduledMatch(),
@@ -474,10 +475,8 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
       isAdmin: true
     });
 
-    const link = wrapper.find('.whatsapp-share-btn');
-    expect(link.exists()).toBe(true);
-    expect(link.attributes('href')).toContain('https://wa.me/?text=');
-    expect(link.attributes('target')).toBe('_blank');
+    const button = wrapper.get('button[aria-label="Share match"]');
+    expect(button.attributes('disabled')).toBeUndefined();
   });
 
   it('hides it from a non-admin', async () => {
@@ -487,7 +486,7 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
       isAdmin: false
     });
 
-    expect(wrapper.find('.whatsapp-share-btn').exists()).toBe(false);
+    expect(wrapper.find('.share-btn').exists()).toBe(false);
   });
 
   it('hides it once sign-ups are closed — nothing left to invite people to', async () => {
@@ -497,7 +496,7 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
       isAdmin: true
     });
 
-    expect(wrapper.find('.whatsapp-share-btn').exists()).toBe(false);
+    expect(wrapper.find('.share-btn').exists()).toBe(false);
   });
 
   it('hides it before sign-ups have opened yet', async () => {
@@ -508,7 +507,7 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
       now: BEFORE_SIGNUPS
     });
 
-    expect(wrapper.find('.whatsapp-share-btn').exists()).toBe(false);
+    expect(wrapper.find('.share-btn').exists()).toBe(false);
   });
 
   it('includes the kick-off and a short /m/:code link, not the full /matches/:id/edit URL', async () => {
@@ -518,8 +517,7 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
       isAdmin: true
     });
 
-    const href = wrapper.find('.whatsapp-share-btn').attributes('href');
-    const text = decodeURIComponent(href.replace('https://wa.me/?text=', ''));
+    const text = wrapper.getComponent(ShareButton).props('text');
     expect(text).toContain(wrapper.vm.kickoffLabel);
 
     const lines = text.split('\n');
@@ -538,8 +536,7 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
     expect(getInviteCode).toHaveBeenCalledWith('group-uuid');
     expect(getInviteCode).toHaveBeenCalledTimes(1);
 
-    const href = wrapper.find('.whatsapp-share-btn').attributes('href');
-    const text = decodeURIComponent(href.replace('https://wa.me/?text=', ''));
+    const text = wrapper.getComponent(ShareButton).props('text');
     expect(text.split('\n').pop()).toBe('Group code: ABC23XYZ');
   });
 
@@ -564,9 +561,7 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
       isAdmin: true
     });
 
-    const link = wrapper.find('.whatsapp-share-btn');
-    expect(link.exists()).toBe(true);
-    const text = decodeURIComponent(link.attributes('href').replace('https://wa.me/?text=', ''));
+    const text = wrapper.getComponent(ShareButton).props('text');
     expect(text).not.toContain('Group code');
   });
 });

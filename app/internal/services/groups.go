@@ -3,8 +3,10 @@ package services
 import (
 	"crypto/rand"
 	"errors"
+	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"app/internal/models"
 
@@ -30,10 +32,13 @@ var DefaultTeamSpecs = [2]TeamSpec{
 }
 
 var (
-	ErrInviteCodeNotFound = errors.New("no group matches this invite code")
-	ErrAlreadyMember      = errors.New("player is already a member of this group")
-	ErrTeamNameRequired   = errors.New("team name must not be empty")
-	ErrTeamColourRequired = errors.New("team colour must not be empty")
+	ErrInviteCodeNotFound       = errors.New("no group matches this invite code")
+	ErrAlreadyMember            = errors.New("player is already a member of this group")
+	ErrTeamNameRequired         = errors.New("team name must not be empty")
+	ErrTeamColourRequired       = errors.New("team colour must not be empty")
+	ErrGroupDescriptionTooLong  = errors.New("description must be at most 1000 characters")
+	ErrGroupWebsiteLabelTooLong = errors.New("link label must be at most 100 characters")
+	ErrInvalidGroupWebsite      = errors.New("enter a valid HTTP or HTTPS address up to 2048 characters")
 )
 
 const (
@@ -116,6 +121,43 @@ func (s *GroupService) GetGroupByID(id uuid.UUID) (*models.Group, error) {
 	result := s.DB.First(&group, "id = ?", id)
 	if result.Error != nil {
 		return nil, result.Error
+	}
+	return &group, nil
+}
+
+func (s *GroupService) UpdateGroupDetails(groupID, adminID uuid.UUID, details models.GroupDetails) (*models.Group, error) {
+	details.Description = strings.TrimSpace(details.Description)
+	details.WebsiteURL = strings.TrimSpace(details.WebsiteURL)
+	details.WebsiteLabel = strings.TrimSpace(details.WebsiteLabel)
+	if utf8.RuneCountInString(details.Description) > 1000 {
+		return nil, ErrGroupDescriptionTooLong
+	}
+	if details.WebsiteURL == "" {
+		details.WebsiteLabel = ""
+	} else {
+		website, err := url.Parse(details.WebsiteURL)
+		if err != nil || len(details.WebsiteURL) > 2048 || website.Hostname() == "" ||
+			website.User != nil || (website.Scheme != "http" && website.Scheme != "https") {
+			return nil, ErrInvalidGroupWebsite
+		}
+		if utf8.RuneCountInString(details.WebsiteLabel) > 100 {
+			return nil, ErrGroupWebsiteLabelTooLong
+		}
+	}
+
+	var group models.Group
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&group, "id = ?", groupID).Error; err != nil {
+			return err
+		}
+		if err := verifyGroupAdmin(tx, groupID, adminID); err != nil {
+			return err
+		}
+		group.GroupDetails = details
+		return tx.Model(&group).Select("description", "website_url", "website_label").Updates(&group).Error
+	})
+	if err != nil {
+		return nil, err
 	}
 	return &group, nil
 }

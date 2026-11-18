@@ -56,6 +56,7 @@ func newBootstrapEnv(t *testing.T, tx *gorm.DB) *bootstrapEnv {
 	router.GET("/groups", authRequired, groupHandler.GetGroups)
 	router.GET("/groups/me", authRequired, groupHandler.GetMyGroups)
 	router.GET("/groups/:id", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupByID)
+	router.PUT("/groups/:id/details", authRequired, requireGroupAdminByPathID, groupHandler.UpdateGroupDetails)
 	router.GET("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.GetInviteCode)
 	router.POST("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.ChangeInvitation)
 	router.DELETE("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.ChangeInvitation)
@@ -151,6 +152,66 @@ func decodeInviteCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 		t.Fatalf("failed to decode invite code from response %s: %v", rec.Body.String(), err)
 	}
 	return payload.InviteCode
+}
+
+func TestGroupDetails_Integration_AdminEditsAndMembersRead(t *testing.T) {
+	env := newBootstrapEnv(t, testutil.BeginTx(t, testutil.OpenDB(t)))
+	admin, adminToken := env.newAuthenticatedPlayer(t, "Details admin", "details-admin@example.test")
+	member, memberToken := env.newAuthenticatedPlayer(t, "Details member", "details-member@example.test")
+	otherAdmin, otherToken := env.newAuthenticatedPlayer(t, "Other admin", "details-other@example.test")
+	group := env.createGroupDirect(t, "Details group", admin)
+	env.createGroupDirect(t, "Other group", otherAdmin)
+	if err := env.memberships.AddPlayerToGroup(group.ID, member); err != nil {
+		t.Fatal(err)
+	}
+	path := "/groups/" + group.ID.String()
+	details := models.GroupDetails{
+		Description:  "We play Thursday evenings.",
+		WebsiteURL:   "https://example.test/request-to-join",
+		WebsiteLabel: "Join our group chat",
+	}
+
+	for _, actor := range []struct {
+		token  string
+		status int
+	}{
+		{"", http.StatusUnauthorized},
+		{memberToken, http.StatusForbidden},
+		{otherToken, http.StatusForbidden},
+		{adminToken, http.StatusOK},
+	} {
+		if rec := env.do(http.MethodPut, path+"/details", actor.token, details); rec.Code != actor.status {
+			t.Fatalf("update status = %d, want %d", rec.Code, actor.status)
+		}
+	}
+
+	for _, websiteURL := range []string{"mailto:group@example.test", "//example.test", "https://"} {
+		if rec := env.do(http.MethodPut, path+"/details", adminToken, models.GroupDetails{
+			WebsiteURL: websiteURL,
+		}); rec.Code != http.StatusBadRequest {
+			t.Fatalf("invalid URL update status = %d, want 400", rec.Code)
+		}
+	}
+
+	memberGroups := env.do(http.MethodGet, "/groups/me", memberToken, nil)
+	var groups []models.GroupWithRole
+	if err := json.Unmarshal(memberGroups.Body.Bytes(), &groups); err != nil ||
+		memberGroups.Code != http.StatusOK || len(groups) != 1 ||
+		groups[0].GroupDetails != details || groups[0].Role != models.RoleMember {
+		t.Fatalf("member did not receive group details: %v (status %d)", err, memberGroups.Code)
+	}
+	if rec := env.do(http.MethodGet, path, otherToken, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("external group read status = %d, want 403", rec.Code)
+	}
+
+	cleared := env.do(http.MethodPut, path+"/details", adminToken, models.GroupDetails{
+		Description: details.Description,
+	})
+	var updated models.Group
+	if err := json.Unmarshal(cleared.Body.Bytes(), &updated); err != nil || cleared.Code != http.StatusOK ||
+		updated.Description != details.Description || updated.WebsiteURL != "" || updated.WebsiteLabel != "" {
+		t.Fatalf("clearing website did not preserve the description: %v (status %d)", err, cleared.Code)
+	}
 }
 
 // TestCreateGroup_Integration_RequiresAuth pins the one thing that still runs

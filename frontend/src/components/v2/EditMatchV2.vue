@@ -19,11 +19,8 @@
         <template v-else>Sign-ups <strong>{{ registrationWord }}</strong> · <template v-if="step === 'score' && bothSides">teams made</template><template v-else><strong>{{ confirmed.length }} confirmed / {{ cap }} places</strong> · {{ waitingLabel }}</template></template>
       </p>
 
-      <div class="share-wa">
-        <a class="btn btn-ghost" :href="shareUrl" target="_blank" rel="noopener">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 19l1.2-4A8 8 0 1 1 12 20a8 8 0 0 1-3.5-.8L5 19z"/></svg>
-          Share on WhatsApp
-        </a>
+      <div class="match-sharing">
+        <ShareButton class="btn btn-ghost" :text="shareText" :label="shareLabel" icon />
         <p class="share-sub">{{ shareSub }}</p>
       </div>
 
@@ -233,7 +230,8 @@ import {
 import { formatDateTimeForDisplay, formatCalendarDayLong } from '@/services/datetime';
 import { heroDateLabel, kickoffLabel } from '@/services/v2Home';
 import { encodeMatchId } from '@/services/shortLink';
-import { buildWhatsAppShareText, buildWhatsAppShareUrl, buildTeamsShareText } from '@/services/whatsappShare';
+import { buildMatchShareText, buildTeamsShareText } from '@/services/shareMessages';
+import ShareButton from '@/components/ShareButton.vue';
 import { scoreSides, teamScoreLine, sizeCounter, recapEntries, lineupsReady, shareSubtitle } from '@/services/v2Edit';
 import fitTwoLines from '@/directives/fitTwoLines';
 
@@ -250,7 +248,7 @@ function copyPlayer(player, position) {
 export default {
   name: 'EditMatchV2',
   directives: { fitTwoLines },
-  components: { AppToast },
+  components: { AppToast, ShareButton },
   inject: {
     v2Context: { default: () => ({}) },
   },
@@ -415,8 +413,11 @@ export default {
     shareSub() {
       return shareSubtitle(this.draftTeams);
     },
-    shareUrl() {
-      if (!this.match) return '#';
+    shareLabel() {
+      return lineupsReady(this.draftTeams) ? 'Share teams' : 'Share match';
+    },
+    shareText() {
+      if (!this.match) return '';
       const when = this.isScheduled
         ? formatDateTimeForDisplay(this.match.ScheduledAt)
         : formatCalendarDayLong(this.match.Date);
@@ -425,14 +426,14 @@ export default {
           name: team.Name,
           players: (team.Players || []).map((player) => player.Name),
         }));
-        return buildWhatsAppShareUrl(buildTeamsShareText({ dateTimeLabel: when, teams }));
+        return buildTeamsShareText({ dateTimeLabel: when, teams });
       }
-      const text = buildWhatsAppShareText({
+      return buildMatchShareText({
         kickoffLabel: when,
         matchUrl: `${window.location.origin}/m/${encodeMatchId(this.match.ID)}`,
         groupInviteCode: this.inviteCode,
+        signupsOpen: this.registrationState === REGISTRATION_OPEN,
       });
-      return buildWhatsAppShareUrl(text);
     },
     scoreStatus() {
       return this.hadScore ? 'Score saved · you can still change it.' : 'Score not saved yet.';

@@ -108,7 +108,7 @@ async function stubApi(page, overrides = {}) {
     return json(route, overrides.teams ?? data.teams);
   });
   // Only an admin viewing a scheduled match fetches this (MatchDetails.vue,
-  // for "Share on WhatsApp") — stubbed unconditionally anyway since every
+  // for sharing the match) — stubbed unconditionally anyway since every
   // match-details scenario shares this one route.
   await page.route(`${API}/groups/*/invite-code`, (route) => json(route, {
     invite_code: overrides.inviteCode ?? data.inviteCode,

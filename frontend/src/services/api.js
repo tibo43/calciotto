@@ -754,6 +754,11 @@ export const revokeGroupInvitation = async (groupId) => {
   return response.data;
 };
 
+export const updateGroupDetails = async (groupId, details) => {
+  const response = await api.put(`/groups/${groupId}/details`, details);
+  return response.data;
+};
+
 // Members — fetched on demand per group, same pattern as the invite code and
 // teams above: a group's roster isn't part of the group JSON either. Each
 // entry is a Player (lowercase fields: id, name) plus its role
