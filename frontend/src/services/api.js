@@ -48,6 +48,12 @@ function sessionID(token) {
   }
 }
 
+// The session id stays the same when a short-lived access token is renewed.
+export function getSessionKey() {
+  const token = getToken();
+  return token && (sessionID(token) || token);
+}
+
 function withSessionLock(fn) {
   return navigator.locks ? navigator.locks.request('calciotto-session', fn) : fn();
 }
@@ -629,11 +635,18 @@ export const updateMyName = async (name) => {
   return response.data;
 };
 
-// Hidden features switched on for the caller (backend models.PlayerFeature,
-// enabled by hand in the database). Always an array.
-export const getMyFeatures = async () => {
+export const getMyFeatureStatus = async () => {
   const response = await api.get('/players/me/features');
-  return Array.isArray(response.data?.features) ? response.data.features : [];
+  return {
+    features: Array.isArray(response.data?.features) ? response.data.features : [],
+    v2GuideCompleted: response.data?.v2_guide_completed,
+  };
+};
+
+export const getMyFeatures = async () => (await getMyFeatureStatus()).features;
+
+export const completeV2Guide = async () => {
+  await api.put('/players/me/v2-guide');
 };
 
 // Push notifications (see services/pushNotifications.js). The public key is

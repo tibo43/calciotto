@@ -77,8 +77,7 @@
       <section v-else-if="isAdmin" class="sec">
         <router-link class="btn btn-ghost" :to="`/profile/groups/${groupId}/settings`">Group settings</router-link>
       </section>
-      <!-- Only device features live here; the theme is on the Account page. -->
-      <section v-if="page === 'home' && (hasPush || installOffered)" class="sec">
+      <section v-if="page === 'home'" class="sec">
         <div class="sec-head"><h2>Settings</h2></div>
         <router-link v-if="hasPush" class="pref-row" to="/profile/notifications">
           <div>
@@ -97,6 +96,11 @@
           </div>
           <button v-if="installState === 'prompt'" class="btn btn-ghost" type="button" @click="install">Install</button>
         </div>
+        <button class="pref-row guide-action" type="button" @click="openV2Guide">
+          <span class="who">Replay app guide</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+            stroke-width="1.6" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg>
+        </button>
       </section>
       <div v-if="page === 'home'" class="logout-row">
         <button class="btn btn-ghost btn-block" type="button" @click="logout">Log out</button>
@@ -321,6 +325,7 @@ export default {
   components: { GroupDetailsForm, InvitationActions, ShareButton },
   inject: {
     v2Context: { default: () => ({}) },
+    openV2Guide: { default: () => {} },
   },
   data() {
     return {
@@ -760,6 +765,15 @@ export default {
 </script>
 
 <style scoped>
+.guide-action {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--v2-rule);
+}
+
 .group-description {
   margin-bottom: 8px;
   white-space: pre-wrap;

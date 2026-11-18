@@ -72,7 +72,18 @@ async function stubApi(page, overrides = {}) {
   // Hidden features. Profile.vue reads this for its cards; App.vue reads it
   // once per session for the design-v2 class. None by default, like most
   // players — so the redesign class stays off and today's screenshots hold.
-  await page.route(`${API}/players/me/features`, (route) => json(route, { features: overrides.features ?? data.features }));
+  let v2GuideCompleted = overrides.v2GuideCompleted ?? true;
+  await page.route(`${API}/players/me/features`, (route) => json(route, {
+    features: overrides.features ?? data.features,
+    v2_guide_completed: v2GuideCompleted,
+  }));
+  await page.route(`${API}/players/me/v2-guide`, (route) => {
+    if (route.request().method() === 'PUT') {
+      v2GuideCompleted = true;
+      return route.fulfill({ status: 204 });
+    }
+    return route.fallback();
+  });
   // The Notifications card reads these only once push is on for the device.
   // The off-state screenshot never calls them; stubbing them keeps an on-state
   // page from falling through to the catch-all. A PUT merges into the copy
@@ -228,7 +239,8 @@ async function gotoApp(page, path, options = {}) {
   // viewport (the @mobile project) App.vue hides the whole top bar on an
   // authenticated page, so no locator inside it would ever become visible
   // there. The main content renders on every viewport and route.
-  await expect(page.locator('.main-content')).toBeVisible();
+  const showsGuide = overrides.v2GuideCompleted === false && overrides.features?.includes('design-v2');
+  await expect(page.locator(showsGuide ? '.player-guide' : '.main-content')).toBeVisible();
   await expect(page.locator('.loading-spinner')).toHaveCount(0);
 
   return { unstubbed };

@@ -1,4 +1,4 @@
-import { getMyFeatures, getToken } from './api';
+import { getMyFeatureStatus, getSessionKey } from './api';
 
 // The redesign ships behind the same hidden-feature list as the install card
 // and push notifications (GET /players/me/features). The key matches
@@ -22,51 +22,52 @@ export const DESIGN_V2_FONT_CSS = `
 @font-face{font-family:"Space Mono";font-style:normal;font-weight:700;font-display:swap;src:url("/fonts/v2/SpaceMono-normal-700-latin.woff2") format("woff2");}
 `;
 
-// The answer to GET /players/me/features for the current session, kept in
-// memory only: nothing about the redesign is written to the browser. The
-// entry is keyed by the token it was fetched with, so a different session
-// (logout, then another account; a 401 that ended this one) never reads
-// the previous one's answer, even if nothing cleared it explicitly.
-let session = { token: null, promise: null, enabled: null };
+const V1 = { enabled: false, guideRequired: false };
+let session = null;
 
-// The flag for this session, from the server. Resolves false with no token
-// and on a failed request (today's design, never a hang); a failure also
-// forgets the entry so the next call asks again. Concurrent callers (the
-// router guards and App.vue) share one request.
-export function loadDesignV2() {
-  const token = getToken();
-  if (!token) {
-    return Promise.resolve(false);
+// Router guards and the shell share one features request per session.
+export function loadDesignV2State() {
+  const key = getSessionKey();
+  if (!key) {
+    return Promise.resolve(V1);
   }
-  if (session.token === token && session.promise) {
+  if (session?.key === key) {
     return session.promise;
   }
-  const entry = { token, promise: null, enabled: null };
-  entry.promise = getMyFeatures()
-    .then((features) => {
-      entry.enabled = hasDesignV2(features);
-      return entry.enabled;
+  const entry = { key, promise: null, state: null };
+  entry.promise = getMyFeatureStatus()
+    .then(({ features, v2GuideCompleted }) => {
+      const enabled = hasDesignV2(features);
+      // An explicit false comes from the backend that can save completion.
+      entry.state = { enabled, guideRequired: enabled && v2GuideCompleted === false };
+      return entry.state;
     })
     .catch((error) => {
       console.error('Error fetching features:', error);
       if (session === entry) {
-        session = { token: null, promise: null, enabled: null };
+        session = null;
       }
-      return false;
+      return V1;
     });
   session = entry;
   return entry.promise;
 }
 
-// The answer already known for this session, synchronously: true or false
-// once the response has landed, null while it hasn't (or for another token).
-export function knownDesignV2() {
-  const token = getToken();
-  return token && session.token === token ? session.enabled : null;
+export async function loadDesignV2() {
+  return (await loadDesignV2State()).enabled;
+}
+
+export function knownDesignV2State() {
+  return session && session.key === getSessionKey() ? session.state : null;
+}
+
+export function rememberV2GuideCompletion() {
+  const state = knownDesignV2State();
+  if (state) state.guideRequired = false;
 }
 
 export function resetDesignV2() {
-  session = { token: null, promise: null, enabled: null };
+  session = null;
 }
 
 export function hasDesignV2(features) {

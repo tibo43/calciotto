@@ -2,26 +2,26 @@ import {
   DESIGN_V2_FEATURE,
   DESIGN_V2_FONT_CSS,
   loadDesignV2,
-  knownDesignV2,
+  knownDesignV2State,
   resetDesignV2,
   hasDesignV2,
   ensureDesignV2Fonts,
   removeDesignV2Fonts
 } from '@/services/designV2';
-import { getMyFeatures, getToken } from '@/services/api';
+import { getMyFeatureStatus, getSessionKey } from '@/services/api';
 
 vi.mock('@/services/api', () => ({
-  getMyFeatures: vi.fn(),
-  getToken: vi.fn()
+  getMyFeatureStatus: vi.fn(),
+  getSessionKey: vi.fn()
 }));
 
 describe('designV2 session flag', () => {
   beforeEach(() => {
     resetDesignV2();
     localStorage.clear();
-    getMyFeatures.mockReset();
-    getToken.mockReset();
-    getToken.mockReturnValue('token-a');
+    getMyFeatureStatus.mockReset();
+    getSessionKey.mockReset();
+    getSessionKey.mockReturnValue('token-a');
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -30,56 +30,56 @@ describe('designV2 session flag', () => {
   });
 
   it('resolves false without asking when there is no token', async () => {
-    getToken.mockReturnValue(null);
+    getSessionKey.mockReturnValue(null);
     await expect(loadDesignV2()).resolves.toBe(false);
-    expect(getMyFeatures).not.toHaveBeenCalled();
-    expect(knownDesignV2()).toBeNull();
+    expect(getMyFeatureStatus).not.toHaveBeenCalled();
+    expect(knownDesignV2State()).toBeNull();
   });
 
   it('takes the flag from the features response', async () => {
-    getMyFeatures.mockResolvedValue(['pwa-install', 'design-v2']);
-    expect(knownDesignV2()).toBeNull();
+    getMyFeatureStatus.mockResolvedValue({ features: ['pwa-install', 'design-v2'] });
+    expect(knownDesignV2State()).toBeNull();
     await expect(loadDesignV2()).resolves.toBe(true);
-    expect(knownDesignV2()).toBe(true);
+    expect(knownDesignV2State()).toEqual({ enabled: true, guideRequired: false });
   });
 
   it('shares one request between concurrent callers and reuses it for the session', async () => {
-    getMyFeatures.mockResolvedValue([]);
+    getMyFeatureStatus.mockResolvedValue({ features: [] });
     const [a, b] = await Promise.all([loadDesignV2(), loadDesignV2()]);
     await loadDesignV2();
     expect(a).toBe(false);
     expect(b).toBe(false);
-    expect(getMyFeatures).toHaveBeenCalledTimes(1);
-    expect(knownDesignV2()).toBe(false);
+    expect(getMyFeatureStatus).toHaveBeenCalledTimes(1);
+    expect(knownDesignV2State()).toEqual({ enabled: false, guideRequired: false });
   });
 
   it('asks again for another token', async () => {
-    getMyFeatures.mockResolvedValueOnce(['design-v2']).mockResolvedValueOnce([]);
+    getMyFeatureStatus.mockResolvedValueOnce({ features: ['design-v2'] }).mockResolvedValueOnce({ features: [] });
     await expect(loadDesignV2()).resolves.toBe(true);
-    getToken.mockReturnValue('token-b');
-    expect(knownDesignV2()).toBeNull();
+    getSessionKey.mockReturnValue('token-b');
+    expect(knownDesignV2State()).toBeNull();
     await expect(loadDesignV2()).resolves.toBe(false);
-    expect(getMyFeatures).toHaveBeenCalledTimes(2);
+    expect(getMyFeatureStatus).toHaveBeenCalledTimes(2);
   });
 
   it('falls back to false on a failed request and asks again next time', async () => {
-    getMyFeatures.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(['design-v2']);
+    getMyFeatureStatus.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ features: ['design-v2'] });
     await expect(loadDesignV2()).resolves.toBe(false);
-    expect(knownDesignV2()).toBeNull();
+    expect(knownDesignV2State()).toBeNull();
     expect(console.error).toHaveBeenCalled();
     await expect(loadDesignV2()).resolves.toBe(true);
-    expect(getMyFeatures).toHaveBeenCalledTimes(2);
+    expect(getMyFeatureStatus).toHaveBeenCalledTimes(2);
   });
 
   it('forgets the answer on reset', async () => {
-    getMyFeatures.mockResolvedValue(['design-v2']);
+    getMyFeatureStatus.mockResolvedValue({ features: ['design-v2'] });
     await loadDesignV2();
     resetDesignV2();
-    expect(knownDesignV2()).toBeNull();
+    expect(knownDesignV2State()).toBeNull();
   });
 
   it('never writes anything to localStorage', async () => {
-    getMyFeatures.mockResolvedValue(['design-v2']);
+    getMyFeatureStatus.mockResolvedValue({ features: ['design-v2'] });
     await loadDesignV2();
     expect(localStorage.length).toBe(0);
   });

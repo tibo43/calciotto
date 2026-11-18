@@ -3,8 +3,10 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 
+	"app/internal/models"
 	"app/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -50,9 +52,7 @@ func (h *PlayerHandler) UpdateMyName(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"name": name})
 }
 
-// GetMyFeatures returns the hidden features enabled for the authenticated
-// player, as {"features": [...]}. Only ever the caller's own: which features
-// someone else has is nobody's business, so there is no /players/:id form.
+// GetMyFeatures returns the caller's feature list and their Design V2 guide status.
 func (h *PlayerHandler) GetMyFeatures(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
@@ -64,5 +64,32 @@ func (h *PlayerHandler) GetMyFeatures(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"features": features})
+	response := gin.H{"features": features}
+	if slices.Contains(features, models.FeatureDesignV2) {
+		completed, err := h.Service.V2GuideCompleted(playerID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not load guide status"})
+			return
+		}
+		response["v2_guide_completed"] = completed
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, response)
+}
+
+func (h *PlayerHandler) CompleteV2Guide(c *gin.Context) {
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+	err := h.Service.CompleteV2Guide(playerID)
+	switch {
+	case errors.Is(err, services.ErrV2GuideUnavailable):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save guide completion"})
+	default:
+		c.Status(http.StatusNoContent)
+	}
 }

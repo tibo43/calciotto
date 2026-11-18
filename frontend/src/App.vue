@@ -1,7 +1,9 @@
 <template>
   <div id="app" :class="{ 'dark-mode': isDarkMode, 'design-v2': designV2 }">
-    <!-- Main App Container -->
-    <div class="app-container" :class="{ wrap: designV2, 'is-confirming': designV2 && v2Context.confirming, 'is-picking-csc': designV2 && v2Context.pickingCsc }">
+    <div v-if="checkingDesignV2" class="app-starting" role="status">Loading Calciotto…</div>
+    <PlayerGuide v-else-if="guideMode" :required="guideMode === 'required'" :saving="savingGuide"
+      :error="guideError" @finish="finishGuide" @dismiss="closeGuide" />
+    <div v-else class="app-container" :class="{ wrap: designV2, 'is-confirming': designV2 && v2Context.confirming, 'is-picking-csc': designV2 && v2Context.pickingCsc }">
         <header v-if="designV2" class="topbar">
           <div class="topbar-left">
             <template v-if="v2Context.pageTitle">
@@ -226,13 +228,15 @@
 
 <script>
 import { computed } from 'vue';
-import { clearToken, logoutSession } from '@/services/api';
+import PlayerGuide from '@/components/v2/PlayerGuide.vue';
+import { clearToken, completeV2Guide, getSessionKey, logoutSession } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta, prefersDarkTheme } from '@/services/theme';
 import { disablePushOnLogout, stopPushIfAppUninstalled } from '@/services/pushNotifications';
 import {
-  loadDesignV2,
-  knownDesignV2,
+  loadDesignV2State,
+  knownDesignV2State,
+  rememberV2GuideCompletion,
   resetDesignV2,
   ensureDesignV2Fonts,
   removeDesignV2Fonts
@@ -243,19 +247,23 @@ const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'
 
 export default {
   name: 'App',
+  components: { PlayerGuide },
   provide() {
     return {
       designV2On: computed(() => this.designV2),
       v2Context: this.v2Context,
+      openV2Guide: this.openGuide,
     };
   },
   data() {
     return {
       isScrolled: false,
       isDarkMode: false,
-      // Only ever from the server's features response for this session;
-      // never true on a public page. Today's design renders until then.
       designV2: false,
+      checkingDesignV2: false,
+      guideMode: null,
+      savingGuide: false,
+      guideError: '',
       v2Context: { label: '', confirming: false, pickingCsc: false, hide: false, pageTitle: '', backTo: '', groups: [], seasons: [], groupId: '', season: '', onGroup: null, onSeason: null },
       designV2Request: 0
     };
@@ -310,9 +318,6 @@ export default {
     }
   },
   created() {
-    // Before the first render: a signed-in page whose answer is already
-    // known (a router guard may have fetched it) paints in the right design
-    // straight away; otherwise today's design paints until the answer lands.
     this.syncDesignV2();
   },
   mounted() {
@@ -359,38 +364,74 @@ export default {
         ensureDesignV2Fonts();
       } else {
         removeDesignV2Fonts();
+        this.guideMode = null;
+        this.guideError = '';
+        this.savingGuide = false;
       }
     },
-    // Public pages never take the class and never ask. A signed-in page
-    // uses the session's known answer if there is one, and otherwise asks
-    // the server once (shared with the router guards), staying on today's
-    // design until it answers. A failure stays on today's design and a
-    // later navigation asks again.
-    syncDesignV2() {
+    async syncDesignV2() {
+      const requestId = ++this.designV2Request;
       if (!this.isAuthenticatedRoute) {
+        this.checkingDesignV2 = false;
         this.applyDesignV2(false);
         return;
       }
-      const known = knownDesignV2();
-      if (known !== null) {
-        this.applyDesignV2(known);
+      const sessionKey = getSessionKey();
+      const known = knownDesignV2State();
+      if (!known) {
+        this.checkingDesignV2 = true;
+        this.guideMode = null;
+        this.guideError = '';
+        this.savingGuide = false;
+      }
+      const state = known ?? await loadDesignV2State();
+      if (requestId !== this.designV2Request) return;
+      if (sessionKey !== getSessionKey()) {
+        this.syncDesignV2();
         return;
       }
-      this.fetchDesignV2();
+      this.checkingDesignV2 = false;
+      this.applyDesignV2(state.enabled);
+      if (state.guideRequired) {
+        this.guideMode = 'required';
+      } else if (this.guideMode === 'required') {
+        this.guideMode = null;
+      }
     },
-    async fetchDesignV2() {
-      const requestId = ++this.designV2Request;
-      const enabled = await loadDesignV2();
-      // Logout (or a newer request) happened while this was in flight.
-      if (requestId !== this.designV2Request) {
+    openGuide() {
+      if (this.designV2 && !this.guideMode) this.guideMode = 'replay';
+    },
+    closeGuide() {
+      if (this.guideMode === 'replay') this.guideMode = null;
+    },
+    async finishGuide() {
+      if (this.guideMode === 'replay') {
+        this.closeGuide();
         return;
       }
-      this.applyDesignV2(this.isAuthenticatedRoute && enabled);
+      if (this.guideMode !== 'required' || this.savingGuide) return;
+      const sessionKey = getSessionKey();
+      this.savingGuide = true;
+      this.guideError = '';
+      try {
+        await completeV2Guide();
+        if (sessionKey === getSessionKey()) {
+          rememberV2GuideCompletion();
+          this.guideMode = null;
+        }
+      } catch {
+        if (sessionKey === getSessionKey() && this.guideMode === 'required') {
+          this.guideError = 'Could not save your progress. Try again.';
+        }
+      } finally {
+        if (sessionKey === getSessionKey()) this.savingGuide = false;
+      }
     },
     async logout() {
       // Invalidate an in-flight features response before anything awaits, so
       // it can't repaint this session's answer after logout.
       this.designV2Request += 1;
+      this.checkingDesignV2 = false;
       resetDesignV2();
       this.applyDesignV2(false);
       // Before the token goes: the next account on this device must not get
@@ -418,6 +459,12 @@ export default {
 </script>
 
 <style>
+.app-starting {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+}
+
 /* Import global styles - Add this import in your main.js or main.ts instead */
 /* @import './assets/global-styles.css'; */
 
