@@ -47,7 +47,7 @@ const steps = [
   },
   {
     title: 'Profile',
-    description: 'See your record and groups, manage your settings, and replay this guide whenever you need it.',
+    description: 'View your record and groups, learn how to install the app, and manage your settings and notifications. Replay this guide anytime.',
     image: 'profile.jpg',
   },
 ];
