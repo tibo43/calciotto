@@ -475,3 +475,49 @@ func TestAuthHandler_Integration_DeleteAccount(t *testing.T) {
 		t.Errorf("login with the deleted account's old email/password returned status %d, want 401", postDeleteLoginRec.Code)
 	}
 }
+
+// Someone guessing at a player's password must only lock themselves out: the
+// player, from their own address and with the right password, still gets in.
+func TestAuthHandler_Integration_LoginGuessesDoNotLockOutThePlayer(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+
+	authService := services.NewAuthService(tx, testAuthJWTSecret)
+	router := newAuthTestRouter(authService)
+	inviteCode := newSignupInviteCode(t, tx)
+
+	signupBody, _ := json.Marshal(map[string]string{
+		"name":        "Zzz Integration Handler Lockout",
+		"email":       "lockout@example.com",
+		"password":    "correct-pass",
+		"invite_code": inviteCode,
+	})
+	signupReq := httptest.NewRequest(http.MethodPost, "/auth/signup", bytes.NewReader(signupBody))
+	signupReq.Header.Set("Content-Type", "application/json")
+	signupRec := httptest.NewRecorder()
+	router.ServeHTTP(signupRec, signupReq)
+	if signupRec.Code != http.StatusOK {
+		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())
+	}
+
+	login := func(remoteAddr, password string) int {
+		body, _ := json.Marshal(map[string]string{"email": "lockout@example.com", "password": password})
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = remoteAddr
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	lastCode := 0
+	for i := 0; i < 20; i++ {
+		lastCode = login("203.0.113.66:5555", "wrong-pass")
+	}
+	if lastCode != http.StatusTooManyRequests {
+		t.Fatalf("the guesser's 20th attempt returned %d, want 429", lastCode)
+	}
+	if code := login("198.51.100.4:5555", "correct-pass"); code != http.StatusOK {
+		t.Fatalf("the player's own login returned %d, want 200", code)
+	}
+}

@@ -81,6 +81,7 @@ func TestAllowedPushEndpoints(t *testing.T) {
 		"https://updates.push.services.mozilla.com/push/test",
 		"https://web.push.apple.com/test",
 		"https://web.push.windows.com/test",
+		"https://wns2-par02p.notify.windows.com/w/?token=test",
 	} {
 		if !isAllowedPushEndpoint(endpoint) {
 			t.Errorf("supported push endpoint %q was rejected", endpoint)
@@ -91,6 +92,8 @@ func TestAllowedPushEndpoints(t *testing.T) {
 		"http://fcm.googleapis.com/push/test",
 		"https://fcm.googleapis.com:444/push/test",
 		"https://fcm.googleapis.com.example.invalid/test",
+		"https://notify.windows.com.example.invalid/test",
+		"https://evilnotify.windows.com/test",
 	} {
 		if isAllowedPushEndpoint(endpoint) {
 			t.Errorf("unsupported push endpoint %q was accepted", endpoint)

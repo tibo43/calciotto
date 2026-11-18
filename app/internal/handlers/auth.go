@@ -18,6 +18,7 @@ type AuthHandler struct {
 	SessionOrigins []string
 	SecureCookies  bool
 	loginByAccount *ipRateLimiter
+	loginFailures  *ipRateLimiter
 	resetByAccount *ipRateLimiter
 }
 
@@ -25,6 +26,7 @@ func NewAuthHandler(service *services.AuthService) *AuthHandler {
 	return &AuthHandler{
 		Service:        service,
 		loginByAccount: newIPRateLimiter(rate.Every(time.Minute), 12),
+		loginFailures:  newIPRateLimiter(rate.Every(30*time.Second), 100),
 		resetByAccount: newIPRateLimiter(rate.Every(30*time.Minute), 3),
 	}
 }
@@ -99,12 +101,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	if !h.loginByAccount.allow(accountRateKey(req.Email)) {
+	// Two limits per account. The tight one is per account *and* client, so
+	// someone guessing at a player's password only ever locks themselves out,
+	// not the player. The wide one is per account alone and only counts
+	// failures, so guesses spread over many addresses still run out, while a
+	// player who knows their password is never charged for logging in.
+	account := accountRateKey(req.Email)
+	if !h.loginFailures.hasTokens(account) || !h.loginByAccount.allow(account+ProxiedClientKey(c)) {
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
 		return
 	}
 	credentials, err := h.Service.LoginSession(req.Email, req.Password)
 	if errors.Is(err, services.ErrInvalidCredentials) {
+		h.loginFailures.allow(account)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": services.ErrInvalidCredentials.Error()})
 		return
 	}
