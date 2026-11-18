@@ -270,25 +270,27 @@ func main() {
 	// Auth — all four are unauthenticated by necessity (a caller signing up or
 	// resetting a lost password has no token yet), which also makes them the
 	// only routes in this app an anonymous script can hit repeatedly for free.
-	// Each gets its own per-IP rate limiter (see ratelimit.go): bcrypt already
+	// Each gets its own per-IP rate limiter (see ratelimit.go), keyed on the
+	// player rather than on Vercel since the frontend reaches them through its
+	// /api/auth rewrite (ProxiedRateLimit): bcrypt already
 	// slows down one guess against Login, but not a script making thousands: a
 	// generous burst absorbs a legitimate user mistyping their password a few
 	// times in a row, then throttles hard.
-	loginRateLimit := handlers.RateLimit(rate.Every(6*time.Second), 10) // ~10/min, burst 10
+	loginRateLimit := handlers.ProxiedRateLimit(rate.Every(6*time.Second), 10) // ~10/min, burst 10
 	// Signup's rate/burst are the one pair overridable via env
 	// (SIGNUP_RATE_LIMIT_PER_HOUR/SIGNUP_RATE_LIMIT_BURST), both defaulting to
 	// 5/hour, burst 5 when unset. The local performance fixtures can raise
 	// these temporarily to create multiple synthetic accounts from one IP.
 	signupPerHour := envIntOrDefault("SIGNUP_RATE_LIMIT_PER_HOUR", 5)
 	signupBurst := envIntOrDefault("SIGNUP_RATE_LIMIT_BURST", 5)
-	signupRateLimit := handlers.RateLimit(rate.Every(time.Hour/time.Duration(signupPerHour)), signupBurst)
-	forgotPasswordRateLimit := handlers.RateLimit(rate.Every(12*time.Minute), 5) // ~5/hour, burst 5 — also caps Brevo email spend, see CLAUDE.md
-	resetPasswordRateLimit := handlers.RateLimit(rate.Every(3*time.Minute), 20)  // ~20/hour, burst 20 — tokens are unguessable 32-byte values, this is a courtesy cap, not the real defense
+	signupRateLimit := handlers.ProxiedRateLimit(rate.Every(time.Hour/time.Duration(signupPerHour)), signupBurst)
+	forgotPasswordRateLimit := handlers.ProxiedRateLimit(rate.Every(12*time.Minute), 5) // ~5/hour, burst 5 — also caps Brevo email spend, see CLAUDE.md
+	resetPasswordRateLimit := handlers.ProxiedRateLimit(rate.Every(3*time.Minute), 20)  // ~20/hour, burst 20 — tokens are unguessable 32-byte values, this is a courtesy cap, not the real defense
 
 	r.POST("/auth/signup", signupRateLimit, authHandler.Signup)
 	r.POST("/auth/login", loginRateLimit, authHandler.Login)
-	r.POST("/auth/refresh", handlers.RateLimit(rate.Every(time.Second), 60), authHandler.RefreshSession)
-	r.POST("/auth/logout", handlers.RateLimit(rate.Every(time.Second), 60), authHandler.Logout)
+	r.POST("/auth/refresh", handlers.ProxiedRateLimit(rate.Every(time.Second), 60), authHandler.RefreshSession)
+	r.POST("/auth/logout", handlers.ProxiedRateLimit(rate.Every(time.Second), 60), authHandler.Logout)
 	// Public like signup/login above: someone who forgot their password has by
 	// definition no token to authenticate the request with.
 	r.POST("/auth/forgot-password", forgotPasswordRateLimit, authHandler.ForgotPassword)
