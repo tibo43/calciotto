@@ -94,6 +94,11 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authService)
 	authHandler.SessionOrigins = origins
 	authHandler.SecureCookies = gin.Mode() == gin.ReleaseMode
+	passkeyService, err := services.NewPasskeyService(authService, origins)
+	if err != nil {
+		log.Fatal(err)
+	}
+	passkeyHandler := handlers.NewPasskeyHandler(passkeyService, authHandler)
 
 	// Auth middleware chains, reused across the group-scoped routes below.
 	authRequired := handlers.AuthMiddleware(authService)
@@ -148,6 +153,10 @@ func main() {
 	// AuthService.DeleteAccount for what actually happens (anonymize, not
 	// erase) and why.
 	r.DELETE("/players/me", authRequired, authHandler.DeleteAccount)
+	r.GET("/players/me/passkeys", authRequired, passkeyHandler.List)
+	r.POST("/players/me/passkeys/options", authRequired, handlers.RateLimit(rate.Every(6*time.Second), 10), passkeyHandler.RegistrationOptions)
+	r.POST("/players/me/passkeys", authRequired, handlers.RateLimit(rate.Every(6*time.Second), 10), passkeyHandler.Register)
+	r.DELETE("/players/me/passkeys/:id", authRequired, passkeyHandler.Remove)
 
 	// Groups
 	// POST /groups and POST /groups/join are temporarily disabled (both
@@ -268,12 +277,12 @@ func main() {
 	r.GET("/standings/predictions", authRequired, requireGroupMember, standingsHandler.GetPredictionStandings)
 	r.GET("/standings/seasons", authRequired, requireGroupMember, standingsHandler.GetSeasons)
 
-	// Auth — all four are unauthenticated by necessity (a caller signing up or
-	// resetting a lost password has no token yet), which also makes them the
-	// only routes in this app an anonymous script can hit repeatedly for free.
-	// Each gets its own per-IP rate limiter (see ratelimit.go), keyed on the
-	// player rather than on Vercel since the frontend reaches them through its
-	// /api/auth rewrite (ProxiedRateLimit): bcrypt already
+	// Auth entry points are unauthenticated by necessity (a caller signing up,
+	// logging in or resetting a lost password has no token yet), which also
+	// makes them the only routes in this app an anonymous script can hit
+	// repeatedly for free. Each gets its own rate limiter (see ratelimit.go),
+	// keyed on the player rather than on Vercel since the frontend reaches them
+	// through its /api/auth rewrite (ProxiedRateLimit): bcrypt already
 	// slows down one guess against Login, but not a script making thousands: a
 	// generous burst absorbs a legitimate user mistyping their password a few
 	// times in a row, then throttles hard.
@@ -290,6 +299,8 @@ func main() {
 
 	r.POST("/auth/signup", signupRateLimit, authHandler.Signup)
 	r.POST("/auth/login", loginRateLimit, authHandler.Login)
+	r.POST("/auth/passkeys/options", handlers.ProxiedRateLimit(rate.Every(6*time.Second), 10), passkeyHandler.LoginOptions)
+	r.POST("/auth/passkeys/login", handlers.ProxiedRateLimit(rate.Every(6*time.Second), 10), passkeyHandler.Login)
 	r.POST("/auth/refresh", handlers.ProxiedRateLimit(rate.Every(time.Second), 60), authHandler.RefreshSession)
 	r.POST("/auth/logout", handlers.ProxiedRateLimit(rate.Every(time.Second), 60), authHandler.Logout)
 	// Public like signup/login above: someone who forgot their password has by

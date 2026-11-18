@@ -1,4 +1,5 @@
 import * as api from '@/services/api';
+import { shouldOfferPasskeyLogin } from '@/services/passkeyAccess';
 
 // api.js installs the interceptors at import time, so keep one shared mock for
 // each Axios instance and inspect the registered callbacks below.
@@ -25,7 +26,7 @@ vi.mock('axios', () => ({
 vi.mock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forgetPush }));
 
 const [prepareRequest] = mockInstance.interceptors.request.use.mock.calls[0];
-const [, handleResponseError] = mockInstance.interceptors.response.use.mock.calls[0];
+const [handleResponse, handleResponseError] = mockInstance.interceptors.response.use.mock.calls[0];
 
 describe('createMatch', () => {
   beforeEach(() => {
@@ -312,6 +313,36 @@ describe('getMyFeatures', () => {
   it('falls back to an empty list on an unexpected body', async () => {
     mockInstance.get.mockResolvedValue({ data: {} });
     await expect(api.getMyFeatures()).resolves.toEqual([]);
+  });
+});
+
+describe('the passkey login hint', () => {
+  const bothFlags = ['design-v2', 'passkeys'];
+  const featureRequest = () => prepareRequest({ headers: {}, url: '/players/me/features' });
+
+  afterEach(() => localStorage.clear());
+
+  it('remembers both flags on logout and starts over for the next sign-in', () => {
+    api.setToken('first-player');
+    const config = featureRequest();
+    handleResponse({ config, data: { features: ['design-v2'] } });
+    expect(shouldOfferPasskeyLogin()).toBe(false);
+    handleResponse({ config, data: { features: ['passkeys'] } });
+    expect(shouldOfferPasskeyLogin()).toBe(false);
+    handleResponse({ config, data: { features: bothFlags } });
+    expect(shouldOfferPasskeyLogin()).toBe(true);
+    api.clearToken();
+    expect(shouldOfferPasskeyLogin()).toBe(true);
+    api.setToken('next-player');
+    expect(shouldOfferPasskeyLogin()).toBe(false);
+  });
+
+  it('ignores a feature response from a previous account', () => {
+    api.setToken('first-player');
+    const config = featureRequest();
+    api.setToken('next-player');
+    handleResponse({ config, data: { features: bothFlags } });
+    expect(shouldOfferPasskeyLogin()).toBe(false);
   });
 });
 

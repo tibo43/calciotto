@@ -136,7 +136,7 @@ func applySchema(db *gorm.DB) error {
 	// NotificationPreference needs no backfill: no row for a (player, type)
 	// means that notification is on, which is what every existing player
 	// should get. See models.NotificationPreference.
-	if err := db.AutoMigrate(&models.Group{}, &models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{}, &models.MatchRegistration{}, &models.MatchVote{}, &models.MatchPrediction{}, &models.GroupMembership{}, &models.PasswordResetToken{}, &models.AuthSession{}, &models.PlayerFeature{}, &models.PushSubscription{}, &models.NotificationPreference{}); err != nil {
+	if err := db.AutoMigrate(&models.Group{}, &models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{}, &models.MatchRegistration{}, &models.MatchVote{}, &models.MatchPrediction{}, &models.GroupMembership{}, &models.PasswordResetToken{}, &models.AuthSession{}, &models.Passkey{}, &models.PasskeyChallenge{}, &models.PlayerFeature{}, &models.PushSubscription{}, &models.NotificationPreference{}); err != nil {
 		return err
 	}
 	if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_matches_group_date_id ON matches (group_id, date DESC, id DESC)").Error; err != nil {

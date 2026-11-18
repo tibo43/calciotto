@@ -118,6 +118,7 @@ test.describe('design v2 profile', () => {
     await expect(page.getByRole('heading', { name: 'Identity' })).toBeVisible();
     await expect(page.locator('.account-email-value')).toHaveText('thibaut@example.com');
     await expect(page.locator('#account-email')).toHaveCount(0);
+    await expect(page.getByText('Passkeys', { exact: true })).toHaveCount(0);
     await expect(page).toHaveScreenshot('v2-profile-account.png', { fullPage: true });
     expectEverythingStubbed(unstubbed);
   });
@@ -127,6 +128,19 @@ test.describe('design v2 profile', () => {
     await expect(page.getByRole('heading', { name: 'Identity' })).toBeVisible();
     await expect(page).toHaveScreenshot('v2-profile-account-mobile.png', { fullPage: true });
     await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('passkeys appear after sign-in with both flags', async ({ page }) => {
+    const passkeyLogin = page.getByRole('button', { name: 'Log in with a passkey', exact: true });
+    await page.goto('/login');
+    await expect(page.getByRole('button', { name: 'Log in', exact: true })).toBeVisible();
+    await expect(passkeyLogin).toHaveCount(0);
+
+    const { unstubbed } = await openProfile(page, '/profile/account', { features: [...V2.features, 'passkeys'] });
+    await expect(page.getByText('Passkeys', { exact: true })).toBeVisible();
+    await page.goto('/login');
+    await expect(passkeyLogin).toBeVisible();
     expectEverythingStubbed(unstubbed);
   });
 });
