@@ -226,7 +226,7 @@
 
 <script>
 import { computed } from 'vue';
-import { clearToken } from '@/services/api';
+import { clearToken, logoutSession } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta, prefersDarkTheme } from '@/services/theme';
 import { disablePushOnLogout, stopPushIfAppUninstalled } from '@/services/pushNotifications';
@@ -397,6 +397,11 @@ export default {
       // this one's notifications, and the backend needs the token to forget
       // the device.
       await disablePushOnLogout();
+      try {
+        await logoutSession();
+      } catch {
+        console.warn('Could not revoke the server session.');
+      }
       clearToken();
       // The next account to log in on this browser must not inherit this
       // one's group — the stale-id fallback would catch it, but only after a

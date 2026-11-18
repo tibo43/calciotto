@@ -40,6 +40,7 @@ func RateLimit(r rate.Limit, burst int) gin.HandlerFunc {
 // this file configures (the widest is one hour) so a legitimate caller never
 // gets a fresh, unpenalized bucket mid-window just because they paused.
 const ipRateLimiterIdleTTL = 2 * time.Hour
+const maxRateLimitBuckets = 10_000
 
 // ipRateLimiter hands out one token-bucket limiter per client IP. A plain
 // map[string]*rate.Limiter would grow forever on a public endpoint, so each
@@ -73,11 +74,25 @@ func (rl *ipRateLimiter) allow(ip string) bool {
 
 	bucket, ok := rl.limiters[ip]
 	if !ok {
+		if len(rl.limiters) >= maxRateLimitBuckets {
+			return false
+		}
 		bucket = &ipBucket{limiter: rate.NewLimiter(rl.r, rl.burst)}
 		rl.limiters[ip] = bucket
 	}
 	bucket.lastSeen = time.Now()
 	return bucket.limiter.Allow()
+}
+
+func LimitRequestBody(maxBytes int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.ContentLength > maxBytes {
+			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body is too large"})
+			return
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
+		c.Next()
+	}
 }
 
 // evictStaleLoop runs for the lifetime of the process — there is exactly one

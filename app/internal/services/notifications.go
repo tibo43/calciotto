@@ -275,7 +275,7 @@ func (s *NotificationService) UpdatePreferences(playerID uuid.UUID, updates map[
 // others, nor fail the admin action that triggered it. A failure to read
 // preferences sends nothing — the same as a failure to read subscriptions —
 // so a player who turned a type off is never told because the lookup failed.
-func (s *NotificationService) send(messages map[uuid.UUID]PushMessage) {
+func (s *NotificationService) send(groupID uuid.UUID, messages map[uuid.UUID]PushMessage) {
 	if s.Sender == nil || len(messages) == 0 {
 		return
 	}
@@ -291,6 +291,7 @@ func (s *NotificationService) send(messages map[uuid.UUID]PushMessage) {
 	var subs []models.PushSubscription
 	if err := s.DB.
 		Joins("JOIN player_features ON player_features.player_id = push_subscriptions.player_id AND player_features.feature = ?", models.FeaturePushNotifications).
+		Joins("JOIN group_memberships ON group_memberships.player_id = push_subscriptions.player_id AND group_memberships.group_id = ?", groupID).
 		Where("push_subscriptions.player_id IN ?", playerIDs).
 		Find(&subs).Error; err != nil {
 		log.Printf("[push] could not load subscriptions: %v", err)
@@ -425,7 +426,7 @@ func (s *NotificationService) rosterSaved(event RosterSavedEvent, now time.Time)
 			TeamName:  names[teamID],
 		}
 	}
-	s.send(messages)
+	s.send(match.GroupID, messages)
 	return s.notifyPredictionsOpen(match, now)
 }
 
@@ -453,7 +454,7 @@ func (s *NotificationService) notifyPredictionsOpen(match models.Match, now time
 	if err != nil || !claimed {
 		return err
 	}
-	s.send(sameMessageFor(memberIDs, PushMessage{
+	s.send(match.GroupID, sameMessageFor(memberIDs, PushMessage{
 		Type:      PushTypePredictionsOpen,
 		URL:       MatchDeepLink(match.ID),
 		Tag:       pushTag(match.ID, "predictions"),
@@ -483,7 +484,7 @@ func (s *NotificationService) notifyResult(match models.Match) error {
 			}
 		}
 	}
-	s.send(messages)
+	s.send(match.GroupID, messages)
 	return nil
 }
 
@@ -533,7 +534,7 @@ func (s *NotificationService) notifyPredictionsSettled(match models.Match) error
 			}
 		}
 	}
-	s.send(messages)
+	s.send(match.GroupID, messages)
 	return nil
 }
 
@@ -623,7 +624,7 @@ func (s *NotificationService) notifyRegistrationOpen(match models.Match) error {
 			recipients = append(recipients, id)
 		}
 	}
-	s.send(sameMessageFor(recipients, PushMessage{
+	s.send(match.GroupID, sameMessageFor(recipients, PushMessage{
 		Type:      PushTypeRegistrationOpen,
 		URL:       MatchDeepLink(match.ID),
 		Tag:       pushTag(match.ID, "registration"),
@@ -657,7 +658,7 @@ func (s *NotificationService) notifyKickoffSoon(match models.Match) error {
 			personal.TeamName = names[row.TeamID]
 			messages[row.PlayerID] = personal
 		}
-		s.send(messages)
+		s.send(match.GroupID, messages)
 		return nil
 	}
 
@@ -672,6 +673,6 @@ func (s *NotificationService) notifyKickoffSoon(match models.Match) error {
 			confirmed = append(confirmed, entry.PlayerID)
 		}
 	}
-	s.send(sameMessageFor(confirmed, message))
+	s.send(match.GroupID, sameMessageFor(confirmed, message))
 	return nil
 }

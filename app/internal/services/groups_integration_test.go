@@ -234,6 +234,7 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create match in group A: %v", err)
 	}
+	addRosterMembers(t, tx, groupA.ID, aliceID, bobID)
 	if err := matchService.UpdateMatch(matchAID, groupA.ID, []models.TeamWithPlayers{
 		{ID: teamsA[0].ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2}}},
 		{ID: teamsA[1].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 0}}},
@@ -249,6 +250,7 @@ func TestMatchesAndStandings_Integration_ScopedPerGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create player carol: %v", err)
 	}
+	addRosterMembers(t, tx, groupB.ID, bobID, carolID)
 	if err := matchService.UpdateMatch(matchBID, groupB.ID, []models.TeamWithPlayers{
 		{ID: teamsB[0].ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 5}}},
 		{ID: teamsB[1].ID, Players: []models.PlayerCustom{{ID: carolID, GoalsScored: 0}}},

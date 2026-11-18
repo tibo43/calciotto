@@ -1,13 +1,18 @@
 package services
 
 import (
-	"app/internal/models"
 	"errors"
+	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
+
+	"app/internal/models"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ErrMatchNotFound is returned when the requested match either does not
@@ -220,14 +225,66 @@ func (s *MatchService) GetGroupIDByMatchID(matchID uuid.UUID) (uuid.UUID, error)
 	return match.GroupID, nil
 }
 
-// GetMatchesDetails returns every match of a group, optionally narrowed to a
-// single season. The season is applied in Go, via the same
-// FilterMatchesBySeason the standings already use, rather than as a SQL
-// predicate: a season is a derived label (models.SeasonOf), not a stored
-// column, so there is nothing to filter on in the query. An empty season means
-// "no filtering" — which is what every standings caller passes, since they run
-// their own FilterMatchesBySeason pass on the result.
+// GetMatchesDetails is the unpaginated service read used by aggregators.
 func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]models.MatchWithDetails, error) {
+	query, ok := s.matchSelection(groupID, season)
+	if !ok {
+		return []models.MatchWithDetails{}, nil
+	}
+	return s.readMatchesDetails(groupID, query)
+}
+
+const MaxMatchPageSize = 100
+
+var (
+	ErrInvalidMatchCursor = errors.New("invalid match cursor")
+	ErrInvalidMatchLimit  = fmt.Errorf("limit must be between 1 and %d", MaxMatchPageSize)
+)
+
+func (s *MatchService) GetMatchesDetailsPage(groupID uuid.UUID, season, cursor string, limit int) ([]models.MatchWithDetails, string, error) {
+	if limit < 1 || limit > MaxMatchPageSize {
+		return nil, "", ErrInvalidMatchLimit
+	}
+	query, ok := s.matchSelection(groupID, season)
+	if !ok {
+		return []models.MatchWithDetails{}, "", nil
+	}
+	if cursor != "" {
+		day, rawID, found := strings.Cut(cursor, ".")
+		date, dateErr := time.Parse("2006-01-02", day)
+		id, idErr := uuid.Parse(rawID)
+		if !found || dateErr != nil || idErr != nil {
+			return nil, "", ErrInvalidMatchCursor
+		}
+		query = query.Where("(date, id) < (?, ?)", models.DateOf(date), id)
+	}
+	matches, err := s.readMatchesDetails(groupID, query.Order("date DESC, id DESC").Limit(limit+1))
+	if err != nil {
+		return nil, "", err
+	}
+	if len(matches) <= limit {
+		return matches, "", nil
+	}
+	last := matches[limit-1]
+	return matches[:limit], last.Date.String() + "." + last.ID.String(), nil
+}
+
+func (s *MatchService) matchSelection(groupID uuid.UUID, season string) (*gorm.DB, bool) {
+	query := s.DB.Model(&models.Match{}).Where("group_id = ?", groupID)
+	if season == "" {
+		return query, true
+	}
+	year, _, _ := strings.Cut(season, "-")
+	start, err := strconv.Atoi(year)
+	if err != nil || start < 0 || start > 9998 || fmt.Sprintf("%d-%d", start, start+1) != season {
+		return nil, false
+	}
+	from := models.DateOf(time.Date(start, time.September, 1, 0, 0, 0, 0, time.UTC))
+	until := models.DateOf(time.Date(start+1, time.September, 1, 0, 0, 0, 0, time.UTC))
+	return query.Where("date >= ? AND date < ?", from, until), true
+}
+
+func (s *MatchService) readMatchesDetails(groupID uuid.UUID, selection *gorm.DB) ([]models.MatchWithDetails, error) {
 	var rowsMatches []models.RowsMatchDetails
 	var err error
 
@@ -244,13 +301,12 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored,
 			   match_players.own_goals as own_goals
-        FROM matches
+        FROM (?) AS matches
         LEFT JOIN match_players ON match_players.match_id = matches.id
         LEFT JOIN teams ON teams.id = match_players.team_id
         LEFT JOIN players ON players.id = match_players.player_id
-		WHERE matches.group_id = ?
-		ORDER BY match_date DESC
-    `, groupID).Scan(&rowsMatches)
+		ORDER BY match_date DESC, match_id DESC
+    `, selection).Scan(&rowsMatches)
 
 	if result.Error != nil {
 		return nil, result.Error
@@ -267,7 +323,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 	var registrationCounts map[uuid.UUID]int
 	for _, rowMatches := range rowsMatches {
 		if rowMatches.MatchScheduledAt != nil {
-			registrationCounts, err = s.registrationCountsByGroup(groupID)
+			registrationCounts, err = s.registrationCountsForSelection(selection)
 			if err != nil {
 				return nil, err
 			}
@@ -403,6 +459,9 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 
 	// Sort matches by date in descending order
 	sort.Slice(matches, func(i, j int) bool {
+		if !matches[i].Date.Before(matches[j].Date) && !matches[j].Date.Before(matches[i].Date) {
+			return matches[i].ID.String() > matches[j].ID.String()
+		}
 		return matches[j].Date.Before(matches[i].Date)
 	})
 	// Sort matched teams same colour in first position
@@ -420,7 +479,7 @@ func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]mo
 			})
 		}
 	}
-	return FilterMatchesBySeason(matches, season), nil
+	return matches, nil
 }
 
 // GetMatchDetailsByID returns the match with the given id, scoped to
@@ -584,9 +643,8 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 	return match, nil
 }
 
-// registrationCountsByGroup returns how many players have signed up per match,
-// for every match of groupID that has at least one sign-up. Matches with none
-// are simply absent from the map, so a plain lookup yields the zero value.
+// registrationCountsForSelection returns sign-up totals for the selected
+// scheduled matches. A match with no sign-ups has no entry in the map.
 //
 // This exists as its own query rather than as a fifth LEFT JOIN in
 // GetMatchesDetails because match_registrations is a *second* one-to-many on
@@ -594,19 +652,14 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 // registration × one per assigned player), and every score and goal total in
 // this file is derived by summing those rows. One extra round-trip is the price
 // of not silently corrupting all of them.
-//
-// It stays on the query builder — the group scope is a subquery on matches, not
-// a join whose columns are needed, so there is nothing here that raw SQL would
-// express better.
-func (s *MatchService) registrationCountsByGroup(groupID uuid.UUID) (map[uuid.UUID]int, error) {
+func (s *MatchService) registrationCountsForSelection(selection *gorm.DB) (map[uuid.UUID]int, error) {
 	var rows []struct {
 		MatchID uuid.UUID
 		Total   int
 	}
 	if err := s.DB.Model(&models.MatchRegistration{}).
 		Select("match_id, COUNT(*) AS total").
-		Where("match_id IN (?)", s.DB.Model(&models.Match{}).
-			Select("id").Where("group_id = ?", groupID)).
+		Where("match_id IN (?)", s.DB.Table("(?) AS selected_matches", selection).Select("id").Where("scheduled_at IS NOT NULL")).
 		Group("match_id").
 		Scan(&rows).Error; err != nil {
 		return nil, err
@@ -619,7 +672,7 @@ func (s *MatchService) registrationCountsByGroup(groupID uuid.UUID) (map[uuid.UU
 	return counts, nil
 }
 
-// registrationCount is registrationCountsByGroup for a single match. The match
+// registrationCount returns the sign-up total for a single match. The match
 // id is already known to belong to the authorized group by the time this runs
 // (GetMatchDetailsByID scopes its own lookup on group_id), so there is nothing
 // left to scope here.
@@ -643,15 +696,15 @@ func (s *MatchService) registrationCount(matchID uuid.UUID) (int, error) {
 // MatchRegistration and MatchVote rows are cleaned up in the same transaction
 // too — see the comments below for why nothing forces that one.
 func (s *MatchService) DeleteMatch(matchID, groupID uuid.UUID) error {
-	var match models.Match
-	if err := s.DB.Where("id = ? AND group_id = ?", matchID, groupID).First(&match).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrMatchNotFound
-		}
-		return err
-	}
-
 	return s.DB.Transaction(func(tx *gorm.DB) error {
+		var match models.Match
+		if err := tx.Select("id").Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&match, "id = ? AND group_id = ?", matchID, groupID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrMatchNotFound
+			}
+			return err
+		}
 		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchPlayer{}).Error; err != nil {
 			return err
 		}
@@ -705,33 +758,37 @@ func (s *MatchService) DeleteMatch(matchID, groupID uuid.UUID) error {
 //     (team_id, group_id).
 func (s *MatchService) UpdateMatch(matchID, groupID uuid.UUID, teams []models.TeamWithPlayers) error {
 	var match models.Match
-	if err := s.DB.Where("id = ? AND group_id = ?", matchID, groupID).First(&match).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrMatchNotFound
-		}
-		return err
-	}
-
-	if err := s.assertTeamsInGroup(teams, groupID); err != nil {
-		return err
-	}
-
-	// Only read when someone listens: without a notifier this is the same
-	// query count as before.
 	var before map[uuid.UUID]uuid.UUID
-	if s.Notifier != nil {
+	resultRecorded := false
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := lockGroup(tx, groupID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrMatchNotFound
+			}
+			return err
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&match, "id = ? AND group_id = ?", matchID, groupID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrMatchNotFound
+			}
+			return err
+		}
+		if err := NewMatchService(tx).assertTeamsInGroup(teams, groupID); err != nil {
+			return err
+		}
 		var rows []models.MatchPlayer
-		if err := s.DB.Where("match_id = ?", matchID).Find(&rows).Error; err != nil {
+		if err := tx.Where("match_id = ?", matchID).Find(&rows).Error; err != nil {
 			return err
 		}
 		before = make(map[uuid.UUID]uuid.UUID, len(rows))
 		for _, row := range rows {
 			before[row.PlayerID] = row.TeamID
 		}
-	}
+		if err := validateRosterAdditions(tx, groupID, before, teams); err != nil {
+			return err
+		}
 
-	resultRecorded := false
-	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		var dbMatchPlayers []models.MatchPlayer
 
 		for i := range teams {
@@ -842,6 +899,34 @@ func (s *MatchService) assertTeamsInGroup(teams []models.TeamWithPlayers, groupI
 		if !inGroup[teams[i].ID] {
 			return ErrTeamNotInGroup
 		}
+	}
+	return nil
+}
+
+var ErrPlayerNotInGroup = errors.New("new roster players must belong to this group")
+
+func validateRosterAdditions(tx *gorm.DB, groupID uuid.UUID, existing map[uuid.UUID]uuid.UUID, teams []models.TeamWithPlayers) error {
+	added := make(map[uuid.UUID]struct{})
+	for _, team := range teams {
+		for _, player := range team.Players {
+			if _, exists := existing[player.ID]; !exists {
+				added[player.ID] = struct{}{}
+			}
+		}
+	}
+	if len(added) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, 0, len(added))
+	for id := range added {
+		ids = append(ids, id)
+	}
+	var count int64
+	if err := tx.Model(&models.GroupMembership{}).Where("group_id = ? AND player_id IN ?", groupID, ids).Count(&count).Error; err != nil {
+		return err
+	}
+	if count != int64(len(ids)) {
+		return ErrPlayerNotInGroup
 	}
 	return nil
 }

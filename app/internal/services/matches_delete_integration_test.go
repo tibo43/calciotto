@@ -42,6 +42,8 @@ func TestDeleteMatch_Integration_Success(t *testing.T) {
 		t.Fatalf("failed to create player: %v", err)
 	}
 
+	addRosterMembers(t, tx, group.ID, aliceID)
+
 	matchID, err := matchService.CreateMatch(services.MatchSpec{Date: models.Date(time.Now())}, group.ID)
 	if err != nil {
 		t.Fatalf("failed to create match: %v", err)

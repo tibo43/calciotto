@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"app/internal/models"
@@ -114,13 +115,26 @@ func (h *MatchHandler) GetMatchesDetails(c *gin.Context) {
 	if !ok {
 		return
 	}
-	// season is optional and read the same way StandingsHandler reads it: an
-	// absent/empty value means "every season", the behaviour before the
-	// matches list gained a season filter.
-	matches, err := h.Service.GetMatchesDetails(groupID, c.Query("season"))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	limit := services.MaxMatchPageSize
+	if raw := c.Query("limit"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": services.ErrInvalidMatchLimit.Error()})
+			return
+		}
+		limit = value
+	}
+	matches, next, err := h.Service.GetMatchesDetailsPage(groupID, c.Query("season"), c.Query("cursor"), limit)
+	if errors.Is(err, services.ErrInvalidMatchCursor) || errors.Is(err, services.ErrInvalidMatchLimit) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to load matches"})
+		return
+	}
+	if next != "" {
+		c.Header("X-Next-Cursor", next)
 	}
 	// A group with no matches yet is a normal state (e.g. a brand-new group),
 	// not an error — but GORM leaves the slice nil, which would serialize as
@@ -228,7 +242,7 @@ func (h *MatchHandler) UpdateMatch(c *gin.Context) {
 		switch {
 		case errors.Is(err, services.ErrMatchNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		case errors.Is(err, services.ErrTeamNotInGroup):
+		case errors.Is(err, services.ErrTeamNotInGroup), errors.Is(err, services.ErrPlayerNotInGroup):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

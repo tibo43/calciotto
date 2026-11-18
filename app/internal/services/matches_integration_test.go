@@ -10,6 +10,7 @@ import (
 	"app/internal/testutil"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 func TestMatchLifecycle_Integration(t *testing.T) {
@@ -47,6 +48,8 @@ func TestMatchLifecycle_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create player bob: %v", err)
 	}
+
+	addRosterMembers(t, tx, group.ID, aliceID, bobID)
 
 	// Two days ago, not today: IsMatchCompleted (standings.go) only counts
 	// a match starting the day after it was played, and "exactly one day
@@ -234,6 +237,8 @@ func TestGetPointsStandings_Integration_ExcludesUpcomingComposedMatch(t *testing
 	if err != nil {
 		t.Fatalf("failed to create player bob: %v", err)
 	}
+
+	addRosterMembers(t, tx, group.ID, aliceID, bobID)
 
 	// A scheduled match kicking off tomorrow, with sign-ups already closed —
 	// the state "Fill teams from sign-ups" is offered in.
@@ -435,6 +440,14 @@ func TestUpdateMatch_Integration_ScopedToGroup(t *testing.T) {
 		t.Errorf("a rejected foreign-team UpdateMatch wrote %d match_player row(s)", rows)
 	}
 
+	if err := matchService.UpdateMatch(matchAID, groupA.ID, rosterA); !errors.Is(err, services.ErrPlayerNotInGroup) {
+		t.Fatalf("adding a non-member returned %v, want ErrPlayerNotInGroup", err)
+	}
+	if rows := countRows(); rows != 0 {
+		t.Fatalf("a rejected roster addition wrote %d row(s)", rows)
+	}
+	addRosterMembers(t, tx, groupA.ID, playerID)
+
 	// The legitimate call still works, so the two checks above reject the
 	// forged shapes rather than the operation itself.
 	if err := matchService.UpdateMatch(matchAID, groupA.ID, rosterA); err != nil {
@@ -442,5 +455,15 @@ func TestUpdateMatch_Integration_ScopedToGroup(t *testing.T) {
 	}
 	if rows := countRows(); rows != 1 {
 		t.Errorf("after a legitimate UpdateMatch the match has %d match_player row(s), want 1", rows)
+	}
+}
+
+func addRosterMembers(t *testing.T, tx *gorm.DB, groupID uuid.UUID, playerIDs ...uuid.UUID) {
+	t.Helper()
+	memberships := services.NewGroupMembershipService(tx)
+	for _, id := range playerIDs {
+		if err := memberships.AddPlayerToGroup(groupID, id); err != nil {
+			t.Fatalf("enroll roster fixture: %v", err)
+		}
 	}
 }

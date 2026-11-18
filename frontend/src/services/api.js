@@ -3,10 +3,17 @@ import axios from 'axios';
 const API_BASE_URL = process.env.VUE_APP_API_BASE_URL || 'http://127.0.0.1:8080';
 
 const TOKEN_KEY = 'calciotto-token';
+let sessionGeneration = 0;
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
-export const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
-export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+export const setToken = (token) => {
+  sessionGeneration++;
+  localStorage.setItem(TOKEN_KEY, token);
+};
+export const clearToken = () => {
+  sessionGeneration++;
+  localStorage.removeItem(TOKEN_KEY);
+};
 
 // Overridable via VUE_APP_API_TIMEOUT_MS (a Vercel build-time var, same
 // mechanism as VUE_APP_API_BASE_URL — see ci.yml's deploy-frontend job) so a
@@ -26,10 +33,90 @@ const api = axios.create({
   }
 });
 
+const sessionAPI = axios.create({
+  baseURL: '/api',
+  timeout: apiTimeoutMs,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+function sessionID(token) {
+  try {
+    const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return claims.session_id || null;
+  } catch {
+    return null;
+  }
+}
+
+function withSessionLock(fn) {
+  return navigator.locks ? navigator.locks.request('calciotto-session', fn) : fn();
+}
+
+let refreshInFlight;
+
+function renewAccessToken(token, generation) {
+  if (refreshInFlight && refreshInFlight.generation === generation && refreshInFlight.token === token) {
+    return refreshInFlight.promise;
+  }
+  const pending = { generation, token };
+  refreshInFlight = pending;
+  pending.promise = Promise.resolve().then(() => withSessionLock(async () => {
+    const id = sessionID(token);
+    const current = getToken();
+    if (generation !== sessionGeneration || sessionID(current) !== id) {
+      return null;
+    }
+    if (current !== token) {
+      return current;
+    }
+    let response;
+    const config = { headers: { 'X-Session-ID': id } };
+    try {
+      response = await sessionAPI.post('/auth/refresh', null, config);
+    } catch (error) {
+      if (error.response?.status !== 409) throw error;
+      // A concurrent tab rotated the cookie. Give its response time to arrive.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (generation !== sessionGeneration || sessionID(getToken()) !== id) {
+        return null;
+      }
+      response = await sessionAPI.post('/auth/refresh', null, config);
+    }
+    const next = response.data.token;
+    if (generation !== sessionGeneration || sessionID(getToken()) !== id || sessionID(next) !== id) {
+      return null;
+    }
+    localStorage.setItem(TOKEN_KEY, next);
+    return next;
+  })).finally(() => {
+    if (refreshInFlight === pending) refreshInFlight = undefined;
+  });
+  return pending.promise;
+}
+
+async function discardExpiredSession(token, generation) {
+  if (generation !== sessionGeneration || getToken() !== token) return;
+  clearToken();
+  const clearedGeneration = sessionGeneration;
+  const { forgetPushOnThisBrowser } = await import('@/services/pushNotifications');
+  if (clearedGeneration !== sessionGeneration || getToken()) return;
+  await forgetPushOnThisBrowser();
+  if (clearedGeneration === sessionGeneration && !getToken() && window.location.pathname !== '/login') {
+    window.location.href = '/login';
+  }
+}
+
 api.interceptors.request.use((config) => {
   const token = getToken();
+  if (config.calciottoRefreshed && (
+    config.calciottoSession.generation !== sessionGeneration ||
+    sessionID(config.calciottoSession.token) !== sessionID(token)
+  )) {
+    throw new Error('the session changed while retrying the request');
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+    config.calciottoSession = { token, generation: sessionGeneration };
   }
   return config;
 });
@@ -37,50 +124,66 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response && error.response.status === 401) {
-      // A session that ended without a logout (expired, revoked by a
-      // password change elsewhere) must not leave this device receiving the
-      // account's notifications. The backend can't be told any more (no
-      // token), so only the browser side is dropped; the backend's next send
-      // gets "gone" and deletes its row. Imported lazily: pushNotifications
-      // itself imports this module.
-      const hadSession = Boolean(getToken());
-      clearToken();
-      if (hadSession) {
-        const { forgetPushOnThisBrowser } = await import('@/services/pushNotifications');
-        await forgetPushOnThisBrowser();
-      }
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+    const request = error.config;
+    const snapshot = request?.calciottoSession;
+    if (error.response?.status !== 401 || request?.calciottoRefreshed || !snapshot) throw error;
+    const { token, generation } = snapshot;
+    if (generation !== sessionGeneration) throw error;
+    if (!sessionID(token)) {
+      await discardExpiredSession(token, generation);
+      throw error;
     }
-    return Promise.reject(error);
+
+    let renewed;
+    try {
+      renewed = await renewAccessToken(token, generation);
+    } catch (refreshError) {
+      if (refreshError.response?.status === 401) {
+        await discardExpiredSession(token, generation);
+      }
+      throw refreshError;
+    }
+    if (!renewed || generation !== sessionGeneration || sessionID(getToken()) !== sessionID(token)) {
+      throw error;
+    }
+    return api({ ...request, calciottoRefreshed: true });
   }
 );
 
 // Auth
 export const login = async (email, password) => {
-  const response = await api.post('/auth/login', { email, password });
+  const response = await sessionAPI.post('/auth/login', { email, password });
   return response.data;
 };
 
 export const signup = async (name, email, password, inviteCode = '') => {
-  const response = await api.post('/auth/signup', { name, email, password, invite_code: inviteCode });
+  const response = await sessionAPI.post('/auth/signup', { name, email, password, invite_code: inviteCode });
   return response.data;
+};
+
+export const logoutSession = async () => {
+  const token = getToken();
+  const id = sessionID(token);
+  if (!id) return;
+  await withSessionLock(() => {
+    if (sessionID(getToken()) === id) {
+      return sessionAPI.post('/auth/logout', null, { headers: { 'X-Session-ID': id } });
+    }
+  });
 };
 
 // Always resolves with the same generic message whether or not the email is
 // registered — the backend deliberately doesn't say, so callers must not try to
 // infer it either.
 export const forgotPassword = async (email) => {
-  const response = await api.post('/auth/forgot-password', { email });
+  const response = await sessionAPI.post('/auth/forgot-password', { email });
   return response.data;
 };
 
 // 400 covers every token failure alike (unknown, expired, already used) — the
 // backend gives one generic message on purpose.
 export const resetPassword = async (token, newPassword) => {
-  const response = await api.post('/auth/reset-password', { token, new_password: newPassword });
+  const response = await sessionAPI.post('/auth/reset-password', { token, new_password: newPassword });
   return response.data;
 };
 
@@ -107,11 +210,19 @@ const query = (params) => {
 // endpoints below: leaving it out asks for every season at once.
 export const getMatchesDetails = async (groupId, season) => {
   try {
-    const response = await api.get(`/matches/details${query({ group_id: groupId, season })}`);
-    if (response.status !== 200) {
-      throw new Error('Failed to fetch matches details');
-    }
-    return response.data;
+    const matches = [];
+    let cursor;
+    do {
+      const response = await api.get(`/matches/details${query({ group_id: groupId, season, cursor })}`);
+      if (response.status !== 200) {
+        throw new Error('Failed to fetch matches details');
+      }
+      matches.push(...response.data);
+      const next = response.headers?.['x-next-cursor'];
+      if (next && next === cursor) throw new Error('The match cursor did not advance');
+      cursor = next;
+    } while (cursor);
+    return matches;
   } catch (error) {
     console.error('Error fetching matches details:', error);
     throw error;
@@ -631,6 +742,16 @@ export const getInviteCode = async (groupId) => {
     console.error('Error fetching invite code:', error);
     throw error;
   }
+};
+
+export const rotateGroupInvitation = async (groupId) => {
+  const response = await api.post(`/groups/${groupId}/invite-code`);
+  return response.data;
+};
+
+export const revokeGroupInvitation = async (groupId) => {
+  const response = await api.delete(`/groups/${groupId}/invite-code`);
+  return response.data;
 };
 
 // Members — fetched on demand per group, same pattern as the invite code and

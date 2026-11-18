@@ -1,20 +1,37 @@
 package handlers
 
 import (
+	"crypto/sha256"
 	"errors"
 	"net/http"
+	"strings"
+	"time"
 
 	"app/internal/services"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/time/rate"
 )
 
 type AuthHandler struct {
-	Service *services.AuthService
+	Service        *services.AuthService
+	SessionOrigins []string
+	SecureCookies  bool
+	loginByAccount *ipRateLimiter
+	resetByAccount *ipRateLimiter
 }
 
 func NewAuthHandler(service *services.AuthService) *AuthHandler {
-	return &AuthHandler{Service: service}
+	return &AuthHandler{
+		Service:        service,
+		loginByAccount: newIPRateLimiter(rate.Every(time.Minute), 12),
+		resetByAccount: newIPRateLimiter(rate.Every(30*time.Minute), 3),
+	}
+}
+
+func accountRateKey(email string) string {
+	hash := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(email))))
+	return string(hash[:])
 }
 
 // Signup is the public "create your account" flow: it creates a brand-new
@@ -26,11 +43,12 @@ func NewAuthHandler(service *services.AuthService) *AuthHandler {
 // The response includes a ready-to-use JWT (the same shape Login returns)
 // alongside the player id: signing up and logging in are one action from the
 // caller's point of view, so the frontend shouldn't have to resend the
-// password through a second POST /auth/login just to get a token. A failure
-// to sign the token here is a genuine 500 — the player row already exists at
-// that point, so this can't be folded back into SignupNewPlayer's own error
-// handling.
+// password through a second POST /auth/login just to get a token.
 func (h *AuthHandler) Signup(c *gin.Context) {
+	if c.ContentType() != "application/json" {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "expected application/json"})
+		return
+	}
 	var req struct {
 		Name       string `json:"name"`
 		Email      string `json:"email"`
@@ -42,7 +60,7 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		return
 	}
 
-	playerID, err := h.Service.SignupNewPlayer(req.Name, req.Email, req.Password, req.InviteCode)
+	playerID, credentials, err := h.Service.SignupSession(req.Name, req.Email, req.Password, req.InviteCode)
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrEmptyPlayerName),
@@ -58,21 +76,20 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 			errors.Is(err, services.ErrInviteCodeNotFound):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unable to complete signup"})
 		}
 		return
 	}
 
-	token, err := h.Service.GenerateToken(playerID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"id": playerID, "token": token})
+	h.writeSessionCookie(c, credentials)
+	c.JSON(http.StatusOK, gin.H{"id": playerID, "token": credentials.AccessToken})
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
+	if c.ContentType() != "application/json" {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "expected application/json"})
+		return
+	}
 	var req struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -82,13 +99,22 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := h.Service.Login(req.Email, req.Password)
+	if !h.loginByAccount.allow(accountRateKey(req.Email)) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
+		return
+	}
+	credentials, err := h.Service.LoginSession(req.Email, req.Password)
+	if errors.Is(err, services.ErrInvalidCredentials) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": services.ErrInvalidCredentials.Error()})
+		return
+	}
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unable to start the session"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	h.writeSessionCookie(c, credentials)
+	c.JSON(http.StatusOK, gin.H{"token": credentials.AccessToken})
 }
 
 // passwordResetRequestedMessage is the same for known and unknown accounts.
@@ -100,6 +126,10 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if h.Service.PasswordResetMailer != nil && !h.resetByAccount.allow(accountRateKey(req.Email)) {
+		c.JSON(http.StatusOK, gin.H{"message": passwordResetRequestedMessage})
 		return
 	}
 

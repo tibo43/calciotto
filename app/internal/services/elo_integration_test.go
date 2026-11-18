@@ -74,7 +74,6 @@ func TestGetEloStandings_Integration_ReplaysHistoryChronologicallyAndTagsMembers
 	if err := membershipService.AddPlayerToGroupWithRole(group.ID, bob, models.RoleMember); err != nil {
 		t.Fatalf("failed to add bob to group: %v", err)
 	}
-	// carol deliberately never joins the group.
 
 	now := time.Now()
 
@@ -88,11 +87,18 @@ func TestGetEloStandings_Integration_ReplaysHistoryChronologicallyAndTagsMembers
 	if err != nil {
 		t.Fatalf("failed to create early match: %v", err)
 	}
+	addRosterMembers(t, tx, group.ID, carol, dave)
 	if err := matchService.UpdateMatch(earlyMatchID, group.ID, []models.TeamWithPlayers{
 		{ID: black.ID, Players: []models.PlayerCustom{{ID: carol, GoalsScored: 0}}},
 		{ID: white.ID, Players: []models.PlayerCustom{{ID: dave, GoalsScored: 2}}},
 	}); err != nil {
 		t.Fatalf("failed to compose early match roster: %v", err)
+	}
+
+	for _, formerMember := range []uuid.UUID{carol, dave} {
+		if err := membershipService.LeaveGroup(group.ID, formerMember); err != nil {
+			t.Fatalf("leave after the historical match: %v", err)
+		}
 	}
 
 	// Match 1 (5 days ago): alice beats bob 1-0.

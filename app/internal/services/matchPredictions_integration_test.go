@@ -88,6 +88,7 @@ func (e *predictionEnv) composeRoster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create player: %v", err)
 	}
+	addRosterMembers(t, e.tx, e.groupID, alice, bob)
 	if err := e.matches.UpdateMatch(e.matchID, e.groupID, []models.TeamWithPlayers{
 		{ID: e.teamAID, Players: []models.PlayerCustom{{ID: alice}}},
 		{ID: e.teamBID, Players: []models.PlayerCustom{{ID: bob}}},

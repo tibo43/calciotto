@@ -1,6 +1,6 @@
 // api.js builds its Axios instance at import time, so the mock has to hand
 // back one shared instance whose methods the assertions can inspect.
-const mockInstance = {
+const mockInstance = Object.assign(jest.fn(), {
   post: jest.fn(),
   get: jest.fn(),
   put: jest.fn(),
@@ -10,10 +10,11 @@ const mockInstance = {
     request: { use: jest.fn() },
     response: { use: jest.fn() }
   }
-};
+});
+const mockSessionAPI = { post: jest.fn() };
 
 jest.mock('axios', () => ({
-  create: () => mockInstance
+  create: ({ baseURL }) => baseURL === '/api' ? mockSessionAPI : mockInstance
 }));
 
 const api = require('@/services/api');
@@ -354,10 +355,17 @@ describe('the push notification calls', () => {
 describe('a session that ends with a 401', () => {
   // The response interceptor api.js registered at import time.
   const onError = () => mockInstance.interceptors.response.use.mock.calls[0][1];
+  const failedRequest = () => ({
+    response: { status: 401 },
+    config: mockInstance.interceptors.request.use.mock.calls[0][0]({ headers: {}, url: '/groups/me' }),
+  });
+  const tokenFor = (version) => `header.${btoa(JSON.stringify({ session_id: 'device-session', version }))}.signature`;
 
   beforeEach(() => {
     jest.resetModules();
     window.localStorage.clear();
+    mockSessionAPI.post.mockReset();
+    mockInstance.mockReset();
     // Already on /login, so the interceptor doesn't navigate (jsdom can't).
     window.history.pushState({}, '', '/login');
   });
@@ -366,7 +374,7 @@ describe('a session that ends with a 401', () => {
     const forget = jest.fn(() => Promise.resolve());
     jest.doMock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forget }));
     api.setToken('old-token');
-    await expect(onError()({ response: { status: 401 } })).rejects.toBeTruthy();
+    await expect(onError()(failedRequest())).rejects.toBeTruthy();
     expect(forget).toHaveBeenCalledTimes(1);
     expect(api.getToken()).toBeFalsy();
   });
@@ -376,5 +384,46 @@ describe('a session that ends with a 401', () => {
     jest.doMock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forget }));
     await expect(onError()({ response: { status: 401 } })).rejects.toBeTruthy();
     expect(forget).not.toHaveBeenCalled();
+  });
+
+  it('renews once for concurrent requests and keeps the push subscription', async () => {
+    const forget = jest.fn();
+    jest.doMock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forget }));
+    const renewed = tokenFor(2);
+    api.setToken(tokenFor(1));
+    mockSessionAPI.post.mockResolvedValue({ data: { token: renewed } });
+    mockInstance.mockResolvedValue({ status: 200 });
+
+    await Promise.all([onError()(failedRequest()), onError()(failedRequest())]);
+
+    expect(mockSessionAPI.post).toHaveBeenCalledTimes(1);
+    expect(mockSessionAPI.post).toHaveBeenCalledWith('/auth/refresh', null, {
+      headers: { 'X-Session-ID': 'device-session' },
+    });
+    expect(mockInstance).toHaveBeenCalledTimes(2);
+    expect(mockInstance).toHaveBeenCalledWith(expect.objectContaining({ calciottoRefreshed: true }));
+    expect(api.getToken()).toBe(renewed);
+    expect(forget).not.toHaveBeenCalled();
+  });
+
+  it('preserves the session and notifications while renewal is temporarily unavailable', async () => {
+    const forget = jest.fn();
+    jest.doMock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forget }));
+    const original = tokenFor(1);
+    api.setToken(original);
+    mockSessionAPI.post.mockRejectedValue({ response: { status: 503 } });
+    await expect(onError()(failedRequest())).rejects.toMatchObject({ response: { status: 503 } });
+    expect(api.getToken()).toBe(original);
+    expect(forget).not.toHaveBeenCalled();
+  });
+
+  it('drops this browser subscription after renewal confirms the session ended', async () => {
+    const forget = jest.fn();
+    jest.doMock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forget }));
+    api.setToken(tokenFor(1));
+    mockSessionAPI.post.mockRejectedValue({ response: { status: 401 } });
+    await expect(onError()(failedRequest())).rejects.toMatchObject({ response: { status: 401 } });
+    expect(api.getToken()).toBeFalsy();
+    expect(forget).toHaveBeenCalledTimes(1);
   });
 });

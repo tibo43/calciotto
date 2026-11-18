@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"app/internal/models"
 	"app/internal/services"
@@ -38,10 +39,7 @@ func (h *GroupHandler) JoinGroup(c *gin.Context) {
 	c.JSON(http.StatusForbidden, gin.H{"error": "joining a group is not available yet"})
 }
 
-// GetInviteCode returns the group's invite code so a member can share it. It
-// is the one endpoint that exposes the code, and its route is guarded by
-// RequireGroupMembershipByPathParam — anywhere else the code stays hidden
-// behind Group's json:"-".
+// GetInviteCode returns the current invitation to a group administrator.
 func (h *GroupHandler) GetInviteCode(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -55,16 +53,57 @@ func (h *GroupHandler) GetInviteCode(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"invite_code": group.InviteCode})
+	writeInvitation(c, group)
 }
 
 func (h *GroupHandler) GetGroups(c *gin.Context) {
-	groups, err := h.Service.GetGroups()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
 		return
 	}
+	groups, err := h.MembershipService.GetGroupsByPlayerID(playerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to load groups"})
+		return
+	}
+	if groups == nil {
+		groups = []models.Group{}
+	}
 	c.JSON(http.StatusOK, groups)
+}
+
+func (h *GroupHandler) ChangeInvitation(c *gin.Context) {
+	groupID, ok := authorizedGroupIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved"})
+		return
+	}
+	adminID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+	group, err := h.Service.ChangeInvitation(groupID, adminID, c.Request.Method == http.MethodPost)
+	switch {
+	case errors.Is(err, services.ErrGroupAdminRequired):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to update the invitation"})
+	default:
+		writeInvitation(c, group)
+	}
+}
+
+func writeInvitation(c *gin.Context, group *models.Group) {
+	code := ""
+	if group.InviteExpiresAt.After(time.Now()) {
+		code = group.InviteCode
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"invite_code": code, "expires_at": group.InviteExpiresAt.UTC()})
 }
 
 func (h *GroupHandler) GetGroupByID(c *gin.Context) {
@@ -96,8 +135,20 @@ func (h *GroupHandler) AddPlayerToGroup(c *gin.Context) {
 		return
 	}
 
-	if err := h.MembershipService.AddPlayerToGroup(groupID, body.PlayerID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	actor, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+	if err := h.MembershipService.AddPlayerAsAdmin(groupID, body.PlayerID, actor); err != nil {
+		switch {
+		case errors.Is(err, services.ErrGroupAdminRequired):
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "player or group not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to add the player"})
+		}
 		return
 	}
 
@@ -176,6 +227,10 @@ func (h *GroupHandler) SetFavoriteGroup(c *gin.Context) {
 	}
 
 	if err := h.MembershipService.SetFavoriteGroup(playerID, groupID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this group"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -216,6 +271,8 @@ func (h *GroupHandler) RemoveMember(c *gin.Context) {
 		switch {
 		case errors.Is(err, services.ErrCannotRemoveSelf):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, services.ErrGroupAdminRequired):
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		case errors.Is(err, gorm.ErrRecordNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "player is not a member of this group"})
 		default:
@@ -267,6 +324,8 @@ func (h *GroupHandler) UpdateMemberRole(c *gin.Context) {
 			errors.Is(err, services.ErrCannotChangeOwnRole),
 			errors.Is(err, services.ErrLastAdmin):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case errors.Is(err, services.ErrGroupAdminRequired):
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		case errors.Is(err, gorm.ErrRecordNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "player is not a member of this group"})
 		default:

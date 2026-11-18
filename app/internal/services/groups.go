@@ -4,11 +4,13 @@ import (
 	"crypto/rand"
 	"errors"
 	"strings"
+	"time"
 
 	"app/internal/models"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // TeamSpec is one team's name/colour, as supplied by the admin creating a
@@ -36,6 +38,7 @@ var (
 
 const (
 	inviteCodeLength = 8
+	groupInviteTTL   = 7 * 24 * time.Hour
 	// inviteCodeAlphabet leaves out the characters that get mixed up when a
 	// code is read out loud or copied by hand (0/O, 1/I/L), since the whole
 	// point of an invite code is to be passed around between humans.
@@ -68,7 +71,7 @@ func (s *GroupService) CreateGroup(name string, teams [2]TeamSpec) (*models.Grou
 		return nil, err
 	}
 
-	group := &models.Group{Name: name, InviteCode: inviteCode}
+	group := &models.Group{Name: name, InviteCode: inviteCode, InviteExpiresAt: time.Now().Add(groupInviteTTL)}
 	err = s.DB.Transaction(func(tx *gorm.DB) error {
 		trimmed := make([]TeamSpec, len(teams))
 		for i, spec := range teams {
@@ -117,6 +120,47 @@ func (s *GroupService) GetGroupByID(id uuid.UUID) (*models.Group, error) {
 	return &group, nil
 }
 
+// ChangeInvitation also serializes with redemption of the current code.
+func (s *GroupService) ChangeInvitation(groupID, adminID uuid.UUID, rotate bool) (*models.Group, error) {
+	var group models.Group
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&group, "id = ?", groupID).Error; err != nil {
+			return err
+		}
+		if err := verifyGroupAdmin(tx, groupID, adminID); err != nil {
+			return err
+		}
+		group.InviteExpiresAt = time.Now()
+		if rotate {
+			code, err := NewGroupService(tx).uniqueInviteCode()
+			if err != nil {
+				return err
+			}
+			group.InviteCode = code
+			group.InviteExpiresAt = group.InviteExpiresAt.Add(groupInviteTTL)
+		}
+		return tx.Model(&group).Select("invite_code", "invite_expires_at").Updates(&group).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &group, nil
+}
+
+func groupForActiveInvite(db *gorm.DB, code string) (*models.Group, error) {
+	var group models.Group
+	if err := db.First(&group, "invite_code = ?", code).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInviteCodeNotFound
+		}
+		return nil, err
+	}
+	if !group.InviteExpiresAt.After(time.Now()) {
+		return nil, ErrInviteCodeNotFound
+	}
+	return &group, nil
+}
+
 // JoinByInviteCode makes playerID a member of the group owning code. It is the
 // only way into a group the caller isn't already in — POST /groups/:id/players
 // requires the caller to be a member of the target group already, so without
@@ -131,26 +175,30 @@ func (s *GroupService) JoinByInviteCode(playerID uuid.UUID, code string) (*model
 		return nil, ErrInviteCodeNotFound
 	}
 
-	var group models.Group
-	if err := s.DB.First(&group, "invite_code = ?", code).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrInviteCodeNotFound
+	var group *models.Group
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if _, err := lockPlayer(tx, playerID); err != nil {
+			return err
 		}
-		return nil, err
-	}
-
-	membershipService := NewGroupMembershipService(s.DB)
-	isMember, err := membershipService.IsMember(group.ID, playerID)
+		var err error
+		group, err = groupForActiveInvite(tx.Clauses(clause.Locking{Strength: "UPDATE"}), code)
+		if err != nil {
+			return err
+		}
+		membershipService := NewGroupMembershipService(tx)
+		isMember, err := membershipService.IsMember(group.ID, playerID)
+		if err != nil {
+			return err
+		}
+		if isMember {
+			return ErrAlreadyMember
+		}
+		return addGroupMembership(tx, group.ID, playerID, models.RoleMember)
+	})
 	if err != nil {
 		return nil, err
 	}
-	if isMember {
-		return nil, ErrAlreadyMember
-	}
-	if err := membershipService.AddPlayerToGroup(group.ID, playerID); err != nil {
-		return nil, err
-	}
-	return &group, nil
+	return group, nil
 }
 
 // uniqueInviteCode draws a random invite code and re-rolls it if some group

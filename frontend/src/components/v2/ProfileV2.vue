@@ -199,9 +199,11 @@
         <div class="sec-head"><h2>Invitation</h2></div>
         <div class="invite-box">
           <code>{{ inviteCode || '—' }}</code>
-          <button class="btn btn-ghost" type="button" @click="copyCode">Copy</button>
-          <button class="btn btn-ghost" type="button" @click="shareInvite">Invite on WhatsApp</button>
+          <button class="btn btn-ghost" type="button" :disabled="!inviteCode" @click="copyCode">Copy</button>
+          <button class="btn btn-ghost" type="button" :disabled="!inviteCode" @click="shareInvite">Invite on WhatsApp</button>
         </div>
+        <InvitationActions :group-id="groupId" :code="inviteCode" :expires-at="inviteExpiresAt"
+          @updated="applyInvitation" />
       </section>
       <section class="sec">
         <div class="sec-head"><h2>Members</h2></div>
@@ -270,6 +272,7 @@ import {
 import { getPushState, enablePush, disablePush, PUSH_STATE, PUSH_FEATURE } from '@/services/pushNotifications';
 import { getInstallTracker, INSTALL_STATE, PWA_INSTALL_FEATURE } from '@/services/pwaInstall';
 import { buildGroupInviteShareText, buildWhatsAppShareUrl } from '@/services/whatsappShare';
+import InvitationActions from '@/components/InvitationActions.vue';
 
 const PREFERENCE_GROUPS = [
   { label: 'Match', items: [
@@ -300,6 +303,7 @@ function playerIdFromToken() {
 
 export default {
   name: 'ProfileV2',
+  components: { InvitationActions },
   inject: {
     v2Context: { default: () => ({}) },
   },
@@ -327,6 +331,7 @@ export default {
       deleteError: '',
       teams: [],
       inviteCode: '',
+      inviteExpiresAt: '',
       members: [],
       teamNote: '',
       demoting: '',
@@ -654,9 +659,13 @@ export default {
         // unchanged on save (the API requires one), for players still on v1.
         colour: team.colour || team.Colour,
       }));
-      this.inviteCode = (code && (code.invite_code || code.InviteCode)) || '';
+      this.applyInvitation(code);
       this.members = Array.isArray(members) ? members : [];
       this.syncChrome();
+    },
+    applyInvitation(invitation) {
+      this.inviteCode = invitation?.invite_code || invitation?.InviteCode || '';
+      this.inviteExpiresAt = invitation?.expires_at || '';
     },
     async saveTeam(team) {
       this.teamNote = '';

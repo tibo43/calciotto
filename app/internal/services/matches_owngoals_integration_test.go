@@ -55,6 +55,8 @@ func TestMatchOwnGoals_Integration(t *testing.T) {
 	// Alice (black) scores 2 real goals and concedes 1 own goal: the own
 	// goal must land on white's Score, not black's, and must never inflate
 	// Alice's own GoalsScored.
+	addRosterMembers(t, tx, group.ID, aliceID, bobID)
+
 	teamsPayload := []models.TeamWithPlayers{
 		{ID: black.ID, Players: []models.PlayerCustom{{ID: aliceID, GoalsScored: 2, OwnGoals: 1}}},
 		{ID: white.ID, Players: []models.PlayerCustom{{ID: bobID, GoalsScored: 0}}},

@@ -303,6 +303,35 @@ func TestNotifications_Integration_TickSignUpsOpen(t *testing.T) {
 	}
 }
 
+func TestNotifications_Integration_FormerMemberGetsNoMatchResult(t *testing.T) {
+	env := newNotificationEnv(t)
+	current, currentEndpoint := env.member(t, "Current player", true)
+	former, formerEndpoint := env.member(t, "Former player", true)
+	now := time.Now()
+	matchID := env.scheduledMatch(t, now.Add(time.Hour), now.Add(-time.Hour), 10)
+	roster := []models.TeamWithPlayers{
+		{ID: env.teamA.ID, Players: []models.PlayerCustom{{ID: current}}},
+		{ID: env.teamB.ID, Players: []models.PlayerCustom{{ID: former}}},
+	}
+	if err := env.matches.UpdateMatch(matchID, env.groupID, roster); err != nil {
+		t.Fatal(err)
+	}
+	if err := services.NewGroupMembershipService(env.tx).LeaveGroup(env.groupID, former); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.tx.Model(&models.Match{}).Where("id = ?", matchID).Update("scheduled_at", now.Add(-time.Hour)).Error; err != nil {
+		t.Fatal(err)
+	}
+	env.sender.reset()
+	if err := env.matches.UpdateMatch(matchID, env.groupID, roster); err != nil {
+		t.Fatal(err)
+	}
+	if len(messagesOfType(env.sender.sent[currentEndpoint], services.PushTypeResultRecorded)) != 1 ||
+		len(env.sender.sent[formerEndpoint]) != 0 {
+		t.Fatal("only current group members should receive the match result")
+	}
+}
+
 func TestNotifications_Integration_TickKickoffReminder(t *testing.T) {
 	env := newNotificationEnv(t)
 	now := time.Now()
