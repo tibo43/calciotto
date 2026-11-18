@@ -83,6 +83,7 @@ func newVoteEnv(t *testing.T, label string, rosterSize, benchSize int) *voteEnv 
 		env.roster = append(env.roster, id)
 		rosterPlayers = append(rosterPlayers, models.PlayerCustom{ID: id, GoalsScored: 0})
 	}
+	addRosterMembers(t, tx, group.ID, env.roster...)
 	if rosterSize > 0 {
 		if err := matchService.UpdateMatch(matchID, group.ID, []models.TeamWithPlayers{
 			{ID: black.ID, Players: rosterPlayers},
@@ -420,6 +421,7 @@ func TestVote_Integration_ScheduledMatchWindowUsesDateNotKickoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create player: %v", err)
 	}
+	addRosterMembers(t, tx, group.ID, alice, bob)
 	if err := matchService.UpdateMatch(matchID, group.ID, []models.TeamWithPlayers{{ID: black.ID, Players: []models.PlayerCustom{{ID: alice}, {ID: bob}}}}); err != nil {
 		t.Fatalf("failed to compose roster: %v", err)
 	}
@@ -472,6 +474,7 @@ func TestTallyVotesForMatches_Integration_GroupsPerMatch(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create player for match %s: %v", label, err)
 		}
+		addRosterMembers(t, tx, group.ID, playerID)
 		if err := matchService.UpdateMatch(matchID, group.ID, []models.TeamWithPlayers{{ID: black.ID, Players: []models.PlayerCustom{{ID: playerID}}}}); err != nil {
 			t.Fatalf("failed to compose roster for match %s: %v", label, err)
 		}
@@ -489,6 +492,7 @@ func TestTallyVotesForMatches_Integration_GroupsPerMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create voter for match A: %v", err)
 	}
+	addRosterMembers(t, tx, group.ID, voterA)
 	if err := matchService.UpdateMatch(matchA, group.ID, []models.TeamWithPlayers{{ID: black.ID, Players: []models.PlayerCustom{{ID: playerA}, {ID: voterA}}}}); err != nil {
 		t.Fatalf("failed to add voterA to match A's roster: %v", err)
 	}

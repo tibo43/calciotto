@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -26,7 +28,13 @@ func main() {
 	}
 
 	// Initialize Gin router
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Logger(), gin.CustomRecoveryWithWriter(io.Discard, func(c *gin.Context, cause any) {
+		// Recovery must not dump request headers containing session credentials.
+		log.Printf("panic handling %s %s (%T)", c.Request.Method, c.FullPath(), cause)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+	}))
+	origins := allowedOrigins()
 
 	// Decide whose X-Forwarded-For to believe *before* any route is served:
 	// gin trusts every caller by default, which made c.ClientIP() — and
@@ -40,12 +48,13 @@ func main() {
 
 	// Configuration CORS
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     allowedOrigins(),
+		AllowOrigins:     origins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
+		ExposeHeaders:    []string{"Content-Length", "X-Next-Cursor"},
 		AllowCredentials: true,
 	}))
+	r.Use(handlers.LimitRequestBody(256 << 10))
 
 	// JWT_SECRET has no hardcoded fallback: an empty signing key would let
 	// anyone forge tokens, so fail fast at startup instead of running insecure.
@@ -82,6 +91,8 @@ func main() {
 	matchPredictionHandler := handlers.NewMatchPredictionHandler(services.NewMatchPredictionService(db, matchService))
 	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(db, groupMembershipService), groupMembershipService)
 	authHandler := handlers.NewAuthHandler(authService)
+	authHandler.SessionOrigins = origins
+	authHandler.SecureCookies = gin.Mode() == gin.ReleaseMode
 
 	// Auth middleware chains, reused across the group-scoped routes below.
 	authRequired := handlers.AuthMiddleware(authService)
@@ -146,27 +157,12 @@ func main() {
 	// invite code on POST /auth/signup — see CLAUDE.md.
 	r.POST("/groups", authRequired, groupHandler.CreateGroup)
 	r.POST("/groups/join", authRequired, groupHandler.JoinGroup)
-	// GET /groups and GET /groups/:id used to be unauthenticated: they carry
-	// no invite code (Group.InviteCode is json:"-") and no per-caller cost, so
-	// there was nothing per se dangerous in the response body. But unscoped
-	// and public, they let anyone on the internet enumerate the name of every
-	// group in the system with a single unauthenticated request — never
-	// something this app wants, and never something the frontend actually
-	// relies on (it only ever calls GET /groups/me). authRequired doesn't
-	// narrow the result to the caller's own groups — it still lists every
-	// group that exists — but it closes off anonymous, at-scale enumeration
-	// down to "any registered player," which is the same trust boundary every
-	// other read in this app already assumes.
 	r.GET("/groups", authRequired, groupHandler.GetGroups)
-	// "My groups" — authRequired only, same reasoning as /players/me/stats:
-	// no single group to authorize against, and the answer is derived from
-	// the JWT's own player. Must stay distinct from GET /groups, which lists
-	// every group in the system regardless of caller.
 	r.GET("/groups/me", authRequired, groupHandler.GetMyGroups)
-	r.GET("/groups/:id", authRequired, groupHandler.GetGroupByID)
-	// The invite code is a shared secret, so it gets its own member-only
-	// route rather than riding along in the (public) group JSON.
-	r.GET("/groups/:id/invite-code", authRequired, requireGroupMemberByPathID, groupHandler.GetInviteCode)
+	r.GET("/groups/:id", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupByID)
+	r.GET("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.GetInviteCode)
+	r.POST("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.ChangeInvitation)
+	r.DELETE("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.ChangeInvitation)
 	r.GET("/groups/:id/teams", authRequired, requireGroupMemberByPathID, teamHandler.GetTeamsByGroup)
 	// Admin-only "rename/recolour a team" — same admin gate as the member-role
 	// and invite routes above; TeamService.UpdateTeam additionally scopes the
@@ -279,11 +275,8 @@ func main() {
 	loginRateLimit := handlers.RateLimit(rate.Every(6*time.Second), 10) // ~10/min, burst 10
 	// Signup's rate/burst are the one pair overridable via env
 	// (SIGNUP_RATE_LIMIT_PER_HOUR/SIGNUP_RATE_LIMIT_BURST), both defaulting to
-	// today's hardcoded 5/hour, burst 5 when unset — needed to run a real
-	// load test (many accounts created in a short window from one IP) against
-	// production without leaving the limit permanently loosened. See
-	// envIntOrDefault below and the "Sync secrets to Koyeb" step in
-	// .github/workflows/ci.yml, which only pushes these when explicitly set.
+	// 5/hour, burst 5 when unset. The local performance fixtures can raise
+	// these temporarily to create multiple synthetic accounts from one IP.
 	signupPerHour := envIntOrDefault("SIGNUP_RATE_LIMIT_PER_HOUR", 5)
 	signupBurst := envIntOrDefault("SIGNUP_RATE_LIMIT_BURST", 5)
 	signupRateLimit := handlers.RateLimit(rate.Every(time.Hour/time.Duration(signupPerHour)), signupBurst)
@@ -292,6 +285,8 @@ func main() {
 
 	r.POST("/auth/signup", signupRateLimit, authHandler.Signup)
 	r.POST("/auth/login", loginRateLimit, authHandler.Login)
+	r.POST("/auth/refresh", handlers.RateLimit(rate.Every(time.Second), 60), authHandler.RefreshSession)
+	r.POST("/auth/logout", handlers.RateLimit(rate.Every(time.Second), 60), authHandler.Logout)
 	// Public like signup/login above: someone who forgot their password has by
 	// definition no token to authenticate the request with.
 	r.POST("/auth/forgot-password", forgotPasswordRateLimit, authHandler.ForgotPassword)
@@ -314,7 +309,13 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	if err := r.Run(":" + port); err != nil {
+	server := &http.Server{
+		Addr: ":" + port, Handler: r,
+		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second,
+		WriteTimeout: 35 * time.Second, IdleTimeout: time.Minute,
+		MaxHeaderBytes: 64 << 10,
+	}
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
 }

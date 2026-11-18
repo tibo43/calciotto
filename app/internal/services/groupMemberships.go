@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ErrLastMember is returned by LeaveGroup when the departing player is the
@@ -39,6 +40,21 @@ var ErrCannotChangeOwnRole = errors.New("cannot change your own role")
 // is the second way it could be broken.
 var ErrLastAdmin = errors.New("cannot demote the group's last admin")
 
+var ErrGroupAdminRequired = errors.New("not an admin of this group")
+
+func lockGroup(tx *gorm.DB, groupID uuid.UUID) error {
+	return tx.Select("id").Clauses(clause.Locking{Strength: "UPDATE"}).
+		Take(&models.Group{}, "id = ?", groupID).Error
+}
+
+func verifyGroupAdmin(tx *gorm.DB, groupID, playerID uuid.UUID) error {
+	role, err := NewGroupMembershipService(tx).GetRole(groupID, playerID)
+	if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil && role != models.RoleAdmin) {
+		return ErrGroupAdminRequired
+	}
+	return err
+}
+
 type GroupMembershipService struct {
 	DB *gorm.DB
 }
@@ -69,19 +85,41 @@ func (s *GroupMembershipService) AddPlayerToGroup(groupID, playerID uuid.UUID) e
 // exactly one favorite the moment they have any group at all, with no extra
 // step required anywhere else.
 func (s *GroupMembershipService) AddPlayerToGroupWithRole(groupID, playerID uuid.UUID, role string) error {
+	return s.addPlayer(groupID, playerID, role, uuid.Nil)
+}
+
+func (s *GroupMembershipService) AddPlayerAsAdmin(groupID, playerID, adminID uuid.UUID) error {
+	return s.addPlayer(groupID, playerID, models.RoleMember, adminID)
+}
+
+func (s *GroupMembershipService) addPlayer(groupID, playerID uuid.UUID, role string, adminID uuid.UUID) error {
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		// Account operations take the player lock before the group lock.
+		if _, err := lockPlayer(tx, playerID); err != nil {
+			return err
+		}
+		if err := lockGroup(tx, groupID); err != nil {
+			return err
+		}
+		if adminID != uuid.Nil {
+			if err := verifyGroupAdmin(tx, groupID, adminID); err != nil {
+				return err
+			}
+		}
+		return addGroupMembership(tx, groupID, playerID, role)
+	})
+}
+
+func addGroupMembership(tx *gorm.DB, groupID, playerID uuid.UUID, role string) error {
 	var existingCount int64
-	if err := s.DB.Model(&models.GroupMembership{}).
+	if err := tx.Model(&models.GroupMembership{}).
 		Where("player_id = ?", playerID).
 		Count(&existingCount).Error; err != nil {
 		return err
 	}
 
 	membership := &models.GroupMembership{GroupID: groupID, PlayerID: playerID, Role: role, IsFavorite: existingCount == 0}
-	result := s.DB.Create(membership)
-	if result.Error != nil {
-		return result.Error
-	}
-	return nil
+	return tx.Create(membership).Error
 }
 
 func (s *GroupMembershipService) GetPlayersByGroupID(groupID uuid.UUID) ([]models.Player, error) {
@@ -195,6 +233,12 @@ func (s *GroupMembershipService) GetFirstGroupForPlayer(playerID uuid.UUID) (*mo
 // with no admin at all.
 func (s *GroupMembershipService) LeaveGroup(groupID, playerID uuid.UUID) error {
 	return s.DB.Transaction(func(tx *gorm.DB) error {
+		if _, err := lockPlayer(tx, playerID); err != nil {
+			return err
+		}
+		if err := lockGroup(tx, groupID); err != nil {
+			return err
+		}
 		var membership models.GroupMembership
 		if err := tx.
 			Where("group_id = ? AND player_id = ?", groupID, playerID).
@@ -302,6 +346,9 @@ func (s *GroupMembershipService) UpdateMemberRole(groupID, actingPlayerID, targe
 	}
 
 	return s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := lockGroup(tx, groupID); err != nil {
+			return err
+		}
 		var membership models.GroupMembership
 		if err := tx.
 			Where("group_id = ? AND player_id = ?", groupID, targetPlayerID).
@@ -309,11 +356,7 @@ func (s *GroupMembershipService) UpdateMemberRole(groupID, actingPlayerID, targe
 			return err
 		}
 
-		if membership.Role == newRole {
-			return nil
-		}
-
-		if newRole == models.RoleMember {
+		if membership.Role == models.RoleAdmin && newRole == models.RoleMember {
 			var otherAdmins int64
 			if err := tx.Model(&models.GroupMembership{}).
 				Where("group_id = ? AND player_id <> ? AND role = ?", groupID, targetPlayerID, models.RoleAdmin).
@@ -325,6 +368,12 @@ func (s *GroupMembershipService) UpdateMemberRole(groupID, actingPlayerID, targe
 			}
 		}
 
+		if err := verifyGroupAdmin(tx, groupID, actingPlayerID); err != nil {
+			return err
+		}
+		if membership.Role == newRole {
+			return nil
+		}
 		return tx.Model(&models.GroupMembership{}).
 			Where("id = ?", membership.ID).
 			Update("role", newRole).Error
@@ -353,6 +402,15 @@ func (s *GroupMembershipService) RemoveMember(groupID, actingPlayerID, targetPla
 	}
 
 	return s.DB.Transaction(func(tx *gorm.DB) error {
+		if _, err := lockPlayer(tx, targetPlayerID); err != nil {
+			return err
+		}
+		if err := lockGroup(tx, groupID); err != nil {
+			return err
+		}
+		if err := verifyGroupAdmin(tx, groupID, actingPlayerID); err != nil {
+			return err
+		}
 		var membership models.GroupMembership
 		if err := tx.
 			Where("group_id = ? AND player_id = ?", groupID, targetPlayerID).
@@ -374,22 +432,25 @@ func (s *GroupMembershipService) RemoveMember(groupID, actingPlayerID, targetPla
 // SetFavoriteGroup marks groupID as playerID's favorite — the group
 // resolveActiveGroup() (frontend) falls back to on a fresh device, after
 // logging in, or whenever the locally-stored active group doesn't match
-// anything, instead of an arbitrary "first group" ordering. Callers are
-// expected to have already verified playerID belongs to groupID (this route
-// sits behind RequireGroupMembershipByPathParam), since "which group" is
-// caller-supplied path data, not business logic this service needs to
-// re-check. Moving the flag, rather than ever unsetting it outright, is what
-// keeps "exactly one favorite" true.
+// anything. Serialize the change with membership removal and roll back if
+// the target membership is gone.
 func (s *GroupMembershipService) SetFavoriteGroup(playerID, groupID uuid.UUID) error {
 	return s.DB.Transaction(func(tx *gorm.DB) error {
+		if _, err := lockPlayer(tx, playerID); err != nil {
+			return err
+		}
 		if err := tx.Model(&models.GroupMembership{}).
 			Where("player_id = ? AND is_favorite = ?", playerID, true).
 			Update("is_favorite", false).Error; err != nil {
 			return err
 		}
-		return tx.Model(&models.GroupMembership{}).
+		update := tx.Model(&models.GroupMembership{}).
 			Where("group_id = ? AND player_id = ?", groupID, playerID).
-			Update("is_favorite", true).Error
+			Update("is_favorite", true)
+		if update.Error == nil && update.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return update.Error
 	})
 }
 

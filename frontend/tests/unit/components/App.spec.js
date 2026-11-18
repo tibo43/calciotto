@@ -9,6 +9,7 @@ import { disablePushOnLogout } from '@/services/pushNotifications';
 jest.mock('@/services/api', () => ({
   getMyFeatures: jest.fn(),
   getToken: jest.fn(),
+  logoutSession: jest.fn(),
   clearToken: jest.fn()
 }));
 

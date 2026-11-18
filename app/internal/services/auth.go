@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var (
@@ -56,12 +57,7 @@ var (
 const tokenTTL = 7 * 24 * time.Hour
 
 // minPasswordLength is the floor for a password the caller is *choosing*.
-// Eight characters is the common baseline (NIST SP 800-63B's own minimum for a
-// user-chosen secret); before this, the only rule anywhere was "not empty", so
-// a one-character password was accepted throughout. It matters more here than
-// it would in an app with account lockout or 2FA: neither exists (see
-// CLAUDE.md), and the per-IP rate limiter on /auth/login only bounds how fast
-// *one IP* can guess.
+// Login also limits attempts by IP and by account.
 const minPasswordLength = 8
 
 // validateNewPassword is the whole policy, in the one place both paths that
@@ -106,8 +102,9 @@ const (
 // identifying the caller still needs no DB round trip up front (the token
 // itself carries player_id), but *trusting* the token now does.
 type playerClaims struct {
-	PlayerID     uuid.UUID `json:"player_id"`
-	TokenVersion int       `json:"token_version"`
+	PlayerID     uuid.UUID  `json:"player_id"`
+	TokenVersion int        `json:"token_version"`
+	SessionID    *uuid.UUID `json:"session_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -187,23 +184,13 @@ func (s *AuthService) Signup(playerID uuid.UUID, email, password string) error {
 // deliberate product decision, not an oversight: do not add a duplicate-name
 // check here.
 //
-// inviteCode is now required — self-service group creation/joining is
-// disabled (see GroupHandler.CreateGroup/JoinGroup), so signing up is the
-// only way left into a group, and a player left with no group at all would
-// have no way in afterwards either. Empty (after normalizeInviteCode
-// trims/uppercases it) fails fast with ErrInviteCodeRequired, before any
-// player row is created. A non-empty code must resolve to an existing group
-// or the whole signup fails with ErrInviteCodeNotFound: the player row and
-// the group membership are created inside a single s.DB.Transaction, so a
-// typo'd or stale code can never leave behind an orphaned account with no
-// group, and a valid code can never silently fail to attach the new player
-// to it. This intentionally does not reuse GroupService.JoinByInviteCode —
-// that helper's IsMember check is meaningless for a player created moments
-// earlier in the same transaction, and it queries s.DB rather than the
-// transaction's tx, which would break atomicity. Instead the group lookup
-// and services.NewGroupMembershipService(tx).AddPlayerToGroupWithRole(...)
-// call are inlined here, both scoped to tx.
+// The account and its membership are created in one transaction after the
+// invitation is rechecked under the group lock.
 func (s *AuthService) SignupNewPlayer(name, email, password, inviteCode string) (uuid.UUID, error) {
+	return s.signupNewPlayer(name, email, password, inviteCode, nil)
+}
+
+func (s *AuthService) signupNewPlayer(name, email, password, inviteCode string, complete func(*gorm.DB, models.Player) error) (uuid.UUID, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return uuid.Nil, ErrEmptyPlayerName
@@ -220,6 +207,9 @@ func (s *AuthService) SignupNewPlayer(name, email, password, inviteCode string) 
 	normalizedInviteCode := normalizeInviteCode(inviteCode)
 	if normalizedInviteCode == "" {
 		return uuid.Nil, ErrInviteCodeRequired
+	}
+	if _, err := groupForActiveInvite(s.DB, normalizedInviteCode); err != nil {
+		return uuid.Nil, err
 	}
 
 	var existing models.Player
@@ -246,14 +236,17 @@ func (s *AuthService) SignupNewPlayer(name, email, password, inviteCode string) 
 			return err
 		}
 
-		var group models.Group
-		if err := tx.First(&group, "invite_code = ?", normalizedInviteCode).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrInviteCodeNotFound
-			}
+		group, err := groupForActiveInvite(tx.Clauses(clause.Locking{Strength: "UPDATE"}), normalizedInviteCode)
+		if err != nil {
 			return err
 		}
-		return NewGroupMembershipService(tx).AddPlayerToGroupWithRole(group.ID, player.ID, models.RoleMember)
+		if err := addGroupMembership(tx, group.ID, player.ID, models.RoleMember); err != nil {
+			return err
+		}
+		if complete != nil {
+			return complete(tx, player)
+		}
+		return nil
 	})
 	if err != nil {
 		return uuid.Nil, err
@@ -265,17 +258,27 @@ func (s *AuthService) SignupNewPlayer(name, email, password, inviteCode string) 
 // is intentionally the same sentinel whether the email is unknown or the
 // password is wrong, so callers can't use it to enumerate registered emails.
 func (s *AuthService) Login(email, password string) (string, error) {
-	email = normalizeEmail(email)
+	player, err := s.authenticate(email, password)
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	return s.signAccessToken(player.ID, player.TokenVersion, nil, now, now.Add(tokenTTL))
+}
 
+func (s *AuthService) authenticate(email, password string) (models.Player, error) {
 	var player models.Player
-	if err := s.DB.Where("email = ?", email).First(&player).Error; err != nil {
-		return "", ErrInvalidCredentials
+	err := s.DB.Where("email = ?", normalizeEmail(email)).First(&player).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return models.Player{}, ErrInvalidCredentials
+	}
+	if err != nil {
+		return models.Player{}, err
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(player.PasswordHash), []byte(password)); err != nil {
-		return "", ErrInvalidCredentials
+		return models.Player{}, ErrInvalidCredentials
 	}
-
-	return s.GenerateToken(player.ID)
+	return player, nil
 }
 
 // ForgotPassword issues and emails a reset link for the registered account.
@@ -304,6 +307,9 @@ func (s *AuthService) ForgotPassword(email string) error {
 	}
 
 	rawToken, err := issuePasswordResetToken(s.DB, player.ID)
+	if errors.Is(err, ErrPlayerNotFound) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -332,12 +338,27 @@ func issuePasswordResetToken(db *gorm.DB, playerID uuid.UUID) (string, error) {
 	resetToken := models.PasswordResetToken{
 		PlayerID:  playerID,
 		TokenHash: tokenHash,
-		ExpiresAt: time.Now().Add(passwordResetTTL),
 	}
-	if err := db.Create(&resetToken).Error; err != nil {
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		player, err := lockPlayer(tx, playerID)
+		if err != nil {
+			return err
+		}
+		if player.Email == nil {
+			return ErrPlayerNotFound
+		}
+		resetToken.ExpiresAt = time.Now().Add(passwordResetTTL)
+		return tx.Create(&resetToken).Error
+	}); err != nil {
 		return "", err
 	}
 	return rawToken, nil
+}
+
+func lockPlayer(tx *gorm.DB, playerID uuid.UUID) (models.Player, error) {
+	var player models.Player
+	err := tx.Clauses(clause.Locking{Strength: "NO KEY UPDATE"}).Take(&player, "id = ?", playerID).Error
+	return player, err
 }
 
 // ResetPassword consumes a reset token and replaces the player's password.
@@ -368,17 +389,8 @@ func (s *AuthService) ResetPassword(token, newPassword string) error {
 		return err
 	}
 
-	now := time.Now()
-	if resetToken.UsedAt != nil || now.After(resetToken.ExpiresAt) {
+	if resetToken.UsedAt != nil || !resetToken.ExpiresAt.After(time.Now()) {
 		return ErrInvalidResetToken
-	}
-
-	var player models.Player
-	if err := s.DB.First(&player, "id = ?", resetToken.PlayerID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrInvalidResetToken
-		}
-		return err
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
@@ -387,6 +399,23 @@ func (s *AuthService) ResetPassword(token, newPassword string) error {
 	}
 
 	return s.DB.Transaction(func(tx *gorm.DB) error {
+		player, err := lockPlayer(tx, resetToken.PlayerID)
+		if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil && player.Email == nil) {
+			return ErrInvalidResetToken
+		}
+		if err != nil {
+			return err
+		}
+		now := time.Now()
+		consumed := tx.Model(&models.PasswordResetToken{}).
+			Where("id = ? AND used_at IS NULL AND expires_at > ?", resetToken.ID, now).
+			Update("used_at", now)
+		if consumed.Error != nil {
+			return consumed.Error
+		}
+		if consumed.RowsAffected != 1 {
+			return ErrInvalidResetToken
+		}
 		if err := tx.Model(&models.Player{}).
 			Where("id = ?", player.ID).
 			Updates(map[string]interface{}{
@@ -469,6 +498,23 @@ func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 	}
 
 	return s.DB.Transaction(func(tx *gorm.DB) error {
+		current, err := lockPlayer(tx, playerID)
+		if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil && current.PasswordHash != player.PasswordHash) {
+			return ErrInvalidCredentials
+		}
+		if err != nil {
+			return err
+		}
+		var groupIDs []uuid.UUID
+		if err := tx.Model(&models.GroupMembership{}).Where("player_id = ?", playerID).
+			Order("group_id ASC").Pluck("group_id", &groupIDs).Error; err != nil {
+			return err
+		}
+		for _, groupID := range groupIDs {
+			if err := lockGroup(tx, groupID); err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		}
 		var memberships []models.GroupMembership
 		if err := tx.Where("player_id = ?", playerID).Find(&memberships).Error; err != nil {
 			return err
@@ -495,7 +541,12 @@ func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 				First(&successor).Error
 			if err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
-					continue // this player was the group's only member
+					// An empty group has no administrator to manage an invitation.
+					if err := tx.Model(&models.Group{}).Where("id = ?", membership.GroupID).
+						Update("invite_expires_at", time.Now()).Error; err != nil {
+						return err
+					}
+					continue
 				}
 				return err
 			}
@@ -510,6 +561,9 @@ func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 			return err
 		}
 		if err := tx.Where("player_id = ?", playerID).Delete(&models.PasswordResetToken{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("player_id = ?", playerID).Delete(&models.AuthSession{}).Error; err != nil {
 			return err
 		}
 		if err := tx.Where("player_id = ?", playerID).Delete(&models.MatchRegistration{}).Error; err != nil {
@@ -566,73 +620,56 @@ func hashResetToken(rawToken string) string {
 	return hex.EncodeToString(digest[:])
 }
 
-// ParseToken validates a JWT, returns the player_id claim it carries, and
-// enforces revocation: the claim's token_version must still match
-// Player.TokenVersion in the database, or the token is rejected the same as
-// a forged or expired one (ErrInvalidToken — this deliberately doesn't
-// distinguish "revoked" from "malformed" any more than ErrInvalidCredentials
-// distinguishes "unknown email" from "wrong password").
-//
-// This is the one place a valid-looking token can still fail, and it costs
-// exactly one indexed primary-key lookup per authenticated request — the
-// trade-off revocation requires, since a stateless JWT alone (checked purely
-// by signature) can never be invalidated before it expires on its own. A
-// player row that no longer exists rejects the token the same way a version
-// mismatch does; there is nothing left to compare against.
+// ParseToken validates both the signed access token and its revocation state.
 func (s *AuthService) ParseToken(tokenString string) (uuid.UUID, error) {
 	claims := &playerClaims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, ErrInvalidToken
-		}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(_ *jwt.Token) (interface{}, error) {
 		return s.secret, nil
-	})
-	if err != nil || !token.Valid {
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
+	if err != nil || !token.Valid || claims.PlayerID == uuid.Nil {
 		return uuid.Nil, ErrInvalidToken
 	}
-
+	if claims.SessionID != nil {
+		var session models.AuthSession
+		err := s.DB.Select("auth_sessions.id").
+			Joins("JOIN players ON players.id = auth_sessions.player_id AND players.token_version = auth_sessions.token_version").
+			Where("auth_sessions.id = ? AND auth_sessions.player_id = ? AND auth_sessions.token_version = ? AND auth_sessions.expires_at > ?",
+				*claims.SessionID, claims.PlayerID, claims.TokenVersion, time.Now()).
+			Take(&session).Error
+		if err != nil {
+			return uuid.Nil, ErrInvalidToken
+		}
+		return claims.PlayerID, nil
+	}
+	// Previously issued access tokens keep their original expiry.
 	var player models.Player
-	if err := s.DB.Select("token_version").First(&player, "id = ?", claims.PlayerID).Error; err != nil {
+	if err := s.DB.Select("token_version").Take(&player, "id = ?", claims.PlayerID).Error; err != nil {
 		return uuid.Nil, ErrInvalidToken
 	}
 	if player.TokenVersion != claims.TokenVersion {
 		return uuid.Nil, ErrInvalidToken
 	}
-
 	return claims.PlayerID, nil
 }
 
-// GenerateToken signs a fresh JWT for playerID, stamped with that player's
-// *current* TokenVersion so ParseToken can later tell this token apart from
-// one issued before a revoking event (password reset, account deletion).
-// Exported (unlike the rest of this file's internals) so AuthHandler.Signup
-// can hand the caller a usable token straight away — signing up and logging
-// in are, from the caller's point of view, one action, not two round trips
-// that both need the password.
-//
-// Loading TokenVersion here rather than asking every caller to supply it is
-// deliberate: Login already has the row in hand, but SignupNewPlayer only
-// returns an id, and a caller that forgot to pass the right version would
-// silently mint a token ParseToken immediately rejects. One extra indexed
-// lookup at issuance time (rare — login/signup only) removes that whole class
-// of mistake.
+// GenerateToken issues a standalone token for callers using the legacy contract.
 func (s *AuthService) GenerateToken(playerID uuid.UUID) (string, error) {
 	var player models.Player
-	if err := s.DB.Select("token_version").First(&player, "id = ?", playerID).Error; err != nil {
+	if err := s.DB.Select("token_version").Take(&player, "id = ?", playerID).Error; err != nil {
 		return "", err
 	}
-
 	now := time.Now()
+	return s.signAccessToken(playerID, player.TokenVersion, nil, now, now.Add(tokenTTL))
+}
+
+func (s *AuthService) signAccessToken(playerID uuid.UUID, version int, sessionID *uuid.UUID, now, expiresAt time.Time) (string, error) {
 	claims := playerClaims{
-		PlayerID:     playerID,
-		TokenVersion: player.TokenVersion,
+		PlayerID: playerID, TokenVersion: version, SessionID: sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(tokenTTL)),
+			IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(s.secret)
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.secret)
 }
 
 func normalizeEmail(email string) string {

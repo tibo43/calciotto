@@ -1,4 +1,12 @@
 const { defineConfig } = require('@vue/cli-service')
+
+const localAPI = new URL(process.env.DEV_API_PROXY_TARGET || 'http://127.0.0.1:8080')
+if (localAPI.protocol !== 'http:' ||
+    !['127.0.0.1', 'localhost', '[::1]', 'backend'].includes(localAPI.hostname) ||
+    localAPI.username || localAPI.password || localAPI.pathname !== '/' || localAPI.search || localAPI.hash) {
+  throw new Error('DEV_API_PROXY_TARGET must be a local HTTP origin')
+}
+
 module.exports = defineConfig({
   transpileDependencies: true,
   chainWebpack: (config) => {
@@ -14,6 +22,12 @@ module.exports = defineConfig({
     // another device, even though the container already listens on 0.0.0.0.
     // 'all' is fine here: this only ever runs against the stubbed/local dev
     // backend, never production.
-    allowedHosts: 'all'
+    allowedHosts: 'all',
+    proxy: {
+      '/api/auth': {
+        target: localAPI.origin,
+        pathRewrite: { '^/api': '' }
+      }
+    }
   }
 })

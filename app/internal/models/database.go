@@ -128,20 +128,28 @@ type PasswordResetToken struct {
 	UsedAt    *time.Time `json:"used_at,omitempty"`
 }
 
+// AuthSession is one device's renewable session. The browser holds the
+// refresh credential and the database stores only its fingerprints.
+type AuthSession struct {
+	BaseModel
+	PlayerID     uuid.UUID `gorm:"type:uuid;not null;index" json:"-"`
+	TokenVersion int       `gorm:"not null" json:"-"`
+	RefreshHash  string    `gorm:"not null" json:"-"`
+	PreviousHash string    `json:"-"`
+	RotatedAt    time.Time `json:"-"`
+	ExpiresAt    time.Time `gorm:"not null;index" json:"-"`
+}
+
 // Group représente un groupe de joueurs (ex: un club, une salle). Team et
 // Match sont scopés par groupe ; un Player peut appartenir à plusieurs
 // groupes via GroupMembership.
 //
-// InviteCode est le secret partagé qui permet à un joueur de rejoindre le
-// groupe (POST /groups/join) : il porte donc `json:"-"` pour ne jamais
-// s'échapper via GET /groups et GET /groups/:id — ces deux routes exigent un
-// compte authentifié mais listent toujours tous les groupes du système, sans
-// filtrage par appartenance — seul GET /groups/:id/invite-code, réservé aux
-// membres, le renvoie explicitement.
+// The invitation is available only through the admin invitation endpoints.
 type Group struct {
 	BaseModel
-	Name       string `gorm:"type:string" json:"name"`
-	InviteCode string `gorm:"type:string;uniqueIndex" json:"-"`
+	Name            string    `gorm:"type:string" json:"name"`
+	InviteCode      string    `gorm:"type:string;uniqueIndex" json:"-"`
+	InviteExpiresAt time.Time `gorm:"not null;default:(CURRENT_TIMESTAMP + INTERVAL '7 days')" json:"-"`
 }
 
 // Team représente une équipe. Chaque groupe a exactement deux équipes,

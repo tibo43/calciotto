@@ -53,6 +53,8 @@
                 <span class="whatsapp-share-label">Invite via WhatsApp</span>
               </a>
             </div>
+            <InvitationActions :group-id="groupId" :code="inviteCode" :expires-at="inviteExpiresAt"
+              @updated="applyInvitation" />
             <p v-if="codeError" class="error-message">{{ codeError }}</p>
           </section>
 
@@ -87,6 +89,7 @@
 
 <script>
 import { getInviteCode, getTeamsByGroup, updateTeam } from '@/services/api';
+import InvitationActions from '@/components/InvitationActions.vue';
 import { isDarkModeActive } from '@/services/theme';
 import { buildGroupInviteShareText, buildWhatsAppShareUrl } from '@/services/whatsappShare';
 import TeamColourPicker from '@/components/TeamColourPicker.vue';
@@ -106,7 +109,7 @@ function toHexColour(colour) {
 
 export default {
   name: 'GroupSettingsModal',
-  components: { TeamColourPicker },
+  components: { InvitationActions, TeamColourPicker },
   props: {
     groupId: { type: String, required: true },
     groupName: { type: String, default: 'Group' }
@@ -120,6 +123,7 @@ export default {
       // case worth a live DOM observer for.
       isDarkModeSnapshot: isDarkModeActive(),
       inviteCode: '',
+      inviteExpiresAt: '',
       codeError: '',
       loadingCode: false,
       copied: false,
@@ -155,15 +159,18 @@ export default {
       this.codeError = '';
       try {
         const data = await getInviteCode(this.groupId);
-        this.inviteCode = data.invite_code || '';
-        if (!this.inviteCode) {
-          this.codeError = 'This group has no invite code yet.';
-        }
+        this.applyInvitation(data);
       } catch (error) {
         this.codeError = this.backendMessage(error, 'Failed to load the invite code.');
       } finally {
         this.loadingCode = false;
       }
+    },
+    applyInvitation(invitation) {
+      this.inviteCode = invitation.invite_code || '';
+      this.inviteExpiresAt = invitation.expires_at || '';
+      this.codeError = '';
+      this.copied = false;
     },
     async copyInviteCode() {
       if (!this.inviteCode) {

@@ -47,11 +47,12 @@ services:
       # this machine too, since 192.168.1.7 loops back to itself. Update if
       # this machine's LAN IP ever changes.
       - VUE_APP_API_BASE_URL=http://192.168.1.7:8080
+      - DEV_API_PROXY_TARGET=http://backend:8080
     depends_on:
       backend:
         condition: service_started
   db:
-      image: postgres:17.5
+      image: postgres:17.12
       volumes:
         - ./scripts/init.sh:/docker-entrypoint-initdb.d/init.sh
         - postgres:/var/lib/postgresql/data/pgdata

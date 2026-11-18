@@ -3,6 +3,7 @@ package handlers_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -33,7 +34,7 @@ type bootstrapEnv struct {
 // newBootstrapEnv mirrors main.go's wiring for the routes involved in group
 // creation and joining, so the middleware chain under test is the real one:
 // POST /groups and POST /groups/join take authRequired alone, while
-// /groups/:id/invite-code also requires membership of the group in the path.
+// invitation routes require administration of the group in the path.
 func newBootstrapEnv(t *testing.T, tx *gorm.DB) *bootstrapEnv {
 	t.Helper()
 
@@ -46,6 +47,7 @@ func newBootstrapEnv(t *testing.T, tx *gorm.DB) *bootstrapEnv {
 	authRequired := handlers.AuthMiddleware(authService)
 	requireGroupMember := handlers.RequireGroupMembership(membershipService)
 	requireGroupMemberByPathID := handlers.RequireGroupMembershipByPathParam(membershipService, "id")
+	requireGroupAdminByPathID := handlers.RequireGroupAdminByPathParam(membershipService, "id")
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -53,8 +55,10 @@ func newBootstrapEnv(t *testing.T, tx *gorm.DB) *bootstrapEnv {
 	router.POST("/groups/join", authRequired, groupHandler.JoinGroup)
 	router.GET("/groups", authRequired, groupHandler.GetGroups)
 	router.GET("/groups/me", authRequired, groupHandler.GetMyGroups)
-	router.GET("/groups/:id", authRequired, groupHandler.GetGroupByID)
-	router.GET("/groups/:id/invite-code", authRequired, requireGroupMemberByPathID, groupHandler.GetInviteCode)
+	router.GET("/groups/:id", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupByID)
+	router.GET("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.GetInviteCode)
+	router.POST("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.ChangeInvitation)
+	router.DELETE("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.ChangeInvitation)
 	router.GET("/matches/details", authRequired, requireGroupMember, matchHandler.GetMatchesDetails)
 
 	return &bootstrapEnv{
@@ -215,46 +219,70 @@ func TestJoinGroup_Integration_RequiresAuth(t *testing.T) {
 	}
 }
 
-// TestGetInviteCode_Integration_MembersOnly checks that the one endpoint
-// exposing the code is gated on current membership — an invite code is a
-// shared secret, so anyone able to read it can hand out access to the group.
-func TestGetInviteCode_Integration_MembersOnly(t *testing.T) {
-	db := testutil.OpenDB(t)
-	tx := testutil.BeginTx(t, db)
+func TestGroupInvitation_Integration_AdminLifecycle(t *testing.T) {
+	tx := testutil.BeginTx(t, testutil.OpenDB(t))
 	env := newBootstrapEnv(t, tx)
-
-	memberID, memberToken := env.newAuthenticatedPlayer(t,
-		"Zzz Bootstrap Code Member", "bootstrap-code-member@example.com")
-	_, outsiderToken := env.newAuthenticatedPlayer(t,
-		"Zzz Bootstrap Code Outsider", "bootstrap-code-outsider@example.com")
-
-	stored := env.createGroupDirect(t, "Zzz Bootstrap Code Group", memberID)
-	groupID := stored.ID
-
-	memberRec := env.do(http.MethodGet, "/groups/"+groupID.String()+"/invite-code", memberToken, nil)
-	if memberRec.Code != http.StatusOK {
-		t.Fatalf("member GET invite-code returned status %d, want 200, body: %s", memberRec.Code, memberRec.Body.String())
+	adminID, adminToken := env.newAuthenticatedPlayer(t, "Zzz Invite Lifecycle Admin", "invite-admin@example.test")
+	memberID, memberToken := env.newAuthenticatedPlayer(t, "Zzz Invite Lifecycle Member", "invite-member@example.test")
+	_, outsiderToken := env.newAuthenticatedPlayer(t, "Zzz Invite Lifecycle Outsider", "invite-outsider@example.test")
+	group := env.createGroupDirect(t, "Zzz Invite Lifecycle", adminID)
+	if err := env.memberships.AddPlayerToGroup(group.ID, memberID); err != nil {
+		t.Fatal(err)
 	}
-	if got := decodeInviteCode(t, memberRec); got != stored.InviteCode {
-		t.Errorf("member got invite code %q, want %q", got, stored.InviteCode)
-	}
+	path := "/groups/" + group.ID.String() + "/invite-code"
 
-	outsiderRec := env.do(http.MethodGet, "/groups/"+groupID.String()+"/invite-code", outsiderToken, nil)
-	if outsiderRec.Code != http.StatusForbidden {
-		t.Errorf("non-member GET invite-code returned status %d, want 403, body: %s", outsiderRec.Code, outsiderRec.Body.String())
+	for _, token := range []string{memberToken, outsiderToken} {
+		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
+			if rec := env.do(method, path, token, nil); rec.Code != http.StatusForbidden {
+				t.Fatalf("%s invitation without admin role: got %d, want 403", method, rec.Code)
+			}
+		}
 	}
-
-	anonRec := env.do(http.MethodGet, "/groups/"+groupID.String()+"/invite-code", "", nil)
-	if anonRec.Code != http.StatusUnauthorized {
-		t.Errorf("anonymous GET invite-code returned status %d, want 401, body: %s", anonRec.Code, anonRec.Body.String())
+	if rec := env.do(http.MethodGet, path, "", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous invitation read: got %d, want 401", rec.Code)
+	}
+	active := env.do(http.MethodGet, path, adminToken, nil)
+	if active.Code != http.StatusOK || decodeInviteCode(t, active) != group.InviteCode {
+		t.Fatal("admin could not read the active invitation")
+	}
+	rotated := env.do(http.MethodPost, path, adminToken, nil)
+	if rotated.Code != http.StatusOK {
+		t.Fatalf("rotate invitation: got %d", rotated.Code)
+	}
+	replacement := decodeInviteCode(t, rotated)
+	if replacement == "" || replacement == group.InviteCode {
+		t.Fatal("rotation did not issue a fresh code")
+	}
+	if _, err := env.auth.SignupNewPlayer("Zzz Rotation Fixture", "invite-rotation@example.test", "fixture-password", group.InviteCode); !errors.Is(err, services.ErrInviteCodeNotFound) {
+		t.Fatalf("old invitation is still accepted: %v", err)
+	}
+	if rec := env.do(http.MethodDelete, path, adminToken, nil); rec.Code != http.StatusOK || decodeInviteCode(t, rec) != "" {
+		t.Fatal("admin could not revoke the invitation")
+	}
+	if _, err := env.auth.SignupNewPlayer("Zzz Revoked Fixture", "invite-revoked@example.test", "fixture-password", replacement); !errors.Is(err, services.ErrInviteCodeNotFound) {
+		t.Fatalf("revoked invitation is still accepted: %v", err)
 	}
 }
 
-// TestGroupJSON_Integration_NeverExposesInviteCode is the counterpart of the
-// SearchPlayer email-leak test: GET /groups and GET /groups/:id require a
-// valid token but still list every group in the system regardless of the
-// caller's own membership, so the invite code must never ride along in their
-// JSON — not even for a member, who has GET /groups/:id/invite-code for that.
+func TestGroupReads_Integration_RequireMembership(t *testing.T) {
+	tx := testutil.BeginTx(t, testutil.OpenDB(t))
+	env := newBootstrapEnv(t, tx)
+	aID, aToken := env.newAuthenticatedPlayer(t, "Zzz Group Read A", "group-read-a@example.test")
+	bID, _ := env.newAuthenticatedPlayer(t, "Zzz Group Read B", "group-read-b@example.test")
+	a := env.createGroupDirect(t, "Zzz Visible Group", aID)
+	b := env.createGroupDirect(t, "Zzz Other Group", bID)
+
+	all := env.do(http.MethodGet, "/groups", aToken, nil)
+	var groups []models.Group
+	if all.Code != http.StatusOK || json.Unmarshal(all.Body.Bytes(), &groups) != nil ||
+		len(groups) != 1 || groups[0].ID != a.ID {
+		t.Fatalf("list should return only the caller's group, got %d groups and status %d", len(groups), all.Code)
+	}
+	if rec := env.do(http.MethodGet, "/groups/"+b.ID.String(), aToken, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("other group read: got %d, want 403", rec.Code)
+	}
+}
+
 func TestGroupJSON_Integration_NeverExposesInviteCode(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
