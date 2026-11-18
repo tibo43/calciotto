@@ -1,7 +1,7 @@
 <template>
-  <details v-if="expiresAt" class="invitation-actions">
+  <details class="invitation-actions">
     <summary>Manage invitation</summary>
-    <p v-if="code">Expires {{ new Date(expiresAt).toLocaleString() }}</p>
+    <p v-if="code">The code works until you generate a new one or revoke it.</p>
     <p v-else>No active invitation.</p>
     <div class="invitation-buttons">
       <button class="btn-base btn-cancel btn-small" type="button" :disabled="saving" @click="update(true)">
@@ -22,8 +22,7 @@ export default {
   name: 'InvitationActions',
   props: {
     groupId: { type: String, required: true },
-    code: { type: String, default: '' },
-    expiresAt: { type: String, default: '' }
+    code: { type: String, default: '' }
   },
   emits: ['updated'],
   data() {

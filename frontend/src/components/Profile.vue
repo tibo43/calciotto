@@ -220,7 +220,7 @@
           <!-- Hidden feature: only for players it was enabled for by hand
                (see PWA_INSTALL_FEATURE). -->
           <InstallAppCard v-if="features.includes(pwaInstallFeature)" />
-          <NotificationsCard v-if="features.includes(pushFeature)" />
+          <NotificationsCard v-if="features.includes(pushFeature)" :is-admin="isAdminSomewhere" />
 
           <!-- Danger zone: kept in its own card, visually separated from
                everything above, so an irreversible action doesn't sit next
@@ -340,6 +340,9 @@ export default {
     };
   },
   computed: {
+    isAdminSomewhere() {
+      return Object.values(this.groupMeta).some((meta) => meta.role === 'admin');
+    },
     designV2() {
       return Boolean(this.designV2On);
     },

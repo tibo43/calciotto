@@ -33,7 +33,7 @@
               <ShareButton v-if="inviteShareText" :text="inviteShareText" label="Share invitation"
                 class="btn-base btn-cancel btn-small" compact-on-mobile />
             </div>
-            <InvitationActions :group-id="groupId" :code="inviteCode" :expires-at="inviteExpiresAt"
+            <InvitationActions :group-id="groupId" :code="inviteCode"
               @updated="applyInvitation" />
             <p v-if="codeError" class="error-message">{{ codeError }}</p>
           </section>
@@ -104,7 +104,6 @@ export default {
       // case worth a live DOM observer for.
       isDarkModeSnapshot: isDarkModeActive(),
       inviteCode: '',
-      inviteExpiresAt: '',
       codeError: '',
       loadingCode: false,
       copied: false,
@@ -148,7 +147,6 @@ export default {
     },
     applyInvitation(invitation) {
       this.inviteCode = invitation.invite_code || '';
-      this.inviteExpiresAt = invitation.expires_at || '';
       this.codeError = '';
       this.copied = false;
     },

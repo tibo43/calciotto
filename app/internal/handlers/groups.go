@@ -103,7 +103,7 @@ func writeInvitation(c *gin.Context, group *models.Group) {
 		code = group.InviteCode
 	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, gin.H{"invite_code": code, "expires_at": group.InviteExpiresAt.UTC()})
+	c.JSON(http.StatusOK, gin.H{"invite_code": code})
 }
 
 func (h *GroupHandler) GetGroupByID(c *gin.Context) {
