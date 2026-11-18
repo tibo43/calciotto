@@ -105,10 +105,10 @@ function buildNotification(data) {
 }
 
 self.addEventListener('push', (event) => {
-  let data = {};
+  let data;
   try {
     data = event.data ? event.data.json() : {};
-  } catch (error) {
+  } catch {
     data = {};
   }
   const { title, body } = buildNotification(data);
@@ -136,7 +136,7 @@ self.addEventListener('notificationclick', (event) => {
         // other gets a fresh window instead.
         try {
           return await client.navigate(url);
-        } catch (error) {
+        } catch {
           break;
         }
       }

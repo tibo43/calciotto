@@ -2,13 +2,13 @@ import { mount, flushPromises } from '@vue/test-utils';
 import HomeV2 from '@/components/v2/HomeV2.vue';
 import { getMatchesDetails, getMatchVotes, getMatchRegistrations, getToken } from '@/services/api';
 
-jest.mock('@/services/api', () => ({
-  getMatchesDetails: jest.fn(),
-  getMatchRegistrations: jest.fn(() => Promise.resolve([])),
-  getMatchVotes: jest.fn(),
-  registerForMatch: jest.fn(),
-  unregisterFromMatch: jest.fn(),
-  getToken: jest.fn(() => '')
+vi.mock('@/services/api', () => ({
+  getMatchesDetails: vi.fn(),
+  getMatchRegistrations: vi.fn(() => Promise.resolve([])),
+  getMatchVotes: vi.fn(),
+  registerForMatch: vi.fn(),
+  unregisterFromMatch: vi.fn(),
+  getToken: vi.fn(() => '')
 }));
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -157,7 +157,7 @@ describe('HomeV2.vue empty group', () => {
 });
 
 describe('HomeV2.vue with a match scheduled', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   const scheduled = (extra = {}) => ({
     ...played('next', -3), ScheduledAt: new Date(Date.now() + 3 * DAY).toISOString(),

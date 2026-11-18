@@ -2,7 +2,6 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <!-- viewport-fit=cover lets the installed app use the whole screen on a
          notched iPhone; it is also what makes env(safe-area-inset-*) report
          real values, which the bottom tab bar and toast already pad with. -->
@@ -10,12 +9,12 @@
     <!-- Every icon below is generated from branding/icon-source.png by
          scripts/generate-icons.sh. The light variant (icon-source-light.png)
          is the navbar logo only; see public/icons/logo-light.png. -->
-    <link rel="icon" type="image/png" sizes="32x32" href="<%= BASE_URL %>icons/favicon-32.png">
-    <link rel="icon" href="<%= BASE_URL %>favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%icons/favicon-32.png">
+    <link rel="icon" href="%BASE_URL%favicon.ico" sizes="any">
     <!-- Installable app (PWA). The manifest covers Android and desktop; iOS
          reads its icon and home-screen title from the apple-* tags instead. -->
-    <link rel="manifest" href="<%= BASE_URL %>manifest.webmanifest">
-    <link rel="apple-touch-icon" href="<%= BASE_URL %>icons/apple-touch-icon.png">
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest">
+    <link rel="apple-touch-icon" href="%BASE_URL%icons/apple-touch-icon.png">
     <meta name="apple-mobile-web-app-title" content="Calciotto">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -24,13 +23,13 @@
          toggle by App.vue (syncThemeColorMeta), since that toggle is the
          app's own setting, not the system's. -->
     <meta name="theme-color" content="#ffffff">
-    <title><%= htmlWebpackPlugin.options.title %></title>
+    <title>Calciotto</title>
   </head>
   <body>
     <noscript>
-      <strong>We're sorry but <%= htmlWebpackPlugin.options.title %> doesn't work properly without JavaScript enabled. Please enable it to continue.</strong>
+      <strong>We're sorry but Calciotto doesn't work properly without JavaScript enabled. Please enable it to continue.</strong>
     </noscript>
     <div id="app"></div>
-    <!-- built files will be auto injected -->
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>

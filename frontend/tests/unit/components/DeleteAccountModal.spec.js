@@ -2,18 +2,18 @@ import { shallowMount, flushPromises } from '@vue/test-utils';
 import DeleteAccountModal from '@/components/DeleteAccountModal.vue';
 import { deleteMyAccount, clearToken } from '@/services/api';
 
-jest.mock('@/services/api', () => ({
-  deleteMyAccount: jest.fn(),
-  clearToken: jest.fn()
+vi.mock('@/services/api', () => ({
+  deleteMyAccount: vi.fn(),
+  clearToken: vi.fn()
 }));
 
-jest.mock('@/services/theme', () => ({
+vi.mock('@/services/theme', () => ({
   isDarkModeActive: () => false
 }));
 
 describe('DeleteAccountModal.vue', () => {
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('does not call the API when submitted with an empty password', async () => {

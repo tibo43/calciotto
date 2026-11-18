@@ -6,23 +6,23 @@ import {
 } from '@/services/api';
 import { findMatchInMyGroups } from '@/services/v2Match';
 
-jest.mock('@/services/api', () => ({
-  getMatchRegistrations: jest.fn(),
-  registerForMatch: jest.fn(),
-  unregisterFromMatch: jest.fn(),
-  getMatchVotes: jest.fn(),
-  voteForMotm: jest.fn(),
-  removeMotmVote: jest.fn(),
-  getSeasons: jest.fn(),
-  getMatchPredictions: jest.fn(),
-  predictForMatch: jest.fn(),
+vi.mock('@/services/api', () => ({
+  getMatchRegistrations: vi.fn(),
+  registerForMatch: vi.fn(),
+  unregisterFromMatch: vi.fn(),
+  getMatchVotes: vi.fn(),
+  voteForMotm: vi.fn(),
+  removeMotmVote: vi.fn(),
+  getSeasons: vi.fn(),
+  getMatchPredictions: vi.fn(),
+  predictForMatch: vi.fn(),
   // A token whose player_id is 'me'.
-  getToken: jest.fn(() => `x.${btoa(JSON.stringify({ player_id: 'me' }))}.y`)
+  getToken: vi.fn(() => `x.${btoa(JSON.stringify({ player_id: 'me' }))}.y`)
 }));
 
-jest.mock('@/services/v2Match', () => ({
-  ...jest.requireActual('@/services/v2Match'),
-  findMatchInMyGroups: jest.fn()
+vi.mock('@/services/v2Match', async (importOriginal) => ({
+  ...(await importOriginal()),
+  findMatchInMyGroups: vi.fn()
 }));
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -69,7 +69,7 @@ async function mountView(match, { registrations = [], votes = null, role = 'memb
 
 const toastText = (wrapper) => wrapper.find('.toast-message span').text();
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => vi.clearAllMocks());
 
 describe('MatchView.vue (design v2)', () => {
   it('shows the result once the score is recorded, even on the match day, and nothing about sign-ups', async () => {

@@ -1,6 +1,8 @@
+import { createRequire } from 'node:module';
+
 // The notification wording lives in public/sw.js (see its comment); the file
 // exports it for exactly this test.
-const { buildNotification } = require('../../../public/sw.js');
+const { buildNotification } = createRequire(import.meta.url)('../../../public/sw.js');
 
 const KICKOFF = '2026-09-06T19:00:00Z';
 const kickoffText = new Date(KICKOFF).toLocaleString('en-US', {

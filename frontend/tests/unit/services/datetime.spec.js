@@ -14,7 +14,7 @@ import {
 // The machine's own zone must never decide whether these pass — a test that
 // only holds in Europe/Paris is worse than no test at all here.
 const withOffset = (offsetMinutes, assertions) => {
-  const spy = jest
+  const spy = vi
     .spyOn(Date.prototype, 'getTimezoneOffset')
     .mockReturnValue(offsetMinutes);
   try {

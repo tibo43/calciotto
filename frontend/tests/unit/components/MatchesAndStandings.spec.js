@@ -1,3 +1,4 @@
+import { ref } from 'vue';
 import { shallowMount, flushPromises } from '@vue/test-utils';
 import MatchesAndStandings from '@/components/MatchesAndStandings.vue';
 import { getPointsStandings, getScorers, getMotmStandings, getSeasons } from '@/services/api';
@@ -6,16 +7,16 @@ import { decodeMatchId } from '@/services/shortLink';
 import { findGroupForMatch } from '@/router/index';
 import { loadDesignV2 } from '@/services/designV2';
 
-jest.mock('@/services/api', () => ({
-  getPointsStandings: jest.fn(),
-  getScorers: jest.fn(),
-  getMotmStandings: jest.fn(),
-  getSeasons: jest.fn()
+vi.mock('@/services/api', () => ({
+  getPointsStandings: vi.fn(),
+  getScorers: vi.fn(),
+  getMotmStandings: vi.fn(),
+  getSeasons: vi.fn()
 }));
 
-jest.mock('@/services/activeGroup', () => ({
-  resolveActiveGroup: jest.fn(),
-  setActiveGroupId: jest.fn()
+vi.mock('@/services/activeGroup', () => ({
+  resolveActiveGroup: vi.fn(),
+  setActiveGroupId: vi.fn()
 }));
 
 // Both mocked wholesale for the same reason: real findGroupForMatch would
@@ -23,21 +24,21 @@ jest.mock('@/services/activeGroup', () => ({
 // decodeMatchId has its own dedicated spec (shortLink.spec.js) already
 // covering the base62 round-trip — this file only cares that the page wires
 // their results into the right tab/group/season/prop.
-jest.mock('@/services/shortLink', () => ({
-  decodeMatchId: jest.fn()
+vi.mock('@/services/shortLink', () => ({
+  decodeMatchId: vi.fn()
 }));
 
-jest.mock('@/router/index', () => ({
-  findGroupForMatch: jest.fn()
+vi.mock('@/router/index', () => ({
+  findGroupForMatch: vi.fn()
 }));
 
 // Design v2 off unless a test says otherwise: these tests are about today's
 // page.
-jest.mock('@/services/designV2', () => ({
-  loadDesignV2: jest.fn(() => Promise.resolve(false))
+vi.mock('@/services/designV2', () => ({
+  loadDesignV2: vi.fn(() => Promise.resolve(false))
 }));
 
-const mountPage = async (seasons, { routeQuery = {}, router = { replace: jest.fn() }, provide = {} } = {}) => {
+const mountPage = async (seasons, { routeQuery = {}, router = { replace: vi.fn() }, provide = {} } = {}) => {
   resolveActiveGroup.mockResolvedValue({
     groups: [{ id: 'group-uuid', name: 'Test Group', role: 'admin' }],
     activeGroupId: 'group-uuid'
@@ -64,11 +65,11 @@ const mountPage = async (seasons, { routeQuery = {}, router = { replace: jest.fn
 // preselected from it.
 describe('MatchesAndStandings.vue season preselection', () => {
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('defaults to the season containing today, not the last season in the list', async () => {
-    jest.useFakeTimers().setSystemTime(new Date(2026, 7, 15)); // Aug 15, 2026 — still season 2025-2026
+    vi.useFakeTimers().setSystemTime(new Date(2026, 7, 15)); // Aug 15, 2026 — still season 2025-2026
     const wrapper = await mountPage(['2024-2025', '2025-2026', '2026-2027']);
 
     // Without the fix this would be '2026-2027' (the last entry) even though
@@ -78,21 +79,21 @@ describe('MatchesAndStandings.vue season preselection', () => {
   });
 
   it('still opens on the current season in the ordinary case where it is also the last one', async () => {
-    jest.useFakeTimers().setSystemTime(new Date(2026, 9, 1)); // Oct 1, 2026 — season 2026-2027
+    vi.useFakeTimers().setSystemTime(new Date(2026, 9, 1)); // Oct 1, 2026 — season 2026-2027
     const wrapper = await mountPage(['2025-2026', '2026-2027']);
 
     expect(wrapper.vm.selectedSeason).toBe('2026-2027');
   });
 
   it("falls back to the last season on record when today's own season has no matches yet", async () => {
-    jest.useFakeTimers().setSystemTime(new Date(2026, 9, 1)); // season 2026-2027, but no matches logged for it yet
+    vi.useFakeTimers().setSystemTime(new Date(2026, 9, 1)); // season 2026-2027, but no matches logged for it yet
     const wrapper = await mountPage(['2024-2025', '2025-2026']);
 
     expect(wrapper.vm.selectedSeason).toBe('2025-2026');
   });
 
   it('degrades to no filtering when the group has no seasons at all', async () => {
-    jest.useFakeTimers().setSystemTime(new Date(2026, 9, 1));
+    vi.useFakeTimers().setSystemTime(new Date(2026, 9, 1));
     const wrapper = await mountPage([]);
 
     expect(wrapper.vm.selectedSeason).toBe('');
@@ -144,7 +145,7 @@ describe('MatchesAndStandings.vue shared match deep link (?match=<code>)', () =>
       group: { id: 'other-group-uuid', role: 'member' },
       details: { ID: 'match-uuid', Date: '2026-09-06' }
     });
-    const reload = jest.fn();
+    const reload = vi.fn();
     const originalLocation = window.location;
     delete window.location;
     window.location = { ...originalLocation, reload };
@@ -199,7 +200,7 @@ describe('MatchesAndStandings.vue under design v2', () => {
   it('opens a ?match= link on the match page, without resolving it here', async () => {
     loadDesignV2.mockResolvedValue(true);
     decodeMatchId.mockReturnValue('match-uuid');
-    const router = { replace: jest.fn() };
+    const router = { replace: vi.fn() };
 
     await mountPage(['2026-2027'], { routeQuery: { match: 'abc123' }, router });
 
@@ -211,7 +212,7 @@ describe('MatchesAndStandings.vue under design v2', () => {
     loadDesignV2.mockResolvedValue(false);
     decodeMatchId.mockReturnValue('match-uuid');
     findGroupForMatch.mockResolvedValue(null);
-    const router = { replace: jest.fn() };
+    const router = { replace: vi.fn() };
 
     await mountPage(['2026-2027'], { routeQuery: { match: 'abc123' }, router });
 
@@ -220,7 +221,6 @@ describe('MatchesAndStandings.vue under design v2', () => {
   });
 
   it('fills the shell\'s group and season selects when the flag lands after the page loaded', async () => {
-    const { ref } = require('vue');
     const designV2On = ref(false);
     const v2Context = { groups: [], seasons: [], groupId: '', season: '' };
 

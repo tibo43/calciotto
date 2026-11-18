@@ -2,9 +2,9 @@ import { mount } from '@vue/test-utils';
 import InstallAppCard from '@/components/InstallAppCard.vue';
 import { getInstallTracker, INSTALL_STATE } from '@/services/pwaInstall';
 
-jest.mock('@/services/pwaInstall', () => {
-  const actual = jest.requireActual('@/services/pwaInstall');
-  return { ...actual, getInstallTracker: jest.fn() };
+vi.mock('@/services/pwaInstall', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, getInstallTracker: vi.fn() };
 });
 
 // A tracker whose state the test sets, and whose subscribers it can notify.
@@ -12,11 +12,11 @@ function stubTracker(initialState) {
   let listener = null;
   const tracker = {
     state: () => initialState,
-    subscribe: jest.fn((fn) => {
+    subscribe: vi.fn((fn) => {
       listener = fn;
-      return jest.fn();
+      return vi.fn();
     }),
-    prompt: jest.fn(() => Promise.resolve('accepted')),
+    prompt: vi.fn(() => Promise.resolve('accepted')),
     emit: (state) => listener(state)
   };
   getInstallTracker.mockReturnValue(tracker);

@@ -2,8 +2,8 @@ import { findMatchInMyGroups, actionErrorMessage } from '@/services/v2Match';
 import { resolveActiveGroup } from '@/services/activeGroup';
 import { findGroupForMatch } from '@/router/index';
 
-jest.mock('@/services/activeGroup', () => ({ resolveActiveGroup: jest.fn() }));
-jest.mock('@/router/index', () => ({ findGroupForMatch: jest.fn() }));
+vi.mock('@/services/activeGroup', () => ({ resolveActiveGroup: vi.fn() }));
+vi.mock('@/router/index', () => ({ findGroupForMatch: vi.fn() }));
 
 const GROUPS = [
   { id: 'first', role: 'member' },

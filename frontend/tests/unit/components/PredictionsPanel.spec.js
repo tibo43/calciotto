@@ -7,11 +7,11 @@ import {
   getToken
 } from '@/services/api';
 
-jest.mock('@/services/api', () => ({
-  getMatchesDetails: jest.fn(),
-  getMatchPredictions: jest.fn(),
-  predictForMatch: jest.fn(),
-  getToken: jest.fn()
+vi.mock('@/services/api', () => ({
+  getMatchesDetails: vi.fn(),
+  getMatchPredictions: vi.fn(),
+  predictForMatch: vi.fn(),
+  getToken: vi.fn()
 }));
 
 const ME = '11111111-1111-1111-1111-111111111111';
@@ -58,12 +58,12 @@ const mountPanel = async (propsOverrides = {}) => {
 let nowSpy;
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   getToken.mockReturnValue(tokenFor(ME));
   getMatchPredictions.mockResolvedValue(summary());
   // Two days before kick-off, so the window is open unless a test says so.
-  nowSpy = jest.spyOn(Date, 'now').mockReturnValue(KICKOFF_MS - 2 * 24 * 3600 * 1000);
-  jest.spyOn(console, 'error').mockImplementation(() => {});
+  nowSpy = vi.spyOn(Date, 'now').mockReturnValue(KICKOFF_MS - 2 * 24 * 3600 * 1000);
+  vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -224,7 +224,7 @@ describe('PredictionsPanel — the pick buttons', () => {
   });
 
   it('closes the toast on its own after five seconds', async () => {
-    const timeoutSpy = jest.spyOn(global, 'setTimeout');
+    const timeoutSpy = vi.spyOn(global, 'setTimeout');
     predictForMatch.mockRejectedValue({ response: { status: 409, data: { error: 'predictions are closed' } } });
     const wrapper = await mountPanel();
 

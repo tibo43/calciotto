@@ -3,37 +3,38 @@ import ProfileV2 from '@/components/v2/ProfileV2.vue';
 import {
   getPlayerProfile, getMyGroups, getMyFeatures, getTeamsByGroup, getInviteCode, getGroupMembers, removeMember
 } from '@/services/api';
+import { getPushState } from '@/services/pushNotifications';
 import { getInstallTracker } from '@/services/pwaInstall';
 
-jest.mock('@/services/api', () => ({
-  getPlayerProfile: jest.fn(),
-  getMyGroups: jest.fn(),
-  getMyFeatures: jest.fn(),
-  getSeasons: jest.fn(() => Promise.resolve([])),
-  getTeamsByGroup: jest.fn(),
-  getInviteCode: jest.fn(),
-  getGroupMembers: jest.fn(),
-  removeMember: jest.fn(),
-  updateMemberRole: jest.fn(),
-  setFavoriteGroup: jest.fn(),
-  updateMyName: jest.fn(),
-  deleteMyAccount: jest.fn(),
-  clearToken: jest.fn(),
-  updateTeam: jest.fn(),
-  getNotificationPreferences: jest.fn(() => Promise.resolve({})),
-  updateNotificationPreferences: jest.fn(),
-  forgotPassword: jest.fn(),
-  getToken: jest.fn(() => `x.${btoa(JSON.stringify({ player_id: 'me' }))}.y`)
+vi.mock('@/services/api', () => ({
+  getPlayerProfile: vi.fn(),
+  getMyGroups: vi.fn(),
+  getMyFeatures: vi.fn(),
+  getSeasons: vi.fn(() => Promise.resolve([])),
+  getTeamsByGroup: vi.fn(),
+  getInviteCode: vi.fn(),
+  getGroupMembers: vi.fn(),
+  removeMember: vi.fn(),
+  updateMemberRole: vi.fn(),
+  setFavoriteGroup: vi.fn(),
+  updateMyName: vi.fn(),
+  deleteMyAccount: vi.fn(),
+  clearToken: vi.fn(),
+  updateTeam: vi.fn(),
+  getNotificationPreferences: vi.fn(() => Promise.resolve({})),
+  updateNotificationPreferences: vi.fn(),
+  forgotPassword: vi.fn(),
+  getToken: vi.fn(() => `x.${btoa(JSON.stringify({ player_id: 'me' }))}.y`)
 }));
 
-jest.mock('@/services/pushNotifications', () => ({
-  ...jest.requireActual('@/services/pushNotifications'),
-  getPushState: jest.fn(() => Promise.resolve('off'))
+vi.mock('@/services/pushNotifications', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getPushState: vi.fn(() => Promise.resolve('off'))
 }));
 
-jest.mock('@/services/pwaInstall', () => ({
-  ...jest.requireActual('@/services/pwaInstall'),
-  getInstallTracker: jest.fn()
+vi.mock('@/services/pwaInstall', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getInstallTracker: vi.fn()
 }));
 
 const GROUP_ID = 'group-uuid';
@@ -49,9 +50,9 @@ async function mountProfile({ routeName = 'Profile', features = [], installState
   getTeamsByGroup.mockResolvedValue([]);
   getInviteCode.mockResolvedValue({ invite_code: 'ABC' });
   getGroupMembers.mockResolvedValue(members);
-  getInstallTracker.mockReturnValue({ state: () => installState, subscribe: () => () => {}, prompt: jest.fn() });
+  getInstallTracker.mockReturnValue({ state: () => installState, subscribe: () => () => {}, prompt: vi.fn() });
 
-  const router = { replace: jest.fn() };
+  const router = { replace: vi.fn() };
   const wrapper = mount(ProfileV2, {
     global: {
       provide: { v2Context: { confirming: false } },
@@ -63,7 +64,7 @@ async function mountProfile({ routeName = 'Profile', features = [], installState
   return { wrapper, router };
 }
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => vi.clearAllMocks());
 
 describe('ProfileV2.vue hidden features', () => {
   it('hides Notifications and Install without their features', async () => {
@@ -116,7 +117,6 @@ describe('ProfileV2.vue removing a member', () => {
 
 describe('ProfileV2.vue notifications switch', () => {
   it('cannot be turned on outside the installed app', async () => {
-    const { getPushState } = require('@/services/pushNotifications');
     getPushState.mockResolvedValue('needs-install');
     const { wrapper } = await mountProfile({ routeName: 'ProfileNotifications', features: ['push-notifications'] });
     const toggle = wrapper.find('[aria-label="Notifications on this device"]');

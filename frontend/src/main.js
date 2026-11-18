@@ -14,9 +14,9 @@ getInstallTracker();
 
 // Production only: a service worker on the dev server would outlive restarts
 // and get in the way of hot reload, and there is nothing to test there yet.
-if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`${process.env.BASE_URL}sw.js`).catch((error) => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch((error) => {
       console.error('Service worker registration failed:', error);
     });
   });

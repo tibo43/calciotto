@@ -296,7 +296,7 @@ function playerIdFromToken() {
     const payload = token.split('.')[1];
     const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
     return decoded.player_id || '';
-  } catch (error) {
+  } catch {
     return '';
   }
 }
@@ -672,7 +672,7 @@ export default {
       try {
         await updateTeam(this.groupId, team.id, team.name.trim(), team.colour);
         this.teamNote = 'Saved.';
-      } catch (error) {
+      } catch {
         this.teamNote = 'Could not save the team.';
       }
     },
@@ -680,7 +680,7 @@ export default {
       try {
         await navigator.clipboard.writeText(this.inviteCode);
         this.teamNote = 'Code copied.';
-      } catch (error) {
+      } catch {
         this.teamNote = this.inviteCode;
       }
     },

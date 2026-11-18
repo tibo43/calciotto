@@ -16,23 +16,23 @@ import {
 import { resolveActiveGroup } from '@/services/activeGroup';
 import { decodeMatchId } from '@/services/shortLink';
 
-jest.mock('@/services/api', () => ({
-  getMatchDetailsByID: jest.fn(),
-  updateMatch: jest.fn(),
-  deleteMatch: jest.fn(),
-  getGroupMembers: jest.fn(),
-  getMatchRegistrations: jest.fn(),
-  registerForMatch: jest.fn(),
-  unregisterFromMatch: jest.fn(),
-  closeMatchRegistrations: jest.fn(),
-  reopenMatchRegistrations: jest.fn(),
-  setMatchMaxPlayers: jest.fn(),
-  getInviteCode: jest.fn(),
-  getToken: jest.fn()
+vi.mock('@/services/api', () => ({
+  getMatchDetailsByID: vi.fn(),
+  updateMatch: vi.fn(),
+  deleteMatch: vi.fn(),
+  getGroupMembers: vi.fn(),
+  getMatchRegistrations: vi.fn(),
+  registerForMatch: vi.fn(),
+  unregisterFromMatch: vi.fn(),
+  closeMatchRegistrations: vi.fn(),
+  reopenMatchRegistrations: vi.fn(),
+  setMatchMaxPlayers: vi.fn(),
+  getInviteCode: vi.fn(),
+  getToken: vi.fn()
 }));
 
-jest.mock('@/services/activeGroup', () => ({
-  resolveActiveGroup: jest.fn()
+vi.mock('@/services/activeGroup', () => ({
+  resolveActiveGroup: vi.fn()
 }));
 
 const ME = '11111111-1111-1111-1111-111111111111';
@@ -102,7 +102,7 @@ let nowSpy;
 const toastText = (wrapper) => wrapper.find('.toast-message span').text();
 
 const mountDetails = async ({ match, registrations = [], isAdmin = false, now = DURING_SIGNUPS } = {}) => {
-  nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
+  nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
   getMatchDetailsByID.mockResolvedValue(match);
   getMatchRegistrations.mockResolvedValue(registrations);
   resolveActiveGroup.mockResolvedValue({
@@ -114,7 +114,7 @@ const mountDetails = async ({ match, registrations = [], isAdmin = false, now = 
     global: {
       mocks: {
         $route: { params: { id: MATCH_ID } },
-        $router: { go: jest.fn(), push: jest.fn() }
+        $router: { go: vi.fn(), push: vi.fn() }
       }
     }
   });
@@ -123,7 +123,7 @@ const mountDetails = async ({ match, registrations = [], isAdmin = false, now = 
 };
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   getToken.mockReturnValue(tokenFor(ME));
   registerForMatch.mockResolvedValue({ PlayerID: ME, Name: 'me', Position: 1, IsWaiting: false });
   unregisterFromMatch.mockResolvedValue({ unregistered: true });
@@ -550,7 +550,7 @@ describe('MatchDetails.vue "Share on WhatsApp"', () => {
     await mountDetails({ match: scheduledMatch(), registrations: registrationList(), isAdmin: false });
     expect(getInviteCode).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     getInviteCode.mockResolvedValue({ invite_code: 'ABC23XYZ' });
     await mountDetails({ match: unscheduledMatch(), isAdmin: true });
     expect(getInviteCode).not.toHaveBeenCalled();
@@ -677,7 +677,7 @@ describe('MatchDetails.vue signing up and withdrawing', () => {
     registrations[0] = { ...registrations[0], PlayerID: ME };
     const wrapper = await mountDetails({ match: scheduledMatch(), registrations });
 
-    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     // The reserve is promoted server-side; the re-fetch is how it becomes visible.
     getMatchRegistrations.mockResolvedValue([
       { PlayerID: 'p3', Name: 'luca', Position: 1, IsWaiting: false, RegisteredAt: OPENS_AT },
@@ -699,7 +699,7 @@ describe('MatchDetails.vue signing up and withdrawing', () => {
     registrations[0] = { ...registrations[0], PlayerID: ME };
     const wrapper = await mountDetails({ match: scheduledMatch(), registrations });
 
-    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(false);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     wrapper.vm.confirmWithdraw();
     await flushPromises();

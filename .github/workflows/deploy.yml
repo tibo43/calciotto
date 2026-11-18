@@ -449,8 +449,7 @@ jobs:
           # rather than exported. This keeps GitHub the single source of truth
           # instead of duplicating the setting in the Vercel dashboard.
           #
-          # Vue CLI only inlines variables prefixed VUE_APP_ into the bundle
-          # (see resolveClientEnv.js), which is why the name matters.
+          # vite.config.mjs exposes the existing VUE_APP_ variables to the app.
           mkdir -p .vercel
           printf '\nVUE_APP_API_BASE_URL=%s\n' "$VUE_APP_API_BASE_URL" >> .vercel/.env.production.local
 

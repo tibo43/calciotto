@@ -2,8 +2,8 @@ import { mount } from '@vue/test-utils';
 import AppToast, { TOAST_DURATION_MS } from '@/components/AppToast.vue';
 
 describe('AppToast.vue', () => {
-  beforeEach(() => jest.useFakeTimers());
-  afterEach(() => jest.useRealTimers());
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
 
   it('renders nothing until shown', () => {
     const wrapper = mount(AppToast);
@@ -28,13 +28,13 @@ describe('AppToast.vue', () => {
   it('closes on its own, and a new message restarts the timer', async () => {
     const wrapper = mount(AppToast);
     wrapper.vm.show('First', 'success');
-    jest.advanceTimersByTime(TOAST_DURATION_MS - 1000);
+    vi.advanceTimersByTime(TOAST_DURATION_MS - 1000);
     wrapper.vm.show('Second', 'error');
-    jest.advanceTimersByTime(TOAST_DURATION_MS - 1000);
+    vi.advanceTimersByTime(TOAST_DURATION_MS - 1000);
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.toast-message span').text()).toBe('Second');
 
-    jest.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(1000);
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.toast-message').exists()).toBe(false);
   });

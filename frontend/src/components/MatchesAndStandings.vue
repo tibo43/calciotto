@@ -242,7 +242,7 @@ export default {
       let matchId;
       try {
         matchId = decodeMatchId(code);
-      } catch (error) {
+      } catch {
         return false;
       }
       this.$router.replace({ name: 'MatchView', params: { id: matchId } });
