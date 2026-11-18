@@ -60,7 +60,7 @@ export default {
   },
   created() {
     // Prefills from an admin's shared invite link (/signup?invite=CODE, see
-    // GroupSettingsModal.vue's WhatsApp invite button) so a new player never
+    // the group settings share button) so a new player never
     // has to type the code by hand.
     const invite = this.$route.query.invite;
     if (typeof invite === 'string' && invite) {

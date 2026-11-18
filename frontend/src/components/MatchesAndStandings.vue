@@ -228,7 +228,7 @@ export default {
     // mirroring the `/m/:code` redirect's own "malformed code falls back
     // home" philosophy: a shared link that doesn't resolve is not worth an
     // error toast.
-    // Design v2 has a page per match, so a `?match=<code>` link (a WhatsApp
+    // Design v2 has a page per match, so a `?match=<code>` link (a match
     // share, a push notification) opens that page instead of preselecting
     // the match on the home list. The flag is asked for only when there is
     // a link to follow (one request per session, shared with App.vue); the

@@ -238,7 +238,7 @@ const groupMembersLongName = [
 ];
 
 // GET /groups/:id/invite-code — fetched by MatchDetails.vue for an admin
-// viewing a scheduled match, to append to its "Share on WhatsApp" message.
+// viewing a scheduled match, to append to its "Share match" message.
 // Scheduled, fully composed matches the predictions page can offer a pick on.
 // The clock is FIXED_NOW (4 Sep 2026), so the September kick-offs are still
 // open and the August ones are settled.

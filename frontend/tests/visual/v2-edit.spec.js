@@ -89,7 +89,7 @@ test.describe('design v2 admin editing', () => {
   test('sign-ups', async ({ page }) => {
     const { unstubbed } = await openEdit(page, EDIT);
     await expect(page.getByRole('button', { name: 'Reopen sign-ups' })).toBeVisible();
-    await expect(page.getByText('Share on WhatsApp')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Share match' })).toBeVisible();
     // The section title says it; the rows carry only the name.
     await expect(page.getByText('Confirmed', { exact: true })).toHaveCount(1);
     await expect(page.getByText('Waiting list', { exact: true })).toHaveCount(1);

@@ -30,28 +30,8 @@
               <button class="btn-base btn-primary btn-small copy-invite-btn" @click="copyInviteCode">
                 {{ copied ? 'Copied!' : 'Copy' }}
               </button>
-              <!-- A plain <a>, not a click handler — it's genuinely just a
-                   URL, same convention as MatchDetails.vue's own
-                   .whatsapp-share-btn, whose look (icon + label, collapsing
-                   to icon-only on mobile) this now matches exactly rather
-                   than being a plain solid-green text button — the same
-                   WhatsApp action should look the same wherever it appears.
-                   The icon/label markup and the CSS a couple of screens down
-                   are duplicated from there rather than shared, the same
-                   "small pieces are duplicated across components" convention
-                   getTeamColor()/formatPlayerNameForDisplay() already follow
-                   in this codebase — there's no shared component library to
-                   put a single copy in. -->
-              <a v-if="whatsAppInviteUrl" :href="whatsAppInviteUrl" target="_blank" rel="noopener"
-                class="btn-base btn-cancel btn-small whatsapp-share-btn" aria-label="Invite via WhatsApp">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path
-                    d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.472-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.148-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
-                  <path
-                    d="M12.004 2c-5.514 0-9.997 4.483-9.997 9.997 0 1.762.464 3.485 1.346 5.002L2 22l5.14-1.334a9.958 9.958 0 0 0 4.862 1.237h.004c5.514 0 9.997-4.483 9.997-9.997 0-2.67-1.04-5.182-2.928-7.07A9.933 9.933 0 0 0 12.004 2zm0 18.183h-.003a8.19 8.19 0 0 1-4.17-1.142l-.299-.178-3.05.793.814-2.973-.195-.306a8.18 8.18 0 0 1-1.256-4.38c0-4.523 3.68-8.203 8.203-8.203 2.19 0 4.25.853 5.799 2.404a8.146 8.146 0 0 1 2.403 5.803c0 4.523-3.681 8.202-8.246 8.202z" />
-                </svg>
-                <span class="whatsapp-share-label">Invite via WhatsApp</span>
-              </a>
+              <ShareButton v-if="inviteShareText" :text="inviteShareText" label="Share invitation"
+                class="btn-base btn-cancel btn-small" compact-on-mobile />
             </div>
             <InvitationActions :group-id="groupId" :code="inviteCode" :expires-at="inviteExpiresAt"
               @updated="applyInvitation" />
@@ -91,7 +71,8 @@
 import { getInviteCode, getTeamsByGroup, updateTeam } from '@/services/api';
 import InvitationActions from '@/components/InvitationActions.vue';
 import { isDarkModeActive } from '@/services/theme';
-import { buildGroupInviteShareText, buildWhatsAppShareUrl } from '@/services/whatsappShare';
+import { buildGroupInviteShareText } from '@/services/shareMessages';
+import ShareButton from '@/components/ShareButton.vue';
 import TeamColourPicker from '@/components/TeamColourPicker.vue';
 
 const LEGACY_TEAM_COLOUR_MAP = {
@@ -109,7 +90,7 @@ function toHexColour(colour) {
 
 export default {
   name: 'GroupSettingsModal',
-  components: { InvitationActions, TeamColourPicker },
+  components: { InvitationActions, ShareButton, TeamColourPicker },
   props: {
     groupId: { type: String, required: true },
     groupName: { type: String, default: 'Group' }
@@ -144,13 +125,12 @@ export default {
     // admin sharing this link — /signup?invite=CODE — is now the only way a
     // new player gets in; Signup.vue's created() reads the query param to
     // prefill the (now mandatory) invite-code field.
-    whatsAppInviteUrl() {
+    inviteShareText() {
       if (!this.inviteCode) {
         return '';
       }
       const inviteUrl = `${window.location.origin}/signup?invite=${this.inviteCode}`;
-      const text = buildGroupInviteShareText({ inviteUrl, groupInviteCode: this.inviteCode });
-      return buildWhatsAppShareUrl(text);
+      return buildGroupInviteShareText({ inviteUrl, groupInviteCode: this.inviteCode });
     }
   },
   methods: {
@@ -291,31 +271,11 @@ export default {
   width: 100%;
 }
 
-/* Icon-only on a narrow screen, same as MatchDetails.vue's two
-   .whatsapp-share-btn instances — kept in sync by hand (see the template
-   comment above) rather than shared, since there's no component library
-   here to put a single copy in. */
 @media (max-width: 768px) {
-  /* Undoes global-styles.css's .btn-base { width: 100% } (aimed at modal
-     footers, not this row) — without it Copy would claim the whole row
-     width and push Invite via WhatsApp onto a line of its own, even though
-     invite-code-box lays them out side by side. height: 3rem matches
-     whatsapp-share-btn's own explicit height so the two sit at the same
-     level instead of Copy floating taller/shorter next to it. */
+  /* Match the compact share button beside the invite code. */
   .copy-invite-btn {
     width: auto;
     height: 3rem;
-  }
-
-  .whatsapp-share-label {
-    display: none;
-  }
-
-  .whatsapp-share-btn {
-    width: 3rem;
-    height: 3rem;
-    padding: 0;
-    justify-content: center;
   }
 
   /* Same global .btn-base { width: 100% } problem as Copy above: without
@@ -337,9 +297,5 @@ export default {
     flex-shrink: 0;
   }
 
-  .whatsapp-share-btn svg {
-    width: 24px;
-    height: 24px;
-  }
 }
 </style>

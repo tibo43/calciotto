@@ -120,6 +120,39 @@ func (h *GroupHandler) GetGroupByID(c *gin.Context) {
 	c.JSON(http.StatusOK, group)
 }
 
+func (h *GroupHandler) UpdateGroupDetails(c *gin.Context) {
+	groupID, ok := authorizedGroupIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved"})
+		return
+	}
+	adminID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+	var details models.GroupDetails
+	if err := c.ShouldBindJSON(&details); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group details"})
+		return
+	}
+	group, err := h.Service.UpdateGroupDetails(groupID, adminID, details)
+	switch {
+	case errors.Is(err, services.ErrGroupDescriptionTooLong),
+		errors.Is(err, services.ErrGroupWebsiteLabelTooLong),
+		errors.Is(err, services.ErrInvalidGroupWebsite):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case errors.Is(err, services.ErrGroupAdminRequired):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save group details"})
+	default:
+		c.JSON(http.StatusOK, group)
+	}
+}
+
 func (h *GroupHandler) AddPlayerToGroup(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {

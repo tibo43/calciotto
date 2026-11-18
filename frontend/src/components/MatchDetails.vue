@@ -120,7 +120,7 @@
           <p class="signup-state-detail">{{ registrationStateDetail }}</p>
 
           <div class="signup-actions">
-            <!-- Close/Reopen and Share on WhatsApp sit next to each other
+            <!-- Close/Reopen and Share match sit next to each other
                  deliberately (rather than Share trailing after the
                  max-players form, further down the DOM): both are things an
                  admin does about the sign-up window itself, so they read as
@@ -139,24 +139,8 @@
               {{ isUpdatingRegistrationState ? 'Reopening...' : 'Reopen sign-ups' }}
             </button>
 
-            <!-- A plain wa.me link, not a click handler: it's a URL WhatsApp
-                 itself publishes, opened in a new tab like any other outbound
-                 link. With no phone number, WhatsApp prompts the admin to pick
-                 who to send it to — any contact or group they're already in —
-                 so posting into a WhatsApp group needs nothing from this app
-                 beyond building the message text. Only offered while sign-ups
-                 are actually open: there's nothing to invite people to once
-                 the list is closed. -->
-            <a v-if="isAdmin && registrationsOpen" :href="whatsappShareUrl" target="_blank" rel="noopener"
-              class="btn-base btn-cancel btn-small whatsapp-share-btn" aria-label="Share on WhatsApp">
-              <svg viewBox="0 0 24 24" fill="currentColor">
-                <path
-                  d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.472-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.148-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
-                <path
-                  d="M12.004 2c-5.514 0-9.997 4.483-9.997 9.997 0 1.762.464 3.485 1.346 5.002L2 22l5.14-1.334a9.958 9.958 0 0 0 4.862 1.237h.004c5.514 0 9.997-4.483 9.997-9.997 0-2.67-1.04-5.182-2.928-7.07A9.933 9.933 0 0 0 12.004 2zm0 18.183h-.003a8.19 8.19 0 0 1-4.17-1.142l-.299-.178-3.05.793.814-2.973-.195-.306a8.18 8.18 0 0 1-1.256-4.38c0-4.523 3.68-8.203 8.203-8.203 2.19 0 4.25.853 5.799 2.404a8.146 8.146 0 0 1 2.403 5.803c0 4.523-3.681 8.202-8.246 8.202z" />
-              </svg>
-              <span class="whatsapp-share-label">Share on WhatsApp</span>
-            </a>
+            <ShareButton v-if="isAdmin && registrationsOpen" :text="matchShareText" label="Share match"
+              class="btn-base btn-cancel btn-small" compact-on-mobile />
 
             <!-- Admin-only, and deliberately offered whether sign-ups are open or
                  closed: dropping the cap is typically what an admin does right
@@ -270,16 +254,8 @@
                    the teams exist. Placed with the other whole-match actions
                    rather than the team switcher below, since it applies to
                    both teams at once, not to whichever tab is active. -->
-              <a v-if="isAdmin && showTeamRoster" :href="teamsShareUrl" target="_blank" rel="noopener"
-                class="btn-base btn-cancel btn-small whatsapp-share-btn" aria-label="Share teams on WhatsApp">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path
-                    d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.472-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.148-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
-                  <path
-                    d="M12.004 2c-5.514 0-9.997 4.483-9.997 9.997 0 1.762.464 3.485 1.346 5.002L2 22l5.14-1.334a9.958 9.958 0 0 0 4.862 1.237h.004c5.514 0 9.997-4.483 9.997-9.997 0-2.67-1.04-5.182-2.928-7.07A9.933 9.933 0 0 0 12.004 2zm0 18.183h-.003a8.19 8.19 0 0 1-4.17-1.142l-.299-.178-3.05.793.814-2.973-.195-.306a8.18 8.18 0 0 1-1.256-4.38c0-4.523 3.68-8.203 8.203-8.203 2.19 0 4.25.853 5.799 2.404a8.146 8.146 0 0 1 2.403 5.803c0 4.523-3.681 8.202-8.246 8.202z" />
-                </svg>
-                <span class="whatsapp-share-label">Share teams on WhatsApp</span>
-              </a>
+              <ShareButton v-if="isAdmin && showTeamRoster" :text="teamsShareText" label="Share teams"
+                class="btn-base btn-cancel btn-small" compact-on-mobile />
             </div>
 
             <!-- Team switcher + "Add player to this team" right next to it —
@@ -663,7 +639,8 @@ import {
   REGISTRATION_CLOSED_BY_ADMIN,
   REGISTRATION_CLOSED_AT_KICKOFF
 } from '@/services/matchRegistration';
-import { buildWhatsAppShareText, buildWhatsAppShareUrl, buildTeamsShareText } from '@/services/whatsappShare';
+import { buildMatchShareText, buildTeamsShareText } from '@/services/shareMessages';
+import ShareButton from '@/components/ShareButton.vue';
 import { encodeMatchId } from '@/services/shortLink';
 
 // Same shape as Profile.vue's own helper — the app has no auth store, and the
@@ -686,7 +663,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'MatchDetail',
-  components: { AppToast },
+  components: { AppToast, ShareButton },
   data() {
     return {
       match: null,
@@ -746,11 +723,7 @@ export default {
       // they find out at all, since nothing notifies them.
       nowMs: 0,
       currentPlayerId: '',
-      // Fetched once, in created(), only for an admin of a scheduled match —
-      // the one case whatsappShareUrl needs it. GET /groups/:id/invite-code
-      // is member-only, not admin-only, but nothing else on this page uses
-      // it, so there's no reason to fetch it for anyone who won't see the
-      // Share on WhatsApp link.
+      // Loaded before sharing so the button can open the native picker on click.
       groupInviteCode: '',
     };
   },
@@ -769,12 +742,6 @@ export default {
     }
     await this.loadMatch();
 
-    // Same condition the Share on WhatsApp link itself is gated on
-    // (isAdmin && isScheduled) — fetched here rather than lazily on click so
-    // the link stays a plain <a href>, not a click handler waiting on a
-    // network request. A failure just leaves groupInviteCode empty, which
-    // buildWhatsAppShareText already treats as "omit the line" rather than
-    // blocking the share link over a roster/schedule concern.
     if (this.isAdmin && this.isScheduled) {
       try {
         const data = await getInviteCode(this.activeGroupId);
@@ -858,29 +825,28 @@ export default {
     // The full /matches/:id/edit URL reads badly in a chat next to "Join
     // Calciotto" — window.location.origin + the encoded id is the same
     // "tinylink" the /m/:code route (router/index.js) decodes back.
-    whatsappShareUrl() {
+    matchShareText() {
       const shortUrl = `${window.location.origin}/m/${encodeMatchId(this.match.ID)}`;
-      const text = buildWhatsAppShareText({
+      return buildMatchShareText({
         kickoffLabel: this.kickoffLabel,
         matchUrl: shortUrl,
         groupInviteCode: this.groupInviteCode
       });
-      return buildWhatsAppShareUrl(text);
     },
 
-    // "Share teams on WhatsApp" — only ever rendered once showTeamRoster is
+    // "Share teams" — only ever rendered once showTeamRoster is
     // true (see the button's own v-if), so match.Teams is guaranteed
     // composed here. kickoffLabel needs ScheduledAt, which an unscheduled
     // match never has, so this falls back to the plain calendar day for one
     // — the same distinction kickoffLabel/formatDate already draw elsewhere
     // on this page.
-    teamsShareUrl() {
+    teamsShareText() {
       const dateTimeLabel = this.isScheduled ? this.kickoffLabel : this.formatDate(this.match.Date);
       const teams = this.match.Teams.map(team => ({
         name: team.Name,
         players: team.Players.map(player => this.formatPlayerNameForDisplay(player.Name))
       }));
-      return buildWhatsAppShareUrl(buildTeamsShareText({ dateTimeLabel, teams }));
+      return buildTeamsShareText({ dateTimeLabel, teams });
     },
 
     // Deliberately says nothing about being told when sign-ups open: there is
@@ -2779,7 +2745,7 @@ export default {
   }
 
   /* Icon-only across the whole row: Save Changes, Delete Match and (once a
-     roster exists) Share teams on WhatsApp all collapse to an equal-sized
+     roster exists) Share teams all collapse to an equal-sized
      square icon button on a narrow screen — the icon alone is enough to
      identify each action, same as add-player-icon-btn's own icon-only
      convention elsewhere on this page. flex: none replaces the old flex: 1
@@ -2817,31 +2783,6 @@ export default {
     margin-left: 0;
   }
 
-  .whatsapp-share-label {
-    display: none;
-  }
-
-  /* Also reached by the sign-up panel's own "Share on WhatsApp" button
-     (.signup-actions, not .action-buttons), which the two rules above don't
-     cover — hence a plain .whatsapp-share-btn rule rather than folding this
-     into .action-buttons .btn-base too. Same 3rem square either way, so the
-     one WhatsApp button looks identical wherever it appears on this page. */
-  .whatsapp-share-btn {
-    padding: 0;
-    justify-content: center;
-    width: 3rem;
-    height: 3rem;
-  }
-
-  /* The WhatsApp glyph is small (16px, .btn-small svg's own default) next to
-     the plain line-icons it now sits alongside at the same square box size —
-     enlarged so it actually reads as the WhatsApp logo at a glance instead
-     of looking like an afterthought. */
-  .whatsapp-share-btn svg {
-    width: 24px;
-    height: 24px;
-  }
-
   /* Centers each wrapped line's own content (Close/Reopen + Share on one
      line, the max-players form on another, Fill teams on its own) instead
      of the default left alignment — matching .action-buttons' own centered
@@ -2850,15 +2791,7 @@ export default {
     justify-content: center;
   }
 
-  /* Undoes global-styles.css's .btn-base { width: 100% } (aimed at modal
-     footers, not this row) — without it Close/Reopen sign-ups would claim
-     the whole row width and push whatsapp-share-btn onto a line of its own,
-     even though the template now places them right next to each other (see
-     .signup-actions above). height: 3rem matches whatsapp-share-btn's own
-     explicit height exactly — relying on .signup-actions' default
-     align-items: stretch instead came within a couple of px (this button's
-     natural content height is very slightly taller than 3rem, so stretch,
-     which only ever grows the *shorter* item, left them visibly mismatched). */
+  /* Match the compact share button beside the sign-up action. */
   .registration-toggle-btn {
     width: auto;
     height: 3rem;

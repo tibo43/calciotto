@@ -160,6 +160,7 @@ func main() {
 	r.GET("/groups", authRequired, groupHandler.GetGroups)
 	r.GET("/groups/me", authRequired, groupHandler.GetMyGroups)
 	r.GET("/groups/:id", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupByID)
+	r.PUT("/groups/:id/details", authRequired, requireGroupAdminByPathID, groupHandler.UpdateGroupDetails)
 	r.GET("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.GetInviteCode)
 	r.POST("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.ChangeInvitation)
 	r.DELETE("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.ChangeInvitation)

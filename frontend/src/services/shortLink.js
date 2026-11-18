@@ -1,4 +1,4 @@
-// A self-hosted "tinylink" for sharing a match, e.g. on WhatsApp — a UUID
+// A self-hosted "tinylink" for sharing a match — a UUID
 // (`92bbe7a1-fa67-49dc-9058-85837504d0d4`) reads badly in a chat next to
 // "Join Calciotto". Rather than reaching for a public shortener (most block
 // browser JS from reading their response at all — no CORS header — and it

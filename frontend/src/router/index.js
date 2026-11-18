@@ -118,7 +118,7 @@ const routes = [
       return true;
     }
   },
-  // The "tinylink" shared on WhatsApp (see whatsappShare.js) — a bare
+  // The "tinylink" used for sharing matches — a bare
   // redirect rather than its own component, since decoding a code and
   // resolving where it points to is all there is to do. An invalid code
   // (hand-edited, truncated in transit) falls back home instead of throwing
