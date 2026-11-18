@@ -84,6 +84,7 @@ func main() {
 	}
 	notificationService := services.NewNotificationService(db, pushSender, matchService)
 	matchService.Notifier = notificationService
+	authService.Notifier = notificationService
 	notificationHandler := handlers.NewNotificationHandler(notificationService, vapidPublicKey, os.Getenv("NOTIFICATIONS_TICK_SECRET"))
 	matchHandler := handlers.NewMatchHandler(matchService, groupMembershipService)
 	matchRegistrationHandler := handlers.NewMatchRegistrationHandler(services.NewMatchRegistrationService(db))

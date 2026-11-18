@@ -343,6 +343,9 @@ func TestCreateGroup_Integration_GeneratesInviteCode(t *testing.T) {
 		if strings.ContainsAny(group.InviteCode, "01OIL") {
 			t.Errorf("invite code %q contains an ambiguous character", group.InviteCode)
 		}
+		if !group.InviteExpiresAt.Equal(models.InviteNeverExpires) {
+			t.Errorf("a new invite code expires at %v, want never", group.InviteExpiresAt)
+		}
 		if group.InviteCode != strings.ToUpper(group.InviteCode) {
 			t.Errorf("invite code %q is not upper-case, so case normalization on join would not match it", group.InviteCode)
 		}
@@ -535,5 +538,38 @@ func TestStandings_Integration_IsMemberAfterRemoval(t *testing.T) {
 	}
 	if bobScorer == nil || bobScorer.IsMember {
 		t.Errorf("bob's scorer row = %+v, want IsMember false after removal", bobScorer)
+	}
+}
+
+// A code stays valid until an admin replaces or revokes it: rotating gives
+// a code that never expires, revoking stops it at once.
+func TestChangeInvitation_Integration_NoExpiryUntilRevoked(t *testing.T) {
+	tx := testutil.BeginTx(t, testutil.OpenDB(t))
+	groups := services.NewGroupService(tx)
+	group, err := groups.CreateGroup("Zzz Integration Invite Lifetime", services.DefaultTeamSpecs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := services.NewPlayerService(tx).CreatePlayer("Zzz Integration Invite Lifetime Admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := services.NewGroupMembershipService(tx).AddPlayerToGroupWithRole(group.ID, admin, models.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+
+	rotated, err := groups.ChangeInvitation(group.ID, admin, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rotated.InviteExpiresAt.Equal(models.InviteNeverExpires) {
+		t.Errorf("a rotated code expires at %v, want never", rotated.InviteExpiresAt)
+	}
+	revoked, err := groups.ChangeInvitation(group.ID, admin, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revoked.InviteExpiresAt.After(time.Now()) {
+		t.Errorf("a revoked code is still valid until %v", revoked.InviteExpiresAt)
 	}
 }

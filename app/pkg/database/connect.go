@@ -213,6 +213,15 @@ func applySchema(db *gorm.DB) error {
 		return err
 	}
 
+	// Invite codes used to expire 7 days after they were generated. They now
+	// stay valid until an admin generates a new one or revokes it, so every
+	// code still active gets no expiry. A revoked code (expiry in the past)
+	// stays revoked. Idempotent: after the first run nothing matches.
+	if err := db.Exec(`UPDATE groups SET invite_expires_at = ? WHERE invite_expires_at > now() AND invite_expires_at < ?`,
+		models.InviteNeverExpires, models.InviteNeverExpires).Error; err != nil {
+		return err
+	}
+
 	return BackfillResultRecordedAt(db)
 }
 

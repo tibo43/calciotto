@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -859,4 +860,70 @@ func TestNotifications_Integration_SendRespectsEachPreference(t *testing.T) {
 	saveRoster(scored, []uuid.UUID{alice}, []uuid.UUID{bob})
 	env.wantTypes(t, aliceEndpoint, services.PushTypeResultRecorded)
 	env.wantTypes(t, bobEndpoint, services.PushTypeResultRecorded, services.PushTypePredictionsSettled)
+}
+
+// Signing up with a group's invite code tells that group's admins who
+// joined, and nobody else, so a code that reached the wrong person shows up
+// the moment it is used.
+func TestNotifications_Integration_MemberJoinedGoesToAdminsOnly(t *testing.T) {
+	env := newNotificationEnv(t)
+	admin, adminEndpoint := env.member(t, "Admin", true)
+	if err := env.tx.Model(&models.GroupMembership{}).
+		Where("group_id = ? AND player_id = ?", env.groupID, admin).
+		Update("role", models.RoleAdmin).Error; err != nil {
+		t.Fatal(err)
+	}
+	_, memberEndpoint := env.member(t, "Member", true)
+
+	var group models.Group
+	if err := env.tx.First(&group, "id = ?", env.groupID).Error; err != nil {
+		t.Fatal(err)
+	}
+	auth := services.NewAuthService(env.tx, "test-secret")
+	auth.Notifier = env.notifications
+	newcomer, err := auth.SignupNewPlayer("Zzz Push Newcomer", "push-newcomer@example.test", "fixture-password", group.InviteCode)
+	if err != nil {
+		t.Fatalf("SignupNewPlayer: %v", err)
+	}
+
+	joined := messagesOfType(env.sender.sent[adminEndpoint], services.PushTypeMemberJoined)
+	if len(joined) != 1 {
+		t.Fatalf("admin received %d member_joined notifications, want 1", len(joined))
+	}
+	if joined[0].PlayerName != "Zzz Push Newcomer" || joined[0].GroupName != env.groupName ||
+		joined[0].URL != "/profile/groups/"+env.groupID.String()+"/settings" {
+		t.Errorf("unexpected member_joined payload: %+v", joined[0])
+	}
+	if joined[0].Tag == "" || !strings.Contains(joined[0].Tag, newcomer.String()) {
+		t.Errorf("member_joined tag %q should name the new member", joined[0].Tag)
+	}
+	if len(env.sender.sent[memberEndpoint]) != 0 {
+		t.Error("a plain member was told about the new member")
+	}
+}
+
+// An admin who turned member_joined off is not told.
+func TestNotifications_Integration_MemberJoinedRespectsPreference(t *testing.T) {
+	env := newNotificationEnv(t)
+	admin, adminEndpoint := env.member(t, "Quiet admin", true)
+	if err := env.tx.Model(&models.GroupMembership{}).
+		Where("group_id = ? AND player_id = ?", env.groupID, admin).
+		Update("role", models.RoleAdmin).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.notifications.UpdatePreferences(admin, map[string]bool{services.PushTypeMemberJoined: false}); err != nil {
+		t.Fatal(err)
+	}
+	var group models.Group
+	if err := env.tx.First(&group, "id = ?", env.groupID).Error; err != nil {
+		t.Fatal(err)
+	}
+	auth := services.NewAuthService(env.tx, "test-secret")
+	auth.Notifier = env.notifications
+	if _, err := auth.SignupNewPlayer("Zzz Push Unnoticed", "push-unnoticed@example.test", "fixture-password", group.InviteCode); err != nil {
+		t.Fatalf("SignupNewPlayer: %v", err)
+	}
+	if len(env.sender.sent[adminEndpoint]) != 0 {
+		t.Error("an admin who turned member_joined off was notified")
+	}
 }
