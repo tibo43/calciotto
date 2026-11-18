@@ -1,7 +1,9 @@
 <template>
   <div id="app" :class="{ 'dark-mode': isDarkMode, 'design-v2': designV2 }">
-    <!-- Main App Container -->
-    <div class="app-container" :class="{ wrap: designV2, 'is-confirming': designV2 && v2Context.confirming, 'is-picking-csc': designV2 && v2Context.pickingCsc }">
+    <div v-if="checkingDesignV2" class="app-starting" role="status">Loading Calciotto…</div>
+    <PlayerGuide v-else-if="guideMode" :required="guideMode === 'required'" :saving="savingGuide"
+      :dark="isDarkMode" :error="guideError" @finish="finishGuide" @dismiss="closeGuide" @skip="skipGuide" />
+    <div v-else class="app-container" :class="{ wrap: designV2, 'is-confirming': designV2 && v2Context.confirming, 'is-picking-csc': designV2 && v2Context.pickingCsc }">
         <header v-if="designV2" class="topbar">
           <div class="topbar-left">
             <template v-if="v2Context.pageTitle">
@@ -226,36 +228,46 @@
 
 <script>
 import { computed } from 'vue';
-import { clearToken, logoutSession } from '@/services/api';
+import PlayerGuide from '@/components/PlayerGuide.vue';
+import { clearToken, completeGuide, getSessionKey, logoutSession } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta, prefersDarkTheme } from '@/services/theme';
 import { disablePushOnLogout, stopPushIfAppUninstalled } from '@/services/pushNotifications';
 import {
-  loadDesignV2,
-  knownDesignV2,
-  resetDesignV2,
-  ensureDesignV2Fonts,
-  removeDesignV2Fonts
-} from '@/services/designV2';
+  knownFeatureStatus, loadFeatureStatus, rememberGuideCompletion, resetFeatureStatus
+} from '@/services/featureStatus';
+import { ensureDesignV2Fonts, hasDesignV2, removeDesignV2Fonts } from '@/services/designV2';
 
 // Routes reachable without a token — nothing group-related is shown there.
 const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
 
+// How long a session's first features request may hold the app on the
+// loading screen. Past it, today's design paints and the answer switches the
+// app when it lands, so a slow or hung request never leaves a blank page.
+const STARTUP_WAIT_MS = 2000;
+
 export default {
   name: 'App',
+  components: { PlayerGuide },
   provide() {
     return {
       designV2On: computed(() => this.designV2),
       v2Context: this.v2Context,
+      openGuide: this.openGuide,
     };
   },
   data() {
     return {
       isScrolled: false,
-      isDarkMode: false,
-      // Only ever from the server's features response for this session;
-      // never true on a public page. Today's design renders until then.
+      isDarkMode: prefersDarkTheme(),
       designV2: false,
+      checkingDesignV2: false,
+      // Set once the shell has painted for this session: later checks (a
+      // retry after a failed request) run in the background.
+      startupSettled: false,
+      guideMode: null,
+      savingGuide: false,
+      guideError: '',
       v2Context: { label: '', confirming: false, pickingCsc: false, hide: false, pageTitle: '', backTo: '', groups: [], seasons: [], groupId: '', season: '', onGroup: null, onSeason: null },
       designV2Request: 0
     };
@@ -310,9 +322,6 @@ export default {
     }
   },
   created() {
-    // Before the first render: a signed-in page whose answer is already
-    // known (a router guard may have fetched it) paints in the right design
-    // straight away; otherwise today's design paints until the answer lands.
     this.syncDesignV2();
   },
   mounted() {
@@ -321,8 +330,7 @@ export default {
     // stopPushIfAppUninstalled). Fire and forget: it never blocks the page.
     stopPushIfAppUninstalled();
 
-    // Check for saved theme preference
-    this.isDarkMode = prefersDarkTheme();
+    syncThemeColorMeta(this.isDarkMode);
 
     // Add scroll listener
     window.addEventListener('scroll', this.handleScroll);
@@ -359,39 +367,94 @@ export default {
         ensureDesignV2Fonts();
       } else {
         removeDesignV2Fonts();
+        this.guideMode = null;
+        this.guideError = '';
+        this.savingGuide = false;
       }
     },
-    // Public pages never take the class and never ask. A signed-in page
-    // uses the session's known answer if there is one, and otherwise asks
-    // the server once (shared with the router guards), staying on today's
-    // design until it answers. A failure stays on today's design and a
-    // later navigation asks again.
-    syncDesignV2() {
+    async syncDesignV2() {
+      const requestId = ++this.designV2Request;
       if (!this.isAuthenticatedRoute) {
+        this.checkingDesignV2 = false;
         this.applyDesignV2(false);
         return;
       }
-      const known = knownDesignV2();
-      if (known !== null) {
-        this.applyDesignV2(known);
+      const sessionKey = getSessionKey();
+      const known = knownFeatureStatus();
+      if (!known && !this.startupSettled) {
+        this.checkingDesignV2 = true;
+        this.guideMode = null;
+        this.guideError = '';
+        this.savingGuide = false;
+        setTimeout(() => {
+          if (requestId === this.designV2Request) this.settleStartup();
+        }, STARTUP_WAIT_MS);
+      }
+      const status = known ?? await loadFeatureStatus();
+      if (requestId !== this.designV2Request) return;
+      if (sessionKey !== getSessionKey()) {
+        this.syncDesignV2();
         return;
       }
-      this.fetchDesignV2();
+      this.settleStartup();
+      const enabled = hasDesignV2(status.features);
+      this.applyDesignV2(enabled);
+      // Wait for an API that can record guide completion during rollout.
+      if (enabled && status.guideCompleted === false) {
+        this.guideMode = 'required';
+      } else if (this.guideMode === 'required') {
+        this.guideMode = null;
+      }
     },
-    async fetchDesignV2() {
-      const requestId = ++this.designV2Request;
-      const enabled = await loadDesignV2();
-      // Logout (or a newer request) happened while this was in flight.
-      if (requestId !== this.designV2Request) {
+    settleStartup() {
+      this.checkingDesignV2 = false;
+      this.startupSettled = true;
+    },
+    // After a failed save: let the player in for this session only. The
+    // server still says the guide is incomplete, so the next session asks
+    // again.
+    skipGuide() {
+      if (this.guideMode !== 'required' || this.savingGuide) return;
+      rememberGuideCompletion();
+      this.guideMode = null;
+      this.guideError = '';
+    },
+    openGuide() {
+      if (this.designV2 && !this.guideMode) this.guideMode = 'replay';
+    },
+    closeGuide() {
+      if (this.guideMode === 'replay') this.guideMode = null;
+    },
+    async finishGuide() {
+      if (this.guideMode === 'replay') {
+        this.closeGuide();
         return;
       }
-      this.applyDesignV2(this.isAuthenticatedRoute && enabled);
+      if (this.guideMode !== 'required' || this.savingGuide) return;
+      const sessionKey = getSessionKey();
+      this.savingGuide = true;
+      this.guideError = '';
+      try {
+        await completeGuide();
+        if (sessionKey === getSessionKey()) {
+          rememberGuideCompletion();
+          this.guideMode = null;
+        }
+      } catch {
+        if (sessionKey === getSessionKey() && this.guideMode === 'required') {
+          this.guideError = 'Could not save your progress. Try again.';
+        }
+      } finally {
+        if (sessionKey === getSessionKey()) this.savingGuide = false;
+      }
     },
     async logout() {
       // Invalidate an in-flight features response before anything awaits, so
       // it can't repaint this session's answer after logout.
       this.designV2Request += 1;
-      resetDesignV2();
+      this.checkingDesignV2 = false;
+      this.startupSettled = false;
+      resetFeatureStatus();
       this.applyDesignV2(false);
       // Before the token goes: the next account on this device must not get
       // this one's notifications, and the backend needs the token to forget
@@ -418,6 +481,12 @@ export default {
 </script>
 
 <style>
+.app-starting {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+}
+
 /* Import global styles - Add this import in your main.js or main.ts instead */
 /* @import './assets/global-styles.css'; */
 

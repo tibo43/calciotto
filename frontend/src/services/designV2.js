@@ -1,4 +1,4 @@
-import { getMyFeatures, getToken } from './api';
+import { loadFeatureStatus } from './featureStatus';
 
 // The redesign ships behind the same hidden-feature list as the install card
 // and push notifications (GET /players/me/features). The key matches
@@ -22,51 +22,9 @@ export const DESIGN_V2_FONT_CSS = `
 @font-face{font-family:"Space Mono";font-style:normal;font-weight:700;font-display:swap;src:url("/fonts/v2/SpaceMono-normal-700-latin.woff2") format("woff2");}
 `;
 
-// The answer to GET /players/me/features for the current session, kept in
-// memory only: nothing about the redesign is written to the browser. The
-// entry is keyed by the token it was fetched with, so a different session
-// (logout, then another account; a 401 that ended this one) never reads
-// the previous one's answer, even if nothing cleared it explicitly.
-let session = { token: null, promise: null, enabled: null };
-
-// The flag for this session, from the server. Resolves false with no token
-// and on a failed request (today's design, never a hang); a failure also
-// forgets the entry so the next call asks again. Concurrent callers (the
-// router guards and App.vue) share one request.
-export function loadDesignV2() {
-  const token = getToken();
-  if (!token) {
-    return Promise.resolve(false);
-  }
-  if (session.token === token && session.promise) {
-    return session.promise;
-  }
-  const entry = { token, promise: null, enabled: null };
-  entry.promise = getMyFeatures()
-    .then((features) => {
-      entry.enabled = hasDesignV2(features);
-      return entry.enabled;
-    })
-    .catch((error) => {
-      console.error('Error fetching features:', error);
-      if (session === entry) {
-        session = { token: null, promise: null, enabled: null };
-      }
-      return false;
-    });
-  session = entry;
-  return entry.promise;
-}
-
-// The answer already known for this session, synchronously: true or false
-// once the response has landed, null while it hasn't (or for another token).
-export function knownDesignV2() {
-  const token = getToken();
-  return token && session.token === token ? session.enabled : null;
-}
-
-export function resetDesignV2() {
-  session = { token: null, promise: null, enabled: null };
+export async function loadDesignV2() {
+  const { features } = await loadFeatureStatus();
+  return hasDesignV2(features);
 }
 
 export function hasDesignV2(features) {

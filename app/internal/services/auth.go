@@ -608,10 +608,11 @@ func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 		return tx.Model(&models.Player{}).
 			Where("id = ?", playerID).
 			Updates(map[string]interface{}{
-				"name":          deletedAccountName,
-				"email":         nil,
-				"password_hash": "",
-				"token_version": gorm.Expr("token_version + 1"),
+				"name":               deletedAccountName,
+				"email":              nil,
+				"password_hash":      "",
+				"token_version":      gorm.Expr("token_version + 1"),
+				"guide_completed_at": nil,
 			}).Error
 	})
 }

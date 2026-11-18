@@ -41,6 +41,7 @@ type Player struct {
 	Email            *string       `gorm:"type:string;uniqueIndex" json:"-"`
 	PasswordHash     string        `gorm:"type:string" json:"-"`
 	TokenVersion     int           `gorm:"not null;default:0" json:"-"`
+	GuideCompletedAt *time.Time    `json:"-"`
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:PlayerID"`
 }
 

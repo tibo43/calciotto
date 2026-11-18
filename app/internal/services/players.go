@@ -4,6 +4,7 @@ import (
 	"app/internal/models"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -105,4 +106,16 @@ func (s *PlayerService) GetFeatures(playerID uuid.UUID) ([]string, error) {
 		return nil, err
 	}
 	return features, nil
+}
+
+func (s *PlayerService) GuideCompleted(playerID uuid.UUID) (bool, error) {
+	var player models.Player
+	err := s.DB.Select("guide_completed_at").Take(&player, "id = ?", playerID).Error
+	return player.GuideCompletedAt != nil, err
+}
+
+func (s *PlayerService) CompleteGuide(playerID uuid.UUID) error {
+	return s.DB.Model(&models.Player{}).
+		Where("id = ? AND email IS NOT NULL AND guide_completed_at IS NULL", playerID).
+		UpdateColumn("guide_completed_at", time.Now()).Error
 }
