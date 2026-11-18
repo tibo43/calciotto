@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"strings"
 	"time"
@@ -37,11 +38,15 @@ func NewPasskeyService(auth *AuthService, origins []string) (*PasskeyService, er
 	sites := make(map[string]*webauthn.WebAuthn)
 	for _, origin := range origins {
 		site, err := url.Parse(origin)
+		// A skipped origin would otherwise only show up as a 403 on every
+		// passkey request from it, with nothing saying why.
 		if err != nil || site.Hostname() == "" || origin != site.Scheme+"://"+site.Host {
+			log.Printf("passkeys are not available on %q: an allowed origin must be a bare scheme://host[:port], with no path or trailing slash", origin)
 			continue
 		}
 		host := site.Hostname()
 		if (site.Scheme != "https" && !(site.Scheme == "http" && host == "localhost")) || protocol.ValidateRPID(host) != nil {
+			log.Printf("passkeys are not available on %q: WebAuthn needs https (or http://localhost) and a domain name", origin)
 			continue
 		}
 		timeout := webauthn.TimeoutConfig{Enforce: true, Timeout: passkeyTimeout}

@@ -41,6 +41,7 @@ type Player struct {
 	Email            *string       `gorm:"type:string;uniqueIndex" json:"-"`
 	PasswordHash     string        `gorm:"type:string" json:"-"`
 	TokenVersion     int           `gorm:"not null;default:0" json:"-"`
+	GuideCompletedAt *time.Time    `json:"-"`
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:PlayerID"`
 }
 
@@ -157,10 +158,17 @@ type GroupDetails struct {
 type Group struct {
 	BaseModel
 	GroupDetails
-	Name            string    `gorm:"type:string" json:"name"`
-	InviteCode      string    `gorm:"type:string;uniqueIndex" json:"-"`
-	InviteExpiresAt time.Time `gorm:"not null;default:(CURRENT_TIMESTAMP + INTERVAL '7 days')" json:"-"`
+	Name       string `gorm:"type:string" json:"name"`
+	InviteCode string `gorm:"type:string;uniqueIndex" json:"-"`
+	// InviteExpiresAt is when the code stops working. An active code never
+	// expires (InviteNeverExpires); revoking it sets this to the moment of
+	// revocation.
+	InviteExpiresAt time.Time `gorm:"not null;default:'9999-12-31T00:00:00Z'" json:"-"`
 }
+
+// InviteNeverExpires is the InviteExpiresAt of a code that stays valid until
+// an admin generates a new one or revokes it.
+var InviteNeverExpires = time.Date(9999, time.December, 31, 0, 0, 0, 0, time.UTC)
 
 // Team représente une équipe. Chaque groupe a exactement deux équipes,
 // créées à la création du groupe à partir des deux noms/couleurs fournis par

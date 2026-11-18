@@ -19,9 +19,9 @@ vi.mock('@/services/api', () => ({
   updateNotificationPreferences: vi.fn()
 }));
 
-async function mountIn(state) {
+async function mountIn(state, props = {}) {
   getPushState.mockResolvedValue(state);
-  const wrapper = mount(NotificationsCard);
+  const wrapper = mount(NotificationsCard, { props });
   await flushPromises();
   return wrapper;
 }
@@ -97,6 +97,14 @@ describe('NotificationsCard.vue', () => {
     expect(switches).toHaveLength(6);
     switches.forEach((toggle) => expect(toggle.attributes('aria-checked')).toBe('true'));
     expect(getNotificationPreferences).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).not.toContain('New member joins');
+  });
+
+  it('adds the new member notification for a group admin', async () => {
+    const wrapper = await mountIn(PUSH_STATE.ON, { isAdmin: true });
+    expect(wrapper.text()).toContain('Admin');
+    expect(wrapper.text()).toContain('New member joins');
+    expect(preferenceSwitches(wrapper)).toHaveLength(7);
   });
 
   it('shows a type the player turned off, and saves a switch on its own', async () => {

@@ -84,6 +84,7 @@ func main() {
 	}
 	notificationService := services.NewNotificationService(db, pushSender, matchService)
 	matchService.Notifier = notificationService
+	authService.Notifier = notificationService
 	notificationHandler := handlers.NewNotificationHandler(notificationService, vapidPublicKey, os.Getenv("NOTIFICATIONS_TICK_SECRET"))
 	matchHandler := handlers.NewMatchHandler(matchService, groupMembershipService)
 	matchRegistrationHandler := handlers.NewMatchRegistrationHandler(services.NewMatchRegistrationService(db))
@@ -126,6 +127,7 @@ func main() {
 	// Hidden features enabled for the caller (models.PlayerFeature), which
 	// are switched on by hand in the database. Same scoping as above.
 	r.GET("/players/me/features", authRequired, playerHandler.GetMyFeatures)
+	r.PUT("/players/me/guide", authRequired, playerHandler.CompleteGuide)
 	// Push notifications for the caller's own devices (the subscribe route
 	// refuses a player without the push-notifications feature).
 	r.GET("/push/public-key", authRequired, notificationHandler.GetPublicKey)
@@ -275,27 +277,32 @@ func main() {
 	r.GET("/standings/predictions", authRequired, requireGroupMember, standingsHandler.GetPredictionStandings)
 	r.GET("/standings/seasons", authRequired, requireGroupMember, standingsHandler.GetSeasons)
 
-	// Auth entry points each get a per-IP limiter (see ratelimit.go): bcrypt
+	// Auth entry points are unauthenticated by necessity (a caller signing up,
+	// logging in or resetting a lost password has no token yet), which also
+	// makes them the only routes in this app an anonymous script can hit
+	// repeatedly for free. Each gets its own rate limiter (see ratelimit.go),
+	// keyed on the player rather than on Vercel since the frontend reaches them
+	// through its /api/auth rewrite (ProxiedRateLimit): bcrypt already
 	// slows down one guess against Login, but not a script making thousands: a
 	// generous burst absorbs a legitimate user mistyping their password a few
 	// times in a row, then throttles hard.
-	loginRateLimit := handlers.RateLimit(rate.Every(6*time.Second), 10) // ~10/min, burst 10
+	loginRateLimit := handlers.ProxiedRateLimit(rate.Every(6*time.Second), 10) // ~10/min, burst 10
 	// Signup's rate/burst are the one pair overridable via env
 	// (SIGNUP_RATE_LIMIT_PER_HOUR/SIGNUP_RATE_LIMIT_BURST), both defaulting to
 	// 5/hour, burst 5 when unset. The local performance fixtures can raise
 	// these temporarily to create multiple synthetic accounts from one IP.
 	signupPerHour := envIntOrDefault("SIGNUP_RATE_LIMIT_PER_HOUR", 5)
 	signupBurst := envIntOrDefault("SIGNUP_RATE_LIMIT_BURST", 5)
-	signupRateLimit := handlers.RateLimit(rate.Every(time.Hour/time.Duration(signupPerHour)), signupBurst)
-	forgotPasswordRateLimit := handlers.RateLimit(rate.Every(12*time.Minute), 5) // ~5/hour, burst 5 — also caps Brevo email spend, see CLAUDE.md
-	resetPasswordRateLimit := handlers.RateLimit(rate.Every(3*time.Minute), 20)  // ~20/hour, burst 20 — tokens are unguessable 32-byte values, this is a courtesy cap, not the real defense
+	signupRateLimit := handlers.ProxiedRateLimit(rate.Every(time.Hour/time.Duration(signupPerHour)), signupBurst)
+	forgotPasswordRateLimit := handlers.ProxiedRateLimit(rate.Every(12*time.Minute), 5) // ~5/hour, burst 5 — also caps Brevo email spend, see CLAUDE.md
+	resetPasswordRateLimit := handlers.ProxiedRateLimit(rate.Every(3*time.Minute), 20)  // ~20/hour, burst 20 — tokens are unguessable 32-byte values, this is a courtesy cap, not the real defense
 
 	r.POST("/auth/signup", signupRateLimit, authHandler.Signup)
 	r.POST("/auth/login", loginRateLimit, authHandler.Login)
-	r.POST("/auth/passkeys/options", handlers.RateLimit(rate.Every(6*time.Second), 10), passkeyHandler.LoginOptions)
-	r.POST("/auth/passkeys/login", handlers.RateLimit(rate.Every(6*time.Second), 10), passkeyHandler.Login)
-	r.POST("/auth/refresh", handlers.RateLimit(rate.Every(time.Second), 60), authHandler.RefreshSession)
-	r.POST("/auth/logout", handlers.RateLimit(rate.Every(time.Second), 60), authHandler.Logout)
+	r.POST("/auth/passkeys/options", handlers.ProxiedRateLimit(rate.Every(6*time.Second), 10), passkeyHandler.LoginOptions)
+	r.POST("/auth/passkeys/login", handlers.ProxiedRateLimit(rate.Every(6*time.Second), 10), passkeyHandler.Login)
+	r.POST("/auth/refresh", handlers.ProxiedRateLimit(rate.Every(time.Second), 60), authHandler.RefreshSession)
+	r.POST("/auth/logout", handlers.ProxiedRateLimit(rate.Every(time.Second), 60), authHandler.Logout)
 	// Public like signup/login above: someone who forgot their password has by
 	// definition no token to authenticate the request with.
 	r.POST("/auth/forgot-password", forgotPasswordRateLimit, authHandler.ForgotPassword)

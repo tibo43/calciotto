@@ -50,9 +50,7 @@ func (h *PlayerHandler) UpdateMyName(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"name": name})
 }
 
-// GetMyFeatures returns the hidden features enabled for the authenticated
-// player, as {"features": [...]}. Only ever the caller's own: which features
-// someone else has is nobody's business, so there is no /players/:id form.
+// GetMyFeatures returns the caller's feature list and guide status.
 func (h *PlayerHandler) GetMyFeatures(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
@@ -64,5 +62,24 @@ func (h *PlayerHandler) GetMyFeatures(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"features": features})
+	completed, err := h.Service.GuideCompleted(playerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not load guide status"})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"features": features, "guide_completed": completed})
+}
+
+func (h *PlayerHandler) CompleteGuide(c *gin.Context) {
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+	if err := h.Service.CompleteGuide(playerID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save guide completion"})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }

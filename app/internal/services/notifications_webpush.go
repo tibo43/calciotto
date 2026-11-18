@@ -67,12 +67,14 @@ func isAllowedPushEndpoint(raw string) bool {
 	if port := endpoint.Port(); port != "" && port != "443" {
 		return false
 	}
-	switch strings.ToLower(endpoint.Hostname()) {
+	host := strings.ToLower(endpoint.Hostname())
+	switch host {
 	case "fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com", "web.push.windows.com":
 		return true
-	default:
-		return false
 	}
+	// Edge hands out Windows Notification Service endpoints on per-region
+	// hosts such as wns2-par02p.notify.windows.com.
+	return strings.HasSuffix(host, ".notify.windows.com")
 }
 
 var webPushHTTPClient = &http.Client{

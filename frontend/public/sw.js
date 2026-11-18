@@ -99,6 +99,11 @@ function buildNotification(data) {
         body: score ? `Final score: ${score}. ${points}` : points,
       };
     }
+    case 'member_joined':
+      return {
+        title: `${data.playerName || 'Someone'} joined ${data.groupName || 'your group'}`,
+        body: "Not someone you know? Remove them and generate a new invite code.",
+      };
     default:
       return { title: 'Calciotto', body: prefix ? prefix.slice(0, -2) : 'Something new in your group.' };
   }

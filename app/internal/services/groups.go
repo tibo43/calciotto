@@ -43,7 +43,6 @@ var (
 
 const (
 	inviteCodeLength = 8
-	groupInviteTTL   = 7 * 24 * time.Hour
 	// inviteCodeAlphabet leaves out the characters that get mixed up when a
 	// code is read out loud or copied by hand (0/O, 1/I/L), since the whole
 	// point of an invite code is to be passed around between humans.
@@ -76,7 +75,7 @@ func (s *GroupService) CreateGroup(name string, teams [2]TeamSpec) (*models.Grou
 		return nil, err
 	}
 
-	group := &models.Group{Name: name, InviteCode: inviteCode, InviteExpiresAt: time.Now().Add(groupInviteTTL)}
+	group := &models.Group{Name: name, InviteCode: inviteCode, InviteExpiresAt: models.InviteNeverExpires}
 	err = s.DB.Transaction(func(tx *gorm.DB) error {
 		trimmed := make([]TeamSpec, len(teams))
 		for i, spec := range teams {
@@ -179,7 +178,7 @@ func (s *GroupService) ChangeInvitation(groupID, adminID uuid.UUID, rotate bool)
 				return err
 			}
 			group.InviteCode = code
-			group.InviteExpiresAt = group.InviteExpiresAt.Add(groupInviteTTL)
+			group.InviteExpiresAt = models.InviteNeverExpires
 		}
 		return tx.Model(&group).Select("invite_code", "invite_expires_at").Updates(&group).Error
 	})

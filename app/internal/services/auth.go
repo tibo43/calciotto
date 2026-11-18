@@ -119,6 +119,15 @@ type AuthService struct {
 	// PasswordResetMailer delivers the reset link to its intended recipient.
 	// Nil means recovery is unavailable for every account.
 	PasswordResetMailer func(email, link string) error
+	// Notifier hears about every player who joined a group by signing up
+	// with its invite code. Nil unless main.go wires one in.
+	Notifier MemberJoinedNotifier
+}
+
+// MemberJoinedNotifier is told, after the signup has committed, that a new
+// player joined a group. NotificationService implements it.
+type MemberJoinedNotifier interface {
+	MemberJoined(groupID, playerID uuid.UUID, playerName string)
 }
 
 // NewAuthService takes the signing secret as a parameter rather than reading
@@ -231,6 +240,7 @@ func (s *AuthService) signupNewPlayer(name, email, password, inviteCode string, 
 		Email:        &email,
 		PasswordHash: string(hash),
 	}
+	var groupID uuid.UUID
 	err = s.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&player).Error; err != nil {
 			return err
@@ -240,6 +250,7 @@ func (s *AuthService) signupNewPlayer(name, email, password, inviteCode string, 
 		if err != nil {
 			return err
 		}
+		groupID = group.ID
 		if err := addGroupMembership(tx, group.ID, player.ID, models.RoleMember); err != nil {
 			return err
 		}
@@ -250,6 +261,9 @@ func (s *AuthService) signupNewPlayer(name, email, password, inviteCode string, 
 	})
 	if err != nil {
 		return uuid.Nil, err
+	}
+	if s.Notifier != nil {
+		s.Notifier.MemberJoined(groupID, player.ID, player.Name)
 	}
 	return player.ID, nil
 }
@@ -604,10 +618,11 @@ func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 		return tx.Model(&models.Player{}).
 			Where("id = ?", playerID).
 			Updates(map[string]interface{}{
-				"name":          deletedAccountName,
-				"email":         nil,
-				"password_hash": "",
-				"token_version": gorm.Expr("token_version + 1"),
+				"name":               deletedAccountName,
+				"email":              nil,
+				"password_hash":      "",
+				"token_version":      gorm.Expr("token_version + 1"),
+				"guide_completed_at": nil,
 			}).Error
 	})
 }

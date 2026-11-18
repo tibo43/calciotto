@@ -62,6 +62,9 @@ const (
 	PushTypeKickoffReminder    = "kickoff_reminder"
 	PushTypeResultRecorded     = "result_recorded"
 	PushTypePredictionsSettled = "predictions_settled"
+	// PushTypeMemberJoined goes to a group's admins only, so an invite code
+	// that reached the wrong person shows up the moment it is used.
+	PushTypeMemberJoined = "member_joined"
 )
 
 // AllPushTypes is every notification a player can turn off, in the order the
@@ -73,6 +76,7 @@ var AllPushTypes = []string{
 	PushTypePredictionsOpen,
 	PushTypePredictionsSettled,
 	PushTypeKickoffReminder,
+	PushTypeMemberJoined,
 }
 
 // KickoffReminderLead is how long before kick-off the reminder becomes due.
@@ -98,13 +102,15 @@ var (
 
 // PushMessage is the JSON payload of one notification.
 type PushMessage struct {
-	Type      string      `json:"type"`
-	URL       string      `json:"url"`
-	Tag       string      `json:"tag"`
-	GroupName string      `json:"groupName,omitempty"`
-	KickoffAt *time.Time  `json:"kickoffAt,omitempty"`
-	TeamName  string      `json:"teamName,omitempty"`
-	Score     []PushScore `json:"score,omitempty"`
+	Type      string     `json:"type"`
+	URL       string     `json:"url"`
+	Tag       string     `json:"tag"`
+	GroupName string     `json:"groupName,omitempty"`
+	KickoffAt *time.Time `json:"kickoffAt,omitempty"`
+	TeamName  string     `json:"teamName,omitempty"`
+	// PlayerName is set only on member_joined: who joined the group.
+	PlayerName string      `json:"playerName,omitempty"`
+	Score      []PushScore `json:"score,omitempty"`
 	// Points is set only on predictions_settled: what this recipient earned
 	// on their one prediction (the odds minus the implicit token, or −1).
 	// A pointer so the field is absent on every other notification.
@@ -308,7 +314,9 @@ func (s *NotificationService) send(groupID uuid.UUID, messages map[uuid.UUID]Pus
 			continue
 		}
 		if err := s.Sender.Send(sub, payload); err != nil {
-			if errors.Is(err, ErrPushSubscriptionGone) {
+			// A subscription whose endpoint is no longer allowed would fail
+			// on every dispatch, so it goes the same way as a gone one.
+			if errors.Is(err, ErrPushSubscriptionGone) || errors.Is(err, ErrInvalidPushSubscription) {
 				s.DB.Delete(&models.PushSubscription{}, "id = ?", sub.ID)
 				continue
 			}
@@ -376,6 +384,34 @@ func (s *NotificationService) groupName(groupID uuid.UUID) string {
 		return ""
 	}
 	return group.Name
+}
+
+// MemberJoined implements MemberJoinedNotifier.
+func (s *NotificationService) MemberJoined(groupID, playerID uuid.UUID, playerName string) {
+	s.Dispatch(func() {
+		if err := s.memberJoined(groupID, playerID, playerName); err != nil {
+			log.Printf("[push] new member notification for group %s failed: %v", groupID, err)
+		}
+	})
+}
+
+// memberJoined tells the group's admins who just joined, with a link to the
+// group's member list, where they can remove someone and generate a new code.
+func (s *NotificationService) memberJoined(groupID, playerID uuid.UUID, playerName string) error {
+	var admins []uuid.UUID
+	if err := s.DB.Model(&models.GroupMembership{}).
+		Where("group_id = ? AND role = ? AND player_id <> ?", groupID, models.RoleAdmin, playerID).
+		Pluck("player_id", &admins).Error; err != nil {
+		return err
+	}
+	s.send(groupID, sameMessageFor(admins, PushMessage{
+		Type:       PushTypeMemberJoined,
+		URL:        "/profile/groups/" + groupID.String() + "/settings",
+		Tag:        "group-" + groupID.String() + "-member-" + playerID.String(),
+		GroupName:  s.groupName(groupID),
+		PlayerName: playerName,
+	}))
+	return nil
 }
 
 // RosterSaved implements MatchEventNotifier.

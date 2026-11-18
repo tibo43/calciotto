@@ -72,7 +72,18 @@ async function stubApi(page, overrides = {}) {
   // Hidden features. Profile.vue reads this for its cards; App.vue reads it
   // once per session for the design-v2 class. None by default, like most
   // players — so the redesign class stays off and today's screenshots hold.
-  await page.route(`${API}/players/me/features`, (route) => json(route, { features: overrides.features ?? data.features }));
+  let guideCompleted = overrides.guideCompleted ?? true;
+  await page.route(`${API}/players/me/features`, (route) => json(route, {
+    features: overrides.features ?? data.features,
+    guide_completed: guideCompleted,
+  }));
+  await page.route(`${API}/players/me/guide`, (route) => {
+    if (route.request().method() === 'PUT') {
+      guideCompleted = true;
+      return route.fulfill({ status: 204 });
+    }
+    return route.fallback();
+  });
   // The Notifications card reads these only once push is on for the device.
   // The off-state screenshot never calls them; stubbing them keeps an on-state
   // page from falling through to the catch-all. A PUT merges into the copy
@@ -111,8 +122,7 @@ async function stubApi(page, overrides = {}) {
   // for sharing the match) — stubbed unconditionally anyway since every
   // match-details scenario shares this one route.
   await page.route(`${API}/groups/*/invite-code`, (route) => json(route, {
-    invite_code: overrides.inviteCode ?? data.inviteCode,
-    expires_at: new Date(new Date(data.FIXED_NOW).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    invite_code: overrides.inviteCode ?? data.inviteCode
   }));
   await page.route(`${API}/standings/seasons*`, (route) => json(route, overrides.seasons ?? data.seasons));
   await page.route(`${API}/standings/points*`, (route) => json(route, overrides.pointsStandings ?? data.pointsStandings));
@@ -189,7 +199,7 @@ async function gotoApp(page, path, options = {}) {
   await page.addInitScript(({ token, tokenKey, groupKey, groupID, themeKey, themeValue }) => {
     localStorage.setItem(tokenKey, token);
     localStorage.setItem(groupKey, groupID);
-    localStorage.setItem(themeKey, themeValue);
+    if (themeValue !== null) localStorage.setItem(themeKey, themeValue);
   }, {
     token: fakeJWT(playerID),
     tokenKey: TOKEN_KEY,
@@ -228,7 +238,8 @@ async function gotoApp(page, path, options = {}) {
   // viewport (the @mobile project) App.vue hides the whole top bar on an
   // authenticated page, so no locator inside it would ever become visible
   // there. The main content renders on every viewport and route.
-  await expect(page.locator('.main-content')).toBeVisible();
+  const showsGuide = overrides.guideCompleted === false && overrides.features?.includes('design-v2');
+  await expect(page.locator(showsGuide ? '.player-guide' : '.main-content')).toBeVisible();
   await expect(page.locator('.loading-spinner')).toHaveCount(0);
 
   return { unstubbed };

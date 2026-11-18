@@ -418,3 +418,34 @@ func TestUpdateMatch_Integration_CannotForgeAnotherGroupsMatch(t *testing.T) {
 		t.Errorf("group B's match_player row = %+v, want player %s on team %s with 1 goal", rows[0], victimID, teamsB[0].ID)
 	}
 }
+
+// The bypass PR #62 closed: an admin of group A naming A in the query string
+// (which the middleware authorizes) and group B in the body (which the handler
+// used to write to). Through the real route it must be refused, and B must
+// gain no match.
+func TestCreateMatch_Integration_QueryAndBodyGroupsMustAgree(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	env := newMatchAdminEnv(t, tx)
+
+	groupA, adminAToken, _ := env.matchAdminGroup(t, tx,
+		"Zzz Match Query A", "match-query-a-admin@example.com", "match-query-a-member@example.com")
+	groupB, _, _ := env.matchAdminGroup(t, tx,
+		"Zzz Match Query B", "match-query-b-admin@example.com", "match-query-b-member@example.com")
+
+	rec := env.do(http.MethodPost, "/matches?group_id="+groupA.String(), adminAToken,
+		map[string]string{"date": "2026-01-04", "group_id": groupB.String()})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /matches with group A in the query and B in the body returned %d, want 400, body: %s", rec.Code, rec.Body.String())
+	}
+
+	for _, group := range []uuid.UUID{groupA, groupB} {
+		matches, err := env.matches.GetMatchesDetails(group, "")
+		if err != nil {
+			t.Fatalf("GetMatchesDetails returned error: %v", err)
+		}
+		if len(matches) != 0 {
+			t.Errorf("a refused POST /matches still created %d match(es) in group %s", len(matches), group)
+		}
+	}
+}
