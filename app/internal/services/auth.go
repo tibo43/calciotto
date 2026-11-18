@@ -275,10 +275,14 @@ func (s *AuthService) authenticate(email, password string) (models.Player, error
 	if err != nil {
 		return models.Player{}, err
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(player.PasswordHash), []byte(password)); err != nil {
+	if !validPassword(player, password) {
 		return models.Player{}, ErrInvalidCredentials
 	}
 	return player, nil
+}
+
+func validPassword(player models.Player, password string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(player.PasswordHash), []byte(password)) == nil
 }
 
 // ForgotPassword issues and emails a reset link for the registered account.
@@ -424,6 +428,9 @@ func (s *AuthService) ResetPassword(token, newPassword string) error {
 			}).Error; err != nil {
 			return err
 		}
+		if err := removePlayerPasskeys(tx, player.ID); err != nil {
+			return err
+		}
 		// One statement marks the token just used *and* every other unused
 		// token of that player — the already-expired ones are swept along
 		// harmlessly, they were unusable anyway.
@@ -493,7 +500,7 @@ func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 		}
 		return err
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(player.PasswordHash), []byte(password)); err != nil {
+	if !validPassword(player, password) {
 		return ErrInvalidCredentials
 	}
 
@@ -564,6 +571,9 @@ func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 			return err
 		}
 		if err := tx.Where("player_id = ?", playerID).Delete(&models.AuthSession{}).Error; err != nil {
+			return err
+		}
+		if err := removePlayerPasskeys(tx, playerID); err != nil {
 			return err
 		}
 		if err := tx.Where("player_id = ?", playerID).Delete(&models.MatchRegistration{}).Error; err != nil {

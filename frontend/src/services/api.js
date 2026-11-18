@@ -156,6 +156,35 @@ export const login = async (email, password) => {
   return response.data;
 };
 
+export const beginPasskeyLogin = async () => {
+  const response = await sessionAPI.post('/auth/passkeys/options', {});
+  return response.data;
+};
+
+export const finishPasskeyLogin = async (challengeId, credential) => {
+  const response = await sessionAPI.post('/auth/passkeys/login', { challenge_id: challengeId, credential });
+  return response.data;
+};
+
+export const beginPasskeyRegistration = async (name, password) => {
+  const response = await api.post('/players/me/passkeys/options', { name, password });
+  return response.data;
+};
+
+export const finishPasskeyRegistration = async (challengeId, credential) => {
+  const response = await api.post('/players/me/passkeys', { challenge_id: challengeId, credential });
+  return response.data;
+};
+
+export const getMyPasskeys = async () => {
+  const response = await api.get('/players/me/passkeys');
+  return response.data;
+};
+
+export const removeMyPasskey = async (id) => {
+  await api.delete(`/players/me/passkeys/${id}`);
+};
+
 export const signup = async (name, email, password, inviteCode = '') => {
   const response = await sessionAPI.post('/auth/signup', { name, email, password, invite_code: inviteCode });
   return response.data;

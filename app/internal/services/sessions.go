@@ -43,17 +43,21 @@ func (s *AuthService) LoginSession(email, password string) (SessionCredentials, 
 		if player.Email == nil || player.TokenVersion != authenticated.TokenVersion {
 			return ErrInvalidCredentials
 		}
-		if err := tx.Where("player_id = ? AND (expires_at <= ? OR token_version <> ?)", player.ID, time.Now(), player.TokenVersion).
-			Delete(&models.AuthSession{}).Error; err != nil {
-			return err
-		}
-		credentials, err = s.createSession(tx, player)
+		credentials, err = s.createLoginSession(tx, player)
 		return err
 	})
 	if err != nil {
 		return SessionCredentials{}, err
 	}
 	return credentials, nil
+}
+
+func (s *AuthService) createLoginSession(tx *gorm.DB, player models.Player) (SessionCredentials, error) {
+	if err := tx.Where("player_id = ? AND (expires_at <= ? OR token_version <> ?)", player.ID, time.Now(), player.TokenVersion).
+		Delete(&models.AuthSession{}).Error; err != nil {
+		return SessionCredentials{}, err
+	}
+	return s.createSession(tx, player)
 }
 
 // SignupSession commits the player, membership and session together.

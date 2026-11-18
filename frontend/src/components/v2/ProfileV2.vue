@@ -160,6 +160,7 @@
         <p><button class="btn btn-ghost" type="button" :disabled="sendingReset || !email" @click="sendReset">{{ sendingReset ? 'Sending…' : 'Email the link' }}</button></p>
         <p v-if="resetNote" class="scope">{{ resetNote }}</p>
       </section>
+      <PasskeySettings class="sec" />
       <section class="danger">
         <p class="label">Danger zone</p>
         <h2 class="h2">Delete my account</h2>
@@ -276,6 +277,7 @@
 </template>
 
 <script>
+import PasskeySettings from '@/components/PasskeySettings.vue';
 import {
   getPlayerProfile, getMyGroups, getSeasons, setFavoriteGroup, updateMyName,
   deleteMyAccount, clearToken, getToken, getTeamsByGroup, updateTeam, getInviteCode,
@@ -318,7 +320,7 @@ function playerIdFromToken() {
 
 export default {
   name: 'ProfileV2',
-  components: { GroupDetailsForm, InvitationActions, ShareButton },
+  components: { GroupDetailsForm, InvitationActions, PasskeySettings, ShareButton },
   inject: {
     v2Context: { default: () => ({}) },
   },

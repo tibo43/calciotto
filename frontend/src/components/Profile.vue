@@ -221,6 +221,7 @@
                (see PWA_INSTALL_FEATURE). -->
           <InstallAppCard v-if="features.includes(pwaInstallFeature)" />
           <NotificationsCard v-if="features.includes(pushFeature)" />
+          <PasskeySettings class="card-base" />
 
           <!-- Danger zone: kept in its own card, visually separated from
                everything above, so an irreversible action doesn't sit next
@@ -267,6 +268,7 @@ import GroupSettingsModal from '@/components/GroupSettingsModal.vue';
 import DeleteAccountModal from '@/components/DeleteAccountModal.vue';
 import InstallAppCard from '@/components/InstallAppCard.vue';
 import NotificationsCard from '@/components/NotificationsCard.vue';
+import PasskeySettings from '@/components/PasskeySettings.vue';
 import ProfileV2 from '@/components/v2/ProfileV2.vue';
 
 // The JWT's own player_id claim is the only place the caller's player id is
@@ -290,7 +292,7 @@ function currentPlayerIdFromToken() {
 
 export default {
   name: 'PlayerProfile',
-  components: { GroupSettingsModal, DeleteAccountModal, InstallAppCard, NotificationsCard, ProfileV2 },
+  components: { GroupSettingsModal, DeleteAccountModal, InstallAppCard, NotificationsCard, PasskeySettings, ProfileV2 },
   inject: {
     designV2On: { default: false },
   },

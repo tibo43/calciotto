@@ -18,13 +18,18 @@
             autocomplete="current-password" />
         </div>
 
-        <p v-if="error" class="error-message">{{ error }}</p>
+        <p v-if="error" class="error-message" role="alert">{{ error }}</p>
 
-        <button type="submit" class="btn-base btn-primary btn-large" :disabled="isSubmitting"
+        <button type="submit" class="btn-base btn-primary btn-large" :disabled="busy"
           style="width: 100%; justify-content: center;">
           {{ isSubmitting ? 'Logging in...' : 'Log in' }}
         </button>
       </form>
+
+      <button v-if="passkeysAvailable" class="btn-base btn-secondary passkey-login" type="button"
+        :disabled="busy" @click="submitPasskey">
+        {{ isUsingPasskey ? 'Waiting for your device…' : 'Log in with a passkey' }}
+      </button>
 
       <p class="auth-switch">
         <router-link to="/forgot-password">Forgot password?</router-link>
@@ -39,6 +44,7 @@
 
 <script>
 import { login, setToken } from '@/services/api';
+import { signInWithPasskey, supportsPasskeys } from '@/services/passkeys';
 
 export default {
   name: 'LoginPage',
@@ -48,9 +54,14 @@ export default {
       password: '',
       error: '',
       isSubmitting: false,
+      isUsingPasskey: false,
+      passkeysAvailable: supportsPasskeys(),
     };
   },
   computed: {
+    busy() {
+      return this.isSubmitting || this.isUsingPasskey;
+    },
     // Set by ResetPassword.vue when it hands the user back here after a
     // successful reset.
     resetConfirmed() {
@@ -67,17 +78,34 @@ export default {
   },
   methods: {
     async submit() {
+      if (this.busy) return;
       this.error = '';
       this.isSubmitting = true;
       try {
         const { token } = await login(this.email, this.password);
-        setToken(token);
-        this.$router.push('/');
+        this.openSession(token);
       } catch (err) {
         this.error = err.response?.data?.error || 'Login failed. Please check your credentials.';
       } finally {
         this.isSubmitting = false;
       }
+    },
+    async submitPasskey() {
+      if (this.busy) return;
+      this.error = '';
+      this.isUsingPasskey = true;
+      try {
+        const { token } = await signInWithPasskey();
+        this.openSession(token);
+      } catch {
+        this.error = 'Could not log in with a passkey. Try again or use your password.';
+      } finally {
+        this.isUsingPasskey = false;
+      }
+    },
+    openSession(token) {
+      setToken(token);
+      this.$router.push('/');
     },
   },
 };
@@ -107,6 +135,13 @@ export default {
   font-size: 0.9rem;
   margin-bottom: 1.5rem;
   text-align: center;
+}
+
+.passkey-login {
+  margin-top: 0.75rem;
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
 }
 
 .auth-switch {

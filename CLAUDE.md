@@ -154,12 +154,19 @@ There is **no `MatchPlayerHandler`**, and no HTTP path of any kind to create or 
 
 Every handler that reads an ID from the URL (`c.Param("id")`, etc.) parses it with `uuid.Parse` and returns 400 on failure before calling the service — service methods take `uuid.UUID`, never a raw path string.
 
-### Auth (email/password, JWT), password reset and account deletion
+### Auth, password reset and account deletion
 `POST /auth/signup` calls `AuthService.SignupSession` to create a new `Player`, group membership, and browser session in one transaction. The response returns the player ID and an access token. The player uses the same browser session flow as after login. Display names may be shared by several accounts.
 
 Signup requires an active group invitation. The service checks its code before hashing the password and rechecks it under the group row lock before writing the membership. Missing, expired, revoked, or unknown codes return 400. Codes are case-insensitive.
 
 `AuthService.Signup(playerID, email, password)` still attaches credentials to an existing test or seed player. HTTP login calls `LoginSession`. See [Browser sessions and group invitations](README.md#browser-sessions-and-group-invitations) for the session and deploy contract.
+
+#### Passkeys
+
+- Players add a passkey with their current password under **Profile → Passkeys** in V1 or **Profile → Manage account → Passkeys** in V2. They can remove their passkeys from the same panel. **Log in with a passkey** uses the browser's account chooser and the device's face, fingerprint or screen lock. The password remains available for sign-in and recovery.
+- The API uses WebAuthn for discoverable credentials with user verification required. `CORS_ALLOWED_ORIGINS` supplies the exact permitted frontend origins. The RP ID is each frontend hostname. Passkeys work over HTTPS and on `http://localhost` for local testing. The browser and the installed app use the same origin.
+- Enrollment uses authenticated `POST /players/me/passkeys/options` and `POST /players/me/passkeys`. Login uses `POST /auth/passkeys/options` and `POST /auth/passkeys/login` through the same-origin `/api/auth` proxy. A successful assertion starts the same renewable browser session as password login. The device verifies the player and holds the private key. The server stores the public credential in `passkeys`.
+- The database holds the five-minute challenges so every backend instance can verify them. A finish request consumes its challenge once. Enrollment challenges are bound to the player and the version of their credentials. A password reset or account deletion removes the player's passkeys and pending enrollments in the same transaction.
 
 The reset flow is deliberately non-committal about what exists:
 - `ForgotPassword(email)` emails a reset link when the address matches a player. With the mailer configured, `POST /auth/forgot-password` returns the same 200 response for known and unknown accounts, including after a delivery failure. It returns a generic 503 before a database lookup when the mailer is unconfigured.
@@ -597,7 +604,6 @@ The styles stay in `global-styles.css` (`.toast-container`, `.toast-bottom`, `.t
 Ideas raised but not decided yet. Each needs a product call before any code.
 
 - **Dropping team colours from the data.** Decided for the UI (design v2 shows none, see "Design v2" above), not yet for the data: `Team.Colour`, its `ErrTeamColourRequired` check, `TeamWithPlayers.Colour` on the API, the colour-based team ordering in `matches.go`, and v1's `getTeamColor()`/`TeamColourPicker.vue` can only go once v1 is retired, since v1 still renders them. Removing the column then needs an explicit `ALTER TABLE ... DROP COLUMN`, as `AutoMigrate` never drops one.
-- **Signing in with a passkey** (fingerprint, face or the phone's code, through WebAuthn) instead of the password. It works in a browser tab as well as in the installed app, and the passkey lives in Google's or Apple's password manager, so it can't tell whether the app is installed (it came up as a way to detect that, and doesn't do it). As a sign-in method it would be a real backend feature: registration and assertion routes, a credential table per player, and a decision on whether the password stays as a fallback.
 
 ## Gotchas
 
