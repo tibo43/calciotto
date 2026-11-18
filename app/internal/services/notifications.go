@@ -308,7 +308,9 @@ func (s *NotificationService) send(groupID uuid.UUID, messages map[uuid.UUID]Pus
 			continue
 		}
 		if err := s.Sender.Send(sub, payload); err != nil {
-			if errors.Is(err, ErrPushSubscriptionGone) {
+			// A subscription whose endpoint is no longer allowed would fail
+			// on every dispatch, so it goes the same way as a gone one.
+			if errors.Is(err, ErrPushSubscriptionGone) || errors.Is(err, ErrInvalidPushSubscription) {
 				s.DB.Delete(&models.PushSubscription{}, "id = ?", sub.ID)
 				continue
 			}
