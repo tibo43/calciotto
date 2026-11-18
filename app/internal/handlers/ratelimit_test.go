@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -155,5 +156,78 @@ func TestRateLimitTrustedProxiesNone(t *testing.T) {
 	}
 	if code := doPostForwardedFor(engine, "10.1.2.3:5555", "198.51.100.4"); code != http.StatusTooManyRequests {
 		t.Fatalf("same peer, different X-Forwarded-For: expected 429, got %d", code)
+	}
+}
+
+func newProxiedRateLimitRouter(t *testing.T, r rate.Limit, burst int) *gin.Engine {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	if err := ConfigureTrustedProxies(engine); err != nil {
+		t.Fatalf("ConfigureTrustedProxies returned error: %v", err)
+	}
+	engine.Use(ProxiedRateLimit(r, burst))
+	engine.POST("/thing", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+	return engine
+}
+
+// Through Vercel's /api/auth rewrite, the platform load balancer (10.1.2.3)
+// sees Vercel's outgoing address (76.76.21.9) as the client, with the player's
+// own address one hop to its left. Each player must keep their own bucket.
+func TestProxiedRateLimitKeysOnThePlayerBehindVercel(t *testing.T) {
+	engine := newProxiedRateLimitRouter(t, rate.Every(time.Hour), 1)
+
+	if code := doPostForwardedFor(engine, "10.1.2.3:5555", "198.51.100.4, 76.76.21.9"); code != http.StatusOK {
+		t.Fatalf("first player: expected 200, got %d", code)
+	}
+	if code := doPostForwardedFor(engine, "10.1.2.3:5555", "198.51.100.4, 76.76.21.9"); code != http.StatusTooManyRequests {
+		t.Fatalf("first player's second request: expected 429, got %d", code)
+	}
+	if code := doPostForwardedFor(engine, "10.1.2.3:5555", "198.51.100.5, 76.76.21.9"); code != http.StatusOK {
+		t.Fatalf("another player behind the same Vercel address: expected 200, got %d", code)
+	}
+}
+
+// A caller reaching the backend directly can forge the hop left of its own
+// address, but its own address still has a bucket proxyPeerFactor times the
+// per-client one.
+func TestProxiedRateLimitCapsAPeerForgingHops(t *testing.T) {
+	engine := newProxiedRateLimitRouter(t, rate.Every(time.Hour), 1)
+
+	for i := 0; i < proxyPeerFactor; i++ {
+		forged := "1.1.1." + string(rune('1'+i)) + ", 203.0.113.7"
+		if code := doPostForwardedFor(engine, "10.1.2.3:5555", forged); code != http.StatusOK {
+			t.Fatalf("forged hop %d: expected 200, got %d", i, code)
+		}
+	}
+	if code := doPostForwardedFor(engine, "10.1.2.3:5555", "1.1.1.9, 203.0.113.7"); code != http.StatusTooManyRequests {
+		t.Fatalf("past the peer's budget: expected 429, got %d", code)
+	}
+}
+
+func TestProxiedRateLimitWithoutAForwardedHopBehavesLikeRateLimit(t *testing.T) {
+	engine := newProxiedRateLimitRouter(t, rate.Every(time.Hour), 1)
+
+	if code := doPost(engine, "203.0.113.7:5555"); code != http.StatusOK {
+		t.Fatalf("first request: expected 200, got %d", code)
+	}
+	if code := doPost(engine, "203.0.113.7:5555"); code != http.StatusTooManyRequests {
+		t.Fatalf("second request: expected 429, got %d", code)
+	}
+}
+
+// A full table must not lock every new caller out.
+func TestRateLimiterStillServesNewKeysWhenFull(t *testing.T) {
+	limiter := &ipRateLimiter{limiters: make(map[string]*ipBucket), r: rate.Every(time.Hour), burst: 1}
+	for i := 0; i < maxRateLimitBuckets; i++ {
+		limiter.allow(fmt.Sprintf("key-%d", i))
+	}
+	if !limiter.allow("newcomer") {
+		t.Fatal("a new key was refused because the table was full")
+	}
+	if len(limiter.limiters) > maxRateLimitBuckets {
+		t.Fatalf("table grew past its cap: %d", len(limiter.limiters))
 	}
 }
