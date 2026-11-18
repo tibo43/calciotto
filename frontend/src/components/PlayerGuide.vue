@@ -13,7 +13,8 @@
         <p class="guide-description">{{ step.description }}</p>
         <p v-if="error" class="field-error" role="alert">{{ error }}</p>
         <div class="guide-actions">
-          <button v-if="index > 0" class="btn btn-ghost" type="button" :disabled="saving" @click="changeStep(-1)">Back</button>
+          <button v-if="required && error" class="btn btn-ghost" type="button" :disabled="saving" @click="$emit('skip')">Continue anyway</button>
+          <button v-else-if="index > 0" class="btn btn-ghost" type="button" :disabled="saving" @click="changeStep(-1)">Back</button>
           <button class="btn" type="button" :disabled="saving" @click="advance">
             {{ saving ? 'Saving…' : actionLabel }}
           </button>
@@ -60,7 +61,7 @@ export default {
     saving: Boolean,
     error: { type: String, default: '' },
   },
-  emits: ['finish', 'dismiss'],
+  emits: ['finish', 'dismiss', 'skip'],
   data() {
     return { steps, index: 0 };
   },

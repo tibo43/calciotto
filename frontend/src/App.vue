@@ -2,7 +2,7 @@
   <div id="app" :class="{ 'dark-mode': isDarkMode, 'design-v2': designV2 }">
     <div v-if="checkingDesignV2" class="app-starting" role="status">Loading Calciotto…</div>
     <PlayerGuide v-else-if="guideMode" :required="guideMode === 'required'" :saving="savingGuide"
-      :dark="isDarkMode" :error="guideError" @finish="finishGuide" @dismiss="closeGuide" />
+      :dark="isDarkMode" :error="guideError" @finish="finishGuide" @dismiss="closeGuide" @skip="skipGuide" />
     <div v-else class="app-container" :class="{ wrap: designV2, 'is-confirming': designV2 && v2Context.confirming, 'is-picking-csc': designV2 && v2Context.pickingCsc }">
         <header v-if="designV2" class="topbar">
           <div class="topbar-left">
@@ -241,6 +241,11 @@ import { ensureDesignV2Fonts, hasDesignV2, removeDesignV2Fonts } from '@/service
 // Routes reachable without a token — nothing group-related is shown there.
 const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
 
+// How long a session's first features request may hold the app on the
+// loading screen. Past it, today's design paints and the answer switches the
+// app when it lands, so a slow or hung request never leaves a blank page.
+const STARTUP_WAIT_MS = 2000;
+
 export default {
   name: 'App',
   components: { PlayerGuide },
@@ -257,6 +262,9 @@ export default {
       isDarkMode: prefersDarkTheme(),
       designV2: false,
       checkingDesignV2: false,
+      // Set once the shell has painted for this session: later checks (a
+      // retry after a failed request) run in the background.
+      startupSettled: false,
       guideMode: null,
       savingGuide: false,
       guideError: '',
@@ -373,11 +381,14 @@ export default {
       }
       const sessionKey = getSessionKey();
       const known = knownFeatureStatus();
-      if (!known) {
+      if (!known && !this.startupSettled) {
         this.checkingDesignV2 = true;
         this.guideMode = null;
         this.guideError = '';
         this.savingGuide = false;
+        setTimeout(() => {
+          if (requestId === this.designV2Request) this.settleStartup();
+        }, STARTUP_WAIT_MS);
       }
       const status = known ?? await loadFeatureStatus();
       if (requestId !== this.designV2Request) return;
@@ -385,7 +396,7 @@ export default {
         this.syncDesignV2();
         return;
       }
-      this.checkingDesignV2 = false;
+      this.settleStartup();
       const enabled = hasDesignV2(status.features);
       this.applyDesignV2(enabled);
       // Wait for an API that can record guide completion during rollout.
@@ -394,6 +405,19 @@ export default {
       } else if (this.guideMode === 'required') {
         this.guideMode = null;
       }
+    },
+    settleStartup() {
+      this.checkingDesignV2 = false;
+      this.startupSettled = true;
+    },
+    // After a failed save: let the player in for this session only. The
+    // server still says the guide is incomplete, so the next session asks
+    // again.
+    skipGuide() {
+      if (this.guideMode !== 'required' || this.savingGuide) return;
+      rememberGuideCompletion();
+      this.guideMode = null;
+      this.guideError = '';
     },
     openGuide() {
       if (this.designV2 && !this.guideMode) this.guideMode = 'replay';
@@ -429,6 +453,7 @@ export default {
       // it can't repaint this session's answer after logout.
       this.designV2Request += 1;
       this.checkingDesignV2 = false;
+      this.startupSettled = false;
       resetFeatureStatus();
       this.applyDesignV2(false);
       // Before the token goes: the next account on this device must not get

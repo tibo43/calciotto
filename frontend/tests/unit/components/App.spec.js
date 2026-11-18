@@ -1,7 +1,8 @@
 import { shallowMount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import App from '@/App.vue';
-import { getMyFeatureStatus, getSessionKey, clearToken } from '@/services/api';
+import PlayerGuide from '@/components/PlayerGuide.vue';
+import { getMyFeatureStatus, getSessionKey, clearToken, completeGuide } from '@/services/api';
 import { resetFeatureStatus } from '@/services/featureStatus';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { disablePushOnLogout } from '@/services/pushNotifications';
@@ -9,6 +10,7 @@ import { disablePushOnLogout } from '@/services/pushNotifications';
 vi.mock('@/services/api', () => ({
   getMyFeatureStatus: vi.fn(),
   getSessionKey: vi.fn(),
+  completeGuide: vi.fn(),
   logoutSession: vi.fn(),
   clearToken: vi.fn()
 }));
@@ -130,7 +132,8 @@ describe('App.vue design-v2', () => {
     getMyFeatureStatus.mockReturnValueOnce(retry.promise);
     await router.push('/profile');
     await flushPromises();
-    expect(wrapper.find('.app-starting').exists()).toBe(true);
+    expect(wrapper.find('.app-starting').exists()).toBe(false);
+    expect(wrapper.find('.app-container').exists()).toBe(true);
     expect(wrapper.classes()).not.toContain('design-v2');
 
     retry.resolve({ features: ['design-v2'] });
@@ -223,6 +226,79 @@ describe('App.vue design-v2', () => {
     await mountAt('/');
     await flushPromises();
     expect(Object.keys(localStorage)).toEqual(['calciotto-theme']);
+  });
+});
+
+describe('App.vue startup and player guide', () => {
+  const guide = (wrapper) => wrapper.findComponent(PlayerGuide);
+
+  beforeEach(() => {
+    resetFeatureStatus();
+    getMyFeatureStatus.mockReset();
+    getSessionKey.mockReset();
+    getSessionKey.mockReturnValue('token-a');
+    completeGuide.mockReset();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('paints today\'s design when the features request is slow, then switches once it answers', async () => {
+    vi.useFakeTimers();
+    const features = deferred();
+    getMyFeatureStatus.mockReturnValue(features.promise);
+
+    const { wrapper } = await mountAt('/');
+    expect(wrapper.find('.app-starting').exists()).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(wrapper.find('.app-starting').exists()).toBe(false);
+    expect(wrapper.find('.app-container').exists()).toBe(true);
+    expect(wrapper.classes()).not.toContain('design-v2');
+
+    features.resolve({ features: ['design-v2'], guideCompleted: false });
+    await flushPromises();
+    expect(guide(wrapper).props('required')).toBe(true);
+  });
+
+  it('keeps the required guide open when saving fails, and closes it once a retry succeeds', async () => {
+    getMyFeatureStatus.mockResolvedValue({ features: ['design-v2'], guideCompleted: false });
+    const { wrapper } = await mountAt('/');
+    await flushPromises();
+
+    completeGuide.mockRejectedValueOnce(new Error('offline'));
+    guide(wrapper).vm.$emit('finish');
+    await flushPromises();
+    expect(guide(wrapper).props('error')).toContain('Could not save');
+
+    completeGuide.mockResolvedValueOnce();
+    guide(wrapper).vm.$emit('finish');
+    await flushPromises();
+    expect(guide(wrapper).exists()).toBe(false);
+    expect(wrapper.find('.app-container').exists()).toBe(true);
+    expect(completeGuide).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets the player continue for this session after a failed save', async () => {
+    getMyFeatureStatus.mockResolvedValue({ features: ['design-v2'], guideCompleted: false });
+    const { wrapper, router } = await mountAt('/');
+    await flushPromises();
+    completeGuide.mockRejectedValueOnce(new Error('offline'));
+    guide(wrapper).vm.$emit('finish');
+    await flushPromises();
+
+    guide(wrapper).vm.$emit('skip');
+    await flushPromises();
+    expect(guide(wrapper).exists()).toBe(false);
+
+    // Not asked again while this session lasts.
+    await router.push('/profile');
+    await flushPromises();
+    expect(guide(wrapper).exists()).toBe(false);
+    expect(getMyFeatureStatus).toHaveBeenCalledTimes(1);
   });
 });
 
