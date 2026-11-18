@@ -2,7 +2,7 @@
   <div class="auth-page">
     <div class="auth-card card-base card-large">
       <h1 class="page-title">Reset password</h1>
-      <p class="auth-hint">Choose a new password for your account. This also removes any saved passkeys.</p>
+      <p class="auth-hint">Choose a new password for your account.</p>
 
       <form @submit.prevent="submit">
         <div class="form-group">

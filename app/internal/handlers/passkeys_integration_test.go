@@ -57,7 +57,7 @@ func TestPasskeys_Integration_ChallengeAndAccountScope(t *testing.T) {
 		return id, token
 	}
 	ownerID, ownerToken := newAccount("Passkey owner", "passkey-owner@example.test")
-	_, otherToken := newAccount("Other player", "passkey-other@example.test")
+	otherID, otherToken := newAccount("Other player", "passkey-other@example.test")
 	send := func(method, path, site, token string, body any, expectedStatus int) *httptest.ResponseRecorder {
 		t.Helper()
 		encoded, err := json.Marshal(body)
@@ -86,6 +86,19 @@ func TestPasskeys_Integration_ChallengeAndAccountScope(t *testing.T) {
 	}
 	credentials := map[string]string{"password": password, "name": "Phone"}
 	send(http.MethodPost, keyPath+"/options", origin, "", credentials, http.StatusUnauthorized)
+	send(http.MethodGet, keyPath, origin, ownerToken, nil, http.StatusForbidden)
+	addFeature := func(id uuid.UUID, feature string) {
+		t.Helper()
+		if err := tx.Create(&models.PlayerFeature{PlayerID: id, Feature: feature}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	addFeature(ownerID, models.FeatureDesignV2)
+	addFeature(otherID, models.FeaturePasskeys)
+	send(http.MethodPost, keyPath+"/options", origin, ownerToken, credentials, http.StatusForbidden)
+	send(http.MethodPost, keyPath+"/options", origin, otherToken, credentials, http.StatusForbidden)
+	addFeature(ownerID, models.FeaturePasskeys)
+	addFeature(otherID, models.FeatureDesignV2)
 	send(http.MethodPost, keyPath+"/options", origin, ownerToken, map[string]string{"password": uuid.NewString()}, http.StatusBadRequest)
 	enrollment := send(http.MethodPost, keyPath+"/options", origin, ownerToken, credentials, http.StatusOK)
 	var creation struct {
@@ -104,6 +117,12 @@ func TestPasskeys_Integration_ChallengeAndAccountScope(t *testing.T) {
 	send(http.MethodPost, keyPath, secondOrigin, ownerToken, proof, http.StatusBadRequest)
 	send(http.MethodPost, loginPath, origin, "", proof, http.StatusUnauthorized)
 	challengeCount(creation.ID, 1)
+	if err := tx.Delete(&models.PlayerFeature{PlayerID: ownerID, Feature: models.FeaturePasskeys}).Error; err != nil {
+		t.Fatal(err)
+	}
+	send(http.MethodPost, keyPath, origin, ownerToken, proof, http.StatusForbidden)
+	send(http.MethodDelete, keyPath+"/"+uuid.NewString(), origin, ownerToken, nil, http.StatusForbidden)
+	addFeature(ownerID, models.FeaturePasskeys)
 	send(http.MethodPost, keyPath, origin, ownerToken, proof, http.StatusBadRequest)
 	challengeCount(creation.ID, 0)
 

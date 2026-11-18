@@ -6,7 +6,7 @@
       <p v-if="error" class="passkey-error" role="alert">{{ error }}</p>
       <p v-if="notice" class="passkey-hint" role="status">{{ notice }}</p>
       <p v-if="loading" role="status">Loading passkeys…</p>
-      <button v-else-if="!loaded" type="button" :class="secondaryButton" @click="loadKeys">Try again</button>
+      <button v-else-if="!loaded" type="button" class="btn btn-ghost" @click="loadKeys">Try again</button>
       <template v-else>
         <p v-if="keys.length === 0" class="passkey-hint">No passkeys saved yet.</p>
         <ul v-else class="passkey-list">
@@ -15,7 +15,7 @@
               <strong>{{ key.name }}</strong>
               <p class="passkey-hint">{{ key.last_used_at ? 'Last used' : 'Added' }} {{ formatDate(key.last_used_at || key.created_at) }}</p>
             </div>
-            <button type="button" :class="secondaryButton" :aria-label="'Remove ' + key.name"
+            <button type="button" class="btn btn-ghost" :aria-label="'Remove ' + key.name"
               :disabled="busy" @click="remove(key.id)">Remove</button>
           </li>
         </ul>
@@ -26,13 +26,13 @@
           <input id="passkey-password" v-model="password" class="form-input" type="password" autocomplete="current-password"
             required :disabled="busy">
           <div class="passkey-actions">
-            <button type="button" :class="secondaryButton" :disabled="busy" @click="closeForm">Cancel</button>
-            <button type="submit" :class="primaryButton" :disabled="busy || !password">
+            <button type="button" class="btn btn-ghost" :disabled="busy" @click="closeForm">Cancel</button>
+            <button type="submit" class="btn" :disabled="busy || !password">
               {{ busy ? 'Waiting for your device…' : 'Create passkey' }}
             </button>
           </div>
         </form>
-        <button v-else-if="supported" :class="primaryButton" type="button" :disabled="busy" @click="adding = true">Add passkey</button>
+        <button v-else-if="supported" class="btn" type="button" :disabled="busy" @click="adding = true">Add passkey</button>
         <p v-else class="passkey-hint">Open Calciotto in a browser that supports passkeys to add one.</p>
       </template>
     </div>
@@ -45,7 +45,6 @@ import { addPasskey, supportsPasskeys } from '@/services/passkeys';
 
 export default {
   name: 'PasskeySettings',
-  inject: { designV2On: { default: false } },
   data() {
     return {
       supported: supportsPasskeys(),
@@ -59,14 +58,6 @@ export default {
       error: '',
       notice: '',
     };
-  },
-  computed: {
-    primaryButton() {
-      return this.designV2On ? 'btn' : 'btn-base btn-primary';
-    },
-    secondaryButton() {
-      return this.designV2On ? 'btn btn-ghost' : 'btn-base btn-secondary';
-    },
   },
   methods: {
     onToggle(event) {
@@ -133,12 +124,8 @@ export default {
 
 <style scoped>
 .passkey-settings {
-  padding: 0.75rem 1.25rem;
-  color: var(--v2-text, var(--text-primary));
-}
-
-.passkey-settings.sec {
-  padding-inline: 0;
+  padding-block: 0.75rem;
+  color: var(--v2-text);
 }
 
 .passkey-settings summary {
@@ -160,12 +147,12 @@ export default {
 }
 
 .passkey-hint {
-  color: var(--v2-text-muted, var(--text-secondary));
+  color: var(--v2-text-muted);
   font-size: 0.875rem;
 }
 
 .passkey-error {
-  color: var(--v2-danger, var(--danger-color));
+  color: var(--v2-danger);
 }
 
 .passkey-list {
@@ -184,7 +171,7 @@ export default {
 
 .passkey-row {
   justify-content: space-between;
-  border-bottom: 1px solid var(--v2-rule, var(--border-color));
+  border-bottom: 1px solid var(--v2-rule);
   padding: 0.5rem 0;
 }
 

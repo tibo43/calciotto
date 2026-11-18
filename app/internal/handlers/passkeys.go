@@ -146,7 +146,7 @@ func bindPasskeyJSON(c *gin.Context, request any) bool {
 
 func passkeyError(c *gin.Context, err error, proofStatus int) {
 	switch {
-	case errors.Is(err, services.ErrPasskeyOrigin):
+	case errors.Is(err, services.ErrPasskeyOrigin), errors.Is(err, services.ErrPasskeysDisabled):
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrPasskeyName):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

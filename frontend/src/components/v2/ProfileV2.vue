@@ -157,10 +157,11 @@
       <section class="sec">
         <div class="sec-head"><h2>Password</h2></div>
         <p class="scope">To choose a new one, we email you a reset link, the same path as forgot password.</p>
+        <p v-if="hasPasskeys" class="scope">A password reset also removes your saved passkeys.</p>
         <p><button class="btn btn-ghost" type="button" :disabled="sendingReset || !email" @click="sendReset">{{ sendingReset ? 'Sending…' : 'Email the link' }}</button></p>
         <p v-if="resetNote" class="scope">{{ resetNote }}</p>
       </section>
-      <PasskeySettings class="sec" />
+      <PasskeySettings v-if="hasPasskeys" class="sec" />
       <section class="danger">
         <p class="label">Danger zone</p>
         <h2 class="h2">Delete my account</h2>
@@ -278,6 +279,7 @@
 
 <script>
 import PasskeySettings from '@/components/PasskeySettings.vue';
+import { hasPasskeyAccess } from '@/services/passkeyAccess';
 import {
   getPlayerProfile, getMyGroups, getSeasons, setFavoriteGroup, updateMyName,
   deleteMyAccount, clearToken, getToken, getTeamsByGroup, updateTeam, getInviteCode,
@@ -448,6 +450,9 @@ export default {
     },
     hasPush() {
       return this.features.includes(PUSH_FEATURE);
+    },
+    hasPasskeys() {
+      return hasPasskeyAccess(this.features);
     },
     hasInstall() {
       return this.features.includes(PWA_INSTALL_FEATURE);

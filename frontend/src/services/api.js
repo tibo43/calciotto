@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { hasPasskeyAccess, rememberPasskeyAccess } from './passkeyAccess';
 
 const API_BASE_URL = import.meta.env.VUE_APP_API_BASE_URL || 'http://127.0.0.1:8080';
 
@@ -8,6 +9,7 @@ let sessionGeneration = 0;
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (token) => {
   sessionGeneration++;
+  rememberPasskeyAccess(false);
   localStorage.setItem(TOKEN_KEY, token);
 };
 export const clearToken = () => {
@@ -122,7 +124,17 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const { url, calciottoSession } = response.config;
+    if (url === '/players/me/features' && calciottoSession?.generation === sessionGeneration) {
+      const current = getToken();
+      const { token } = calciottoSession;
+      if (current && (sessionID(current) || current) === (sessionID(token) || token)) {
+        rememberPasskeyAccess(hasPasskeyAccess(response.data?.features));
+      }
+    }
+    return response;
+  },
   async (error) => {
     const request = error.config;
     const snapshot = request?.calciottoSession;
@@ -213,6 +225,7 @@ export const forgotPassword = async (email) => {
 // backend gives one generic message on purpose.
 export const resetPassword = async (token, newPassword) => {
   const response = await sessionAPI.post('/auth/reset-password', { token, new_password: newPassword });
+  rememberPasskeyAccess(false);
   return response.data;
 };
 
@@ -706,6 +719,7 @@ export const updateNotificationPreferences = async (preferences) => {
 // else in this file already forces a logout.
 export const deleteMyAccount = async (password) => {
   const response = await api.delete('/players/me', { data: { password } });
+  rememberPasskeyAccess(false);
   return response.data;
 };
 

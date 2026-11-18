@@ -45,6 +45,7 @@
 <script>
 import { login, setToken } from '@/services/api';
 import { signInWithPasskey, supportsPasskeys } from '@/services/passkeys';
+import { shouldOfferPasskeyLogin } from '@/services/passkeyAccess';
 
 export default {
   name: 'LoginPage',
@@ -55,7 +56,7 @@ export default {
       error: '',
       isSubmitting: false,
       isUsingPasskey: false,
-      passkeysAvailable: supportsPasskeys(),
+      passkeysAvailable: supportsPasskeys() && shouldOfferPasskeyLogin(),
     };
   },
   computed: {
@@ -91,7 +92,7 @@ export default {
       }
     },
     async submitPasskey() {
-      if (this.busy) return;
+      if (this.busy || !this.passkeysAvailable) return;
       this.error = '';
       this.isUsingPasskey = true;
       try {

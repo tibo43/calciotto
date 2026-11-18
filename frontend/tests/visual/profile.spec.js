@@ -21,7 +21,8 @@ test.describe('profile page', () => {
   // deliberately over-long name, which is what proves the truncation rather
   // than the actions being pushed out of the row.
   test('group roster as an admin on a narrow viewport @mobile', async ({ page }) => {
-    const { unstubbed } = await gotoApp(page, '/profile', { groupMembers: data.groupMembersLongName });
+    const { unstubbed } = await gotoApp(page, '/profile', { groupMembers: data.groupMembersLongName, features: ['passkeys'] });
+    await expect(page.getByText('Passkeys', { exact: true })).toHaveCount(0);
     await page.locator('.group-card-horizontal').first().click();
     // Waiting on an action button rather than the panel itself: the panel
     // renders before its members have loaded, so this is what proves the

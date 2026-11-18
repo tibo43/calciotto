@@ -163,7 +163,8 @@ Signup requires an active group invitation. The service checks its code before h
 
 #### Passkeys
 
-- Players add a passkey with their current password under **Profile → Passkeys** in V1 or **Profile → Manage account → Passkeys** in V2. They can remove their passkeys from the same panel. **Log in with a passkey** uses the browser's account chooser and the device's face, fingerprint or screen lock. The password remains available for sign-in and recovery.
+- Passkeys are off by default. An administrator enables `passkeys` in `player_features` for a player who already has `design-v2`. Eligible players add or remove their passkeys under **Profile → Manage account → Passkeys**. Enrollment asks for their current password.
+- The signed-out screen offers **Log in with a passkey** on a browser that has already seen an eligible signed-in account. The first sign-in on a new browser uses the password. The API checks both flags on every passkey enrollment and sign-in. Removing either flag disables passkey use for that account. The password stays available for sign-in and recovery.
 - The API uses WebAuthn for discoverable credentials with user verification required. `CORS_ALLOWED_ORIGINS` supplies the exact permitted frontend origins. The RP ID is each frontend hostname. Passkeys work over HTTPS and on `http://localhost` for local testing. The browser and the installed app use the same origin.
 - Enrollment uses authenticated `POST /players/me/passkeys/options` and `POST /players/me/passkeys`. Login uses `POST /auth/passkeys/options` and `POST /auth/passkeys/login` through the same-origin `/api/auth` proxy. A successful assertion starts the same renewable browser session as password login. The device verifies the player and holds the private key. The server stores the public credential in `passkeys`.
 - The database holds the five-minute challenges so every backend instance can verify them. A finish request consumes its challenge once. Enrollment challenges are bound to the player and the version of their credentials. A password reset or account deletion removes the player's passkeys and pending enrollments in the same transaction.
@@ -552,7 +553,7 @@ A redesign of the signed-in app, behind the hidden feature `design-v2` (`models.
 INSERT INTO player_features (player_id, feature) VALUES ('<player uuid>', 'design-v2');
 ```
 
-Nothing in the backend branches on the key. `GET /players/me/features` already returns whatever rows exist for the caller.
+`GET /players/me/features` returns the caller's enabled flags. Passkey access requires both `design-v2` and `passkeys`.
 
 - **The flag.** It comes only from the server. `src/services/designV2.js` keeps the session's answer to `GET /players/me/features` in memory (`loadDesignV2`, `knownDesignV2`), keyed by the token it was fetched with, so another session never reads it; nothing about the redesign is stored in the browser. Concurrent callers share one request. A failed request resolves to today's design and is forgotten, so the next call asks again. `logout()` calls `resetDesignV2()` and bumps a request id *before* its first await, so a response that lands afterwards is dropped.
 - **The class.** `App.vue` puts `design-v2` on `#app` — the same element that already carries `.dark-mode` — from that answer, on signed-in pages only. The v2-only routes (`/rankings`, the `/profile/...` sub-pages) ask through the same `loadDesignV2()` in an async `beforeEnter` and redirect a v1 player. `main.js` mounts only after `router.isReady()`, so `created()` decides on the real route; a missing route name (the router's start location) is treated as not authenticated in `isAuthenticatedRouteName`.

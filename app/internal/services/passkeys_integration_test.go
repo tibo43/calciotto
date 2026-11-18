@@ -21,6 +21,13 @@ func TestPasskeys_Integration_AccountRecoveryClearsCredentials(t *testing.T) {
 			playerID := newClaimedPlayer(t, tx, "Passkey recovery", email, password)
 			otherID := newClaimedPlayer(t, tx, "Other account", "passkey-recovery-other@example.test", password)
 			for _, id := range []uuid.UUID{playerID, otherID} {
+				features := []models.PlayerFeature{
+					{PlayerID: id, Feature: models.FeatureDesignV2},
+					{PlayerID: id, Feature: models.FeaturePasskeys},
+				}
+				if err := tx.Create(&features).Error; err != nil {
+					t.Fatal(err)
+				}
 				key := models.Passkey{PlayerID: id, RPID: "calciotto.example.test", CredentialID: id[:], Name: "Phone"}
 				if err := tx.Create(&key).Error; err != nil {
 					t.Fatal(err)
@@ -41,8 +48,9 @@ func TestPasskeys_Integration_AccountRecoveryClearsCredentials(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if owned, err := keys.List(playerID); err != nil || len(owned) != 0 {
-				t.Fatalf("passkeys after recovery = %d (error %v)", len(owned), err)
+			var owned int64
+			if err := tx.Model(&models.Passkey{}).Where("player_id = ?", playerID).Count(&owned).Error; err != nil || owned != 0 {
+				t.Fatalf("passkeys after recovery = %d (error %v)", owned, err)
 			}
 			if other, err := keys.List(otherID); err != nil || len(other) != 1 {
 				t.Fatalf("other player's passkeys = %d (error %v)", len(other), err)

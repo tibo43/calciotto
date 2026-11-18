@@ -20,9 +20,10 @@ import (
 const passkeyTimeout = 5 * time.Minute
 
 var (
-	ErrPasskeyOrigin = errors.New("passkeys are unavailable on this origin")
-	ErrPasskeyName   = errors.New("passkey names must be at most 60 characters")
-	ErrPasskeyProof  = errors.New("could not verify the passkey")
+	ErrPasskeyOrigin    = errors.New("passkeys are unavailable on this origin")
+	ErrPasskeysDisabled = errors.New("passkeys are unavailable for this account")
+	ErrPasskeyName      = errors.New("passkey names must be at most 60 characters")
+	ErrPasskeyProof     = errors.New("could not verify the passkey")
 )
 
 type PasskeyService struct {
@@ -71,7 +72,24 @@ func (u passkeyUser) WebAuthnName() string                       { return *u.pla
 func (u passkeyUser) WebAuthnDisplayName() string                { return u.player.Name }
 func (u passkeyUser) WebAuthnCredentials() []webauthn.Credential { return u.credentials }
 
+func requirePasskeyFeatures(db *gorm.DB, playerID uuid.UUID) error {
+	var features []string
+	// In a write transaction, keep the flags in place until the write commits.
+	if err := db.Model(&models.PlayerFeature{}).Clauses(clause.Locking{Strength: "SHARE"}).
+		Where("player_id = ? AND feature IN ?", playerID, []string{models.FeatureDesignV2, models.FeaturePasskeys}).
+		Pluck("feature", &features).Error; err != nil {
+		return err
+	}
+	if len(features) != 2 {
+		return ErrPasskeysDisabled
+	}
+	return nil
+}
+
 func (s *PasskeyService) List(playerID uuid.UUID) ([]models.Passkey, error) {
+	if err := requirePasskeyFeatures(s.auth.DB, playerID); err != nil {
+		return nil, err
+	}
 	keys := []models.Passkey{}
 	err := s.auth.DB.Select("id", "name", "created_at", "last_used_at").
 		Where("player_id = ?", playerID).Order("created_at DESC").Find(&keys).Error
@@ -79,13 +97,24 @@ func (s *PasskeyService) List(playerID uuid.UUID) ([]models.Passkey, error) {
 }
 
 func (s *PasskeyService) Remove(playerID, keyID uuid.UUID) error {
-	return s.auth.DB.Where("player_id = ? AND id = ?", playerID, keyID).Delete(&models.Passkey{}).Error
+	return s.auth.DB.Transaction(func(tx *gorm.DB) error {
+		if _, err := lockPlayer(tx, playerID); err != nil {
+			return err
+		}
+		if err := requirePasskeyFeatures(tx, playerID); err != nil {
+			return err
+		}
+		return tx.Where("player_id = ? AND id = ?", playerID, keyID).Delete(&models.Passkey{}).Error
+	})
 }
 
 func (s *PasskeyService) BeginRegistration(playerID uuid.UUID, origin, password, name string) (uuid.UUID, *protocol.CredentialCreation, error) {
 	rp := s.sites[origin]
 	if rp == nil {
 		return uuid.Nil, nil, ErrPasskeyOrigin
+	}
+	if err := requirePasskeyFeatures(s.auth.DB, playerID); err != nil {
+		return uuid.Nil, nil, err
 	}
 	name = strings.TrimSpace(name)
 	if utf8.RuneCountInString(name) > 60 {
@@ -126,6 +155,9 @@ func (s *PasskeyService) FinishRegistration(playerID uuid.UUID, origin string, c
 	if rp == nil {
 		return models.Passkey{}, ErrPasskeyOrigin
 	}
+	if err := requirePasskeyFeatures(s.auth.DB, playerID); err != nil {
+		return models.Passkey{}, err
+	}
 	challenge, err := s.takeChallenge(challengeID, origin, &playerID)
 	if err != nil {
 		return models.Passkey{}, err
@@ -141,6 +173,9 @@ func (s *PasskeyService) FinishRegistration(playerID uuid.UUID, origin string, c
 			return ErrPasskeyProof
 		}
 		if err != nil {
+			return err
+		}
+		if err := requirePasskeyFeatures(tx, playerID); err != nil {
 			return err
 		}
 		credential, err := rp.CreateCredential(passkeyUser{player: player}, challenge.Session, parsed)
@@ -197,6 +232,12 @@ func (s *PasskeyService) FinishLogin(origin string, challengeID uuid.UUID, proof
 			return ErrPasskeyProof
 		}
 		if err != nil {
+			return err
+		}
+		if err := requirePasskeyFeatures(tx, playerID); err != nil {
+			if errors.Is(err, ErrPasskeysDisabled) {
+				return ErrPasskeyProof
+			}
 			return err
 		}
 		var key models.Passkey
