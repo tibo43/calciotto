@@ -44,7 +44,7 @@ import {
 } from '@/services/pushNotifications';
 import { getNotificationPreferences, updateNotificationPreferences } from '@/services/api';
 
-// The six push types, in the order the card shows them. `type` matches the
+// The push types, in the order the card shows them. `type` matches the
 // backend's PushType constants; the label is what the player reads.
 const NOTIFICATION_GROUPS = [
   {
@@ -66,6 +66,13 @@ const NOTIFICATION_GROUPS = [
     label: 'Reminder',
     items: [
       { type: 'kickoff_reminder', label: 'Kick-off in 30 minutes' }
+    ]
+  },
+  {
+    label: 'Admin',
+    admin: true,
+    items: [
+      { type: 'member_joined', label: 'New member joins' }
     ]
   }
 ];
@@ -96,17 +103,24 @@ const DESCRIPTIONS = {
 
 export default {
   name: 'NotificationsCard',
+  props: {
+    isAdmin: { type: Boolean, default: false }
+  },
   data() {
     return {
       state: null,
       isBusy: false,
       error: '',
       preferences: null,
-      preferenceBusy: '',
-      groups: NOTIFICATION_GROUPS
+      preferenceBusy: ''
     };
   },
   computed: {
+    // The admin notifications are only listed to someone who is an admin of
+    // at least one group.
+    groups() {
+      return NOTIFICATION_GROUPS.filter((group) => this.isAdmin || !group.admin);
+    },
     canToggle() {
       return this.state === PUSH_STATE.ON || this.state === PUSH_STATE.OFF;
     },

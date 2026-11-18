@@ -219,7 +219,7 @@
           <button class="btn btn-ghost" type="button" :disabled="!inviteCode" @click="copyCode">Copy</button>
           <ShareButton class="btn btn-ghost" :text="inviteShareText" label="Share invitation" />
         </div>
-        <InvitationActions :group-id="groupId" :code="inviteCode" :expires-at="inviteExpiresAt"
+        <InvitationActions :group-id="groupId" :code="inviteCode"
           @updated="applyInvitation" />
       </section>
       <section class="sec">
@@ -306,6 +306,9 @@ const PREFERENCE_GROUPS = [
   { label: 'Reminder', items: [
     { key: 'kickoff_reminder', label: 'Kick-off in 30 minutes' },
   ] },
+  { label: 'Admin', admin: true, items: [
+    { key: 'member_joined', label: 'New member joins' },
+  ] },
 ];
 
 function playerIdFromToken() {
@@ -339,7 +342,6 @@ export default {
       playerId: '',
       pushState: PUSH_STATE.OFF,
       preferences: {},
-      preferenceGroups: PREFERENCE_GROUPS,
       nameInput: '',
       savingName: false,
       nameError: '',
@@ -351,7 +353,6 @@ export default {
       deleteError: '',
       teams: [],
       inviteCode: '',
-      inviteExpiresAt: '',
       members: [],
       teamNote: '',
       demoting: '',
@@ -366,6 +367,12 @@ export default {
     };
   },
   computed: {
+    // The admin notifications are only listed to someone who is an admin of
+    // at least one group.
+    preferenceGroups() {
+      const admin = this.groups.some((group) => group.role === 'admin');
+      return PREFERENCE_GROUPS.filter((group) => admin || !group.admin);
+    },
     page() {
       const name = this.$route.name;
       if (name === 'ProfileGroup') return 'group';
@@ -696,7 +703,6 @@ export default {
     },
     applyInvitation(invitation) {
       this.inviteCode = invitation?.invite_code || invitation?.InviteCode || '';
-      this.inviteExpiresAt = invitation?.expires_at || '';
     },
     applyGroupDetails(updated) {
       this.groups = this.groups.map((group) => group.id === updated.id ? { ...group, ...updated } : group);

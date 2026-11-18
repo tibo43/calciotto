@@ -75,4 +75,10 @@ describe('buildNotification', () => {
   it('still shows something for a type it does not know', () => {
     expect(buildNotification({ type: 'something_new' }).title).toBe('Calciotto');
   });
+
+  it('names who joined which group for an admin', () => {
+    const notification = buildNotification({ type: 'member_joined', playerName: 'Sam', groupName: 'Thursday Football' });
+    expect(notification.title).toBe('Sam joined Thursday Football');
+    expect(notification.body).toContain('generate a new invite code');
+  });
 });
