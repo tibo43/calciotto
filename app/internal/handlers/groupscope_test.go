@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"app/internal/models"
@@ -18,13 +19,6 @@ import (
 // resolveScopedGroupID exists for: for one and the same request, the group a
 // middleware authorizes against (resolveGroupIDForMembership) and the group the
 // handler behind it then acts on (resolveGroupID) are the *same* group.
-//
-// That matters because DELETE /matches/:id resolves its group twice — once in
-// requireGroupAdmin and once in MatchHandler.DeleteMatch — so a divergence
-// between the two would mean an admin of group A having their delete applied to
-// group B. Before this refactor the two functions were independent copies of
-// the same rules, agreeing by coincidence rather than by construction; this
-// test is what would catch them drifting apart again.
 func TestGroupIDResolution_HandlerAndMiddlewareAgree(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -131,5 +125,34 @@ func TestGroupIDResolution_HandlerAndMiddlewareAgree(t *testing.T) {
 	}
 	if middlewareRec.Body.String() != handlerRec.Body.String() {
 		t.Errorf("malformed group_id answered differently:\n middleware: %s\n handler:    %s", middlewareRec.Body.String(), handlerRec.Body.String())
+	}
+}
+
+func TestCreateMatchRequiresAuthorizedGroup(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	requestGroup := uuid.New()
+	for _, tc := range []struct {
+		name       string
+		authorized uuid.UUID
+		status     int
+	}{
+		{"missing authorization", uuid.Nil, http.StatusInternalServerError},
+		{"conflicting group", uuid.New(), http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(rec)
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/matches",
+				strings.NewReader(`{"date":"2026-01-04","group_id":"`+requestGroup.String()+`"}`))
+			if tc.authorized != uuid.Nil {
+				ctx.Set(authorizedGroupIDKey, tc.authorized)
+			}
+
+			// Rejected requests must stop before any service call.
+			(&MatchHandler{}).CreateMatch(ctx)
+			if rec.Code != tc.status {
+				t.Fatalf("CreateMatch status = %d, want %d", rec.Code, tc.status)
+			}
+		})
 	}
 }

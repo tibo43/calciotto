@@ -54,12 +54,7 @@ type createMatchRequest struct {
 	RegisterCreator bool `json:"register_creator"`
 }
 
-// CreateMatch requires authentication (see main.go), so when the payload
-// carries no group_id it falls back to a group the caller actually belongs
-// to — the same resolution RequireGroupMembership already authorized against
-// — rather than the old sort-by-random-UUID default (GroupService.GetDefaultGroup,
-// since removed), which had no relation to the caller and would let the match
-// get created in a group the caller was never even checked against.
+// CreateMatch writes to the group already checked by RequireGroupAdmin.
 func (h *MatchHandler) CreateMatch(c *gin.Context) {
 	var req createMatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -67,19 +62,14 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 		return
 	}
 
-	groupID := req.GroupID
-	if groupID == uuid.Nil {
-		playerID, ok := playerIDFromContext(c)
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
-			return
-		}
-		group, err := h.MembershipService.GetFirstGroupForPlayer(playerID)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "authenticated player does not belong to any group"})
-			return
-		}
-		groupID = group.ID
+	groupID, ok := authorizedGroupIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved for this match"})
+		return
+	}
+	if req.GroupID != uuid.Nil && req.GroupID != groupID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id does not match the authorized group"})
+		return
 	}
 
 	spec := services.MatchSpec{
@@ -165,21 +155,29 @@ func (h *MatchHandler) GetMatchDetailsByID(c *gin.Context) {
 	c.JSON(http.StatusOK, matches)
 }
 
-// DeleteMatch is gated by requireGroupAdmin in main.go, which resolves its
-// group the same way this handler does (query param group_id, else the
-// caller's first group) — reusing that exact resolution, rather than a
-// different one, is what stops an admin of group A from deleting a match in
-// group B: the group the middleware authorized against must be the same one
-// the delete is scoped to.
+// DeleteMatch uses the match's group, as authorized by the middleware. The
+// optional query parameter remains an assertion about the match's group.
 func (h *MatchHandler) DeleteMatch(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
 		return
 	}
-	groupID, ok := resolveGroupID(c, h.MembershipService)
+	groupID, ok := authorizedGroupIDFromContext(c)
 	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved for this match"})
 		return
+	}
+	if raw := c.Query("group_id"); raw != "" {
+		requestedGroupID, err := uuid.Parse(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group_id"})
+			return
+		}
+		if requestedGroupID != groupID {
+			abortMatchNotFound(c)
+			return
+		}
 	}
 
 	if err := h.Service.DeleteMatch(id, groupID); err != nil {

@@ -24,15 +24,6 @@ type groupIDFailure struct {
 // request act on", shared by resolveGroupID (handlers) and
 // resolveGroupIDForMembership (middlewares).
 //
-// Sharing it is a correctness property, not tidiness. DELETE /matches/:id
-// resolves its group twice — once in requireGroupAdmin, to decide whether the
-// caller may act, and once in MatchHandler.DeleteMatch, to scope the delete —
-// and those two answers have to be the same group or an admin of group A could
-// have their delete applied to group B. They used to be two independent copies
-// of this logic that merely happened to agree for every request; now they
-// agree by construction, and a future change to the resolution rules can only
-// be made in one place.
-//
 // The order is: group_id from the query string, then — only when fromBody is
 // supplied — the same field out of the JSON body, then a group the
 // authenticated caller (AuthMiddleware sets "player_id" in the context)

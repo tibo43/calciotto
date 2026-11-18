@@ -81,15 +81,8 @@ func playerIDFromContext(c *gin.Context) (uuid.UUID, bool) {
 	return id, ok
 }
 
-// authorizedGroupIDFromContext reads back the group a match-scoped middleware
-// already authorized the caller against (see matchscope.go for why they
-// publish it). A handler on such a route must use *this* group and never
-// resolve one of its own: resolving independently is how an admin of group A
-// ends up acting on a match in group B.
-//
-// ok=false means the route was wired without one of those middlewares, which
-// is a programming error rather than a client one — hence the 500 its callers
-// answer with.
+// authorizedGroupIDFromContext returns the group checked by the authorization
+// middleware. A missing value indicates an incorrectly wired route.
 func authorizedGroupIDFromContext(c *gin.Context) (uuid.UUID, bool) {
 	val, exists := c.Get(authorizedGroupIDKey)
 	if !exists {

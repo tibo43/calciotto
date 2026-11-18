@@ -1,52 +1,55 @@
 # Perf load test — 50 parallel sign-ups
 
-One-off tooling to run a real perf test against production: 50 accounts
-created and driven entirely through the UI (not the API), signing up for one
-match, then a manual SQL cleanup. Nothing here is part of `npm run test:unit`
-or `test:visual` — it's meant to be run by hand, deliberately, against a real
-deployment.
+Run the load test against a local frontend, API, and disposable PostgreSQL
+database. Playwright drives the signup, participation, and logout flows
+through the browser. The runner accepts loopback addresses and blocks remote
+requests.
 
-## 0. Temporarily raise the signup rate limit
+## 1. Start a disposable database and create fixtures
 
-Production throttles `POST /auth/signup` to ~5/hour per IP (see
-`app/main.go`), which 50 parallel sign-ups from one machine will hit almost
-immediately. Set these two **secrets** on the `production` GitHub
-environment, then push anything to `master` (or re-run the `deploy-backend`
-job) to roll them out:
-
-- `SIGNUP_RATE_LIMIT_PER_HOUR` — e.g. `200`
-- `SIGNUP_RATE_LIMIT_BURST` — e.g. `60`
-
-Both are optional and only synced to Koyeb when set (see the "Sync secrets to
-Koyeb" step in `.github/workflows/ci.yml`) — leaving them unset keeps today's
-default (5/hour, burst 5) exactly as it is. **Remove both secrets and
-redeploy once the test is done** to revert.
-
-## 1. Create the group, admin and match
-
-From `app/`, pointed at the production database:
+From the repository root, with Docker, Go and Node installed:
 
 ```bash
-DATABASE_URL="<production DATABASE_URL>" go run ./cmd/perfsetup \
-  -frontend-url "<your Vercel URL>" \
-  -existing-player-id "<your own player UUID, optional>"
+unset DATABASE_URL DATABASE_URL_UNPOOLED
+export DB_HOST=127.0.0.1 DB_PORT=5433 DB_USER=calciotto_perf DB_NAME=calciotto_perf
+export DB_PASSWORD="$(openssl rand -hex 24)"
+export PERF_ADMIN_PASSWORD="$(openssl rand -hex 24)"
+POSTGRES_PASSWORD="$DB_PASSWORD" docker run --rm --detach --name calciotto-perf-db \
+  --publish "127.0.0.1:$DB_PORT:5432" \
+  --env POSTGRES_PASSWORD --env POSTGRES_USER="$DB_USER" \
+  --env POSTGRES_DB="$DB_NAME" postgres:17
+docker exec calciotto-perf-db pg_isready -U "$DB_USER" -d "$DB_NAME"
+(cd app && go run ./cmd/perfsetup -frontend-url http://127.0.0.1:4000)
 ```
 
-`-existing-player-id` adds your own real account to the throwaway group as
-admin too, so you can log in normally and watch the sign-up list fill up
-live. It is never touched by `devops/perf-cleanup.sql` — only its membership
-in this one throwaway group is removed (because the group itself is
-deleted), never the player row.
+Run the setup once PostgreSQL is ready. It prints the invite code, admin email,
+group ID, and match ID. The admin can sign in with the password chosen for
+this run in `PERF_ADMIN_PASSWORD`. To seed an existing local player as a second
+admin, pass `-existing-player-id` with their UUID from this test database.
 
-This prints a group id, invite code, admin login, and match id — keep this
-output, you need the group id for step 4 and the invite code for step 2.
+## 2. Start the local app and run the test
 
-## 2. Run the load test
-
-From `frontend/`, against the deployed frontend:
+Start the API with the same `DB_*` environment. For 50 sign-ups from the same
+machine, raise the signup rate and burst for this local process:
 
 ```bash
-BASE_URL="<your Vercel URL>" INVITE_CODE="<from step 1>" USERS=50 node loadtest/run.js
+(cd app && JWT_SECRET="$(openssl rand -hex 32)" \
+  SIGNUP_RATE_LIMIT_PER_HOUR=200 SIGNUP_RATE_LIMIT_BURST=60 go run .)
+```
+
+In another terminal, start the frontend using the loopback API address:
+
+```bash
+cd frontend
+npm ci
+VUE_APP_API_BASE_URL=http://127.0.0.1:8080 npm run serve -- --host 127.0.0.1
+```
+
+From `frontend/` in a third terminal:
+
+```bash
+npx playwright install chromium
+BASE_URL=http://127.0.0.1:4000 INVITE_CODE="<from step 1>" USERS=50 node loadtest/run.js
 ```
 
 Each of the 50 virtual users, in parallel: signs up via `/signup?invite=...`
@@ -64,9 +67,7 @@ If a run reports every user failing at the `signup` step with "no
 navigation and no error message shown", **check the failure screenshot in
 `loadtest/reports/failures/` before assuming the app is broken** — a common
 cause is the signup request simply taking longer than the wait allows under
-concurrent load (bcrypt hashing is deliberately slow, and the backend runs on
-Koyeb's `free` instance type, a shared/limited CPU — see
-`.github/workflows/ci.yml`'s `KOYEB_INSTANCE_TYPE`). If the screenshot shows
+concurrent load while the backend hashes the passwords. If the screenshot shows
 the app already past signup (matches loaded, group selected), that's exactly
 this: raise `SIGNUP_TIMEOUT_MS` (default 60000) rather than treating it as a
 bug, and treat the actual signup latency this reveals as a real perf-test
@@ -75,8 +76,8 @@ finding in its own right.
 If instead a failure's error text is the UI's generic fallback ("Signup
 failed. Please try again.") rather than a timeout, that error already
 resolved quickly — raising a timeout won't change it. Every such failure logs
-the actual observed HTTP response or network error in `[brackets]` right
-after the UI text (e.g. `[http 502: ...]` or `[network error: ...]`) — that's
+the HTTP status or network error in `[brackets]` right
+after the UI text (e.g. `[http 502]` or `[network error: ...]`) — that's
 the backend or connection actually breaking under load, a genuine perf
 finding rather than a script issue. `STEP_TIMEOUT_MS` (default 120000)
 raises every other wait in the script (page rendering, the roster panel,
@@ -85,26 +86,7 @@ happens" run.
 
 ## 3. Clean up
 
-Fill in the group id from step 1 into `devops/perf-cleanup.sql`'s
-verification queries, review the counts, then uncomment and run the `DELETE`
-transaction. `real_player_id` has no default in the script — pass the id you
-gave `perfsetup -existing-player-id`, or any placeholder uuid if you ran it
-without that flag:
-
-```bash
-psql "<production DATABASE_URL>" \
-  -v group_id="'<group id from step 1>'" \
-  -v real_player_id="'<the -existing-player-id you passed to perfsetup, if any>'" \
-  -f ../devops/perf-cleanup.sql
-```
-
-This removes the throwaway group, its teams, the match and its
-registrations, the group memberships, and every `perfload+uN@perfload.test`
-/ `perfload-admin@perfload.test` player. Nothing outside that scope is
-touched.
-
-## 4. Revert the rate limit
-
-Delete (or empty) the two GitHub secrets from step 0 and push to `master`
-again so the next deploy drops the `--env` overrides, returning to the
-hardcoded 5/hour, burst 5 default.
+Stop the local frontend and API, then run `docker stop calciotto-perf-db` to
+remove the disposable database container. If reusing an isolated database,
+`devops/perf-cleanup.sql` provides a dry run and a separate cleanup
+transaction for a loopback connection to `calciotto_perf`.

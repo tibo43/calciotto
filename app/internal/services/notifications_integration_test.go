@@ -85,7 +85,7 @@ func (e *notificationEnv) member(t *testing.T, name string, withFeature bool) (u
 	if err := services.NewGroupMembershipService(e.tx).AddPlayerToGroup(e.groupID, id); err != nil {
 		t.Fatalf("AddPlayerToGroup: %v", err)
 	}
-	endpoint := "https://push.test/" + id.String()
+	endpoint := "https://fcm.googleapis.com/fixture/" + id.String()
 	if withFeature {
 		if err := e.tx.Create(&models.PlayerFeature{PlayerID: id, Feature: models.FeaturePushNotifications}).Error; err != nil {
 			t.Fatalf("enable feature: %v", err)

@@ -52,7 +52,7 @@ func newMatchAdminEnv(t *testing.T, tx *gorm.DB) *matchAdminEnv {
 	router := gin.New()
 	router.POST("/matches", authRequired, requireGroupAdmin, matchHandler.CreateMatch)
 	router.PUT("/matches/:id", authRequired, requireGroupAdminByMatchID, matchHandler.UpdateMatch)
-	router.DELETE("/matches/:id", authRequired, requireGroupAdmin, matchHandler.DeleteMatch)
+	router.DELETE("/matches/:id", authRequired, requireGroupAdminByMatchID, matchHandler.DeleteMatch)
 	router.GET("/matches/details", authRequired, requireGroupMember, matchHandler.GetMatchesDetails)
 	router.GET("/matches/:id/details", authRequired, requireGroupMember, matchHandler.GetMatchDetailsByID)
 

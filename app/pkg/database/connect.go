@@ -2,9 +2,13 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net"
+	"net/url"
 	"os"
+	"strconv"
 	"time"
 
 	"app/internal/models"
@@ -63,9 +67,8 @@ func appDSN() string {
 // pool — the app's — outlives startup; otherwise it reuses the pool it's given.
 // Either way, applySchema itself only runs while withSchemaMigrationLock holds
 // the advisory lock — see schemaMigrationLockKey for why.
-func migrate(appDB *gorm.DB) error {
-	unpooled := os.Getenv("DATABASE_URL_UNPOOLED")
-	if unpooled == "" || unpooled == appDSN() {
+func migrate(appDB *gorm.DB, dsn, unpooled string) error {
+	if unpooled == "" || unpooled == dsn {
 		return withSchemaMigrationLock(appDB, applySchema)
 	}
 
@@ -238,14 +241,43 @@ func BackfillResultRecordedAt(db *gorm.DB) error {
 var resultRecordedAtCutoff = time.Date(2026, time.November, 11, 15, 41, 0, 0, time.UTC)
 
 func InitDB() (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(appDSN()), &gorm.Config{})
+	return initDB(appDSN(), os.Getenv("DATABASE_URL_UNPOOLED"))
+}
+
+// InitLocalPerfDB is reserved for fixtures in a disposable local database.
+// Both schema migrations and fixture writes use the same loopback connection.
+func InitLocalPerfDB() (*gorm.DB, error) {
+	if os.Getenv("DATABASE_URL") != "" || os.Getenv("DATABASE_URL_UNPOOLED") != "" {
+		return nil, errors.New("unset DATABASE_URL and DATABASE_URL_UNPOOLED before running perfsetup")
+	}
+	const databaseName = "calciotto_perf"
+	host := net.ParseIP(os.Getenv("DB_HOST"))
+	if !host.IsLoopback() || os.Getenv("DB_NAME") != databaseName {
+		return nil, errors.New("perfsetup requires a loopback IP in DB_HOST and DB_NAME=calciotto_perf")
+	}
+	port, err := strconv.ParseUint(getEnv("DB_PORT", "5432"), 10, 16)
+	if err != nil || port == 0 {
+		return nil, errors.New("invalid local DB_PORT")
+	}
+	dsn := url.URL{
+		Scheme:   "postgres",
+		Host:     net.JoinHostPort(host.String(), strconv.FormatUint(port, 10)),
+		User:     url.UserPassword(getEnv("DB_USER", databaseName), os.Getenv("DB_PASSWORD")),
+		Path:     "/" + databaseName,
+		RawQuery: "sslmode=disable",
+	}
+	return initDB(dsn.String(), "")
+}
+
+func initDB(dsn, unpooled string) (*gorm.DB, error) {
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
 
 	log.Println("Successfully connected to the database!")
 
-	if err := migrate(db); err != nil {
+	if err := migrate(db, dsn, unpooled); err != nil {
 		log.Fatal(err)
 	}
 

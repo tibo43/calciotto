@@ -54,7 +54,7 @@ func TestNotificationRoutes_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseToken: %v", err)
 	}
-	device := map[string]any{"endpoint": "https://push.test/device", "keys": map[string]string{"p256dh": "k", "auth": "a"}}
+	device := map[string]any{"endpoint": "https://fcm.googleapis.com/fixture/device", "keys": map[string]string{"p256dh": "k", "auth": "a"}}
 
 	if rec := sendJSON(router, http.MethodGet, "/push/public-key", bearer, nil); rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte("public-key")) {
 		t.Errorf("GET /push/public-key = %d %s", rec.Code, rec.Body.String())
@@ -72,7 +72,7 @@ func TestNotificationRoutes_Integration(t *testing.T) {
 	if rec := sendJSON(router, http.MethodPost, "/players/me/push-subscription", bearer, device); rec.Code != http.StatusOK {
 		t.Errorf("subscribe with the feature = %d %s, want 200", rec.Code, rec.Body.String())
 	}
-	if rec := sendJSON(router, http.MethodDelete, "/players/me/push-subscription", bearer, map[string]string{"endpoint": "https://push.test/device"}); rec.Code != http.StatusOK {
+	if rec := sendJSON(router, http.MethodDelete, "/players/me/push-subscription", bearer, map[string]string{"endpoint": "https://fcm.googleapis.com/fixture/device"}); rec.Code != http.StatusOK {
 		t.Errorf("unsubscribe = %d, want 200", rec.Code)
 	}
 
