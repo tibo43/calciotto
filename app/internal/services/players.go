@@ -3,7 +3,6 @@ package services
 import (
 	"app/internal/models"
 	"errors"
-	"slices"
 	"strings"
 	"time"
 
@@ -19,8 +18,6 @@ var ErrEmptyPlayerName = errors.New("player name must not be empty")
 // permissiveness on names — see UpdateName's own doc comment for why a
 // self-service rename is held to a different bar than player creation.
 var ErrPlayerNameAlreadyUsed = errors.New("player name is already in use")
-
-var ErrV2GuideUnavailable = errors.New("the guide requires Design V2")
 
 type PlayerService struct {
 	DB *gorm.DB
@@ -111,21 +108,14 @@ func (s *PlayerService) GetFeatures(playerID uuid.UUID) ([]string, error) {
 	return features, nil
 }
 
-func (s *PlayerService) V2GuideCompleted(playerID uuid.UUID) (bool, error) {
+func (s *PlayerService) GuideCompleted(playerID uuid.UUID) (bool, error) {
 	var player models.Player
-	err := s.DB.Select("v2_guide_completed_at").Take(&player, "id = ?", playerID).Error
-	return player.V2GuideCompletedAt != nil, err
+	err := s.DB.Select("guide_completed_at").Take(&player, "id = ?", playerID).Error
+	return player.GuideCompletedAt != nil, err
 }
 
-func (s *PlayerService) CompleteV2Guide(playerID uuid.UUID) error {
-	features, err := s.GetFeatures(playerID)
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(features, models.FeatureDesignV2) {
-		return ErrV2GuideUnavailable
-	}
+func (s *PlayerService) CompleteGuide(playerID uuid.UUID) error {
 	return s.DB.Model(&models.Player{}).
-		Where("id = ? AND email IS NOT NULL AND v2_guide_completed_at IS NULL", playerID).
-		UpdateColumn("v2_guide_completed_at", time.Now()).Error
+		Where("id = ? AND email IS NOT NULL AND guide_completed_at IS NULL", playerID).
+		UpdateColumn("guide_completed_at", time.Now()).Error
 }

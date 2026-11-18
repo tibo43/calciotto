@@ -96,7 +96,7 @@
           </div>
           <button v-if="installState === 'prompt'" class="btn btn-ghost" type="button" @click="install">Install</button>
         </div>
-        <button class="pref-row guide-action" type="button" @click="openV2Guide">
+        <button class="pref-row guide-action" type="button" @click="openGuide">
           <span class="who">Replay app guide</span>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"
             stroke-width="1.6" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg>
@@ -325,7 +325,7 @@ export default {
   components: { GroupDetailsForm, InvitationActions, ShareButton },
   inject: {
     v2Context: { default: () => ({}) },
-    openV2Guide: { default: () => {} },
+    openGuide: { default: () => {} },
   },
   data() {
     return {

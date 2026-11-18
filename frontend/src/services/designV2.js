@@ -1,4 +1,4 @@
-import { getMyFeatureStatus, getSessionKey } from './api';
+import { loadFeatureStatus } from './featureStatus';
 
 // The redesign ships behind the same hidden-feature list as the install card
 // and push notifications (GET /players/me/features). The key matches
@@ -22,52 +22,9 @@ export const DESIGN_V2_FONT_CSS = `
 @font-face{font-family:"Space Mono";font-style:normal;font-weight:700;font-display:swap;src:url("/fonts/v2/SpaceMono-normal-700-latin.woff2") format("woff2");}
 `;
 
-const V1 = { enabled: false, guideRequired: false };
-let session = null;
-
-// Router guards and the shell share one features request per session.
-export function loadDesignV2State() {
-  const key = getSessionKey();
-  if (!key) {
-    return Promise.resolve(V1);
-  }
-  if (session?.key === key) {
-    return session.promise;
-  }
-  const entry = { key, promise: null, state: null };
-  entry.promise = getMyFeatureStatus()
-    .then(({ features, v2GuideCompleted }) => {
-      const enabled = hasDesignV2(features);
-      // An explicit false comes from the backend that can save completion.
-      entry.state = { enabled, guideRequired: enabled && v2GuideCompleted === false };
-      return entry.state;
-    })
-    .catch((error) => {
-      console.error('Error fetching features:', error);
-      if (session === entry) {
-        session = null;
-      }
-      return V1;
-    });
-  session = entry;
-  return entry.promise;
-}
-
 export async function loadDesignV2() {
-  return (await loadDesignV2State()).enabled;
-}
-
-export function knownDesignV2State() {
-  return session && session.key === getSessionKey() ? session.state : null;
-}
-
-export function rememberV2GuideCompletion() {
-  const state = knownDesignV2State();
-  if (state) state.guideRequired = false;
-}
-
-export function resetDesignV2() {
-  session = null;
+  const { features } = await loadFeatureStatus();
+  return hasDesignV2(features);
 }
 
 export function hasDesignV2(features) {

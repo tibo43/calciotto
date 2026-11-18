@@ -37,12 +37,12 @@ func (bm *BaseModel) BeforeCreate(tx *gorm.DB) error {
 // bump changes anything.
 type Player struct {
 	BaseModel
-	Name               string        `gorm:"type:string" json:"name"`
-	Email              *string       `gorm:"type:string;uniqueIndex" json:"-"`
-	PasswordHash       string        `gorm:"type:string" json:"-"`
-	TokenVersion       int           `gorm:"not null;default:0" json:"-"`
-	V2GuideCompletedAt *time.Time    `json:"-"`
-	TeamCompositions   []MatchPlayer `gorm:"foreignKey:PlayerID"`
+	Name             string        `gorm:"type:string" json:"name"`
+	Email            *string       `gorm:"type:string;uniqueIndex" json:"-"`
+	PasswordHash     string        `gorm:"type:string" json:"-"`
+	TokenVersion     int           `gorm:"not null;default:0" json:"-"`
+	GuideCompletedAt *time.Time    `json:"-"`
+	TeamCompositions []MatchPlayer `gorm:"foreignKey:PlayerID"`
 }
 
 // PlayerFeature turns a hidden feature on for one player: one row per
@@ -73,7 +73,7 @@ const FeaturePushNotifications = "push-notifications"
 
 // FeatureDesignV2 switches the signed-in shell onto the redesign. The
 // frontend adds a design-v2 class to the app root when this key comes back
-// from GET /players/me/features.
+// from GET /players/me/features. Nothing on the backend branches on it.
 const FeatureDesignV2 = "design-v2"
 
 // PushSubscription is one device a player receives push notifications on,

@@ -3,10 +3,8 @@ package handlers
 import (
 	"errors"
 	"net/http"
-	"slices"
 	"strings"
 
-	"app/internal/models"
 	"app/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -52,7 +50,7 @@ func (h *PlayerHandler) UpdateMyName(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"name": name})
 }
 
-// GetMyFeatures returns the caller's feature list and their Design V2 guide status.
+// GetMyFeatures returns the caller's feature list and guide status.
 func (h *PlayerHandler) GetMyFeatures(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
@@ -64,32 +62,24 @@ func (h *PlayerHandler) GetMyFeatures(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	response := gin.H{"features": features}
-	if slices.Contains(features, models.FeatureDesignV2) {
-		completed, err := h.Service.V2GuideCompleted(playerID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not load guide status"})
-			return
-		}
-		response["v2_guide_completed"] = completed
+	completed, err := h.Service.GuideCompleted(playerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not load guide status"})
+		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, gin.H{"features": features, "guide_completed": completed})
 }
 
-func (h *PlayerHandler) CompleteV2Guide(c *gin.Context) {
+func (h *PlayerHandler) CompleteGuide(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
 		return
 	}
-	err := h.Service.CompleteV2Guide(playerID)
-	switch {
-	case errors.Is(err, services.ErrV2GuideUnavailable):
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
-	case err != nil:
+	if err := h.Service.CompleteGuide(playerID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save guide completion"})
-	default:
-		c.Status(http.StatusNoContent)
+		return
 	}
+	c.Status(http.StatusNoContent)
 }

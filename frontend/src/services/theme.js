@@ -16,8 +16,8 @@ export function isDarkModeActive() {
 }
 
 // The theme to start in: the saved choice (App.vue's toggle) or, without
-// one, the system's. App.vue applies it on mount; main.js also uses it for
-// the page background before mount (see there).
+// one, the system's. App.vue reads it before rendering. main.js also uses it
+// for the page background before mount.
 export function prefersDarkTheme() {
   const savedTheme = localStorage.getItem('calciotto-theme');
   if (savedTheme) {

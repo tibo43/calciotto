@@ -121,7 +121,7 @@ func main() {
 	// Hidden features enabled for the caller (models.PlayerFeature), which
 	// are switched on by hand in the database. Same scoping as above.
 	r.GET("/players/me/features", authRequired, playerHandler.GetMyFeatures)
-	r.PUT("/players/me/v2-guide", authRequired, playerHandler.CompleteV2Guide)
+	r.PUT("/players/me/guide", authRequired, playerHandler.CompleteGuide)
 	// Push notifications for the caller's own devices (the subscribe route
 	// refuses a player without the push-notifications feature).
 	r.GET("/push/public-key", authRequired, notificationHandler.GetPublicKey)

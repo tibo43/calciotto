@@ -2,7 +2,7 @@ import { shallowMount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import App from '@/App.vue';
 import { getMyFeatureStatus, getSessionKey, clearToken } from '@/services/api';
-import { resetDesignV2 } from '@/services/designV2';
+import { resetFeatureStatus } from '@/services/featureStatus';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { disablePushOnLogout } from '@/services/pushNotifications';
 
@@ -61,7 +61,7 @@ const deferred = () => {
 
 describe('App.vue design-v2', () => {
   beforeEach(() => {
-    resetDesignV2();
+    resetFeatureStatus();
     localStorage.clear();
     localStorage.setItem('calciotto-theme', 'dark');
     document.getElementById('design-v2-fonts')?.remove();
@@ -98,8 +98,8 @@ describe('App.vue design-v2', () => {
     expect(document.getElementById('design-v2-fonts').textContent).toContain('Big Shoulders Display');
   });
 
-  it('renders today\'s design, without the fonts, once the feature comes back absent', async () => {
-    getMyFeatureStatus.mockResolvedValue({ features: ['pwa-install'] });
+  it('renders the original design when the redesign is disabled and the guide is incomplete', async () => {
+    getMyFeatureStatus.mockResolvedValue({ features: ['pwa-install'], guideCompleted: false });
 
     const { wrapper } = await mountAt('/');
     await flushPromises();
@@ -228,7 +228,7 @@ describe('App.vue design-v2', () => {
 
 describe('App.vue v2 season selector', () => {
   beforeEach(() => {
-    resetDesignV2();
+    resetFeatureStatus();
     localStorage.clear();
     localStorage.setItem('calciotto-theme', 'dark');
     document.getElementById('design-v2-fonts')?.remove();

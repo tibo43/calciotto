@@ -2,7 +2,7 @@
   <div id="app" :class="{ 'dark-mode': isDarkMode, 'design-v2': designV2 }">
     <div v-if="checkingDesignV2" class="app-starting" role="status">Loading Calciotto…</div>
     <PlayerGuide v-else-if="guideMode" :required="guideMode === 'required'" :saving="savingGuide"
-      :error="guideError" @finish="finishGuide" @dismiss="closeGuide" />
+      :dark="isDarkMode" :error="guideError" @finish="finishGuide" @dismiss="closeGuide" />
     <div v-else class="app-container" :class="{ wrap: designV2, 'is-confirming': designV2 && v2Context.confirming, 'is-picking-csc': designV2 && v2Context.pickingCsc }">
         <header v-if="designV2" class="topbar">
           <div class="topbar-left">
@@ -228,19 +228,15 @@
 
 <script>
 import { computed } from 'vue';
-import PlayerGuide from '@/components/v2/PlayerGuide.vue';
-import { clearToken, completeV2Guide, getSessionKey, logoutSession } from '@/services/api';
+import PlayerGuide from '@/components/PlayerGuide.vue';
+import { clearToken, completeGuide, getSessionKey, logoutSession } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta, prefersDarkTheme } from '@/services/theme';
 import { disablePushOnLogout, stopPushIfAppUninstalled } from '@/services/pushNotifications';
 import {
-  loadDesignV2State,
-  knownDesignV2State,
-  rememberV2GuideCompletion,
-  resetDesignV2,
-  ensureDesignV2Fonts,
-  removeDesignV2Fonts
-} from '@/services/designV2';
+  knownFeatureStatus, loadFeatureStatus, rememberGuideCompletion, resetFeatureStatus
+} from '@/services/featureStatus';
+import { ensureDesignV2Fonts, hasDesignV2, removeDesignV2Fonts } from '@/services/designV2';
 
 // Routes reachable without a token — nothing group-related is shown there.
 const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
@@ -252,13 +248,13 @@ export default {
     return {
       designV2On: computed(() => this.designV2),
       v2Context: this.v2Context,
-      openV2Guide: this.openGuide,
+      openGuide: this.openGuide,
     };
   },
   data() {
     return {
       isScrolled: false,
-      isDarkMode: false,
+      isDarkMode: prefersDarkTheme(),
       designV2: false,
       checkingDesignV2: false,
       guideMode: null,
@@ -326,8 +322,7 @@ export default {
     // stopPushIfAppUninstalled). Fire and forget: it never blocks the page.
     stopPushIfAppUninstalled();
 
-    // Check for saved theme preference
-    this.isDarkMode = prefersDarkTheme();
+    syncThemeColorMeta(this.isDarkMode);
 
     // Add scroll listener
     window.addEventListener('scroll', this.handleScroll);
@@ -377,22 +372,24 @@ export default {
         return;
       }
       const sessionKey = getSessionKey();
-      const known = knownDesignV2State();
+      const known = knownFeatureStatus();
       if (!known) {
         this.checkingDesignV2 = true;
         this.guideMode = null;
         this.guideError = '';
         this.savingGuide = false;
       }
-      const state = known ?? await loadDesignV2State();
+      const status = known ?? await loadFeatureStatus();
       if (requestId !== this.designV2Request) return;
       if (sessionKey !== getSessionKey()) {
         this.syncDesignV2();
         return;
       }
       this.checkingDesignV2 = false;
-      this.applyDesignV2(state.enabled);
-      if (state.guideRequired) {
+      const enabled = hasDesignV2(status.features);
+      this.applyDesignV2(enabled);
+      // Wait for an API that can record guide completion during rollout.
+      if (enabled && status.guideCompleted === false) {
         this.guideMode = 'required';
       } else if (this.guideMode === 'required') {
         this.guideMode = null;
@@ -414,9 +411,9 @@ export default {
       this.savingGuide = true;
       this.guideError = '';
       try {
-        await completeV2Guide();
+        await completeGuide();
         if (sessionKey === getSessionKey()) {
-          rememberV2GuideCompletion();
+          rememberGuideCompletion();
           this.guideMode = null;
         }
       } catch {
@@ -432,7 +429,7 @@ export default {
       // it can't repaint this session's answer after logout.
       this.designV2Request += 1;
       this.checkingDesignV2 = false;
-      resetDesignV2();
+      resetFeatureStatus();
       this.applyDesignV2(false);
       // Before the token goes: the next account on this device must not get
       // this one's notifications, and the backend needs the token to forget

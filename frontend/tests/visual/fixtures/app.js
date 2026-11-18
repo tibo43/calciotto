@@ -72,14 +72,14 @@ async function stubApi(page, overrides = {}) {
   // Hidden features. Profile.vue reads this for its cards; App.vue reads it
   // once per session for the design-v2 class. None by default, like most
   // players — so the redesign class stays off and today's screenshots hold.
-  let v2GuideCompleted = overrides.v2GuideCompleted ?? true;
+  let guideCompleted = overrides.guideCompleted ?? true;
   await page.route(`${API}/players/me/features`, (route) => json(route, {
     features: overrides.features ?? data.features,
-    v2_guide_completed: v2GuideCompleted,
+    guide_completed: guideCompleted,
   }));
-  await page.route(`${API}/players/me/v2-guide`, (route) => {
+  await page.route(`${API}/players/me/guide`, (route) => {
     if (route.request().method() === 'PUT') {
-      v2GuideCompleted = true;
+      guideCompleted = true;
       return route.fulfill({ status: 204 });
     }
     return route.fallback();
@@ -200,7 +200,7 @@ async function gotoApp(page, path, options = {}) {
   await page.addInitScript(({ token, tokenKey, groupKey, groupID, themeKey, themeValue }) => {
     localStorage.setItem(tokenKey, token);
     localStorage.setItem(groupKey, groupID);
-    localStorage.setItem(themeKey, themeValue);
+    if (themeValue !== null) localStorage.setItem(themeKey, themeValue);
   }, {
     token: fakeJWT(playerID),
     tokenKey: TOKEN_KEY,
@@ -239,7 +239,7 @@ async function gotoApp(page, path, options = {}) {
   // viewport (the @mobile project) App.vue hides the whole top bar on an
   // authenticated page, so no locator inside it would ever become visible
   // there. The main content renders on every viewport and route.
-  const showsGuide = overrides.v2GuideCompleted === false && overrides.features?.includes('design-v2');
+  const showsGuide = overrides.guideCompleted === false && overrides.features?.includes('design-v2');
   await expect(page.locator(showsGuide ? '.player-guide' : '.main-content')).toBeVisible();
   await expect(page.locator('.loading-spinner')).toHaveCount(0);
 

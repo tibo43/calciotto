@@ -2,7 +2,7 @@
   <main class="player-guide" aria-labelledby="player-guide-title" @keydown.esc="dismiss">
     <div class="guide-card">
       <div class="guide-preview">
-        <img :src="step.image" alt="" width="390" height="560" draggable="false">
+        <img :src="imageSrc" alt="" width="390" height="560" draggable="false">
       </div>
       <section class="guide-panel">
         <div class="guide-panel-heading">
@@ -28,33 +28,34 @@ const steps = [
   {
     title: 'Welcome to Calciotto',
     description: 'Find your next match and keep up with your group’s teams, scores, and standings.',
-    image: '/guide/welcome.jpg',
+    image: 'welcome.jpg',
   },
   {
     title: 'Matches',
     description: 'Tap Sign up when places are open. Come back to see your team and the final score.',
-    image: '/guide/matches.jpg',
+    image: 'matches.jpg',
   },
   {
     title: 'Rankings',
     description: 'Points tracks match results. Scorers lists goals. MOTM counts Man of the Match awards from post-match votes.',
-    image: '/guide/rankings.jpg',
+    image: 'rankings.jpg',
   },
   {
     title: 'Predictions',
     description: 'Pick a result while predictions are open. Check the leaderboard for your points after the match.',
-    image: '/guide/predictions.jpg',
+    image: 'predictions.jpg',
   },
   {
     title: 'Profile',
     description: 'See your record and groups, manage your settings, and replay this guide whenever you need it.',
-    image: '/guide/profile.jpg',
+    image: 'profile.jpg',
   },
 ];
 
 export default {
   name: 'PlayerGuide',
   props: {
+    dark: Boolean,
     required: Boolean,
     saving: Boolean,
     error: { type: String, default: '' },
@@ -66,6 +67,10 @@ export default {
   computed: {
     step() {
       return this.steps[this.index];
+    },
+    imageSrc() {
+      const theme = this.dark ? 'dark' : 'light';
+      return `/guide/${theme}/${this.step.image}`;
     },
     isLast() {
       return this.index === this.steps.length - 1;
@@ -120,7 +125,7 @@ export default {
   height: clamp(230px, 54svh, 490px);
   overflow: hidden;
   padding-bottom: 14px;
-  background: #ebedf4;
+  background: var(--v2-bg);
 }
 
 .guide-preview img {
