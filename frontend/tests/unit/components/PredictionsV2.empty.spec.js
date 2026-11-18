@@ -5,18 +5,18 @@ import {
 } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
 
-jest.mock('@/services/api', () => ({
-  getMatchesDetails: jest.fn(),
-  getMatchPredictions: jest.fn(),
-  predictForMatch: jest.fn(),
-  getPredictionStandings: jest.fn(),
-  getSeasons: jest.fn(),
-  getToken: jest.fn(() => '')
+vi.mock('@/services/api', () => ({
+  getMatchesDetails: vi.fn(),
+  getMatchPredictions: vi.fn(),
+  predictForMatch: vi.fn(),
+  getPredictionStandings: vi.fn(),
+  getSeasons: vi.fn(),
+  getToken: vi.fn(() => '')
 }));
 
-jest.mock('@/services/activeGroup', () => ({
-  resolveActiveGroup: jest.fn(),
-  setActiveGroupId: jest.fn()
+vi.mock('@/services/activeGroup', () => ({
+  resolveActiveGroup: vi.fn(),
+  setActiveGroupId: vi.fn()
 }));
 
 function mountPredictions({ seasons = [], matches = [], route = { query: {} } } = {}) {

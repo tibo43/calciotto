@@ -570,7 +570,7 @@ export default {
             const code = await getInviteCode(this.groupId).catch(() => null);
             this.inviteCode = (code && (code.invite_code || code.InviteCode)) || '';
           }
-        } catch (error) {
+        } catch {
           this.groupId = this.match.GroupID || '';
         }
       } catch (error) {

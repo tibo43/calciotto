@@ -8,7 +8,7 @@
 // lines. They are icon-only now (an up/down arrow and an X), with the row
 // held to `flex-wrap: nowrap` so a long name truncates instead of pushing
 // them off. A pixel diff is the only thing that can catch that regressing —
-// Jest renders nothing, and the markup would look perfectly correct either
+// jsdom renders nothing, and the markup would look perfectly correct either
 // way.
 
 const { test, expect } = require('@playwright/test');

@@ -1,5 +1,5 @@
 // Visual regression tests. Deliberately separate from `npm run test:unit`
-// (Jest/jsdom, which renders no pixels at all) and never run on the host — see
+// (Vitest/jsdom, which renders no pixels at all) and never run on the host — see
 // the `test:visual` script in package.json.
 //
 // **Baselines are platform-specific.** Font rasterisation and antialiasing

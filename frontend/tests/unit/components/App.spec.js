@@ -6,26 +6,26 @@ import { resetDesignV2 } from '@/services/designV2';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { disablePushOnLogout } from '@/services/pushNotifications';
 
-jest.mock('@/services/api', () => ({
-  getMyFeatures: jest.fn(),
-  getToken: jest.fn(),
-  logoutSession: jest.fn(),
-  clearToken: jest.fn()
+vi.mock('@/services/api', () => ({
+  getMyFeatures: vi.fn(),
+  getToken: vi.fn(),
+  logoutSession: vi.fn(),
+  clearToken: vi.fn()
 }));
 
-jest.mock('@/services/activeGroup', () => ({
-  clearActiveGroupId: jest.fn(),
-  clearMyGroupsCache: jest.fn()
+vi.mock('@/services/activeGroup', () => ({
+  clearActiveGroupId: vi.fn(),
+  clearMyGroupsCache: vi.fn()
 }));
 
-jest.mock('@/services/theme', () => ({
-  syncThemeColorMeta: jest.fn(),
-  prefersDarkTheme: jest.fn(() => true)
+vi.mock('@/services/theme', () => ({
+  syncThemeColorMeta: vi.fn(),
+  prefersDarkTheme: vi.fn(() => true)
 }));
 
-jest.mock('@/services/pushNotifications', () => ({
-  disablePushOnLogout: jest.fn(() => Promise.resolve()),
-  stopPushIfAppUninstalled: jest.fn(() => Promise.resolve(false))
+vi.mock('@/services/pushNotifications', () => ({
+  disablePushOnLogout: vi.fn(() => Promise.resolve()),
+  stopPushIfAppUninstalled: vi.fn(() => Promise.resolve(false))
 }));
 
 const mountAt = async (path) => {
@@ -69,12 +69,12 @@ describe('App.vue design-v2', () => {
     getMyFeatures.mockResolvedValue([]);
     getToken.mockReset();
     getToken.mockReturnValue('token-a');
-    jest.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     document.getElementById('design-v2-fonts')?.remove();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('renders today\'s design while the features request is pending, then switches to v2', async () => {
@@ -237,12 +237,12 @@ describe('App.vue v2 season selector', () => {
     getMyFeatures.mockResolvedValue(['design-v2']);
     getToken.mockReset();
     getToken.mockReturnValue('token-a');
-    jest.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     document.getElementById('design-v2-fonts')?.remove();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('shows a disabled No season yet control when the group has no seasons, in the same place', async () => {

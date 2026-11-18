@@ -172,17 +172,9 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # `--no-fix` is the whole point of running this in CI. `vue-cli-service
-      # lint` *fixes* by default, so without it an auto-fixable violation is
-      # repaired in the runner's throwaway checkout, the job exits 0, and the
-      # violation stays in the repo — CI reporting green on the one class of
-      # problem it was added to catch. Only non-fixable rules (no-unused-vars
-      # and friends) ever failed the build. The tree is clean under `--no-fix`
-      # as of this commit, so adopting it costs nothing today; it only gets
-      # more expensive to adopt later.
       - name: Lint
         working-directory: frontend
-        run: npm run lint -- --no-fix
+        run: npm run lint
 
       - name: Unit test
         working-directory: frontend

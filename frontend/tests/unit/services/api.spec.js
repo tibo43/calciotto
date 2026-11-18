@@ -1,23 +1,31 @@
-// api.js builds its Axios instance at import time, so the mock has to hand
-// back one shared instance whose methods the assertions can inspect.
-const mockInstance = Object.assign(jest.fn(), {
-  post: jest.fn(),
-  get: jest.fn(),
-  put: jest.fn(),
-  patch: jest.fn(),
-  delete: jest.fn(),
-  interceptors: {
-    request: { use: jest.fn() },
-    response: { use: jest.fn() }
-  }
-});
-const mockSessionAPI = { post: jest.fn() };
+import * as api from '@/services/api';
 
-jest.mock('axios', () => ({
-  create: ({ baseURL }) => baseURL === '/api' ? mockSessionAPI : mockInstance
+// api.js installs the interceptors at import time, so keep one shared mock for
+// each Axios instance and inspect the registered callbacks below.
+const { mockInstance, mockSessionAPI, forgetPush } = vi.hoisted(() => ({
+  mockInstance: Object.assign(vi.fn(), {
+    post: vi.fn(),
+    get: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+    interceptors: {
+      request: { use: vi.fn() },
+      response: { use: vi.fn() }
+    }
+  }),
+  mockSessionAPI: { post: vi.fn() },
+  forgetPush: vi.fn(() => Promise.resolve())
 }));
 
-const api = require('@/services/api');
+vi.mock('axios', () => ({
+  default: { create: ({ baseURL }) => baseURL === '/api' ? mockSessionAPI : mockInstance }
+}));
+
+vi.mock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forgetPush }));
+
+const [prepareRequest] = mockInstance.interceptors.request.use.mock.calls[0];
+const [, handleResponseError] = mockInstance.interceptors.response.use.mock.calls[0];
 
 describe('createMatch', () => {
   beforeEach(() => {
@@ -353,16 +361,14 @@ describe('the push notification calls', () => {
 });
 
 describe('a session that ends with a 401', () => {
-  // The response interceptor api.js registered at import time.
-  const onError = () => mockInstance.interceptors.response.use.mock.calls[0][1];
   const failedRequest = () => ({
     response: { status: 401 },
-    config: mockInstance.interceptors.request.use.mock.calls[0][0]({ headers: {}, url: '/groups/me' }),
+    config: prepareRequest({ headers: {}, url: '/groups/me' }),
   });
   const tokenFor = (version) => `header.${btoa(JSON.stringify({ session_id: 'device-session', version }))}.signature`;
 
   beforeEach(() => {
-    jest.resetModules();
+    forgetPush.mockClear();
     window.localStorage.clear();
     mockSessionAPI.post.mockReset();
     mockInstance.mockReset();
@@ -371,30 +377,24 @@ describe('a session that ends with a 401', () => {
   });
 
   it('drops this browser\'s push subscription when a session was open', async () => {
-    const forget = jest.fn(() => Promise.resolve());
-    jest.doMock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forget }));
     api.setToken('old-token');
-    await expect(onError()(failedRequest())).rejects.toBeTruthy();
-    expect(forget).toHaveBeenCalledTimes(1);
+    await expect(handleResponseError(failedRequest())).rejects.toBeTruthy();
+    expect(forgetPush).toHaveBeenCalledTimes(1);
     expect(api.getToken()).toBeFalsy();
   });
 
   it('leaves it alone on a 401 with no session (a wrong password at login)', async () => {
-    const forget = jest.fn(() => Promise.resolve());
-    jest.doMock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forget }));
-    await expect(onError()({ response: { status: 401 } })).rejects.toBeTruthy();
-    expect(forget).not.toHaveBeenCalled();
+    await expect(handleResponseError({ response: { status: 401 } })).rejects.toBeTruthy();
+    expect(forgetPush).not.toHaveBeenCalled();
   });
 
   it('renews once for concurrent requests and keeps the push subscription', async () => {
-    const forget = jest.fn();
-    jest.doMock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forget }));
     const renewed = tokenFor(2);
     api.setToken(tokenFor(1));
     mockSessionAPI.post.mockResolvedValue({ data: { token: renewed } });
     mockInstance.mockResolvedValue({ status: 200 });
 
-    await Promise.all([onError()(failedRequest()), onError()(failedRequest())]);
+    await Promise.all([handleResponseError(failedRequest()), handleResponseError(failedRequest())]);
 
     expect(mockSessionAPI.post).toHaveBeenCalledTimes(1);
     expect(mockSessionAPI.post).toHaveBeenCalledWith('/auth/refresh', null, {
@@ -403,27 +403,23 @@ describe('a session that ends with a 401', () => {
     expect(mockInstance).toHaveBeenCalledTimes(2);
     expect(mockInstance).toHaveBeenCalledWith(expect.objectContaining({ calciottoRefreshed: true }));
     expect(api.getToken()).toBe(renewed);
-    expect(forget).not.toHaveBeenCalled();
+    expect(forgetPush).not.toHaveBeenCalled();
   });
 
   it('preserves the session and notifications while renewal is temporarily unavailable', async () => {
-    const forget = jest.fn();
-    jest.doMock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forget }));
     const original = tokenFor(1);
     api.setToken(original);
     mockSessionAPI.post.mockRejectedValue({ response: { status: 503 } });
-    await expect(onError()(failedRequest())).rejects.toMatchObject({ response: { status: 503 } });
+    await expect(handleResponseError(failedRequest())).rejects.toMatchObject({ response: { status: 503 } });
     expect(api.getToken()).toBe(original);
-    expect(forget).not.toHaveBeenCalled();
+    expect(forgetPush).not.toHaveBeenCalled();
   });
 
   it('drops this browser subscription after renewal confirms the session ended', async () => {
-    const forget = jest.fn();
-    jest.doMock('@/services/pushNotifications', () => ({ forgetPushOnThisBrowser: forget }));
     api.setToken(tokenFor(1));
     mockSessionAPI.post.mockRejectedValue({ response: { status: 401 } });
-    await expect(onError()(failedRequest())).rejects.toMatchObject({ response: { status: 401 } });
+    await expect(handleResponseError(failedRequest())).rejects.toMatchObject({ response: { status: 401 } });
     expect(api.getToken()).toBeFalsy();
-    expect(forget).toHaveBeenCalledTimes(1);
+    expect(forgetPush).toHaveBeenCalledTimes(1);
   });
 });

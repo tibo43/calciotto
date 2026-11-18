@@ -4,10 +4,10 @@ import {
 } from '@/services/pushNotifications';
 import { getPushPublicKey, savePushSubscription, deletePushSubscription } from '@/services/api';
 
-jest.mock('@/services/api', () => ({
-  getPushPublicKey: jest.fn(),
-  savePushSubscription: jest.fn(),
-  deletePushSubscription: jest.fn()
+vi.mock('@/services/api', () => ({
+  getPushPublicKey: vi.fn(),
+  savePushSubscription: vi.fn(),
+  deletePushSubscription: vi.fn()
 }));
 
 const ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
@@ -19,8 +19,8 @@ function fakeWindow({
   relatedApps = undefined, storage = {}
 } = {}) {
   const pushManager = {
-    getSubscription: jest.fn(() => Promise.resolve(subscription)),
-    subscribe: jest.fn(() => Promise.resolve({
+    getSubscription: vi.fn(() => Promise.resolve(subscription)),
+    subscribe: vi.fn(() => Promise.resolve({
       endpoint: 'https://push.test/new',
       toJSON: () => ({ endpoint: 'https://push.test/new', keys: { p256dh: 'k', auth: 'a' } })
     }))
@@ -32,7 +32,7 @@ function fakeWindow({
       maxTouchPoints: 0,
       serviceWorker: { getRegistration: () => Promise.resolve(registered ? { pushManager } : undefined) }
     },
-    Notification: { permission, requestPermission: jest.fn(() => Promise.resolve(permission)) },
+    Notification: { permission, requestPermission: vi.fn(() => Promise.resolve(permission)) },
     localStorage: {
       getItem: (key) => (key in storage ? storage[key] : null),
       setItem: (key, value) => { storage[key] = value; }
@@ -40,13 +40,13 @@ function fakeWindow({
   };
   // undefined: the browser has no getInstalledRelatedApps at all.
   if (relatedApps !== undefined) {
-    win.navigator.getInstalledRelatedApps = jest.fn(() => Promise.resolve(relatedApps));
+    win.navigator.getInstalledRelatedApps = vi.fn(() => Promise.resolve(relatedApps));
   }
   if (push) win.PushManager = function PushManager() {};
   return { win, pushManager };
 }
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => vi.clearAllMocks());
 
 describe('getPushState', () => {
   it('asks iPhone users in a Safari tab to install the app first', async () => {
@@ -102,7 +102,7 @@ describe('disablePush', () => {
   it('tells the backend first, then drops the browser subscription', async () => {
     const order = [];
     deletePushSubscription.mockImplementation(() => { order.push('backend'); return Promise.resolve(); });
-    const subscription = { endpoint: 'https://push.test/old', unsubscribe: jest.fn(() => { order.push('browser'); return Promise.resolve(true); }) };
+    const subscription = { endpoint: 'https://push.test/old', unsubscribe: vi.fn(() => { order.push('browser'); return Promise.resolve(true); }) };
     await expect(disablePush(fakeWindow({ subscription }).win)).resolves.toBe(PUSH_STATE.OFF);
     expect(deletePushSubscription).toHaveBeenCalledWith('https://push.test/old');
     expect(order).toEqual(['backend', 'browser']);
@@ -118,13 +118,13 @@ describe('urlBase64ToUint8Array', () => {
 describe('logging out and lost sessions', () => {
   it('drops the browser subscription even when the backend cannot be told', async () => {
     deletePushSubscription.mockRejectedValue(new Error('offline'));
-    const subscription = { endpoint: 'https://push.test/old', unsubscribe: jest.fn(() => Promise.resolve(true)) };
+    const subscription = { endpoint: 'https://push.test/old', unsubscribe: vi.fn(() => Promise.resolve(true)) };
     await disablePushOnLogout(fakeWindow({ subscription }).win);
     expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it('forgets the browser subscription without calling the backend', async () => {
-    const subscription = { endpoint: 'https://push.test/old', unsubscribe: jest.fn(() => Promise.resolve(true)) };
+    const subscription = { endpoint: 'https://push.test/old', unsubscribe: vi.fn(() => Promise.resolve(true)) };
     await forgetPushOnThisBrowser(fakeWindow({ subscription }).win);
     expect(subscription.unsubscribe).toHaveBeenCalledTimes(1);
     expect(deletePushSubscription).not.toHaveBeenCalled();
@@ -132,7 +132,7 @@ describe('logging out and lost sessions', () => {
 });
 
 describe('stopPushIfAppUninstalled', () => {
-  const subscribed = () => ({ endpoint: 'https://push.test/old', unsubscribe: jest.fn(() => Promise.resolve(true)) });
+  const subscribed = () => ({ endpoint: 'https://push.test/old', unsubscribe: vi.fn(() => Promise.resolve(true)) });
 
   it('learns, in the installed app, that the check works on this device', async () => {
     const storage = {};

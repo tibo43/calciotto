@@ -12,16 +12,16 @@ import {
   getToken
 } from '@/services/api';
 
-jest.mock('@/services/api', () => ({
-  getMatchesDetails: jest.fn(),
-  createMatch: jest.fn(),
-  getMatchRegistrations: jest.fn(),
-  registerForMatch: jest.fn(),
-  unregisterFromMatch: jest.fn(),
-  getMatchVotes: jest.fn(),
-  voteForMotm: jest.fn(),
-  removeMotmVote: jest.fn(),
-  getToken: jest.fn()
+vi.mock('@/services/api', () => ({
+  getMatchesDetails: vi.fn(),
+  createMatch: vi.fn(),
+  getMatchRegistrations: vi.fn(),
+  registerForMatch: vi.fn(),
+  unregisterFromMatch: vi.fn(),
+  getMatchVotes: vi.fn(),
+  voteForMotm: vi.fn(),
+  removeMotmVote: vi.fn(),
+  getToken: vi.fn()
 }));
 
 // Europe/Paris in September, regardless of the machine running the suite.
@@ -84,8 +84,8 @@ beforeEach(() => {
   removeMotmVote.mockResolvedValue({ unvoted: true });
   getToken.mockReset();
   getToken.mockReturnValue(tokenFor(ME));
-  push = jest.fn();
-  offsetSpy = jest
+  push = vi.fn();
+  offsetSpy = vi
     .spyOn(Date.prototype, 'getTimezoneOffset')
     .mockReturnValue(OFFSET_MINUTES);
 });
@@ -373,7 +373,7 @@ describe('MatchesPanel.vue scheduled match cards', () => {
   // badge every match gets — see the dedicated describe block further down
   // for why that badge is unconditional.
   it('leaves an ordinary card\'s date/count untouched, but still shows a status badge', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-08-31T09:00:00+02:00'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-08-31T09:00:00+02:00'));
     getMatchesDetails.mockResolvedValue([played]);
     const wrapper = await mountPanel();
 
@@ -383,7 +383,7 @@ describe('MatchesPanel.vue scheduled match cards', () => {
     expect(wrapper.find('.signup-count').exists()).toBe(false);
     expect(card.find('.match-date-horizontal').text()).toBe('Aug 30, 2026');
 
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   // loadMatches() discards the *entire* list if any match fails its shape check,
@@ -414,11 +414,11 @@ describe('MatchesPanel.vue inline sign-up panel', () => {
   // applied at the block level here since every test in it shares one clock
   // assumption.
   beforeEach(() => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-02T09:00:00+02:00'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-09-02T09:00:00+02:00'));
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   // Factories, not shared consts: participate()/withdraw() mutate
@@ -535,7 +535,7 @@ describe('MatchesPanel.vue inline sign-up panel', () => {
     getMatchRegistrations.mockResolvedValueOnce([
       { PlayerID: ME, Name: 'me', Position: 3, IsWaiting: false, RegisteredAt: '2026-09-01T12:00:00+02:00' }
     ]).mockResolvedValue([]);
-    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const wrapper = await mountPanel();
 
     expect(wrapper.find('.signup-inline-actions button').text()).toContain('Withdraw');
@@ -555,7 +555,7 @@ describe('MatchesPanel.vue inline sign-up panel', () => {
     getMatchRegistrations.mockResolvedValue([
       { PlayerID: ME, Name: 'me', Position: 3, IsWaiting: false, RegisteredAt: '2026-09-01T12:00:00+02:00' }
     ]);
-    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(false);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const wrapper = await mountPanel();
 
     await wrapper.find('.signup-inline-actions button').trigger('click');
@@ -586,14 +586,14 @@ describe('MatchesPanel.vue inline sign-up panel', () => {
     // Match day itself, so matchStatus (which the badge now shows once
     // sign-ups are no longer open) reads "Upcoming" rather than "Completed"
     // — that distinction isn't what this test is about, the buttons are.
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-03T09:00:00+02:00'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-09-03T09:00:00+02:00'));
     getMatchesDetails.mockResolvedValue([scheduled({ RegistrationsClosedAt: '2026-09-02T09:00:00+02:00' })]);
     const wrapper = await mountPanel();
 
     expect(wrapper.find('.signup-state-badge').text()).toBe('Upcoming');
     expect(wrapper.find('.signup-inline-actions button').exists()).toBe(false);
 
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it("says who is already registered as 'me', not a stranger's entry", async () => {
@@ -695,7 +695,7 @@ describe('MatchesPanel.vue edit-match link visibility', () => {
 // depends on where "now" falls relative to the match's 24h voting window.
 describe('MatchesPanel.vue Man of the Match voting', () => {
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   const composedMatch = (overrides = {}) => ({
@@ -718,7 +718,7 @@ describe('MatchesPanel.vue Man of the Match voting', () => {
 
   // Well within 24h of composedMatch()'s default CreatedAt — the "window
   // open" instant every test below starts from unless it says otherwise.
-  const withinWindow = () => jest.useFakeTimers().setSystemTime(new Date('2026-08-30T19:00:00+02:00'));
+  const withinWindow = () => vi.useFakeTimers().setSystemTime(new Date('2026-08-30T19:00:00+02:00'));
 
   // The caller's own star still renders (disabled, visibility:hidden via
   // .is-self) rather than being omitted — omitting it would shift every
@@ -828,7 +828,7 @@ describe('MatchesPanel.vue Man of the Match voting', () => {
     // is set well past that. Targets marco's star specifically — the
     // caller's own star is disabled unconditionally (see the self-vote
     // test above) and would pass this assertion for the wrong reason.
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-02T09:00:00+02:00'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-09-02T09:00:00+02:00'));
     getMatchesDetails.mockResolvedValue([composedMatch({ Date: '2026-08-01' })]);
     const wrapper = await mountPanel();
 
@@ -979,7 +979,7 @@ describe('MatchesPanel.vue team roster visibility on a scheduled match', () => {
 // clock since the label depends on where "now" falls in the window.
 describe("MatchesPanel.vue card's registration state badge", () => {
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   const scheduled = (overrides = {}) => ({
@@ -998,7 +998,7 @@ describe("MatchesPanel.vue card's registration state badge", () => {
   });
 
   it('labels it "Sign-ups open" during the window', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-03T09:00:00+02:00'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-09-03T09:00:00+02:00'));
     getMatchesDetails.mockResolvedValue([scheduled()]);
     const wrapper = await mountPanel();
 
@@ -1007,7 +1007,7 @@ describe("MatchesPanel.vue card's registration state badge", () => {
   });
 
   it('labels it "Sign-ups not open yet" before the opening instant', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-08-30T09:00:00+02:00'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-08-30T09:00:00+02:00'));
     getMatchesDetails.mockResolvedValue([scheduled()]);
     const wrapper = await mountPanel();
 
@@ -1024,7 +1024,7 @@ describe("MatchesPanel.vue card's registration state badge", () => {
   // been recorded — a deliberate simplification over the old kick-off/goal
   // heuristic, which could show a badge for some matches and not others.
   it('labels it "Upcoming" once an admin has closed the list, on match day itself', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-06T09:00:00+02:00'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-09-06T09:00:00+02:00'));
     getMatchesDetails.mockResolvedValue([scheduled({ RegistrationsClosedAt: '2026-09-02T18:00:00+02:00' })]);
     const wrapper = await mountPanel();
 
@@ -1040,7 +1040,7 @@ describe("MatchesPanel.vue card's registration state badge", () => {
     // (this suite runs in UTC there, not the +02:00 this was first written
     // against) can land on the wrong side of the boundary by a couple of
     // hours and flip this to "upcoming".
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01'));
     getMatchesDetails.mockResolvedValue([scheduled()]);
     const wrapper = await mountPanel();
 
@@ -1059,7 +1059,7 @@ describe("MatchesPanel.vue card's registration state badge", () => {
 // the describe block above, which needs nothing about a roster at all.
 describe("MatchesPanel.vue unscheduled match's card status", () => {
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   const unscheduled = (overrides = {}) => ({
@@ -1074,7 +1074,7 @@ describe("MatchesPanel.vue unscheduled match's card status", () => {
   });
 
   it('shows "Upcoming" on match day itself, roster empty and all', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-06T09:00:00+02:00'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-09-06T09:00:00+02:00'));
     getMatchesDetails.mockResolvedValue([unscheduled()]);
     const wrapper = await mountPanel();
 
@@ -1089,7 +1089,7 @@ describe("MatchesPanel.vue unscheduled match's card status", () => {
     // See the identical comment above: no explicit offset, so this lines up
     // with matchStatus()'s own local-time boundary regardless of the
     // runtime's actual zone.
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01'));
     const played = unscheduled();
     played.Teams[0].Score = 3;
     played.Teams[1].Score = 2;
@@ -1102,7 +1102,7 @@ describe("MatchesPanel.vue unscheduled match's card status", () => {
   });
 
   it('shows "Completed" the day after even with no roster at all — the status no longer depends on composition', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01'));
+    vi.useFakeTimers().setSystemTime(new Date('2026-09-07T00:00:01'));
     getMatchesDetails.mockResolvedValue([unscheduled()]);
     const wrapper = await mountPanel();
 

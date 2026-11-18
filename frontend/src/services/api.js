@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.VUE_APP_API_BASE_URL || 'http://127.0.0.1:8080';
+const API_BASE_URL = import.meta.env.VUE_APP_API_BASE_URL || 'http://127.0.0.1:8080';
 
 const TOKEN_KEY = 'calciotto-token';
 let sessionGeneration = 0;
@@ -16,14 +16,14 @@ export const clearToken = () => {
 };
 
 // Overridable via VUE_APP_API_TIMEOUT_MS (a Vercel build-time var, same
-// mechanism as VUE_APP_API_BASE_URL — see ci.yml's deploy-frontend job) so a
+// mechanism as VUE_APP_API_BASE_URL in deploy.yml) so a
 // deliberate load test can raise it temporarily to see the backend's real
 // response time under concurrent load, instead of every request past 10s
 // being aborted client-side (ECONNABORTED, no `.response`) and surfacing as
 // a generic "...failed. Please try again." even when the backend went on to
 // complete the request successfully — see CLAUDE.md's perf load-test notes.
 // Defaults to today's exact 10000 when unset or invalid.
-const apiTimeoutMs = parseInt(process.env.VUE_APP_API_TIMEOUT_MS, 10) || 10000;
+const apiTimeoutMs = parseInt(import.meta.env.VUE_APP_API_TIMEOUT_MS, 10) || 10000;
 
 const api = axios.create({
   baseURL: API_BASE_URL,

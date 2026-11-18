@@ -3,17 +3,17 @@ import RankingsV2 from '@/components/v2/RankingsV2.vue';
 import { getPointsStandings, getScorers, getMotmStandings, getSeasons, getToken } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
 
-jest.mock('@/services/api', () => ({
-  getPointsStandings: jest.fn(),
-  getScorers: jest.fn(),
-  getMotmStandings: jest.fn(),
-  getSeasons: jest.fn(),
-  getToken: jest.fn(() => '')
+vi.mock('@/services/api', () => ({
+  getPointsStandings: vi.fn(),
+  getScorers: vi.fn(),
+  getMotmStandings: vi.fn(),
+  getSeasons: vi.fn(),
+  getToken: vi.fn(() => '')
 }));
 
-jest.mock('@/services/activeGroup', () => ({
-  resolveActiveGroup: jest.fn(),
-  setActiveGroupId: jest.fn()
+vi.mock('@/services/activeGroup', () => ({
+  resolveActiveGroup: vi.fn(),
+  setActiveGroupId: vi.fn()
 }));
 
 function mountRankings({ seasons = [], points = [], route = { query: {} } } = {}) {

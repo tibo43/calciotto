@@ -6,14 +6,14 @@ import { getSeasons, getPredictionStandings } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
 import { seasonOf } from '@/services/datetime';
 
-jest.mock('@/services/api', () => ({
-  getSeasons: jest.fn(),
-  getPredictionStandings: jest.fn()
+vi.mock('@/services/api', () => ({
+  getSeasons: vi.fn(),
+  getPredictionStandings: vi.fn()
 }));
 
-jest.mock('@/services/activeGroup', () => ({
-  resolveActiveGroup: jest.fn(),
-  setActiveGroupId: jest.fn()
+vi.mock('@/services/activeGroup', () => ({
+  resolveActiveGroup: vi.fn(),
+  setActiveGroupId: vi.fn()
 }));
 
 const CURRENT = seasonOf(new Date());
@@ -28,7 +28,7 @@ const mountPage = async () => {
 const tabs = (wrapper) => wrapper.findAll('.sub-tab-button');
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   resolveActiveGroup.mockResolvedValue({
     groups: [{ id: 'group-uuid', name: 'Test Group', role: 'member' }],
     activeGroupId: 'group-uuid'

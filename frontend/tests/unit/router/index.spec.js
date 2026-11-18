@@ -1,5 +1,5 @@
 // No existing precedent in this codebase for mounting/exercising the router
-// itself in a test, so this is a plain Jest unit test of the guard function
+// itself in a test, so this is a unit test of the guard function
 // canEditMatch exports in isolation, the same "pure logic gets tested
 // directly" rule the rest of tests/unit/ already follows for
 // matchRegistration.js/motmVoting.js.
@@ -8,12 +8,12 @@ import { canEditMatch, findGroupForMatch } from '@/router/index';
 import { getMatchDetailsByID } from '@/services/api';
 import { loadMyGroups } from '@/services/activeGroup';
 
-jest.mock('@/services/api', () => ({
-  getMatchDetailsByID: jest.fn()
+vi.mock('@/services/api', () => ({
+  getMatchDetailsByID: vi.fn()
 }));
 
-jest.mock('@/services/activeGroup', () => ({
-  loadMyGroups: jest.fn()
+vi.mock('@/services/activeGroup', () => ({
+  loadMyGroups: vi.fn()
 }));
 
 const notFound = () => Promise.reject({ response: { status: 404 } });

@@ -3,20 +3,20 @@ import NotificationsCard from '@/components/NotificationsCard.vue';
 import { PUSH_STATE, getPushState, enablePush, disablePush, resyncPushSubscription } from '@/services/pushNotifications';
 import { getNotificationPreferences, updateNotificationPreferences } from '@/services/api';
 
-jest.mock('@/services/pushNotifications', () => {
-  const actual = jest.requireActual('@/services/pushNotifications');
+vi.mock('@/services/pushNotifications', async (importOriginal) => {
+  const actual = await importOriginal();
   return {
     ...actual,
-    getPushState: jest.fn(),
-    enablePush: jest.fn(),
-    disablePush: jest.fn(),
-    resyncPushSubscription: jest.fn()
+    getPushState: vi.fn(),
+    enablePush: vi.fn(),
+    disablePush: vi.fn(),
+    resyncPushSubscription: vi.fn()
   };
 });
 
-jest.mock('@/services/api', () => ({
-  getNotificationPreferences: jest.fn(),
-  updateNotificationPreferences: jest.fn()
+vi.mock('@/services/api', () => ({
+  getNotificationPreferences: vi.fn(),
+  updateNotificationPreferences: vi.fn()
 }));
 
 async function mountIn(state) {
@@ -40,7 +40,7 @@ function preferenceSwitches(wrapper) {
 }
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   getNotificationPreferences.mockResolvedValue({ ...ALL_ON });
   updateNotificationPreferences.mockImplementation(async (updates) => ({ ...ALL_ON, ...updates }));
 });

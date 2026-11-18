@@ -7,6 +7,17 @@ cd devops
 docker-compose --env-file env/develop.env up
 ```
 
+Use Node.js 24 for local frontend development.
+
+```bash
+cd frontend
+npm ci
+npm run serve -- --host 127.0.0.1
+```
+
+The dev server uses port 4000. Run `npm run test:unit` for Vitest and
+`npm run build` to build `dist/` for Vercel.
+
 ## Browser sessions and group invitations
 
 The frontend sends authentication requests to `/api/auth` on its own origin.

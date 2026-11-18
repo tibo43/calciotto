@@ -2,13 +2,13 @@ import { shallowMount, flushPromises } from '@vue/test-utils';
 import Signup from '@/components/Signup.vue';
 import { signup, setToken } from '@/services/api';
 
-jest.mock('@/services/api', () => ({
-  signup: jest.fn(),
-  setToken: jest.fn()
+vi.mock('@/services/api', () => ({
+  signup: vi.fn(),
+  setToken: vi.fn()
 }));
 
 const mountPage = (routeQuery = {}) => {
-  const push = jest.fn();
+  const push = vi.fn();
   const wrapper = shallowMount(Signup, {
     global: {
       mocks: {
@@ -22,7 +22,7 @@ const mountPage = (routeQuery = {}) => {
 
 describe('Signup.vue invite code', () => {
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('prefills the invite code from a ?invite=CODE query param', () => {
@@ -68,7 +68,7 @@ describe('Signup.vue invite code', () => {
 // push('/') pattern exactly.
 describe('Signup.vue auto-login', () => {
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('stores the token from the signup response and navigates to the home page', async () => {

@@ -170,15 +170,8 @@ jobs:
       - name: Prepare report directory
         run: mkdir -p reports
 
-      # `--omit=dev` first: the dev tree carries dozens of advisories in Vue
-      # CLI's own build tooling (webpack-dev-server, ws, yaml, ajv) that no
-      # visitor is ever exposed to, and a permanently-red check is a check
-      # everyone learns to ignore.
-      #
-      # Two packages are excluded on top of that, for the same reason rather
-      # than a different one: postcss and nanoid are *build-time* — Vue CLI's
-      # CSS pipeline — and land in the production tree only because that is how
-      # the toolchain declares them. Neither reaches the browser bundle.
+      # Audit runtime libraries. Vue's compiler dependencies can include
+      # postcss and nanoid for build-time CSS processing.
       #
       # Excluding by package, not by lowering the severity threshold: the axios
       # advisory that mattered here (GHSA, fixed in 1.18) was `high`, not

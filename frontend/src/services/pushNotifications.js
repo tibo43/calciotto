@@ -165,7 +165,7 @@ async function relatedAppInstalled(win) {
   try {
     const apps = await win.navigator.getInstalledRelatedApps();
     return Array.isArray(apps) ? apps.length > 0 : null;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -173,7 +173,7 @@ async function relatedAppInstalled(win) {
 function detectionProven(win) {
   try {
     return win.localStorage.getItem(DETECTION_KEY) === 'works';
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -181,7 +181,7 @@ function detectionProven(win) {
 function recordDetectionWorks(win) {
   try {
     win.localStorage.setItem(DETECTION_KEY, 'works');
-  } catch (error) {
+  } catch {
     // Private mode or blocked storage: the check just stays inactive.
   }
 }

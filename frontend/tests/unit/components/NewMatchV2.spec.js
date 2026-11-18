@@ -3,12 +3,12 @@ import NewMatchV2 from '@/components/v2/NewMatchV2.vue';
 import { createMatch } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
 
-jest.mock('@/services/api', () => ({ createMatch: jest.fn() }));
-jest.mock('@/services/activeGroup', () => ({ resolveActiveGroup: jest.fn() }));
+vi.mock('@/services/api', () => ({ createMatch: vi.fn() }));
+vi.mock('@/services/activeGroup', () => ({ resolveActiveGroup: vi.fn() }));
 
 async function mountPage(role = 'admin') {
   resolveActiveGroup.mockResolvedValue({ groups: [{ id: 'g', role }], activeGroupId: 'g' });
-  const router = { replace: jest.fn(), push: jest.fn() };
+  const router = { replace: vi.fn(), push: vi.fn() };
   const v2Context = {};
   const wrapper = mount(NewMatchV2, { global: { provide: { v2Context }, mocks: { $router: router } } });
   await flushPromises();
@@ -21,7 +21,7 @@ function futureDay() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => vi.clearAllMocks());
 
 describe('NewMatchV2.vue', () => {
   it('sends a non-admin home', async () => {

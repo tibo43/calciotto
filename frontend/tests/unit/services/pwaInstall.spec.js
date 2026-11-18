@@ -20,7 +20,7 @@ function fakeWindow({ userAgent = ANDROID_UA, standalone = false, maxTouchPoints
 
 function fakeInstallPrompt(outcome) {
   const event = new Event('beforeinstallprompt', { cancelable: true });
-  event.prompt = jest.fn(() => Promise.resolve());
+  event.prompt = vi.fn(() => Promise.resolve());
   event.userChoice = Promise.resolve({ outcome });
   return event;
 }
@@ -69,7 +69,7 @@ describe('createInstallTracker', () => {
   it("holds on to Chrome's offer, suppressing its own banner", () => {
     const win = fakeWindow();
     const tracker = createInstallTracker(win);
-    const listener = jest.fn();
+    const listener = vi.fn();
     tracker.subscribe(listener);
     expect(tracker.state()).toBe(INSTALL_STATE.UNAVAILABLE);
 
@@ -107,7 +107,7 @@ describe('createInstallTracker', () => {
   it('stops notifying after unsubscribe', () => {
     const win = fakeWindow();
     const tracker = createInstallTracker(win);
-    const listener = jest.fn();
+    const listener = vi.fn();
     const unsubscribe = tracker.subscribe(listener);
     unsubscribe();
     win.dispatchEvent(fakeInstallPrompt('accepted'));

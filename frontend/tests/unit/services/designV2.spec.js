@@ -10,9 +10,9 @@ import {
 } from '@/services/designV2';
 import { getMyFeatures, getToken } from '@/services/api';
 
-jest.mock('@/services/api', () => ({
-  getMyFeatures: jest.fn(),
-  getToken: jest.fn()
+vi.mock('@/services/api', () => ({
+  getMyFeatures: vi.fn(),
+  getToken: vi.fn()
 }));
 
 describe('designV2 session flag', () => {
@@ -22,11 +22,11 @@ describe('designV2 session flag', () => {
     getMyFeatures.mockReset();
     getToken.mockReset();
     getToken.mockReturnValue('token-a');
-    jest.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('resolves false without asking when there is no token', async () => {

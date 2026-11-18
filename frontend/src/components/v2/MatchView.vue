@@ -167,7 +167,7 @@ function currentPlayerIdFromToken() {
     const payload = token.split('.')[1];
     const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
     return decoded.player_id || '';
-  } catch (error) {
+  } catch {
     return '';
   }
 }
