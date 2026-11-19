@@ -24,6 +24,20 @@ const groupsWithDetails = data.groups.map((group) => group.id === data.GROUP_ID 
   website_label: WEBSITE_LABEL,
 } : group);
 
+// Noon UTC, so the day is the same in every time zone the tests could run in.
+const PASSKEYS = [
+  { id: 'pk-1', name: 'iPhone', created_at: '2026-09-02T12:00:00Z', last_used_at: '2026-09-03T12:00:00Z' },
+  { id: 'pk-2', name: 'MacBook Air', created_at: '2026-08-28T12:00:00Z', last_used_at: null },
+];
+
+// Invitation and Passkeys are collapsible cards, closed by default.
+async function openCard(page, title) {
+  const header = page.locator('.cc-head', { hasText: title });
+  await header.click();
+  await expect(header).toHaveAttribute('aria-expanded', 'true');
+  await page.evaluate(() => window.scrollTo(0, 0));
+}
+
 async function openProfile(page, path, options = {}) {
   return gotoApp(page, path, { ...V2, ...options });
 }
@@ -99,7 +113,8 @@ test.describe('design v2 profile', () => {
     const { unstubbed } = await openProfile(page, `${GROUP}/settings`, { groups: groupsWithDetails });
     await expect(page.getByRole('heading', { name: 'Teams' })).toBeVisible();
     await expect(page.getByLabel('Link label')).toHaveValue(WEBSITE_LABEL);
-    await expect(page.getByText('ABC23XYZ')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Invite players/ })).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByText('Code active')).toBeVisible();
     await expect(page).toHaveScreenshot('v2-profile-settings.png', { fullPage: true });
     expectEverythingStubbed(unstubbed);
   });
@@ -131,6 +146,125 @@ test.describe('design v2 profile', () => {
     expectEverythingStubbed(unstubbed);
   });
 
+  test('invitation open', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, `${GROUP}/settings`, { groups: groupsWithDetails });
+    await openCard(page, 'Invite players');
+    await expect(page.getByText('ABC23XYZ')).toBeVisible();
+    await expect(page.locator('.invite-tile')).toHaveCount(3);
+    await expect(page.getByText('Revoke')).toHaveCount(0);
+    await expect(page).toHaveScreenshot('v2-profile-settings-invite-open.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('invitation open @mobile', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, `${GROUP}/settings`, { groups: groupsWithDetails });
+    await openCard(page, 'Invite players');
+    await expect(page.getByText('ABC23XYZ')).toBeVisible();
+    await expect(page).toHaveScreenshot('v2-profile-settings-invite-open-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('group settings without an invite @mobile', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, `${GROUP}/settings`, { groups: groupsWithDetails, inviteCode: '' });
+    await expect(page.getByText('No active code')).toBeVisible();
+    await openCard(page, 'Invite players');
+    await expect(page.getByRole('button', { name: 'Make a code' })).toBeVisible();
+    await expect(page.locator('.invite-tiles')).toHaveCount(0);
+    await expect(page).toHaveScreenshot('v2-profile-settings-no-invite-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('renew code confirmation @mobile', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, `${GROUP}/settings`, { groups: groupsWithDetails });
+    await openCard(page, 'Invite players');
+    await page.getByRole('button', { name: 'Renew', exact: true }).click();
+    const sheet = page.locator('.confirm-sheet');
+    await expect(sheet.getByRole('heading', { name: 'Renew the code?' })).toBeVisible();
+    await expect(page.locator('.confirm-pop')).toBeHidden();
+    await expect(page).toHaveScreenshot('v2-profile-settings-renew-mobile.png');
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  // A failed renewal lands in the shared toast (above the tab bar on phones).
+  async function failRenewal(page) {
+    await page.route('**/groups/*/invite-code', (route) => (route.request().method() === 'POST'
+      ? route.fulfill({ status: 500, contentType: 'application/json', body: '{}' })
+      : route.fallback()));
+    await openCard(page, 'Invite players');
+    await page.getByRole('button', { name: 'Renew', exact: true }).click();
+    await page.locator('.confirm-pop, .confirm-sheet').filter({ visible: true }).getByRole('button', { name: 'Renew', exact: true }).click();
+    const toast = page.locator('.toast-message.error');
+    await expect(toast).toContainText('Could not renew the code.');
+    return toast;
+  }
+
+  test('renew failure toast', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, `${GROUP}/settings`, { groups: groupsWithDetails });
+    await failRenewal(page);
+    await expect(page).toHaveScreenshot('v2-profile-settings-renew-error.png');
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('renew failure toast @mobile', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, `${GROUP}/settings`, { groups: groupsWithDetails, theme: 'dark' });
+    const toast = await failRenewal(page);
+    const toastBox = await toast.boundingBox();
+    const tabBox = await page.locator('nav.tabbar').boundingBox();
+    expect(toastBox.y + toastBox.height).toBeLessThanOrEqual(tabBox.y);
+    await expect(page).toHaveScreenshot('v2-profile-settings-renew-error-mobile.png');
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('account with passkeys, closed', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, '/profile/account', { features: [...V2.features, 'passkeys'], passkeys: PASSKEYS, theme: 'dark' });
+    await expect(page.getByText('2 devices')).toBeVisible();
+    await expect(page.locator('.pk-row')).toHaveCount(0);
+    await expect(page).toHaveScreenshot('v2-profile-account-passkeys-closed.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('account with passkeys', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, '/profile/account', { features: [...V2.features, 'passkeys'], passkeys: PASSKEYS });
+    await openCard(page, 'Passkeys');
+    await expect(page.getByText('Last used 3 Sep 2026')).toBeVisible();
+    await expect(page.getByText('Added 28 Aug 2026')).toBeVisible();
+    await page.getByRole('button', { name: 'Remove iPhone' }).click();
+    await expect(page.locator('.confirm-pop').getByRole('heading', { name: 'Remove this passkey?' })).toBeVisible();
+    await expect(page.locator('.confirm-sheet')).toBeHidden();
+    await expect(page).toHaveScreenshot('v2-profile-account-passkeys-remove.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('account with passkeys @mobile', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, '/profile/account', { features: [...V2.features, 'passkeys'], passkeys: PASSKEYS, theme: 'dark' });
+    await openCard(page, 'Passkeys');
+    await expect(page.locator('.pk-row')).toHaveCount(2);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(page).toHaveScreenshot('v2-profile-account-passkeys-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('add passkey form @mobile', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, '/profile/account', { features: [...V2.features, 'passkeys'] });
+    await expect(page.getByText('None yet')).toBeVisible();
+    await openCard(page, 'Passkeys');
+    await expect(page.getByText('Sign in with Face ID, your fingerprint or your screen lock.')).toBeVisible();
+    await page.getByRole('button', { name: 'Add a passkey' }).click();
+    await expect(page.getByLabel('Name (optional)')).toHaveAttribute('placeholder', 'My phone');
+    // The click scrolled the form into view. A full-page capture from the
+    // top keeps the sticky top bar where it belongs.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(page).toHaveScreenshot('v2-profile-account-passkey-form-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
   test('passkeys appear after sign-in with both flags', async ({ page }) => {
     const passkeyLogin = page.getByRole('button', { name: 'Log in with a passkey', exact: true });
     await page.goto('/login');
@@ -138,7 +272,8 @@ test.describe('design v2 profile', () => {
     await expect(passkeyLogin).toHaveCount(0);
 
     const { unstubbed } = await openProfile(page, '/profile/account', { features: [...V2.features, 'passkeys'] });
-    await expect(page.getByText('Passkeys', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Passkeys' })).toBeVisible();
+    await expect(page.getByText('None yet')).toBeVisible();
     await page.goto('/login');
     await expect(passkeyLogin).toBeVisible();
     expectEverythingStubbed(unstubbed);

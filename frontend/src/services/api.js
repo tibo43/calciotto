@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { hasPasskeyAccess, rememberPasskeyAccess } from './passkeyAccess';
+import { rememberDesignV2Login } from './loginV2';
 
 const API_BASE_URL = import.meta.env.VUE_APP_API_BASE_URL || 'http://127.0.0.1:8080';
 
@@ -136,7 +137,9 @@ api.interceptors.response.use(
       const current = getToken();
       const { token } = calciottoSession;
       if (current && (sessionID(current) || current) === (sessionID(token) || token)) {
-        rememberPasskeyAccess(hasPasskeyAccess(response.data?.features));
+        const features = response.data?.features;
+        rememberPasskeyAccess(hasPasskeyAccess(features));
+        rememberDesignV2Login(Array.isArray(features) && features.includes('design-v2'));
       }
     }
     return response;
@@ -733,6 +736,7 @@ export const updateNotificationPreferences = async (preferences) => {
 export const deleteMyAccount = async (password) => {
   const response = await api.delete('/players/me', { data: { password } });
   rememberPasskeyAccess(false);
+  rememberDesignV2Login(false);
   return response.data;
 };
 

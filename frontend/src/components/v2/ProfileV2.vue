@@ -165,7 +165,7 @@
         <p><button class="btn btn-ghost" type="button" :disabled="sendingReset || !email" @click="sendReset">{{ sendingReset ? 'Sending…' : 'Email the link' }}</button></p>
         <p v-if="resetNote" class="scope">{{ resetNote }}</p>
       </section>
-      <PasskeySettings v-if="hasPasskeys" class="sec" />
+      <PasskeysV2 v-if="hasPasskeys" @confirming="onChildConfirming" />
       <section class="danger">
         <p class="label">Danger zone</p>
         <h2 class="h2">Delete my account</h2>
@@ -214,16 +214,8 @@
         </div>
         <p v-if="teamNote" class="scope">{{ teamNote }}</p>
       </section>
-      <section class="sec">
-        <div class="sec-head"><h2>Invitation</h2></div>
-        <div class="invite-box">
-          <code>{{ inviteCode || '—' }}</code>
-          <button class="btn btn-ghost" type="button" :disabled="!inviteCode" @click="copyCode">Copy</button>
-          <ShareButton class="btn btn-ghost" :text="inviteShareText" label="Share invitation" />
-        </div>
-        <InvitationActions :group-id="groupId" :code="inviteCode"
-          @updated="applyInvitation" />
-      </section>
+      <InvitationV2 :group-id="groupId" :code="inviteCode" :share-text="inviteShareText"
+        @updated="applyInvitation" @confirming="onChildConfirming" />
       <section class="sec">
         <div class="sec-head"><h2>Members</h2></div>
         <p class="scope">You can't change your own role. The last admin can't be demoted.</p>
@@ -282,7 +274,7 @@
 </template>
 
 <script>
-import PasskeySettings from '@/components/PasskeySettings.vue';
+import PasskeysV2 from './PasskeysV2.vue';
 import { hasPasskeyAccess } from '@/services/passkeyAccess';
 import {
   getPlayerProfile, getMyGroups, getSeasons, setFavoriteGroup, updateMyName,
@@ -293,8 +285,7 @@ import {
 import { getPushState, enablePush, disablePush, PUSH_STATE, PUSH_FEATURE } from '@/services/pushNotifications';
 import { getInstallTracker, INSTALL_STATE, PWA_INSTALL_FEATURE } from '@/services/pwaInstall';
 import { buildGroupInviteShareText } from '@/services/shareMessages';
-import InvitationActions from '@/components/InvitationActions.vue';
-import ShareButton from '@/components/ShareButton.vue';
+import InvitationV2 from './InvitationV2.vue';
 import GroupDetailsForm from './GroupDetailsForm.vue';
 
 const PREFERENCE_GROUPS = [
@@ -329,7 +320,7 @@ function playerIdFromToken() {
 
 export default {
   name: 'ProfileV2',
-  components: { GroupDetailsForm, InvitationActions, PasskeySettings, ShareButton },
+  components: { GroupDetailsForm, InvitationV2, PasskeysV2 },
   inject: {
     v2Context: { default: () => ({}) },
     openGuide: { default: () => {} },
@@ -361,6 +352,7 @@ export default {
       teamNote: '',
       demoting: '',
       removing: '',
+      childConfirming: false,
       roleError: '',
       pushError: '',
       // Hidden features (GET /players/me/features): notifications and the
@@ -507,8 +499,12 @@ export default {
     this.v2Context.confirming = false;
   },
   methods: {
+    onChildConfirming(open) {
+      this.childConfirming = open;
+      this.syncConfirming();
+    },
     syncConfirming() {
-      if (this.v2Context) this.v2Context.confirming = Boolean(this.demoting || this.removing || this.deleting);
+      if (this.v2Context) this.v2Context.confirming = Boolean(this.demoting || this.removing || this.deleting || this.childConfirming);
     },
     install() {
       getInstallTracker().prompt();
@@ -721,14 +717,6 @@ export default {
         this.teamNote = 'Saved.';
       } catch {
         this.teamNote = 'Could not save the team.';
-      }
-    },
-    async copyCode() {
-      try {
-        await navigator.clipboard.writeText(this.inviteCode);
-        this.teamNote = 'Code copied.';
-      } catch {
-        this.teamNote = this.inviteCode;
       }
     },
     askDemote(member) {

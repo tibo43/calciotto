@@ -110,6 +110,15 @@ async function stubApi(page, overrides = {}) {
     unstubbed.push(`${method} ${route.request().url()}`);
     return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
   });
+  // GET /players/me/passkeys — the v2 Account page lists them on display
+  // (design-v2 + passkeys only). Writes are never expected here.
+  await page.route(`${API}/players/me/passkeys`, (route) => {
+    if (route.request().method() !== 'GET') {
+      unstubbed.push(`${route.request().method()} ${route.request().url()}`);
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
+    }
+    return json(route, overrides.passkeys ?? []);
+  });
   await page.route(`${API}/groups/*/players`, (route) => json(route, overrides.groupMembers ?? data.groupMembers));
   await page.route(`${API}/groups/*/teams`, (route) => {
     if (route.request().method() !== 'GET') {

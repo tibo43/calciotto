@@ -25,6 +25,10 @@ vi.mock('@/services/api', () => ({
   getNotificationPreferences: vi.fn(() => Promise.resolve({})),
   updateNotificationPreferences: vi.fn(),
   forgotPassword: vi.fn(),
+  getMyPasskeys: vi.fn(() => Promise.resolve([])),
+  removeMyPasskey: vi.fn(),
+  rotateGroupInvitation: vi.fn(),
+  revokeGroupInvitation: vi.fn(),
   getToken: vi.fn(() => `x.${btoa(JSON.stringify({ player_id: 'me' }))}.y`)
 }));
 
@@ -160,5 +164,37 @@ describe('ProfileV2.vue notifications switch', () => {
     const toggle = wrapper.find('[aria-label="Notifications on this device"]');
     expect(toggle.attributes('disabled')).toBeDefined();
     expect(wrapper.text()).toContain('Install the app first');
+  });
+});
+
+describe('ProfileV2.vue invitation and passkeys', () => {
+  it('uses the v2 invitation card in group settings and applies its updates', async () => {
+    const { wrapper } = await mountProfile({ routeName: 'ProfileGroupSettings' });
+    const invitation = wrapper.findComponent({ name: 'InvitationV2' });
+    expect(invitation.exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'InvitationActions' }).exists()).toBe(false);
+    expect(invitation.props('code')).toBe('ABC');
+    expect(invitation.props('shareText')).toContain('ABC');
+    invitation.vm.$emit('updated', { invite_code: '' });
+    await flushPromises();
+    expect(invitation.props('code')).toBe('');
+  });
+
+  it("puts the shell in confirming mode while a child's confirmation is open", async () => {
+    const { wrapper } = await mountProfile({ routeName: 'ProfileGroupSettings' });
+    const context = wrapper.vm.v2Context;
+    wrapper.findComponent({ name: 'InvitationV2' }).vm.$emit('confirming', true);
+    expect(context.confirming).toBe(true);
+    wrapper.findComponent({ name: 'InvitationV2' }).vm.$emit('confirming', false);
+    expect(context.confirming).toBe(false);
+  });
+
+  it('shows the Passkeys section only with both design-v2 and passkeys', async () => {
+    const without = await mountProfile({ routeName: 'ProfileAccount', features: ['design-v2'] });
+    expect(without.wrapper.findComponent({ name: 'PasskeysV2' }).exists()).toBe(false);
+    const { wrapper } = await mountProfile({ routeName: 'ProfileAccount', features: ['design-v2', 'passkeys'] });
+    expect(wrapper.findComponent({ name: 'PasskeysV2' }).exists()).toBe(true);
+    const headings = wrapper.findAll('h2').map((h) => h.text());
+    expect(headings.indexOf('Passkeys')).toBe(headings.indexOf('Password') + 1);
   });
 });
