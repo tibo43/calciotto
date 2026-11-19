@@ -1,7 +1,8 @@
 import { mount, flushPromises } from '@vue/test-utils';
 import ProfileV2 from '@/components/v2/ProfileV2.vue';
 import {
-  getPlayerProfile, getMyGroups, getMyFeatures, getTeamsByGroup, getInviteCode, getGroupMembers, removeMember, updateGroupDetails
+  getPlayerProfile, getMyGroups, getMyFeatures, getTeamsByGroup, getInviteCode, getGroupMembers, removeMember, updateGroupDetails,
+  getMyPositions, updateMyPositions
 } from '@/services/api';
 import { getPushState } from '@/services/pushNotifications';
 import { getInstallTracker } from '@/services/pwaInstall';
@@ -29,6 +30,8 @@ vi.mock('@/services/api', () => ({
   removeMyPasskey: vi.fn(),
   rotateGroupInvitation: vi.fn(),
   revokeGroupInvitation: vi.fn(),
+  getMyPositions: vi.fn(() => Promise.resolve([])),
+  updateMyPositions: vi.fn(),
   getToken: vi.fn(() => `x.${btoa(JSON.stringify({ player_id: 'me' }))}.y`)
 }));
 
@@ -241,5 +244,92 @@ describe('ProfileV2.vue invitation and passkeys', () => {
       wrapper.unmount();
       expect(context.pageAction).toBeNull();
     });
+  });
+});
+
+describe('ProfileV2.vue preferred positions (Account)', () => {
+  const buttons = (wrapper) => wrapper.findAll('.account-positions .pos-pick');
+  const state = (wrapper) => buttons(wrapper).map((b) => `${b.text()}:${b.attributes('aria-pressed')}`);
+  const toast = (wrapper) => wrapper.find('.toast-message');
+
+  it('shows four toggles in a labelled group, with the saved ones pressed and ticked', async () => {
+    getMyPositions.mockResolvedValueOnce(['MID', 'DEF']);
+    const { wrapper } = await mountProfile({ routeName: 'ProfileAccount' });
+    const section = wrapper.get('.account-positions');
+    expect(section.get('h2').text()).toBe('Positions');
+    expect(section.get('[role="group"]').attributes('aria-label')).toBe('Where you like to play');
+    expect(state(wrapper)).toEqual(['GK:false', '✓DEF:true', '✓MID:true', 'FWD:false']);
+    expect(buttons(wrapper)[1].classes()).toContain('is-on');
+    expect(buttons(wrapper)[1].find('.tick').attributes('aria-hidden')).toBe('true');
+    expect(section.text()).toContain('Pick one or more. Only your group admins see them, to balance teams.');
+    // Under the name, before the email.
+    const headings = wrapper.findAll('.sec-head h2').map((h) => h.text());
+    expect(headings.indexOf('Positions')).toBe(headings.indexOf('Identity') + 1);
+  });
+
+  it('is not loaded outside the Account page', async () => {
+    await mountProfile({ routeName: 'Profile' });
+    expect(getMyPositions).not.toHaveBeenCalled();
+  });
+
+  it('saves the whole set at each tap, in canonical order, and says so', async () => {
+    getMyPositions.mockResolvedValueOnce(['MID']);
+    updateMyPositions.mockImplementation((list) => Promise.resolve(list));
+    const { wrapper } = await mountProfile({ routeName: 'ProfileAccount' });
+    await buttons(wrapper)[0].trigger('click');
+    // Pressed at once, before the answer.
+    expect(buttons(wrapper)[0].attributes('aria-pressed')).toBe('true');
+    await flushPromises();
+    expect(updateMyPositions).toHaveBeenLastCalledWith(['GK', 'MID']);
+    expect(toast(wrapper).text()).toContain('Positions saved.');
+    expect(toast(wrapper).classes()).toContain('success');
+
+    await buttons(wrapper)[2].trigger('click');
+    await flushPromises();
+    expect(updateMyPositions).toHaveBeenLastCalledWith(['GK']);
+    await buttons(wrapper)[0].trigger('click');
+    await flushPromises();
+    // No position at all is allowed.
+    expect(updateMyPositions).toHaveBeenLastCalledWith([]);
+    expect(state(wrapper)).toEqual(['GK:false', 'DEF:false', 'MID:false', 'FWD:false']);
+  });
+
+  it('puts the buttons back and shows the server\'s reason when a save is refused', async () => {
+    getMyPositions.mockResolvedValueOnce(['DEF']);
+    updateMyPositions.mockRejectedValueOnce({ response: { data: { error: 'invalid position "X": use GK, DEF, MID or FWD' } } });
+    const { wrapper } = await mountProfile({ routeName: 'ProfileAccount' });
+    await buttons(wrapper)[3].trigger('click');
+    await flushPromises();
+    expect(state(wrapper)).toEqual(['GK:false', '✓DEF:true', 'MID:false', 'FWD:false']);
+    expect(toast(wrapper).classes()).toContain('error');
+    expect(toast(wrapper).text()).toContain('invalid position "X": use GK, DEF, MID or FWD');
+  });
+
+  it('sends overlapping saves one after the other and keeps the latest tap', async () => {
+    getMyPositions.mockResolvedValueOnce([]);
+    let firstResolve;
+    updateMyPositions
+      .mockImplementationOnce(() => new Promise((resolve) => { firstResolve = resolve; }))
+      .mockImplementationOnce((list) => Promise.resolve(list));
+    const { wrapper } = await mountProfile({ routeName: 'ProfileAccount' });
+    await buttons(wrapper)[0].trigger('click');
+    await buttons(wrapper)[1].trigger('click');
+    await flushPromises();
+    // The second save waits for the first answer.
+    expect(updateMyPositions).toHaveBeenCalledTimes(1);
+    firstResolve(['GK']);
+    await flushPromises();
+    expect(updateMyPositions).toHaveBeenCalledTimes(2);
+    expect(updateMyPositions).toHaveBeenLastCalledWith(['GK', 'DEF']);
+    expect(state(wrapper)).toEqual(['✓GK:true', '✓DEF:true', 'MID:false', 'FWD:false']);
+  });
+
+  it('disables the toggles when the positions could not be loaded', async () => {
+    getMyPositions.mockRejectedValueOnce(new Error('offline'));
+    const { wrapper } = await mountProfile({ routeName: 'ProfileAccount' });
+    buttons(wrapper).forEach((b) => expect(b.attributes('disabled')).toBeDefined());
+    expect(wrapper.text()).toContain("Couldn't load your positions.");
+    await buttons(wrapper)[0].trigger('click');
+    expect(updateMyPositions).not.toHaveBeenCalled();
   });
 });

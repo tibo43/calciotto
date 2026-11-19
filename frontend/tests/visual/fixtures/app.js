@@ -183,6 +183,38 @@ async function stubApi(page, overrides = {}) {
     return json(route, overrides.motmVotes ?? data.motmVotes);
   });
 
+  // Preferred positions (design v2). The player's own, read and replaced on
+  // the Account page: a PUT answers with what it was sent, normalized the way
+  // the server does, unless `myPositionsError` asks for a refusal. And the
+  // admin-only list for a match (`matchPositions`, [{ PlayerID,
+  // PreferredPositions }]), empty by default so that no existing page shows a
+  // tag.
+  let myPositions = overrides.myPositions ?? [];
+  await page.route(`${API}/players/me/positions`, (route) => {
+    const method = route.request().method();
+    if (method === 'PUT') {
+      if (overrides.myPositionsError) {
+        return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: overrides.myPositionsError }) });
+      }
+      const body = JSON.parse(route.request().postData() || '{}');
+      const picked = new Set(body.PreferredPositions || []);
+      myPositions = ['GK', 'DEF', 'MID', 'FWD'].filter((position) => picked.has(position));
+      return json(route, { PreferredPositions: myPositions });
+    }
+    if (method !== 'GET') {
+      unstubbed.push(`${method} ${route.request().url()}`);
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
+    }
+    return json(route, { PreferredPositions: myPositions });
+  });
+  await page.route(`${API}/matches/*/positions`, (route) => {
+    if (route.request().method() !== 'GET') {
+      unstubbed.push(`${route.request().method()} ${route.request().url()}`);
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
+    }
+    return json(route, overrides.matchPositions ?? []);
+  });
+
   return unstubbed;
 }
 
@@ -204,6 +236,20 @@ async function gotoApp(page, path, options = {}) {
   // time rather than fake timers: transitions and timeouts keep working, which
   // is what lets the page finish rendering at all.
   await page.clock.setFixedTime(data.FIXED_NOW);
+
+  // A seeded Math.random, for the same reason as the frozen clock: the v2
+  // automatic split draws its teams at random, and a screenshot of them has
+  // to be the same at every run.
+  await page.addInitScript(() => {
+    let seed = 0x5eed;
+    Math.random = () => {
+      seed = (seed + 0x6D2B79F5) >>> 0;
+      let t = seed;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  });
 
   await page.addInitScript(({ token, tokenKey, groupKey, groupID, themeKey, themeValue }) => {
     localStorage.setItem(tokenKey, token);

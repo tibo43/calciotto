@@ -82,10 +82,11 @@
             <p class="col-count">{{ reserve.length }}</p>
             <p v-if="!reserve.length" class="col-empty">Every confirmed player is placed.</p>
             <template v-for="player in reserve" :key="player.ID">
-              <button class="p-row" :class="{ 'is-picked': pickedId === player.ID }" type="button" :data-player="player.ID"
+              <button class="p-row" :class="{ 'is-picked': pickedId === player.ID, 'has-tag': tagOf(player) }" type="button" :data-player="player.ID"
                 aria-haspopup="menu" :aria-expanded="pickedId === player.ID ? 'true' : 'false'" @click="pick(player)">
                 <span class="pos">{{ posLabel(player) }}</span>
                 <span class="nm">{{ player.Name }}</span>
+                <span v-if="tagOf(player)" class="pos-tag">{{ tagOf(player) }}</span>
               </button>
               <div v-if="pickedId === player.ID" class="move-menu" role="menu" :aria-label="`Move ${player.Name} to`" @keydown="onMenuKey">
                 <button v-for="dest in destinations" :key="dest.key" class="move-opt" role="menuitem" type="button" @click="assign(dest.index)">{{ dest.label }}</button>
@@ -98,12 +99,14 @@
               <h2>{{ teamName(index) }}</h2>
             </div>
             <p class="col-count">{{ teamPlayers[index].length }}</p>
+            <p v-if="teamPlayers[index].length" class="pos-summary">{{ positionSummary(teamPlayers[index], positionsById) }}</p>
             <p v-if="!teamPlayers[index].length" class="col-empty">No players yet.</p>
             <template v-for="player in teamPlayers[index]" :key="player.ID">
-              <button class="p-row" :class="{ 'is-picked': pickedId === player.ID }" type="button" :data-player="player.ID"
+              <button class="p-row" :class="{ 'is-picked': pickedId === player.ID, 'has-tag': tagOf(player) }" type="button" :data-player="player.ID"
                 aria-haspopup="menu" :aria-expanded="pickedId === player.ID ? 'true' : 'false'" @click="pick(player)">
                 <span class="pos">{{ posLabel(player) }}</span>
                 <span class="nm">{{ player.Name }}</span>
+                <span v-if="tagOf(player)" class="pos-tag">{{ tagOf(player) }}</span>
               </button>
               <div v-if="pickedId === player.ID" class="move-menu" role="menu" :aria-label="`Move ${player.Name} to`" @keydown="onMenuKey">
                 <button v-for="dest in destinations" :key="dest.key" class="move-opt" role="menuitem" type="button" @click="assign(dest.index)">{{ dest.label }}</button>
@@ -218,15 +221,15 @@
 <script>
 import {
   getMatchRegistrations, closeMatchRegistrations, reopenMatchRegistrations,
-  setMatchMaxPlayers, updateMatch, deleteMatch, getInviteCode, getGroupMembers, getSeasons,
+  setMatchMaxPlayers, updateMatch, deleteMatch, getInviteCode, getGroupMembers, getSeasons, getMatchPositions,
 } from '@/services/api';
 import { setActiveGroupId } from '@/services/activeGroup';
 import { findMatchInMyGroups, actionErrorMessage } from '@/services/v2Match';
 import AppToast from '@/components/AppToast.vue';
 import {
   deriveRegistrationState, REGISTRATION_OPEN, REGISTRATION_CLOSED_BY_ADMIN, REGISTRATION_CLOSED_AT_KICKOFF,
-  fillTeamsFromRegistrations,
 } from '@/services/matchRegistration';
+import { splitByPositions, positionsMap, positionsTag, positionSummary } from '@/services/v2Positions';
 import { formatDateTimeForDisplay, formatCalendarDayLong } from '@/services/datetime';
 import { heroDateLabel, kickoffLabel } from '@/services/v2Home';
 import { encodeMatchId } from '@/services/shortLink';
@@ -263,6 +266,7 @@ export default {
       step: 'signups',
       match: null,
       registrations: [],
+      positionsById: {},
       teamPlayers: [[], []],
       held: {},
       guests: [],
@@ -383,7 +387,7 @@ export default {
       return sizeCounter(this.teamPlayers[0].length, this.teamPlayers[1].length);
     },
     splitHint() {
-      return `All confirmed players are split, in sign-up order, onto the smaller team (a tie goes to ${this.teamName(0)}). An odd number leaves one extra player on one side. Players already placed stay where they are. The waiting list is not included.`;
+      return 'Confirmed players are split at random: one goalkeeper per team when there are two, then defenders, midfielders and forwards evenly, then players with no position. Team sizes differ by one at most. Players already placed stay where they are. The waiting list is not included.';
     },
     picked() {
       if (!this.pickedId) return null;
@@ -476,6 +480,10 @@ export default {
   },
   methods: {
     teamScoreLine,
+    positionSummary,
+    tagOf(player) {
+      return positionsTag(this.positionsById[player.ID]);
+    },
     stepFromRoute() {
       const step = this.$route.query.step;
       return step === 'teams' || step === 'score' ? step : 'signups';
@@ -543,6 +551,9 @@ export default {
         this.match = found.details;
         const regs = await getMatchRegistrations(this.id).catch(() => []);
         this.registrations = Array.isArray(regs) ? regs : [];
+        // This page is admin-only, and so are the preferred positions. Without
+        // them (an older backend, a failed request) the split is still random.
+        this.positionsById = positionsMap(await getMatchPositions(this.id).catch(() => []));
         this.guests = [];
         this.held = {};
         this.initDraft();
@@ -617,9 +628,10 @@ export default {
       }
     },
     split() {
-      const { rosters, addedCount } = fillTeamsFromRegistrations(
+      const { rosters, addedCount } = splitByPositions(
         this.registrations,
-        this.teamPlayers
+        this.teamPlayers,
+        this.positionsById,
       );
       if (!addedCount) {
         this.message = 'Everyone confirmed is already on a team.';

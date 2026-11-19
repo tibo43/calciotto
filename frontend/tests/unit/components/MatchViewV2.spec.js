@@ -2,7 +2,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import MatchView from '@/components/v2/MatchView.vue';
 import {
   getMatchRegistrations, registerForMatch, unregisterFromMatch, getMatchVotes, voteForMotm, removeMotmVote, getSeasons,
-  getMatchPredictions, predictForMatch
+  getMatchPredictions, predictForMatch, getMatchPositions
 } from '@/services/api';
 import { findMatchInMyGroups } from '@/services/v2Match';
 
@@ -16,6 +16,7 @@ vi.mock('@/services/api', () => ({
   getSeasons: vi.fn(),
   getMatchPredictions: vi.fn(),
   predictForMatch: vi.fn(),
+  getMatchPositions: vi.fn(() => Promise.resolve([])),
   // A token whose player_id is 'me'.
   getToken: vi.fn(() => `x.${btoa(JSON.stringify({ player_id: 'me' }))}.y`)
 }));
@@ -49,8 +50,9 @@ function playedMatch() {
   };
 }
 
-async function mountView(match, { registrations = [], votes = null, role = 'member' } = {}) {
+async function mountView(match, { registrations = [], votes = null, role = 'member', positions = [] } = {}) {
   const group = { ...GROUP, role };
+  getMatchPositions.mockResolvedValue(positions);
   findMatchInMyGroups.mockResolvedValue({ group, details: match, groups: [group] });
   getMatchRegistrations.mockResolvedValue(registrations);
   getMatchVotes.mockResolvedValue(votes);
@@ -253,5 +255,52 @@ describe('MatchView.vue admin manage gear', () => {
   it('hides the gear from a member', async () => {
     const { wrapper } = await mountView(upcomingMatch(), { role: 'member' });
     expect(wrapper.find('.hero-manage').exists()).toBe(false);
+  });
+});
+
+describe('MatchView.vue preferred positions', () => {
+  const positions = [
+    { PlayerID: 'p2', PreferredPositions: ['MID', 'DEF'] },
+    { PlayerID: 'p3', PreferredPositions: ['GK'] },
+  ];
+
+  it('shows an admin each player\'s positions after the name, in canonical order, nothing without any', async () => {
+    const { wrapper } = await mountView(playedMatch(), { role: 'admin', positions });
+    expect(getMatchPositions).toHaveBeenCalledWith('match');
+    const rows = wrapper.findAll('.lineup .player');
+    const paolo = rows.find((row) => row.text().includes('Paolo'));
+    expect(paolo.find('.nm-line .nm').text()).toBe('Paolo');
+    expect(paolo.find('.nm-line .pos-tag').text()).toBe('DEF · MID');
+    expect(rows.find((row) => row.text().includes('Luca')).find('.pos-tag').text()).toBe('GK');
+    const me = rows.find((row) => row.text().includes('Me'));
+    expect(me.find('.pos-tag').exists()).toBe(false);
+    expect(me.find('.nm-line').exists()).toBe(false);
+  });
+
+  it('shows the tags on the teams of an upcoming match too, for an admin', async () => {
+    const match = { ...upcomingMatch(), RegistrationsClosedAt: iso(-60 * 1000), Teams: playedMatch().Teams.map((team) => ({ ...team, Score: 0 })) };
+    const { wrapper } = await mountView(match, { role: 'admin', positions });
+    const tags = wrapper.findAll('.lineups-upcoming .pos-tag').map((tag) => tag.text());
+    expect(tags).toEqual(['DEF · MID', 'GK']);
+  });
+
+  it('never asks for positions, nor shows any, for a plain member', async () => {
+    const { wrapper } = await mountView(playedMatch(), { role: 'member', positions });
+    expect(getMatchPositions).not.toHaveBeenCalled();
+    expect(wrapper.find('.pos-tag').exists()).toBe(false);
+    expect(wrapper.find('.nm-line').exists()).toBe(false);
+  });
+
+  it('still renders the match for an admin when the positions request fails', async () => {
+    getMatchPositions.mockRejectedValueOnce(new Error('boom'));
+    const group = { ...GROUP, role: 'admin' };
+    findMatchInMyGroups.mockResolvedValue({ group, details: playedMatch(), groups: [group] });
+    getMatchRegistrations.mockResolvedValue([]);
+    getMatchVotes.mockResolvedValue(null);
+    getSeasons.mockResolvedValue([]);
+    const wrapper = mount(MatchView, { props: { id: 'match' }, global: { provide: { v2Context: { groups: [], seasons: [] } }, stubs: { 'router-link': true } } });
+    await flushPromises();
+    expect(wrapper.find('.board').exists()).toBe(true);
+    expect(wrapper.find('.pos-tag').exists()).toBe(false);
   });
 });

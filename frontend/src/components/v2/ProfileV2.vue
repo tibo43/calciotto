@@ -145,6 +145,20 @@
         <p><button class="btn" type="button" :disabled="savingName || !nameInput.trim()" @click="saveName">{{ savingName ? 'Saving…' : 'Save name' }}</button></p>
         <p v-if="nameError" class="scope">{{ nameError }}</p>
       </section>
+      <!-- Preferred positions: each tap saves the whole set at once (toast),
+           and a refused save puts the buttons back as they were. -->
+      <section class="sec account-positions">
+        <div class="sec-head"><h2>Positions</h2></div>
+        <p class="label">Where you like to play</p>
+        <div class="pos-picks" role="group" aria-label="Where you like to play">
+          <button v-for="position in positionOptions" :key="position" class="pos-pick" :class="{ 'is-on': positions.includes(position) }"
+            type="button" :aria-pressed="positions.includes(position).toString()" :disabled="!positionsReady" @click="togglePosition(position)">
+            <span v-if="positions.includes(position)" class="tick" aria-hidden="true">✓</span>{{ position }}
+          </button>
+        </div>
+        <p class="scope pos-help">Pick one or more. Only your group admins see them, to balance teams.</p>
+        <p v-if="positionsLoadFailed" class="scope">Couldn't load your positions. Reload the page to try again.</p>
+      </section>
       <section class="sec">
         <div class="sec-head"><h2>Email</h2></div>
         <div class="field account-email">
@@ -265,6 +279,7 @@
         </div>
       </div>
     </template>
+    <AppToast ref="toast" />
   </main>
 </template>
 
@@ -275,8 +290,11 @@ import {
   getPlayerProfile, getMyGroups, getSeasons, setFavoriteGroup, updateMyName,
   deleteMyAccount, clearToken, getToken, getTeamsByGroup, updateTeam, getInviteCode,
   getGroupMembers, updateMemberRole, removeMember, getNotificationPreferences, updateNotificationPreferences,
-  forgotPassword, getMyFeatures,
+  forgotPassword, getMyFeatures, getMyPositions, updateMyPositions,
 } from '@/services/api';
+import { POSITIONS, normalizePositions } from '@/services/v2Positions';
+import { actionErrorMessage } from '@/services/v2Match';
+import AppToast from '@/components/AppToast.vue';
 import { getPushState, enablePush, disablePush, PUSH_STATE, PUSH_FEATURE } from '@/services/pushNotifications';
 import { getInstallTracker, INSTALL_STATE, PWA_INSTALL_FEATURE } from '@/services/pwaInstall';
 import { buildGroupInviteShareText } from '@/services/shareMessages';
@@ -316,7 +334,7 @@ function playerIdFromToken() {
 
 export default {
   name: 'ProfileV2',
-  components: { GearLink, GroupDetailsForm, InvitationV2, PasskeysV2 },
+  components: { AppToast, GearLink, GroupDetailsForm, InvitationV2, PasskeysV2 },
   inject: {
     v2Context: { default: () => ({}) },
     openGuide: { default: () => {} },
@@ -336,6 +354,12 @@ export default {
       nameInput: '',
       savingName: false,
       nameError: '',
+      positionOptions: POSITIONS,
+      positions: [],
+      savedPositions: [],
+      positionsReady: false,
+      positionsLoadFailed: false,
+      positionsSeq: 0,
       email: '',
       resetNote: '',
       sendingReset: false,
@@ -466,6 +490,7 @@ export default {
       this.syncChrome();
       if (this.page === 'settings') this.loadSettings();
       if (this.page === 'notifications') this.loadNotifications();
+      if (this.page === 'account') this.loadPositions();
     },
     demoting() {
       this.syncConfirming();
@@ -575,6 +600,7 @@ export default {
           }
           await this.loadNotifications();
         }
+        if (this.page === 'account') await this.loadPositions();
       } catch (error) {
         console.error(error);
         this.failed = true;
@@ -635,6 +661,50 @@ export default {
         console.error(error);
         this.pushError = (error.response && error.response.data && error.response.data.error) || error.message || 'Could not change the notifications.';
       }
+    },
+    async loadPositions() {
+      this.positionsLoadFailed = false;
+      try {
+        const positions = normalizePositions(await getMyPositions());
+        this.positions = positions;
+        this.savedPositions = positions;
+        this.positionsReady = true;
+      } catch (error) {
+        console.error(error);
+        this.positionsReady = false;
+        this.positionsLoadFailed = true;
+      }
+    },
+    // Saved at every tap, optimistically: the button changes at once and
+    // the whole set is sent. Saves go out one after the other, so the server
+    // ends on the latest tap; the server's answer becomes the saved state and
+    // a refusal puts back the last saved set with the server's reason. Only
+    // the latest tap's answer updates the buttons.
+    togglePosition(position) {
+      if (!this.positionsReady) return Promise.resolve();
+      const picked = new Set(this.positions);
+      if (picked.has(position)) picked.delete(position);
+      else picked.add(position);
+      const next = normalizePositions([...picked]);
+      this.positions = next;
+      this.positionsSeq += 1;
+      const seq = this.positionsSeq;
+      const send = async () => {
+        try {
+          const saved = normalizePositions(await updateMyPositions(next));
+          this.savedPositions = saved;
+          if (seq !== this.positionsSeq) return;
+          this.positions = saved;
+          this.$refs.toast?.show('Positions saved.', 'success');
+        } catch (error) {
+          console.error(error);
+          if (seq !== this.positionsSeq) return;
+          this.positions = this.savedPositions;
+          this.$refs.toast?.show(actionErrorMessage(error, 'Could not save your positions.'), 'error');
+        }
+      };
+      this.positionsQueue = (this.positionsQueue || Promise.resolve()).then(send);
+      return this.positionsQueue;
     },
     async saveName() {
       this.savingName = true;

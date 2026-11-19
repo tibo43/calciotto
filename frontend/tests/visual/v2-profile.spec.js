@@ -158,6 +158,45 @@ test.describe('design v2 profile', () => {
     expectEverythingStubbed(unstubbed);
   });
 
+  // Two positions ticked, one tap at a time, each saved with the toast.
+  async function tickTwoPositions(page) {
+    const group = page.getByRole('group', { name: 'Where you like to play' });
+    await expect(group.getByRole('button')).toHaveText(['GK', 'DEF', 'MID', 'FWD']);
+    await group.getByRole('button', { name: 'DEF' }).click();
+    await expect(page.locator('.toast-message')).toContainText('Positions saved.');
+    await group.getByRole('button', { name: 'MID' }).click();
+    await expect(group.getByRole('button', { name: 'MID' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(group.getByRole('button', { name: 'DEF' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.toast-message')).toContainText('Positions saved.');
+    await page.locator('.pos-pick').last().blur();
+  }
+
+  test('account, positions saved', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, '/profile/account');
+    await tickTwoPositions(page);
+    await expect(page).toHaveScreenshot('v2-profile-account-positions.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('account, positions saved, dark @mobile', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, '/profile/account', { theme: 'dark' });
+    await tickTwoPositions(page);
+    await expect(page).toHaveScreenshot('v2-profile-account-positions-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('account, a refused position save @mobile', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, '/profile/account', { myPositions: ['GK'], myPositionsError: 'invalid position "X": use GK, DEF, MID or FWD' });
+    const group = page.getByRole('group', { name: 'Where you like to play' });
+    await expect(group.getByRole('button', { name: 'GK' })).toHaveAttribute('aria-pressed', 'true');
+    await group.getByRole('button', { name: 'FWD' }).click();
+    await expect(page.locator('.toast-message.error')).toContainText('invalid position "X"');
+    await expect(group.getByRole('button', { name: 'FWD' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(group.getByRole('button', { name: 'GK' })).toHaveAttribute('aria-pressed', 'true');
+    expectEverythingStubbed(unstubbed);
+  });
+
   test('account @mobile', async ({ page }) => {
     const { unstubbed } = await openProfile(page, '/profile/account');
     await expect(page.getByRole('heading', { name: 'Identity' })).toBeVisible();

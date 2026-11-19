@@ -128,6 +128,10 @@ func main() {
 	// are switched on by hand in the database. Same scoping as above.
 	r.GET("/players/me/features", authRequired, playerHandler.GetMyFeatures)
 	r.PUT("/players/me/guide", authRequired, playerHandler.CompleteGuide)
+	// The caller's own preferred positions (GK/DEF/MID/FWD), shown on the v2
+	// Account page. Same scoping as above: only ever the JWT's own player.
+	r.GET("/players/me/positions", authRequired, playerHandler.GetMyPositions)
+	r.PUT("/players/me/positions", authRequired, playerHandler.UpdateMyPositions)
 	// Push notifications for the caller's own devices (the subscribe route
 	// refuses a player without the push-notifications feature).
 	r.GET("/push/public-key", authRequired, notificationHandler.GetPublicKey)
@@ -246,6 +250,11 @@ func main() {
 	// the cap is typically what an admin does right after closing sign-ups, in
 	// order to compose the teams.
 	r.PATCH("/matches/:id/registrations/max-players", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.SetMaxPlayers)
+	// Preferred positions of the match's group members, for composing the
+	// teams. Admin-only: positions are never shown to a plain member, so they
+	// are not on the sign-up list or the match details (which every member
+	// reads) but behind the match-scoped admin gate (member 403, non-member 404).
+	r.GET("/matches/:id/positions", authRequired, requireGroupAdminByMatchID, playerHandler.GetMatchPositions)
 
 	// Man of the Match voting. Same match-scoped middleware pair as the
 	// sign-up routes above, and every route is open to any member — there is

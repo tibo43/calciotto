@@ -58,7 +58,10 @@
           <h3>{{ team.Name }}</h3>
           <ul class="signup-ro">
             <li v-for="player in team.Players" :key="player.ID" :class="{ 'is-me': player.ID === playerId }">
-              <span class="nm">{{ player.Name }}</span>
+              <!-- Group admins only: the player's preferred positions right
+                   after the name, which gives way first (…). -->
+              <span v-if="tagOf(player)" class="nm-line"><span class="nm">{{ player.Name }}</span><span class="pos-tag">{{ tagOf(player) }}</span></span>
+              <span v-else class="nm">{{ player.Name }}</span>
               <span v-if="player.ID === playerId" class="pos">You</span>
             </li>
           </ul>
@@ -113,14 +116,16 @@
           <h3>{{ team.Name }}</h3>
           <template v-for="player in team.Players" :key="player.ID">
           <button v-if="canVote(player)" class="player" :class="{ 'is-winner': isWinner(player) }" type="button" :aria-label="voteAria(player)" @click="castVote(player)">
-            <span class="nm">{{ player.Name }}</span>
+            <span v-if="tagOf(player)" class="nm-line"><span class="nm">{{ player.Name }}</span><span class="pos-tag">{{ tagOf(player) }}</span></span>
+            <span v-else class="nm">{{ player.Name }}</span>
             <span class="player-meta">
               <span v-if="goalLabel(player)" class="goals">{{ goalLabel(player) }}</span>
               <span class="votes"><span class="star" aria-hidden="true">{{ starFor(player) }}</span>{{ votesFor(player) }}</span>
             </span>
           </button>
           <div v-else class="player" :class="{ 'is-self': player.ID === playerId, 'is-winner': isWinner(player) }">
-            <span class="nm">{{ player.Name }}</span>
+            <span v-if="tagOf(player)" class="nm-line"><span class="nm">{{ player.Name }}</span><span class="pos-tag">{{ tagOf(player) }}</span></span>
+            <span v-else class="nm">{{ player.Name }}</span>
             <span class="player-meta">
               <span v-if="goalLabel(player)" class="goals">{{ goalLabel(player) }}</span>
               <span class="votes"><span class="star" aria-hidden="true">{{ starFor(player) }}</span>{{ votesFor(player) }}</span>
@@ -149,7 +154,8 @@
 </template>
 
 <script>
-import { getMatchRegistrations, registerForMatch, unregisterFromMatch, getMatchVotes, voteForMotm, removeMotmVote, getSeasons, getToken, getMatchPredictions, predictForMatch } from '@/services/api';
+import { getMatchRegistrations, registerForMatch, unregisterFromMatch, getMatchVotes, voteForMotm, removeMotmVote, getSeasons, getToken, getMatchPredictions, predictForMatch, getMatchPositions } from '@/services/api';
+import { positionsMap, positionsTag } from '@/services/v2Positions';
 import { predictionsAreOpen } from '@/services/matchPrediction';
 import { setActiveGroupId } from '@/services/activeGroup';
 import { findMatchInMyGroups, actionErrorMessage } from '@/services/v2Match';
@@ -192,6 +198,7 @@ export default {
       playerId: '',
       nowMs: Date.now(),
       isAdmin: false,
+      positionsById: {},
       busy: false,
       confirming: false,
       prediction: null,
@@ -289,6 +296,11 @@ export default {
     this.load();
   },
   methods: {
+    // "DEF · MID" for an admin, '' for a member or a player with no position.
+    tagOf(player) {
+      if (!this.isAdmin || !player) return '';
+      return positionsTag(this.positionsById[player.ID]);
+    },
     heroDateLabel,
     kickoffLabel,
     teamName(index) {
@@ -381,6 +393,11 @@ export default {
           ? await getMatchPredictions(this.id).catch(() => null)
           : null;
         this.isAdmin = group.role === 'admin';
+        // Preferred positions are for the group's admins only: the route
+        // refuses a member, and a member's page never asks for them.
+        this.positionsById = this.isAdmin
+          ? positionsMap(await getMatchPositions(this.id).catch(() => []))
+          : {};
         this.v2Context.groupId = group.id;
         await this.publishChrome(groups).catch(() => {});
       } catch (error) {
