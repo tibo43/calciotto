@@ -11,7 +11,7 @@
         <div class="skel pk-skel"></div>
       </div>
       <div v-else-if="!loaded" class="pk-block">
-        <p class="scope" role="alert">{{ error }}</p>
+        <p class="scope" role="alert">{{ loadError }}</p>
         <button class="btn btn-ghost" type="button" @click="loadKeys">Try again</button>
       </div>
       <template v-else>
@@ -39,8 +39,6 @@
             </div>
           </li>
         </ul>
-        <p v-if="notice" class="scope pk-feedback" role="status">{{ notice }}</p>
-        <p v-if="error" class="scope pk-feedback" role="alert">{{ error }}</p>
         <form v-if="adding" class="pk-form" @submit.prevent="create">
           <div class="field">
             <label class="label" for="passkey-name">Name (optional)</label>
@@ -77,11 +75,14 @@
       <button class="btn btn-ghost" type="button" @click="removing = ''">Cancel</button>
     </div>
   </div>
+  <AppToast ref="toast" />
 </template>
 
 <script>
+import AppToast from '@/components/AppToast.vue';
 import { getMyPasskeys, removeMyPasskey } from '@/services/api';
 import { addPasskey, supportsPasskeys } from '@/services/passkeys';
+import { actionErrorMessage } from '@/services/v2Match';
 import CollapsibleCardV2 from './CollapsibleCardV2.vue';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -97,7 +98,7 @@ export function formatPasskeyDate(value) {
 // design-v2 and passkeys features (ProfileV2 checks both).
 export default {
   name: 'PasskeysV2',
-  components: { CollapsibleCardV2 },
+  components: { AppToast, CollapsibleCardV2 },
   emits: ['confirming'],
   data() {
     return {
@@ -110,14 +111,13 @@ export default {
       keys: [],
       name: '',
       password: '',
-      error: '',
-      notice: '',
+      loadError: '',
     };
   },
   computed: {
     summary() {
       if (this.loading) return 'Loading…';
-      if (!this.loaded) return this.error ? "Couldn't load" : '';
+      if (!this.loaded) return this.loadError ? "Couldn't load" : '';
       if (this.keys.length === 0) return 'None yet';
       return this.keys.length === 1 ? '1 device' : `${this.keys.length} devices`;
     },
@@ -150,20 +150,19 @@ export default {
     async loadKeys() {
       if (this.loading) return;
       this.loading = true;
-      this.error = '';
+      this.loadError = '';
       try {
         const keys = await getMyPasskeys();
         this.keys = Array.isArray(keys) ? keys : [];
         this.loaded = true;
       } catch {
-        this.error = 'Could not load your passkeys.';
+        // Stays in the card (summary and Try again), not in a toast.
+        this.loadError = 'Could not load your passkeys.';
       } finally {
         this.loading = false;
       }
     },
     openForm() {
-      this.notice = '';
-      this.error = '';
       this.adding = true;
     },
     closeForm() {
@@ -172,8 +171,6 @@ export default {
       this.password = '';
     },
     askRemove(id) {
-      this.notice = '';
-      this.error = '';
       this.removing = id;
     },
     async create() {
@@ -181,15 +178,14 @@ export default {
       const password = this.password;
       this.password = '';
       this.busy = true;
-      this.error = '';
-      this.notice = '';
       try {
         const key = await addPasskey(this.name, password);
         this.keys.unshift(key);
         this.closeForm();
-        this.notice = 'Passkey added.';
+        this.$refs.toast?.show('Passkey added.', 'success');
       } catch (error) {
-        this.error = error.response?.data?.error || 'Could not add a passkey. Try again.';
+        // Also when the device prompt is cancelled (no server message then).
+        this.$refs.toast?.show(actionErrorMessage(error, 'Could not add the passkey.'), 'error');
       } finally {
         this.busy = false;
       }
@@ -197,14 +193,12 @@ export default {
     async remove(id) {
       if (this.busy || !id) return;
       this.busy = true;
-      this.error = '';
-      this.notice = '';
       try {
         await removeMyPasskey(id);
         this.keys = this.keys.filter((key) => key.id !== id);
-        this.notice = 'Passkey removed.';
-      } catch {
-        this.error = 'Could not remove the passkey. Try again.';
+        this.$refs.toast?.show('Passkey removed.', 'success');
+      } catch (error) {
+        this.$refs.toast?.show(actionErrorMessage(error, 'Could not remove the passkey.'), 'error');
       } finally {
         this.busy = false;
         this.removing = '';
@@ -289,12 +283,6 @@ export default {
 .pk-empty {
   margin: 0;
   padding: 14px 16px 10px;
-}
-
-.pk-feedback {
-  margin: 0;
-  padding: 10px 16px;
-  border-top: 1px solid var(--v2-rule);
 }
 
 .pk-add {

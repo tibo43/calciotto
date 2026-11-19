@@ -10,7 +10,7 @@
         <p class="invite-code">{{ code }}</p>
         <p class="label invite-note">Works until you renew it</p>
         <div class="invite-tiles withdraw-wrap">
-          <ShareButton class="invite-tile" icon :text="shareText" label="Share" />
+          <ShareButton ref="share" class="invite-tile" @click="$refs.toast?.dismiss()" icon :text="shareText" label="Share" />
           <button class="invite-tile" type="button" @click="copy">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
               stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4H4v12h4" /></svg>
@@ -36,7 +36,6 @@
         <p class="scope">Make a code to let new players join.</p>
         <button class="btn btn-ghost" type="button" :disabled="saving" @click="renew">Make a code</button>
       </div>
-      <p v-if="error" class="scope invite-error" role="alert">{{ error }}</p>
     </CollapsibleCardV2>
   </section>
   <div v-if="asking" class="confirm-scrim" @click="cancel"></div>
@@ -48,12 +47,15 @@
       <button class="btn btn-ghost" type="button" @click="cancel">Cancel</button>
     </div>
   </div>
+  <AppToast ref="toast" />
 </template>
 
 <script>
+import AppToast from '@/components/AppToast.vue';
 import ShareButton from '@/components/ShareButton.vue';
 import CollapsibleCardV2 from './CollapsibleCardV2.vue';
 import { rotateGroupInvitation } from '@/services/api';
+import { actionErrorMessage } from '@/services/v2Match';
 
 const COPIED_MS = 2000;
 
@@ -61,7 +63,7 @@ const COPIED_MS = 2000;
 // InvitationActions.vue; v2 can only renew the code.
 export default {
   name: 'InvitationV2',
-  components: { CollapsibleCardV2, ShareButton },
+  components: { AppToast, CollapsibleCardV2, ShareButton },
   props: {
     groupId: { type: String, required: true },
     code: { type: String, default: '' },
@@ -69,7 +71,7 @@ export default {
   },
   emits: ['updated', 'confirming'],
   data() {
-    return { saving: false, error: '', asking: false, copied: false, copiedTimer: null };
+    return { saving: false, asking: false, copied: false, copiedTimer: null };
   },
   watch: {
     asking(value) {
@@ -85,7 +87,6 @@ export default {
   },
   methods: {
     ask() {
-      this.error = '';
       this.asking = true;
     },
     cancel() {
@@ -96,8 +97,13 @@ export default {
       this.copiedTimer = null;
       this.copied = false;
     },
+    // Results go to the shared toast. ShareButton has its own toast
+    // ("Message copied"), so drop it first: two toasts never stack.
+    notify(message, type) {
+      this.$refs.share?.$refs?.toast?.dismiss();
+      this.$refs.toast?.show(message, type);
+    },
     async copy() {
-      this.error = '';
       try {
         await navigator.clipboard.writeText(this.code);
         this.resetCopied();
@@ -107,19 +113,24 @@ export default {
           this.copiedTimer = null;
         }, COPIED_MS);
       } catch {
-        this.error = "Couldn't copy the code. Select it and copy it by hand.";
+        this.notify('Could not copy the code.', 'error');
       }
     },
     async renew() {
       if (this.saving) return;
       const groupId = this.groupId;
+      // "Make a code" (no code yet) just shows the new code; only a renewal
+      // of an existing code gets a success toast.
+      const renewing = Boolean(this.code);
       this.saving = true;
-      this.error = '';
       try {
         const invitation = await rotateGroupInvitation(groupId);
-        if (this.groupId === groupId) this.$emit('updated', invitation);
-      } catch {
-        this.error = 'Could not update the invitation.';
+        if (this.groupId !== groupId) return;
+        this.$emit('updated', invitation);
+        if (renewing) this.notify('Code renewed.', 'success');
+      } catch (error) {
+        const fallback = renewing ? 'Could not renew the code.' : 'Could not make a code.';
+        if (this.groupId === groupId) this.notify(actionErrorMessage(error, fallback), 'error');
       } finally {
         this.saving = false;
         this.asking = false;
@@ -200,10 +211,5 @@ export default {
 
 .invite-empty .scope {
   margin: 0 0 12px;
-}
-
-.invite-error {
-  margin: 0;
-  padding: 0 16px 16px;
 }
 </style>

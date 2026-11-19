@@ -1,4 +1,5 @@
 import { mount, flushPromises } from '@vue/test-utils';
+import AppToast from '@/components/AppToast.vue';
 import PasskeysV2, { formatPasskeyDate } from '@/components/v2/PasskeysV2.vue';
 import { getMyPasskeys, removeMyPasskey } from '@/services/api';
 import { addPasskey, supportsPasskeys } from '@/services/passkeys';
@@ -18,6 +19,10 @@ const LAPTOP = { id: 'k2', name: 'Laptop', created_at: '2026-11-10T10:00:00Z', l
 
 const buttonByText = (root, text) => root.findAll('button').find((b) => b.text().trim() === text);
 const summary = (wrapper) => wrapper.find('.cc-summary').text();
+const toast = (wrapper) => {
+  const { message, type } = wrapper.findComponent(AppToast).vm;
+  return { message, type };
+};
 
 async function mountPasskeys(keys = [PHONE, LAPTOP], { open = true } = {}) {
   getMyPasskeys.mockResolvedValue(keys);
@@ -103,7 +108,7 @@ describe('PasskeysV2.vue', () => {
     expect(summary(wrapper)).toBe('1 device');
   });
 
-  it('asks before removing, and confirms with the removed notice', async () => {
+  it('asks before removing, and confirms with a success toast', async () => {
     removeMyPasskey.mockResolvedValue();
     const wrapper = await mountPasskeys();
     await wrapper.findAll('.pk-trash')[0].trigger('click');
@@ -117,7 +122,9 @@ describe('PasskeysV2.vue', () => {
     expect(removeMyPasskey).toHaveBeenCalledWith('k1');
     expect(wrapper.findAll('.pk-row')).toHaveLength(1);
     expect(summary(wrapper)).toBe('1 device');
-    expect(wrapper.find('.pk-feedback').text()).toBe('Passkey removed.');
+    expect(toast(wrapper)).toEqual({ message: 'Passkey removed.', type: 'success' });
+    expect(wrapper.find('.toast-message').text()).toContain('Passkey removed.');
+    expect(wrapper.find('.pk-feedback').exists()).toBe(false);
     expect(wrapper.find('.confirm-sheet').exists()).toBe(false);
     expect(wrapper.emitted('confirming').at(-1)).toEqual([false]);
   });
@@ -130,14 +137,15 @@ describe('PasskeysV2.vue', () => {
     expect(removeMyPasskey).not.toHaveBeenCalled();
   });
 
-  it('shows a failed removal', async () => {
+  it('shows a failed removal in an error toast', async () => {
     removeMyPasskey.mockRejectedValue(new Error('no'));
     const wrapper = await mountPasskeys();
     await wrapper.findAll('.pk-trash')[0].trigger('click');
     await wrapper.find('.confirm-sheet .btn-danger').trigger('click');
     await flushPromises();
     expect(wrapper.findAll('.pk-row')).toHaveLength(2);
-    expect(wrapper.find('[role="alert"]').text()).toBe('Could not remove the passkey. Try again.');
+    expect(toast(wrapper)).toEqual({ message: 'Could not remove the passkey.', type: 'error' });
+    expect(wrapper.find('.cc-panel [role="alert"]').exists()).toBe(false);
   });
 
   it('opens the add form in place and adds a passkey', async () => {
@@ -161,20 +169,32 @@ describe('PasskeysV2.vue', () => {
     await flushPromises();
     expect(wrapper.find('form').exists()).toBe(false);
     expect(wrapper.find('.pk-name').text()).toBe('Work laptop');
-    expect(wrapper.find('.pk-feedback').text()).toBe('Passkey added.');
+    expect(toast(wrapper)).toEqual({ message: 'Passkey added.', type: 'success' });
     expect(summary(wrapper)).toBe('1 device');
   });
 
-  it("shows the server's refusal and keeps the form open", async () => {
+  it("shows the server's refusal in an error toast and keeps the form open", async () => {
     addPasskey.mockRejectedValue({ response: { data: { error: 'Wrong password' } } });
     const wrapper = await mountPasskeys([]);
     await wrapper.find('.pk-add').trigger('click');
     await wrapper.find('#passkey-password').setValue('bad');
     await wrapper.find('form').trigger('submit');
     await flushPromises();
-    expect(wrapper.find('[role="alert"]').text()).toBe('Wrong password');
+    expect(toast(wrapper)).toEqual({ message: 'Wrong password', type: 'error' });
+    expect(wrapper.find('.cc-panel [role="alert"]').exists()).toBe(false);
     expect(wrapper.find('form').exists()).toBe(true);
     expect(wrapper.find('#passkey-password').element.value).toBe('');
+  });
+
+  it('says it could not add the passkey when the device prompt is cancelled', async () => {
+    addPasskey.mockRejectedValue(Object.assign(new Error('cancelled'), { name: 'NotAllowedError' }));
+    const wrapper = await mountPasskeys([]);
+    await wrapper.find('.pk-add').trigger('click');
+    await wrapper.find('#passkey-password').setValue('secret');
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+    expect(toast(wrapper)).toEqual({ message: 'Could not add the passkey.', type: 'error' });
+    expect(wrapper.findAll('.pk-row')).toHaveLength(0);
   });
 
   it('Cancel, or folding the card, closes the form and clears it', async () => {

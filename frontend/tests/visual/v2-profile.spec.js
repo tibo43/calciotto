@@ -188,6 +188,38 @@ test.describe('design v2 profile', () => {
     expectEverythingStubbed(unstubbed);
   });
 
+  // A failed renewal lands in the shared toast (above the tab bar on phones).
+  async function failRenewal(page) {
+    await page.route('**/groups/*/invite-code', (route) => (route.request().method() === 'POST'
+      ? route.fulfill({ status: 500, contentType: 'application/json', body: '{}' })
+      : route.fallback()));
+    await openCard(page, 'Invite players');
+    await page.getByRole('button', { name: 'Renew', exact: true }).click();
+    await page.locator('.confirm-pop, .confirm-sheet').filter({ visible: true }).getByRole('button', { name: 'Renew', exact: true }).click();
+    const toast = page.locator('.toast-message.error');
+    await expect(toast).toContainText('Could not renew the code.');
+    return toast;
+  }
+
+  test('renew failure toast', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, `${GROUP}/settings`, { groups: groupsWithDetails });
+    await failRenewal(page);
+    await expect(page).toHaveScreenshot('v2-profile-settings-renew-error.png');
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('renew failure toast @mobile', async ({ page }) => {
+    const { unstubbed } = await openProfile(page, `${GROUP}/settings`, { groups: groupsWithDetails, theme: 'dark' });
+    const toast = await failRenewal(page);
+    const toastBox = await toast.boundingBox();
+    const tabBox = await page.locator('nav.tabbar').boundingBox();
+    expect(toastBox.y + toastBox.height).toBeLessThanOrEqual(tabBox.y);
+    await expect(page).toHaveScreenshot('v2-profile-settings-renew-error-mobile.png');
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
   test('account with passkeys, closed', async ({ page }) => {
     const { unstubbed } = await openProfile(page, '/profile/account', { features: [...V2.features, 'passkeys'], passkeys: PASSKEYS, theme: 'dark' });
     await expect(page.getByText('2 devices')).toBeVisible();

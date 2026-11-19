@@ -1,4 +1,5 @@
 import { mount, flushPromises } from '@vue/test-utils';
+import AppToast from '@/components/AppToast.vue';
 import InvitationV2 from '@/components/v2/InvitationV2.vue';
 import { rotateGroupInvitation } from '@/services/api';
 
@@ -20,6 +21,11 @@ async function mountOpen(props = {}) {
 }
 
 const tile = (wrapper, label) => wrapper.findAll('.invite-tiles button').find((b) => b.text().trim() === label);
+
+const toast = (wrapper) => {
+  const { message, type } = wrapper.findComponent(AppToast).vm;
+  return { message, type };
+};
 
 const buttonByText = (wrapper, text) => wrapper.findAll('button').find((b) => b.text().trim() === text);
 
@@ -45,7 +51,7 @@ describe('InvitationV2.vue', () => {
     expect(panel.attributes('hidden')).toBeUndefined();
   });
 
-  it('open, shows the code and the four tiles', async () => {
+  it('open, shows the code and the three tiles', async () => {
     const wrapper = await mountOpen();
     expect(wrapper.find('.invite-code').text()).toBe('ABC23XYZ');
     expect(wrapper.text()).toContain('Works until you renew it');
@@ -84,12 +90,13 @@ describe('InvitationV2.vue', () => {
     expect(tile(wrapper, 'Copy')).toBeTruthy();
   });
 
-  it('shows a copy failure inside the card', async () => {
+  it('shows a copy failure in an error toast', async () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn().mockRejectedValue(new Error('no')) }, configurable: true });
     const wrapper = await mountOpen();
     await tile(wrapper, 'Copy').trigger('click');
     await flushPromises();
-    expect(wrapper.find('.cc-panel [role="alert"]').text()).toContain("Couldn't copy");
+    expect(toast(wrapper)).toEqual({ message: 'Could not copy the code.', type: 'error' });
+    expect(wrapper.find('.cc-panel [role="alert"]').exists()).toBe(false);
   });
 
   it('asks before renewing the code, and Cancel changes nothing', async () => {
@@ -117,6 +124,7 @@ describe('InvitationV2.vue', () => {
     expect(rotateGroupInvitation).toHaveBeenCalledWith('group-1');
     expect(wrapper.emitted('updated')[0]).toEqual([{ invite_code: 'NEWCODE1' }]);
     expect(wrapper.find('.confirm-sheet').exists()).toBe(false);
+    expect(toast(wrapper)).toEqual({ message: 'Code renewed.', type: 'success' });
   });
 
   it('offers no way to revoke the code in v2', async () => {
@@ -127,15 +135,69 @@ describe('InvitationV2.vue', () => {
     expect(wrapper.find('.btn-danger').exists()).toBe(false);
   });
 
-  it('shows a failed update inside the card and closes the confirmation', async () => {
+  it('shows a failed renewal in an error toast and closes the confirmation', async () => {
     rotateGroupInvitation.mockRejectedValue(new Error('boom'));
     const wrapper = await mountOpen();
     await tile(wrapper, 'Renew').trigger('click');
     await wrapper.find('.confirm-sheet').findAll('button').find((b) => b.text() === 'Renew').trigger('click');
     await flushPromises();
-    expect(wrapper.find('.invite-error').text()).toBe('Could not update the invitation.');
+    expect(toast(wrapper)).toEqual({ message: 'Could not renew the code.', type: 'error' });
+    expect(wrapper.find('.invite-error').exists()).toBe(false);
     expect(wrapper.find('.confirm-sheet').exists()).toBe(false);
     expect(wrapper.emitted('updated')).toBeUndefined();
+  });
+
+  it('Make a code shows the new code without a toast', async () => {
+    rotateGroupInvitation.mockResolvedValue({ invite_code: 'FIRST123' });
+    const wrapper = await mountOpen({ code: '' });
+    await buttonByText(wrapper, 'Make a code').trigger('click');
+    await flushPromises();
+    expect(rotateGroupInvitation).toHaveBeenCalledWith('group-1');
+    expect(wrapper.emitted('updated')[0]).toEqual([{ invite_code: 'FIRST123' }]);
+    expect(toast(wrapper).message).toBe('');
+  });
+
+  it('says it could not make a code when Make a code fails', async () => {
+    rotateGroupInvitation.mockRejectedValue(new Error('boom'));
+    const wrapper = await mountOpen({ code: '' });
+    await buttonByText(wrapper, 'Make a code').trigger('click');
+    await flushPromises();
+    expect(toast(wrapper)).toEqual({ message: 'Could not make a code.', type: 'error' });
+    expect(wrapper.emitted('updated')).toBeUndefined();
+  });
+
+  it("shows the server's reason when there is one", async () => {
+    rotateGroupInvitation.mockRejectedValue({ response: { data: { error: 'Only admins can do this' } } });
+    const wrapper = await mountOpen({ code: '' });
+    await buttonByText(wrapper, 'Make a code').trigger('click');
+    await flushPromises();
+    expect(toast(wrapper)).toEqual({ message: 'Only admins can do this', type: 'error' });
+  });
+
+  it('copies without a toast, the tile reads Copied', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn().mockResolvedValue() }, configurable: true });
+    const wrapper = await mountOpen();
+    await tile(wrapper, 'Copy').trigger('click');
+    await flushPromises();
+    expect(tile(wrapper, 'Copied')).toBeTruthy();
+    expect(toast(wrapper).message).toBe('');
+  });
+
+  it('never stacks its toast on the Share button toast', async () => {
+    rotateGroupInvitation.mockRejectedValue(new Error('boom'));
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn().mockResolvedValue() }, configurable: true });
+    const wrapper = mount(InvitationV2, { props: { groupId: 'group-1', code: 'ABC23XYZ', shareText: 'Join us' } });
+    await wrapper.find('.cc-head').trigger('click');
+    await tile(wrapper, 'Share').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('.toast-message').map((t) => t.text())).toEqual([expect.stringContaining('Message copied')]);
+    await tile(wrapper, 'Renew').trigger('click');
+    await wrapper.find('.confirm-sheet').findAll('button').find((b) => b.text() === 'Renew').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('.toast-message').map((t) => t.text())).toEqual([expect.stringContaining('Could not renew the code.')]);
+    await tile(wrapper, 'Share').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('.toast-message').map((t) => t.text())).toEqual([expect.stringContaining('Message copied')]);
   });
 
   it('drops a late answer for a group the admin already left', async () => {
