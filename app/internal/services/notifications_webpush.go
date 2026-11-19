@@ -25,10 +25,10 @@ type WebPushSender struct {
 	client     *http.Client
 }
 
-func (w *WebPushSender) Send(sub models.PushSubscription, payload []byte) error {
+func (w *WebPushSender) Send(sub models.PushSubscription, payload []byte) (int, error) {
 	// Subscriptions saved before endpoint validation are checked here too.
 	if !isAllowedPushEndpoint(sub.Endpoint) {
-		return ErrInvalidPushSubscription
+		return 0, ErrInvalidPushSubscription
 	}
 	client := w.client
 	if client == nil {
@@ -47,16 +47,16 @@ func (w *WebPushSender) Send(sub models.PushSubscription, payload []byte) error 
 	})
 	if err != nil {
 		// URL errors from net/http can contain the subscription's credentials.
-		return errors.New("web push delivery failed")
+		return 0, errors.New("web push delivery failed")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
-		return ErrPushSubscriptionGone
+		return resp.StatusCode, ErrPushSubscriptionGone
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("push service returned HTTP %d", resp.StatusCode)
+		return resp.StatusCode, fmt.Errorf("push service returned HTTP %d", resp.StatusCode)
 	}
-	return nil
+	return resp.StatusCode, nil
 }
 
 func isAllowedPushEndpoint(raw string) bool {

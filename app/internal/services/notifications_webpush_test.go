@@ -49,8 +49,8 @@ func TestWebPushSender_AgainstAFakePushService(t *testing.T) {
 		Auth:     base64.RawURLEncoding.EncodeToString(authSecret),
 	}
 
-	if err := sender.Send(sub, []byte(`{"type":"registration_open"}`)); err != nil {
-		t.Fatalf("Send to a 201 = %v, want nil", err)
+	if got, err := sender.Send(sub, []byte(`{"type":"registration_open"}`)); err != nil || got != http.StatusCreated {
+		t.Fatalf("Send to a 201 = %d, %v, want 201, nil", got, err)
 	}
 	if got := lastRequest.Header.Get("Content-Encoding"); got != "aes128gcm" {
 		t.Errorf("Content-Encoding = %q, want aes128gcm (an encrypted payload)", got)
@@ -60,17 +60,17 @@ func TestWebPushSender_AgainstAFakePushService(t *testing.T) {
 	}
 
 	status = http.StatusGone
-	if err := sender.Send(sub, []byte(`{}`)); !errors.Is(err, ErrPushSubscriptionGone) {
-		t.Errorf("Send to a 410 = %v, want ErrPushSubscriptionGone", err)
+	if got, err := sender.Send(sub, []byte(`{}`)); !errors.Is(err, ErrPushSubscriptionGone) || got != http.StatusGone {
+		t.Errorf("Send to a 410 = %d, %v, want 410, ErrPushSubscriptionGone", got, err)
 	}
 	status = http.StatusInternalServerError
-	if err := sender.Send(sub, []byte(`{}`)); err == nil || errors.Is(err, ErrPushSubscriptionGone) {
-		t.Errorf("Send to a 500 = %v, want a plain error", err)
+	if got, err := sender.Send(sub, []byte(`{}`)); err == nil || errors.Is(err, ErrPushSubscriptionGone) || got != http.StatusInternalServerError {
+		t.Errorf("Send to a 500 = %d, %v, want 500 and a plain error", got, err)
 	}
 
 	lastRequest = nil
 	sub.Endpoint = "https://example.invalid/push/test"
-	if err := sender.Send(sub, []byte(`{}`)); !errors.Is(err, ErrInvalidPushSubscription) || lastRequest != nil {
+	if _, err := sender.Send(sub, []byte(`{}`)); !errors.Is(err, ErrInvalidPushSubscription) || lastRequest != nil {
 		t.Fatal("a stored subscription outside the allowlist must be rejected before transport")
 	}
 }

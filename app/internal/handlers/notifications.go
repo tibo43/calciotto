@@ -18,7 +18,7 @@ type NotificationHandler struct {
 	// when push isn't configured, which the frontend reads as "unavailable".
 	PublicKey string
 	// TickSecret authenticates the external scheduler (cron-job.org) calling
-	// Tick every five minutes: POST
+	// Tick every minute: POST
 	// https://calciotto.koyeb.app/internal/notifications/tick with
 	// Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>. The route isn't
 	// registered at all without it.
@@ -140,8 +140,8 @@ func writePreferenceError(c *gin.Context, err error) {
 }
 
 // Tick sends the time-driven notifications that are due. cron-job.org calls
-// POST https://calciotto.koyeb.app/internal/notifications/tick every five
-// minutes with `Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>`, compared
+// POST https://calciotto.koyeb.app/internal/notifications/tick every
+// minute with `Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>`, compared
 // in constant time; anything else is a 401 that says nothing more.
 func (h *NotificationHandler) Tick(c *gin.Context) {
 	token, found := strings.CutPrefix(c.GetHeader("Authorization"), "Bearer ")

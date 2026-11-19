@@ -21,8 +21,10 @@ import (
 //     member not already signed up).
 //   - team_assigned: an admin saved a roster that puts the player on a team,
 //     or moves them, before kick-off (that player only).
-//   - predictions_open: that same save left both teams with a player, so
-//     predictions are open (every group member, once per match).
+//   - predictions_open: PredictionsOpenDelay after the first save that sent
+//     team_assigned for the match, once both teams have a player, so the
+//     teams notification is read before this one arrives (every group
+//     member, once per match, sent by the tick).
 //   - kickoff_reminder: kick-off is at most KickoffReminderLead away (the
 //     roster once composed, otherwise the confirmed sign-ups).
 //   - result_recorded: an admin saved the score for the first time, so the
@@ -33,15 +35,14 @@ import (
 //     predictions, not who was on the roster — each told the points that
 //     prediction earned.
 //
-// The four event-driven ones go out from MatchService.UpdateMatch through
-// RosterSaved. The two time-driven ones need a clock, and the backend's free
-// Koyeb instance sleeps when idle, so an in-process timer would not fire:
-// cron-job.org calls POST https://calciotto.koyeb.app/internal/notifications/tick
-// every five minutes with Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>,
-// which runs Tick. Each match records
-// when each of the time-driven ones went out, and when predictions_open went
-// out, so however many saves or ticks see it, it is sent once, and a tick
-// that runs late still sends what is due.
+// Three event-driven ones go out from MatchService.UpdateMatch through
+// RosterSaved. The three time-driven ones need a clock, and the backend's
+// free Koyeb instance sleeps when idle, so an in-process timer would not
+// fire: cron-job.org calls POST https://calciotto.koyeb.app/internal/notifications/tick
+// every minute with Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>,
+// which runs Tick. Each match records when each of the time-driven ones went
+// out, so however many ticks see it, it is sent once, and a tick that runs
+// late still sends what is due.
 //
 // Everything is gated by the push-notifications hidden feature
 // (models.FeaturePushNotifications), checked when subscribing and again on
@@ -80,9 +81,17 @@ var AllPushTypes = []string{
 }
 
 // KickoffReminderLead is how long before kick-off the reminder becomes due.
-// The tick runs every five minutes from cron-job.org, so the reminder
-// arrives at most this long before kick-off, usually a little less.
+// The tick runs every minute from cron-job.org, so the reminder arrives at
+// most this long before kick-off, usually a little less.
 const KickoffReminderLead = 30 * time.Minute
+
+// PredictionsOpenDelay is how long after the first team_assigned of a match
+// (Match.TeamAssignedNotifiedAt) the tick announces predictions_open. Sent
+// together, the two arrive in the same instant and a phone may only show the
+// last one; ten minutes apart, the teams notification is seen first. When
+// kick-off comes sooner than that, it is sent as soon as the roster allows,
+// since predictions close at kick-off.
+const PredictionsOpenDelay = 10 * time.Minute
 
 // RegistrationOpenWindow bounds how late a "sign-ups are open" notification
 // may still go out. A list that opened longer ago than this before any tick
@@ -132,9 +141,11 @@ type PushSubscriptionInput struct {
 	} `json:"keys"`
 }
 
-// PushSender delivers one encrypted payload to one subscription.
+// PushSender delivers one encrypted payload to one subscription. It returns
+// the push service's HTTP status (0 when no response was received), so every
+// send can be logged with what the push service answered.
 type PushSender interface {
-	Send(sub models.PushSubscription, payload []byte) error
+	Send(sub models.PushSubscription, payload []byte) (int, error)
 }
 
 type NotificationService struct {
@@ -306,6 +317,7 @@ func (s *NotificationService) send(groupID uuid.UUID, messages map[uuid.UUID]Pus
 	for _, sub := range subs {
 		message := messages[sub.PlayerID]
 		if optedOut[sub.PlayerID][message.Type] {
+			log.Printf("[push] %s skipped for player %s subscription %s: turned off", message.Type, sub.PlayerID, sub.ID)
 			continue
 		}
 		payload, err := json.Marshal(message)
@@ -313,15 +325,20 @@ func (s *NotificationService) send(groupID uuid.UUID, messages map[uuid.UUID]Pus
 			log.Printf("[push] could not encode message: %v", err)
 			continue
 		}
-		if err := s.Sender.Send(sub, payload); err != nil {
+		// Logged by ids only: the endpoint and keys are credentials.
+		status, err := s.Sender.Send(sub, payload)
+		if err != nil {
 			// A subscription whose endpoint is no longer allowed would fail
 			// on every dispatch, so it goes the same way as a gone one.
 			if errors.Is(err, ErrPushSubscriptionGone) || errors.Is(err, ErrInvalidPushSubscription) {
+				log.Printf("[push] %s to player %s subscription %s: HTTP %d, subscription no longer valid, deleted", message.Type, sub.PlayerID, sub.ID, status)
 				s.DB.Delete(&models.PushSubscription{}, "id = ?", sub.ID)
 				continue
 			}
-			log.Printf("[push] delivery to a subscription of player %s failed: %v", sub.PlayerID, err)
+			log.Printf("[push] %s to player %s subscription %s failed: HTTP %d: %v", message.Type, sub.PlayerID, sub.ID, status, err)
+			continue
 		}
+		log.Printf("[push] %s sent to player %s subscription %s: HTTP %d", message.Type, sub.PlayerID, sub.ID, status)
 	}
 }
 
@@ -462,33 +479,54 @@ func (s *NotificationService) rosterSaved(event RosterSavedEvent, now time.Time)
 			TeamName:  names[teamID],
 		}
 	}
+	if len(messages) == 0 {
+		return nil
+	}
+	// The first save that places anyone starts the predictions_open clock
+	// (see PredictionsOpenDelay). Later saves only move players: they still
+	// tell them, but the clock keeps its first value.
+	if _, err := s.claim(match.ID, "team_assigned_notified_at", now); err != nil {
+		log.Printf("[push] could not record the first team notification for match %s: %v", match.ID, err)
+	}
 	s.send(match.GroupID, messages)
-	return s.notifyPredictionsOpen(match, now)
+	return nil
+}
+
+// predictionsOpenDue reports whether the tick at now should announce
+// predictions_open for match: PredictionsOpenDelay after its first
+// team_assigned, or straight away when kick-off comes sooner than that.
+func predictionsOpenDue(match models.Match, now time.Time) bool {
+	if match.TeamAssignedNotifiedAt == nil || match.ScheduledAt == nil || !now.Before(*match.ScheduledAt) {
+		return false
+	}
+	due := match.TeamAssignedNotifiedAt.Add(PredictionsOpenDelay)
+	return !now.Before(due) || match.ScheduledAt.Before(due)
 }
 
 // notifyPredictionsOpen tells every current group member that predictions
-// are open, the first time a save before kick-off leaves both teams with a
-// player. A one-sided roster is not open yet (rosterFullyComposed), and the
-// claim means a later save — a player moved, a goal edited, the roster
-// emptied and filled again — does not send it a second time.
-func (s *NotificationService) notifyPredictionsOpen(match models.Match, now time.Time) error {
+// are open, once the match is due (predictionsOpenDue) and both teams have a
+// player. A one-sided roster is not open yet (rosterFullyComposed): the
+// match stays unclaimed and a later tick sends it once the roster is full.
+// The claim means nothing ever sends it a second time. It reports whether
+// this call sent it.
+func (s *NotificationService) notifyPredictionsOpen(match models.Match, now time.Time) (bool, error) {
 	details, err := s.Matches.GetMatchDetailsByID(match.ID, match.GroupID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !rosterFullyComposed(details.Teams) {
-		return nil
+		return false, nil
 	}
 	var memberIDs []uuid.UUID
 	if err := s.DB.Model(&models.GroupMembership{}).Where("group_id = ?", match.GroupID).Pluck("player_id", &memberIDs).Error; err != nil {
-		return err
+		return false, err
 	}
 	// Claimed after the reads, so a failure to load the roster or the
-	// members leaves the match unclaimed and the next save can retry.
-	// Two saves racing still send once: only one UPDATE matches IS NULL.
+	// members leaves the match unclaimed and the next tick can retry.
+	// Two ticks racing still send once: only one UPDATE matches IS NULL.
 	claimed, err := s.claim(match.ID, "predictions_open_notified_at", now)
 	if err != nil || !claimed {
-		return err
+		return false, err
 	}
 	s.send(match.GroupID, sameMessageFor(memberIDs, PushMessage{
 		Type:      PushTypePredictionsOpen,
@@ -497,7 +535,7 @@ func (s *NotificationService) notifyPredictionsOpen(match models.Match, now time
 		GroupName: s.groupName(match.GroupID),
 		KickoffAt: match.ScheduledAt,
 	}))
-	return nil
+	return true, nil
 }
 
 func (s *NotificationService) notifyResult(match models.Match) error {
@@ -577,6 +615,7 @@ func (s *NotificationService) notifyPredictionsSettled(match models.Match) error
 // TickResult counts what one Tick sent, for the scheduler's log.
 type TickResult struct {
 	RegistrationOpen int `json:"registration_open"`
+	PredictionsOpen  int `json:"predictions_open"`
 	KickoffReminders int `json:"kickoff_reminders"`
 }
 
@@ -604,6 +643,27 @@ func (s *NotificationService) Tick(now time.Time) (TickResult, error) {
 			log.Printf("[push] sign-ups-open notification for match %s failed: %v", match.ID, err)
 		}
 		result.RegistrationOpen++
+	}
+
+	var composed []models.Match
+	if err := s.DB.
+		Where("scheduled_at IS NOT NULL AND scheduled_at > ?", now).
+		Where("team_assigned_notified_at IS NOT NULL AND predictions_open_notified_at IS NULL").
+		Find(&composed).Error; err != nil {
+		return result, err
+	}
+	for _, match := range composed {
+		if !predictionsOpenDue(match, now) {
+			continue
+		}
+		sent, err := s.notifyPredictionsOpen(match, now)
+		if err != nil {
+			log.Printf("[push] predictions-open notification for match %s failed: %v", match.ID, err)
+			continue
+		}
+		if sent {
+			result.PredictionsOpen++
+		}
 	}
 
 	var starting []models.Match

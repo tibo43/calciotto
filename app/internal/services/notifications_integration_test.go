@@ -24,16 +24,16 @@ type fakePushSender struct {
 	gone map[string]bool
 }
 
-func (f *fakePushSender) Send(sub models.PushSubscription, payload []byte) error {
+func (f *fakePushSender) Send(sub models.PushSubscription, payload []byte) (int, error) {
 	if f.gone[sub.Endpoint] {
-		return services.ErrPushSubscriptionGone
+		return 410, services.ErrPushSubscriptionGone
 	}
 	var message services.PushMessage
 	if err := json.Unmarshal(payload, &message); err != nil {
-		return err
+		return 0, err
 	}
 	f.sent[sub.Endpoint] = append(f.sent[sub.Endpoint], message)
-	return nil
+	return 201, nil
 }
 
 func (f *fakePushSender) reset() { f.sent = map[string][]services.PushMessage{} }
@@ -208,22 +208,17 @@ func TestNotifications_Integration_TeamAssignedThenResult(t *testing.T) {
 	if len(aliceTeam) != 1 || aliceTeam[0].TeamName != env.teamA.Name {
 		t.Fatalf("Alice got %+v, want one team_assigned for %q", env.sender.sent[aliceEndpoint], env.teamA.Name)
 	}
-	// Both teams have a player, so predictions open in the same save, for
-	// every member who can receive a push — alongside the team notification,
-	// not instead of it.
-	aliceOpen := messagesOfType(env.sender.sent[aliceEndpoint], services.PushTypePredictionsOpen)
-	if len(aliceOpen) != 1 || aliceOpen[0].URL != services.MatchDeepLink(matchID) || aliceOpen[0].GroupName != env.groupName || aliceOpen[0].KickoffAt == nil {
-		t.Fatalf("Alice got %+v, want one predictions_open for the match", env.sender.sent[aliceEndpoint])
-	}
-	if len(env.sender.sent[aliceEndpoint]) != 2 {
-		t.Fatalf("Alice got %+v, want exactly team_assigned and predictions_open", env.sender.sent[aliceEndpoint])
+	// predictions_open is not part of the save any more: the tick sends it
+	// PredictionsOpenDelay later (see the PredictionsOpen tests).
+	if len(env.sender.sent[aliceEndpoint]) != 1 {
+		t.Fatalf("Alice got %+v, want only team_assigned from the save", env.sender.sent[aliceEndpoint])
 	}
 	bobTeam := messagesOfType(env.sender.sent[bobEndpoint], services.PushTypeTeamAssigned)
 	if len(bobTeam) != 1 || bobTeam[0].TeamName != env.teamB.Name || bobTeam[0].KickoffAt == nil || bobTeam[0].URL != services.MatchDeepLink(matchID) {
 		t.Fatalf("Bob got %+v, want one team_assigned for %q with kick-off and link", env.sender.sent[bobEndpoint], env.teamB.Name)
 	}
-	if len(messagesOfType(env.sender.sent[bobEndpoint], services.PushTypePredictionsOpen)) != 1 {
-		t.Fatalf("Bob got %+v, want predictions_open alongside the team", env.sender.sent[bobEndpoint])
+	if len(env.sender.sent[bobEndpoint]) != 1 {
+		t.Fatalf("Bob got %+v, want only team_assigned from the save", env.sender.sent[bobEndpoint])
 	}
 	if len(env.sender.sent[carolEndpoint]) != 0 {
 		t.Errorf("Carol, without the feature, got %+v", env.sender.sent[carolEndpoint])
@@ -403,10 +398,11 @@ func TestNotifications_Integration_FeatureRemovedAndGoneSubscriptions(t *testing
 }
 
 // TestNotifications_Integration_PredictionsOpenOnceThenSettledForPredictors
-// covers the two prediction notifications: they share the roster-save
-// trigger with team_assigned and result_recorded, they go out once, and the
-// settled one is only for players who placed a prediction — with that
-// prediction's own points.
+// covers the two prediction notifications: predictions_open comes from the
+// tick once the roster is full and PredictionsOpenDelay has passed since the
+// first team_assigned, predictions_settled from the result save; each goes
+// out once, and the settled one is only for players who placed a prediction
+// — with that prediction's own points.
 func TestNotifications_Integration_PredictionsOpenOnceThenSettledForPredictors(t *testing.T) {
 	env := newNotificationEnv(t)
 	alice, aliceEndpoint := env.member(t, "Alice", true) // roster, predicts the winner
@@ -440,35 +436,66 @@ func TestNotifications_Integration_PredictionsOpenOnceThenSettledForPredictors(t
 		return match.PredictionsOpenNotifiedAt
 	}
 
-	// One team still empty: predictions are not open, and nothing is claimed,
-	// so the save that completes the roster can still announce them.
+	teamNotifiedAt := func() *time.Time {
+		t.Helper()
+		var match models.Match
+		if err := env.tx.First(&match, "id = ?", matchID).Error; err != nil {
+			t.Fatalf("reload match: %v", err)
+		}
+		return match.TeamAssignedNotifiedAt
+	}
+	tick := func(at time.Time) services.TickResult {
+		t.Helper()
+		result, err := env.notifications.Tick(at)
+		if err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		return result
+	}
+
+	// One team still empty: the save tells Alice her team and starts the
+	// clock, but predictions are not open, so even a tick well past the
+	// delay sends nothing and claims nothing.
 	save([]models.TeamWithPlayers{{ID: env.teamA.ID, Players: roster(alice)}})
 	if got := env.types(aliceEndpoint); len(got) != 1 || got[0] != services.PushTypeTeamAssigned {
 		t.Fatalf("one-sided roster: Alice got %v, want only team_assigned", got)
 	}
-	if len(env.sender.sent[eveEndpoint])+len(env.sender.sent[carolEndpoint]) != 0 {
-		t.Fatalf("one-sided roster announced predictions: eve %+v carol %+v", env.sender.sent[eveEndpoint], env.sender.sent[carolEndpoint])
+	firstTeam := teamNotifiedAt()
+	if firstTeam == nil {
+		t.Fatal("the first team_assigned did not record team_assigned_notified_at")
+	}
+	env.sender.reset()
+	if result := tick(firstTeam.Add(services.PredictionsOpenDelay + time.Minute)); result.PredictionsOpen != 0 || len(env.sender.sent) != 0 {
+		t.Fatalf("one-sided roster announced predictions: %+v %+v", result, env.sender.sent)
 	}
 	if notifiedAt() != nil {
 		t.Fatal("one-sided roster claimed predictions_open")
 	}
 
-	env.sender.reset()
+	// Bob completes the roster. The save tells him his team and nothing
+	// else: predictions_open is the tick's, never the save's.
 	save([]models.TeamWithPlayers{
 		{ID: env.teamA.ID, Players: roster(alice)},
 		{ID: env.teamB.ID, Players: roster(bob)},
 	})
-	// Alice was already on her team, so she hears only that predictions
-	// opened. Bob was placed, so he hears both. Eve is not on the roster and
-	// Carol is not in this save either: every member with the feature gets
-	// predictions_open, whether or not they are playing.
-	if got := env.types(aliceEndpoint); len(got) != 1 || got[0] != services.PushTypePredictionsOpen {
-		t.Fatalf("Alice, already placed, got %v, want only predictions_open", got)
+	if got := env.types(bobEndpoint); len(got) != 1 || got[0] != services.PushTypeTeamAssigned {
+		t.Fatalf("Bob got %v from the save, want only team_assigned", got)
 	}
-	if got := env.types(bobEndpoint); len(got) != 2 || got[0] != services.PushTypePredictionsOpen || got[1] != services.PushTypeTeamAssigned {
-		t.Fatalf("Bob got %v, want predictions_open and team_assigned", got)
+	if len(env.sender.sent[aliceEndpoint])+len(env.sender.sent[eveEndpoint])+len(env.sender.sent[carolEndpoint]) != 0 {
+		t.Fatalf("the save announced predictions: %+v", env.sender.sent)
 	}
-	for _, endpoint := range []string{eveEndpoint, carolEndpoint} {
+	if got := teamNotifiedAt(); got == nil || !got.Equal(*firstTeam) {
+		t.Errorf("team_assigned_notified_at moved from %v to %v", firstTeam, got)
+	}
+
+	// The delay has long passed and the roster is now full: the next tick
+	// tells every member with the feature, whether or not they are playing.
+	env.sender.reset()
+	sentAt := firstTeam.Add(services.PredictionsOpenDelay + 2*time.Minute)
+	if result := tick(sentAt); result.PredictionsOpen != 1 {
+		t.Fatalf("tick result %+v, want one predictions_open", result)
+	}
+	for _, endpoint := range []string{aliceEndpoint, bobEndpoint, eveEndpoint, carolEndpoint} {
 		got := env.sender.sent[endpoint]
 		if len(got) != 1 || got[0].Type != services.PushTypePredictionsOpen || got[0].URL != services.MatchDeepLink(matchID) || got[0].GroupName != env.groupName || got[0].KickoffAt == nil {
 			t.Fatalf("member %s got %+v, want one predictions_open", endpoint, got)
@@ -481,18 +508,26 @@ func TestNotifications_Integration_PredictionsOpenOnceThenSettledForPredictors(t
 		t.Errorf("Dave, without the feature, got %+v", env.sender.sent[daveEndpoint])
 	}
 	firstClaim := notifiedAt()
-	if firstClaim == nil {
-		t.Fatal("composed roster did not claim predictions_open")
+	if firstClaim == nil || !firstClaim.Equal(sentAt) {
+		t.Fatalf("predictions_open_notified_at = %v, want the tick's time %v", firstClaim, sentAt)
 	}
 
-	// Same roster again: nobody moved, and predictions were already announced.
+	// Nothing sends it again: not a later tick, not the same roster saved
+	// again, not a player moved.
 	env.sender.reset()
+	if result := tick(sentAt.Add(time.Minute)); result.PredictionsOpen != 0 || len(env.sender.sent) != 0 {
+		t.Fatalf("a second tick sent %+v %+v", result, env.sender.sent)
+	}
 	save([]models.TeamWithPlayers{
 		{ID: env.teamA.ID, Players: roster(alice)},
 		{ID: env.teamB.ID, Players: roster(bob)},
 	})
 	if len(env.sender.sent) != 0 {
 		t.Fatalf("saving the same roster again sent %+v", env.sender.sent)
+	}
+	tick(sentAt.Add(2 * time.Minute))
+	if len(env.sender.sent) != 0 {
+		t.Fatalf("a tick after an unchanged save sent %+v", env.sender.sent)
 	}
 	if second := notifiedAt(); second == nil || !second.Equal(*firstClaim) {
 		t.Errorf("predictions_open claim moved from %v to %v", firstClaim, second)
@@ -791,6 +826,9 @@ func TestNotifications_Integration_SendRespectsEachPreference(t *testing.T) {
 		services.PushTypeTeamAssigned:     false,
 	})
 	saveRoster(teams, []uuid.UUID{alice}, []uuid.UUID{bob})
+	if _, err := env.notifications.Tick(time.Now().Add(services.PredictionsOpenDelay + time.Minute)); err != nil {
+		t.Fatalf("Tick (predictions open): %v", err)
+	}
 	env.wantTypes(t, aliceEndpoint, services.PushTypePredictionsOpen)
 	env.wantTypes(t, bobEndpoint, services.PushTypeTeamAssigned, services.PushTypePredictionsOpen)
 
@@ -802,6 +840,9 @@ func TestNotifications_Integration_SendRespectsEachPreference(t *testing.T) {
 		services.PushTypePredictionsOpen: false,
 	})
 	saveRoster(predictions, []uuid.UUID{alice}, []uuid.UUID{bob})
+	if _, err := env.notifications.Tick(time.Now().Add(services.PredictionsOpenDelay + time.Minute)); err != nil {
+		t.Fatalf("Tick (predictions open): %v", err)
+	}
 	env.wantTypes(t, aliceEndpoint, services.PushTypeTeamAssigned)
 	env.wantTypes(t, bobEndpoint, services.PushTypeTeamAssigned, services.PushTypePredictionsOpen)
 
@@ -925,5 +966,160 @@ func TestNotifications_Integration_MemberJoinedRespectsPreference(t *testing.T) 
 	}
 	if len(env.sender.sent[adminEndpoint]) != 0 {
 		t.Error("an admin who turned member_joined off was notified")
+	}
+}
+
+// predictionsEnv is a match with Alice and Bob subscribed, plus helpers to
+// save a roster, read the match's two bookkeeping columns and tick.
+type predictionsEnv struct {
+	*notificationEnv
+	matchID                    uuid.UUID
+	alice, bob                 uuid.UUID
+	aliceEndpoint, bobEndpoint string
+}
+
+func newPredictionsEnv(t *testing.T, kickoff time.Time) *predictionsEnv {
+	t.Helper()
+	env := newNotificationEnv(t)
+	p := &predictionsEnv{notificationEnv: env}
+	p.alice, p.aliceEndpoint = env.member(t, "Alice", true)
+	p.bob, p.bobEndpoint = env.member(t, "Bob", true)
+	p.matchID = env.scheduledMatch(t, kickoff, kickoff.Add(-72*time.Hour), 10)
+	return p
+}
+
+func (p *predictionsEnv) save(t *testing.T, sideA, sideB []uuid.UUID) {
+	t.Helper()
+	roster := func(ids []uuid.UUID) []models.PlayerCustom {
+		players := []models.PlayerCustom{}
+		for _, id := range ids {
+			players = append(players, models.PlayerCustom{ID: id})
+		}
+		return players
+	}
+	if err := p.matches.UpdateMatch(p.matchID, p.groupID, []models.TeamWithPlayers{
+		{ID: p.teamA.ID, Players: roster(sideA)},
+		{ID: p.teamB.ID, Players: roster(sideB)},
+	}); err != nil {
+		t.Fatalf("UpdateMatch: %v", err)
+	}
+}
+
+func (p *predictionsEnv) reload(t *testing.T) models.Match {
+	t.Helper()
+	var match models.Match
+	if err := p.tx.First(&match, "id = ?", p.matchID).Error; err != nil {
+		t.Fatalf("reload match: %v", err)
+	}
+	return match
+}
+
+func (p *predictionsEnv) tick(t *testing.T, at time.Time) int {
+	t.Helper()
+	p.sender.reset()
+	result, err := p.notifications.Tick(at)
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	return result.PredictionsOpen
+}
+
+// The ten minutes are counted from the first team_assigned: a tick one
+// minute short sends nothing, the first tick at or after it sends once, and
+// predictions_open_notified_at is that tick's time.
+func TestNotifications_Integration_PredictionsOpenWaitsForTheDelay(t *testing.T) {
+	p := newPredictionsEnv(t, time.Now().Add(9*time.Hour))
+	p.save(t, []uuid.UUID{p.alice}, []uuid.UUID{p.bob})
+	p.wantTypes(t, p.aliceEndpoint, services.PushTypeTeamAssigned)
+	p.wantTypes(t, p.bobEndpoint, services.PushTypeTeamAssigned)
+
+	first := p.reload(t).TeamAssignedNotifiedAt
+	if first == nil {
+		t.Fatal("team_assigned_notified_at not set by the first team_assigned")
+	}
+	if p.reload(t).PredictionsOpenNotifiedAt != nil {
+		t.Fatal("the save claimed predictions_open")
+	}
+
+	if sent := p.tick(t, first.Add(services.PredictionsOpenDelay-time.Minute)); sent != 0 || len(p.sender.sent) != 0 {
+		t.Fatalf("a tick before the delay sent %d: %+v", sent, p.sender.sent)
+	}
+	due := first.Add(services.PredictionsOpenDelay)
+	if sent := p.tick(t, due); sent != 1 {
+		t.Fatalf("the tick at the delay sent %d, want 1", sent)
+	}
+	p.wantTypes(t, p.aliceEndpoint, services.PushTypePredictionsOpen)
+	p.wantTypes(t, p.bobEndpoint, services.PushTypePredictionsOpen)
+	if got := p.reload(t).PredictionsOpenNotifiedAt; got == nil || !got.Equal(due) {
+		t.Fatalf("predictions_open_notified_at = %v, want %v", got, due)
+	}
+
+	if sent := p.tick(t, due.Add(time.Minute)); sent != 0 || len(p.sender.sent) != 0 {
+		t.Fatalf("a later tick sent again: %d %+v", sent, p.sender.sent)
+	}
+}
+
+// team_assigned_notified_at is the first save that told anyone their team:
+// a save that places nobody does not set it, and a later move still notifies
+// the moved player without changing it.
+func TestNotifications_Integration_TeamAssignedNotifiedAtIsSetOnce(t *testing.T) {
+	p := newPredictionsEnv(t, time.Now().Add(9*time.Hour))
+	p.save(t, nil, nil)
+	if got := p.reload(t).TeamAssignedNotifiedAt; got != nil {
+		t.Fatalf("an empty roster set team_assigned_notified_at to %v", got)
+	}
+
+	p.save(t, []uuid.UUID{p.alice}, []uuid.UUID{p.bob})
+	first := p.reload(t).TeamAssignedNotifiedAt
+	if first == nil {
+		t.Fatal("team_assigned_notified_at not set")
+	}
+
+	p.sender.reset()
+	p.save(t, []uuid.UUID{p.alice, p.bob}, nil)
+	p.wantTypes(t, p.aliceEndpoint)
+	p.wantTypes(t, p.bobEndpoint, services.PushTypeTeamAssigned)
+	if got := p.reload(t).TeamAssignedNotifiedAt; got == nil || !got.Equal(*first) {
+		t.Fatalf("team_assigned_notified_at moved from %v to %v", first, got)
+	}
+}
+
+// When kick-off is less than the delay after the first team_assigned,
+// predictions_open does not wait for it: the first tick that sees a full
+// roster sends it, and nothing is sent once kick-off has passed.
+func TestNotifications_Integration_PredictionsOpenBeforeAnEarlyKickoff(t *testing.T) {
+	kickoff := time.Now().Add(6 * time.Minute)
+	p := newPredictionsEnv(t, kickoff)
+	p.save(t, []uuid.UUID{p.alice}, nil)
+	first := p.reload(t).TeamAssignedNotifiedAt
+	if first == nil {
+		t.Fatal("team_assigned_notified_at not set")
+	}
+
+	// One side empty: not open yet, however early the kick-off.
+	if sent := p.tick(t, first.Add(time.Minute)); sent != 0 {
+		t.Fatalf("a one-sided roster sent predictions_open")
+	}
+
+	p.save(t, []uuid.UUID{p.alice}, []uuid.UUID{p.bob})
+	at := first.Add(2 * time.Minute)
+	if sent := p.tick(t, at); sent != 1 {
+		t.Fatalf("the first tick with a full roster before an early kick-off sent %d, want 1", sent)
+	}
+	p.wantTypes(t, p.aliceEndpoint, services.PushTypePredictionsOpen)
+	if got := p.reload(t).PredictionsOpenNotifiedAt; got == nil || !got.Equal(at) {
+		t.Fatalf("predictions_open_notified_at = %v, want %v", got, at)
+	}
+}
+
+func TestNotifications_Integration_PredictionsOpenNeverAfterKickoff(t *testing.T) {
+	kickoff := time.Now().Add(6 * time.Minute)
+	p := newPredictionsEnv(t, kickoff)
+	p.save(t, []uuid.UUID{p.alice}, []uuid.UUID{p.bob})
+	if sent := p.tick(t, kickoff.Add(time.Minute)); sent != 0 || len(p.sender.sent) != 0 {
+		t.Fatalf("a tick after kick-off sent predictions_open: %d %+v", sent, p.sender.sent)
+	}
+	if got := p.reload(t).PredictionsOpenNotifiedAt; got != nil {
+		t.Fatalf("predictions_open claimed after kick-off at %v", got)
 	}
 }
