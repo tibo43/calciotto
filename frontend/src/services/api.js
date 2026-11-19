@@ -694,6 +694,26 @@ export const completeGuide = async () => {
   await api.put('/players/me/guide');
 };
 
+// Preferred positions (design v2). The player's own, read and replaced on the
+// Account page; a refused PUT rejects with the server's reason in
+// error.response.data.error, as everywhere else.
+export const getMyPositions = async () => {
+  const response = await api.get('/players/me/positions');
+  return Array.isArray(response.data?.PreferredPositions) ? response.data.PreferredPositions : [];
+};
+
+export const updateMyPositions = async (positions) => {
+  const response = await api.put('/players/me/positions', { PreferredPositions: positions });
+  return Array.isArray(response.data?.PreferredPositions) ? response.data.PreferredPositions : [];
+};
+
+// Every position set in the match's group, as [{ PlayerID, PreferredPositions }].
+// Admin-only on the server (a member gets 403): only call it for an admin.
+export const getMatchPositions = async (matchId) => {
+  const response = await api.get(`/matches/${matchId}/positions`);
+  return Array.isArray(response.data) ? response.data : [];
+};
+
 // Push notifications (see services/pushNotifications.js). The public key is
 // '' when the backend has no VAPID keys configured.
 export const getPushPublicKey = async () => {

@@ -43,6 +43,14 @@ type Player struct {
 	TokenVersion     int           `gorm:"not null;default:0" json:"-"`
 	GuideCompletedAt *time.Time    `json:"-"`
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:PlayerID"`
+
+	// PreferredPositions (GK/DEF/MID/FWD, any number, canonical order) is
+	// private to the player and their group admins, so it is never part of
+	// this model's JSON: the player reads it through GET /players/me/positions
+	// and an admin through GET /matches/:id/positions. NOT NULL DEFAULT '{}'
+	// lets AutoMigrate add the column to an existing table without touching a
+	// single row's data — every existing player simply has no position.
+	PreferredPositions PreferredPositions `gorm:"type:text[];not null;default:'{}'" json:"-"`
 }
 
 // PlayerFeature turns a hidden feature on for one player: one row per

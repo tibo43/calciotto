@@ -79,6 +79,39 @@ test.describe('design v2 home and match', () => {
     expectEverythingStubbed(unstubbed);
   });
 
+  // Group admins only: each player's preferred positions after the name.
+  const matchPositions = [
+    [1, ['FWD']], [2, ['GK']], [3, ['DEF', 'MID']], [4, ['GK', 'DEF']],
+    [5, ['MID', 'FWD']], [6, ['FWD']], [7, ['DEF']],
+  ].map(([n, positions]) => ({ PlayerID: `bbbbbbbb-0000-4000-8000-0000000000${String(n).padStart(2, '0')}`, PreferredPositions: positions }));
+
+  test('played match, positions for an admin', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, `/matches/${PLAYED}`, { ...V2, matchPositions });
+    await expect(page.locator('.player', { hasText: 'Thibaut Fabre' }).locator('.pos-tag')).toHaveText('DEF · MID');
+    await expect(page.locator('.player', { hasText: 'Alessandro Moretti' }).locator('.pos-tag')).toHaveCount(0);
+    await expect(page).toHaveScreenshot('v2-match-played-positions.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('played match, positions for an admin @mobile', async ({ page }) => {
+    const { unstubbed } = await gotoApp(page, `/matches/${PLAYED}`, { ...V2, matchPositions, theme: 'dark' });
+    await expect(page.locator('.pos-tag')).toHaveCount(7);
+    await expect(page).toHaveScreenshot('v2-match-played-positions-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('played match, no positions for a member', async ({ page }) => {
+    const asked = [];
+    page.on('request', (request) => { if (request.url().endsWith('/positions')) asked.push(request.url()); });
+    const groups = data.groups.map((group) => ({ ...group, role: 'member' }));
+    const { unstubbed } = await gotoApp(page, `/matches/${PLAYED}`, { ...V2, groups, matchPositions });
+    await expect(page.getByText('MOTM vote closed', { exact: true })).toBeVisible();
+    await expect(page.locator('.pos-tag')).toHaveCount(0);
+    expect(asked).toEqual([]);
+    expectEverythingStubbed(unstubbed);
+  });
+
   test('played match, vote closed, dark', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, `/matches/${PLAYED}`, { ...V2, theme: 'dark' });
     await expect(page.getByText('MOTM vote closed', { exact: true })).toBeVisible();

@@ -69,6 +69,31 @@ async function splitTeams(page) {
   await expect(page.locator('.size-count')).toHaveText('6 v 5');
 }
 
+// Preferred positions of the 11 confirmed players (GET /matches/:id/positions,
+// admin-only), Riccardo Gallo with none.
+const POSITIONS_BY_NAME = {
+  'Andrea Conti': ['MID', 'FWD'], 'Marco Rossi': ['FWD'], 'Luca Bianchi': ['GK'], 'Matteo Ricci': ['FWD'],
+  'Federico Greco': ['DEF'], 'Alessandro Moretti': ['DEF', 'MID'], 'Giovanni Esposito': ['GK', 'DEF'],
+  'Davide Fontana': ['MID'], 'Simone Barbieri': ['DEF'], 'Stefano Marino': ['MID'],
+};
+const matchPositions = registrations
+  .filter((entry) => POSITIONS_BY_NAME[entry.Name])
+  .map((entry) => ({ PlayerID: entry.PlayerID, PreferredPositions: POSITIONS_BY_NAME[entry.Name] }));
+
+// After the split: one goalkeeper a side, each row's positions on the right,
+// and the per-team summary under the count (a multi-position player counts
+// in each of their positions).
+async function splitByPositions(page) {
+  await splitTeams(page);
+  const teams = page.locator('.compose-col').filter({ has: page.locator('.pos-summary') });
+  await expect(teams).toHaveCount(2);
+  for (const index of [0, 1]) {
+    await expect(teams.nth(index).locator('.pos-summary')).toContainText('GK 1 ·');
+  }
+  await expect(page.locator('.p-row', { hasText: 'Andrea Conti' }).locator('.pos-tag')).toHaveText('MID · FWD');
+  await expect(page.locator('.p-row', { hasText: 'Riccardo Gallo' }).locator('.pos-tag')).toHaveCount(0);
+}
+
 // Moves the first player of the second team onto the first through the
 // player's menu, with real clicks (a tap on a phone), then picks them again
 // so the menu is open for the screenshot.
@@ -177,6 +202,28 @@ test.describe('design v2 admin editing', () => {
     await splitTeams(page);
     await expect(page.getByText('The teams are uneven')).toHaveCount(0);
     await expect(page).toHaveScreenshot('v2-edit-teams-auto.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('teams, split by positions', async ({ page }) => {
+    const { unstubbed } = await openEdit(page, `${EDIT}?step=teams`, { matchPositions });
+    await splitByPositions(page);
+    await expect(page).toHaveScreenshot('v2-edit-teams-positions.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('teams, split by positions, dark', async ({ page }) => {
+    const { unstubbed } = await openEdit(page, `${EDIT}?step=teams`, { matchPositions, theme: 'dark' });
+    await splitByPositions(page);
+    await expect(page).toHaveScreenshot('v2-edit-teams-positions-dark.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('teams, split by positions @mobile', async ({ page }) => {
+    const { unstubbed } = await openEdit(page, `${EDIT}?step=teams`, { matchPositions });
+    await splitByPositions(page);
+    await expect(page).toHaveScreenshot('v2-edit-teams-positions-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
     expectEverythingStubbed(unstubbed);
   });
 

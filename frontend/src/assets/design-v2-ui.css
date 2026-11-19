@@ -343,3 +343,21 @@
 .design-v2 .ident .ident-name h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .design-v2 .ident .ident-gear{margin-left:auto;}
 .design-v2 .topbar .page-action{margin-left:auto;}
+
+/* Preferred positions. Account: four equal 44px toggles (mono 13px, outlined
+   when off, filled in the text colour with a ✓ when on — never the accent).
+   Match page and team editor, group admins only: a grey mono tag after the
+   name, which is the one to give way (…), and in the editor a summary line
+   under each team's count. */
+.design-v2 .pos-picks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:6px 0 0;}
+.design-v2 .pos-pick{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:44px;min-width:0;padding:0 4px;border:1px solid var(--v2-outline);border-radius:var(--v2-radius);background:transparent;color:var(--v2-text);font-family:var(--v2-font-label);font-size:13px;letter-spacing:0.08em;line-height:1;cursor:pointer;}
+.design-v2 .pos-pick.is-on{background:var(--v2-text);border-color:var(--v2-text);color:var(--v2-bg);}
+.design-v2 .pos-pick:disabled{opacity:0.5;cursor:default;}
+.design-v2 .pos-pick:focus-visible{outline:2px solid var(--v2-text);outline-offset:2px;}
+.design-v2 .pos-pick .tick{font-family:var(--v2-font-body),"Segoe UI Symbol","Apple Symbols",sans-serif;font-size:12px;}
+.design-v2 .account-positions .pos-help{margin-top:8px;}
+.design-v2 .nm-line{display:flex;align-items:baseline;gap:8px;min-width:0;flex:1 1 auto;}
+.design-v2 .nm-line .nm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.design-v2 .pos-tag{flex:none;font-family:var(--v2-font-label);font-size:10px;letter-spacing:0.06em;color:var(--v2-text-muted);white-space:nowrap;}
+.design-v2 .p-row.has-tag{grid-template-columns:28px minmax(0,1fr) auto;}
+.design-v2 .pos-summary{font-family:var(--v2-font-label);font-size:10px;letter-spacing:0.06em;color:var(--v2-text-muted);margin:-2px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
