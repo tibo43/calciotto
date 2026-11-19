@@ -227,14 +227,18 @@ type Match struct {
 	// see the match. Internal bookkeeping, never serialized.
 	RegistrationOpenNotifiedAt *time.Time `gorm:"type:timestamptz" json:"-"`
 	KickoffReminderNotifiedAt  *time.Time `gorm:"type:timestamptz" json:"-"`
-	// PredictionsOpenNotifiedAt records when the "predictions are open" push
-	// went out. That one is event-driven (the roster save that first leaves
-	// both teams with a player, before kick-off) rather than tick-driven, but
-	// it is claimed the same way — UPDATE ... WHERE IS NULL — so a later save
-	// does not announce it again. NULL on every match that predates the
-	// column is the right starting state: there is nothing to backfill, and
-	// the next such save announces it once. Internal bookkeeping, never
+	// TeamAssignedNotifiedAt records the first roster save that sent
+	// "you're playing for …" for this match (NotificationService.rosterSaved).
+	// It is set once: later team_assigned pushes (a player moved) still go
+	// out but never change it. It is what times predictions_open, which the
+	// tick sends PredictionsOpenDelay after it. Internal bookkeeping, never
 	// serialized.
+	TeamAssignedNotifiedAt *time.Time `gorm:"type:timestamptz" json:"-"`
+	// PredictionsOpenNotifiedAt records when the "predictions are open" push
+	// went out (NotificationService.Tick, PredictionsOpenDelay after
+	// TeamAssignedNotifiedAt, once both teams have a player). Claimed with
+	// UPDATE ... WHERE IS NULL, so it is sent once per match. Internal
+	// bookkeeping, never serialized.
 	PredictionsOpenNotifiedAt *time.Time `gorm:"type:timestamptz" json:"-"`
 	// CreatedAt is the moment this row was logged — GORM's usual
 	// auto-populate-on-create convention, like MatchRegistration.CreatedAt and
