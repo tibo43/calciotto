@@ -14,11 +14,11 @@
     <template v-else-if="page === 'home' || page === 'group'">
       <section v-if="page === 'home'" class="ident">
         <div class="avatar" aria-hidden="true">{{ initials }}</div>
-        <div>
+        <div class="ident-name">
           <p class="label">Account</p>
           <h1>{{ displayName(record.Name) }}</h1>
-          <router-link class="account-link" to="/profile/account">Manage account</router-link>
         </div>
+        <GearLink class="group-gear ident-gear" to="/profile/account" label="Manage account" />
       </section>
       <section v-if="page === 'group' && (currentGroup?.description || currentGroup?.website_url)" class="sec">
         <div class="sec-head"><h2>About this group</h2></div>
@@ -66,16 +66,11 @@
             </h3>
             <p class="meta">{{ row.Played }} matches · {{ row.Points }} pts</p>
           </router-link>
-          <router-link v-if="roleOf(row) === 'admin'" class="group-gear" :to="`/profile/groups/${row.GroupID}/settings`" aria-label="Group settings">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          </router-link>
+          <GearLink v-if="roleOf(row) === 'admin'" class="group-gear" :to="`/profile/groups/${row.GroupID}/settings`" label="Group settings" />
           <router-link class="chev-link" :to="`/profile/groups/${row.GroupID}`" aria-hidden="true" tabindex="-1">
             <svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 2l4 4-4 4"/></svg>
           </router-link>
         </div>
-      </section>
-      <section v-else-if="isAdmin" class="sec">
-        <router-link class="btn btn-ghost" :to="`/profile/groups/${groupId}/settings`">Group settings</router-link>
       </section>
       <section v-if="page === 'home'" class="sec">
         <div class="sec-head"><h2>Settings</h2></div>
@@ -287,6 +282,7 @@ import { getInstallTracker, INSTALL_STATE, PWA_INSTALL_FEATURE } from '@/service
 import { buildGroupInviteShareText } from '@/services/shareMessages';
 import InvitationV2 from './InvitationV2.vue';
 import GroupDetailsForm from './GroupDetailsForm.vue';
+import GearLink from './GearLink.vue';
 
 const PREFERENCE_GROUPS = [
   { label: 'Match', items: [
@@ -320,7 +316,7 @@ function playerIdFromToken() {
 
 export default {
   name: 'ProfileV2',
-  components: { GroupDetailsForm, InvitationV2, PasskeysV2 },
+  components: { GearLink, GroupDetailsForm, InvitationV2, PasskeysV2 },
   inject: {
     v2Context: { default: () => ({}) },
     openGuide: { default: () => {} },
@@ -496,6 +492,7 @@ export default {
     this.v2Context.hide = false;
     this.v2Context.pageTitle = '';
     this.v2Context.backTo = '';
+    this.v2Context.pageAction = null;
     this.v2Context.confirming = false;
   },
   methods: {
@@ -542,6 +539,10 @@ export default {
       this.v2Context.backTo = this.page === 'settings'
         ? `/profile/groups/${this.groupId}`
         : '/profile';
+      // The gear to the group's settings, on the title row; admins only.
+      this.v2Context.pageAction = this.page === 'group' && this.isAdmin
+        ? { to: `/profile/groups/${this.groupId}/settings`, label: 'Group settings' }
+        : null;
     },
     async load() {
       this.loading = true;

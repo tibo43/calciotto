@@ -60,9 +60,10 @@ async function mountProfile({
   getInstallTracker.mockReturnValue({ state: () => installState, subscribe: () => () => {}, prompt: vi.fn() });
 
   const router = { replace: vi.fn() };
+  const context = { confirming: false, pageAction: null };
   const wrapper = mount(ProfileV2, {
     global: {
-      provide: { v2Context: { confirming: false } },
+      provide: { v2Context: context },
       mocks: { $route: { name: routeName, params: { id: GROUP_ID }, fullPath: '/profile' }, $router: router },
       stubs: { 'router-link': { template: '<a :data-to="to"><slot /></a>', props: ['to'] }, TeamColourPicker: true }
     }
@@ -196,5 +197,49 @@ describe('ProfileV2.vue invitation and passkeys', () => {
     expect(wrapper.findComponent({ name: 'PasskeysV2' }).exists()).toBe(true);
     const headings = wrapper.findAll('h2').map((h) => h.text());
     expect(headings.indexOf('Passkeys')).toBe(headings.indexOf('Password') + 1);
+  });
+
+  describe('gear entries', () => {
+    it('shows the account gear on the profile home, with no text link', async () => {
+      const { wrapper } = await mountProfile({ routeName: 'Profile' });
+      const gear = wrapper.find('.ident a[data-to="/profile/account"]');
+      expect(gear.exists()).toBe(true);
+      expect(gear.attributes('aria-label')).toBe('Manage account');
+      expect(gear.attributes('title')).toBe('Manage account');
+      expect(gear.classes()).toContain('group-gear');
+      expect(gear.text()).toBe('');
+      expect(wrapper.text()).not.toContain('Manage account');
+    });
+
+    it('keeps the group-row gear for admins only', async () => {
+      const admin = await mountProfile({ routeName: 'Profile' });
+      const gear = admin.wrapper.find(`.group-row a[data-to="/profile/groups/${GROUP_ID}/settings"]`);
+      expect(gear.attributes('aria-label')).toBe('Group settings');
+      expect(gear.attributes('title')).toBe('Group settings');
+      const member = await mountProfile({ routeName: 'Profile', groupRole: 'member' });
+      expect(member.wrapper.find('.group-row .group-gear').exists()).toBe(false);
+    });
+
+    it('sets the page action on the group page for an admin, with no body button', async () => {
+      const { wrapper } = await mountProfile({ routeName: 'ProfileGroup', groupRole: 'admin' });
+      expect(wrapper.vm.v2Context.pageAction).toEqual({ to: `/profile/groups/${GROUP_ID}/settings`, label: 'Group settings' });
+      expect(wrapper.find('a.btn').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('Group settings');
+    });
+
+    it('sets no page action for a non-admin, nor on other pages', async () => {
+      const member = await mountProfile({ routeName: 'ProfileGroup', groupRole: 'member' });
+      expect(member.wrapper.vm.v2Context.pageAction).toBeNull();
+      const home = await mountProfile({ routeName: 'Profile' });
+      expect(home.wrapper.vm.v2Context.pageAction).toBeNull();
+    });
+
+    it('clears the page action on leave', async () => {
+      const { wrapper } = await mountProfile({ routeName: 'ProfileGroup', groupRole: 'admin' });
+      const context = wrapper.vm.v2Context;
+      expect(context.pageAction).not.toBeNull();
+      wrapper.unmount();
+      expect(context.pageAction).toBeNull();
+    });
   });
 });

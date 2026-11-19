@@ -37,6 +37,8 @@
             </div>
             </template>
           </div>
+          <GearLink v-if="v2Context.pageTitle && v2Context.pageAction" class="btn btn-ghost hero-manage page-action"
+            :to="v2Context.pageAction.to" :label="v2Context.pageAction.label" />
           <nav v-if="isAuthenticatedRoute && !v2Context.pageTitle" class="dnav" aria-label="Main">
             <router-link v-for="item in v2NavItems" :key="item.to" :to="item.to" class="nav-text" :class="{ 'is-on': item.on }"
               :aria-current="item.on ? 'page' : null">
@@ -229,6 +231,7 @@
 <script>
 import { computed } from 'vue';
 import PlayerGuide from '@/components/PlayerGuide.vue';
+import GearLink from '@/components/v2/GearLink.vue';
 import { clearToken, completeGuide, getSessionKey, logoutSession } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta, prefersDarkTheme } from '@/services/theme';
@@ -249,7 +252,7 @@ const STARTUP_WAIT_MS = 2000;
 
 export default {
   name: 'App',
-  components: { PlayerGuide },
+  components: { GearLink, PlayerGuide },
   provide() {
     return {
       designV2On: computed(() => this.designV2),
@@ -269,7 +272,7 @@ export default {
       guideMode: null,
       savingGuide: false,
       guideError: '',
-      v2Context: { label: '', confirming: false, pickingCsc: false, hide: false, pageTitle: '', backTo: '', groups: [], seasons: [], groupId: '', season: '', onGroup: null, onSeason: null },
+      v2Context: { label: '', confirming: false, pickingCsc: false, hide: false, pageTitle: '', backTo: '', pageAction: null, groups: [], seasons: [], groupId: '', season: '', onGroup: null, onSeason: null },
       designV2Request: 0
     };
   },
