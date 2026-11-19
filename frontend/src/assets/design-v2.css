@@ -15,6 +15,7 @@
   --v2-on-accent: #141a33;
   --v2-bg: #eef0f7;
   --v2-surface: #ffffff;
+  --v2-surface-2: #e3e7f2;
   --v2-text: #141a33;
   --v2-text-muted: #5c6578;
   --v2-rule: rgba(20, 26, 51, 0.14);
@@ -31,6 +32,7 @@
 .design-v2.dark-mode {
   --v2-bg: #141a33;
   --v2-surface: #1c2440;
+  --v2-surface-2: #252f52;
   --v2-text: #eef0f7;
   --v2-text-muted: #8b93ad;
   --v2-rule: rgba(238, 240, 247, 0.12);

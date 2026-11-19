@@ -1,50 +1,50 @@
 <template>
   <section class="sec invitation-v2">
     <div class="sec-head"><h2>Invitation</h2></div>
-    <div class="invite-card">
+    <CollapsibleCardV2 title="Invite players" :summary="code ? 'Code active' : 'No active code'">
+      <template #icon>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+          stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1" /></svg>
+      </template>
       <template v-if="code">
-        <p class="label">Invite code</p>
         <p class="invite-code">{{ code }}</p>
-        <p class="label invite-note">Works until you make a new one or revoke it</p>
-        <div class="invite-buttons">
-          <ShareButton class="btn btn-ghost" :text="shareText" label="Share invite" />
-          <button class="btn btn-ghost" type="button" @click="copy">{{ copied ? 'Copied' : 'Copy' }}</button>
+        <p class="label invite-note">Works until you renew it</p>
+        <div class="invite-tiles withdraw-wrap">
+          <ShareButton class="invite-tile" icon :text="shareText" label="Share" />
+          <button class="invite-tile" type="button" @click="copy">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4H4v12h4" /></svg>
+            <span>{{ copied ? 'Copied' : 'Copy' }}</span>
+          </button>
+          <button class="invite-tile" type="button" :disabled="saving"
+            :aria-expanded="asking.toString()" @click="ask">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5" /></svg>
+            <span>Renew</span>
+          </button>
+          <div v-if="asking" class="confirm-pop" role="dialog" aria-labelledby="invite-confirm-title">
+            <h3 id="invite-confirm-title">Renew the code?</h3>
+            <p class="ref">The old code and invite link stop working.</p>
+            <div class="confirm-actions actions">
+              <button class="btn btn-ghost" type="button" @click="cancel">Cancel</button>
+              <button class="btn btn-ghost" type="button" :disabled="saving" @click="renew">Renew</button>
+            </div>
+          </div>
         </div>
       </template>
-      <template v-else>
-        <p class="label">No active invite</p>
-        <p class="invite-empty">Make a code to invite players.</p>
-        <div class="invite-buttons">
-          <button class="btn btn-ghost" type="button" :disabled="saving" @click="update('rotate')">Make a code</button>
-        </div>
-      </template>
-      <p v-if="error" class="scope invite-error" role="alert">{{ error }}</p>
-    </div>
-    <div v-if="code" class="invite-links withdraw-wrap">
-      <button class="invite-link" type="button" :disabled="saving"
-        :aria-expanded="(asking === 'rotate').toString()" @click="ask('rotate')">
-        <span aria-hidden="true">↻</span> New code
-      </button>
-      <button class="invite-link" type="button" :disabled="saving"
-        :aria-expanded="(asking === 'revoke').toString()" @click="ask('revoke')">Revoke</button>
-      <div v-if="asking" class="confirm-pop" role="dialog" aria-labelledby="invite-confirm-title">
-        <h3 id="invite-confirm-title">{{ prompt.title }}</h3>
-        <p class="ref">{{ prompt.text }}</p>
-        <div class="confirm-actions actions">
-          <button class="btn btn-ghost" type="button" @click="cancel">Cancel</button>
-          <button class="btn" :class="prompt.danger ? 'btn-danger' : 'btn-ghost'" type="button" :disabled="saving"
-            @click="update(asking)">{{ prompt.action }}</button>
-        </div>
+      <div v-else class="invite-empty">
+        <p class="scope">Make a code to let new players join.</p>
+        <button class="btn btn-ghost" type="button" :disabled="saving" @click="renew">Make a code</button>
       </div>
-    </div>
+      <p v-if="error" class="scope invite-error" role="alert">{{ error }}</p>
+    </CollapsibleCardV2>
   </section>
   <div v-if="asking" class="confirm-scrim" @click="cancel"></div>
   <div v-if="asking" class="confirm-sheet" role="dialog" aria-labelledby="invite-sheet-title">
-    <h3 id="invite-sheet-title">{{ prompt.title }}</h3>
-    <p class="ref">{{ prompt.text }}</p>
+    <h3 id="invite-sheet-title">Renew the code?</h3>
+    <p class="ref">The old code and invite link stop working.</p>
     <div class="confirm-actions">
-      <button class="btn" :class="prompt.danger ? 'btn-danger' : 'btn-ghost'" type="button" :disabled="saving"
-        @click="update(asking)">{{ prompt.action }}</button>
+      <button class="btn btn-ghost" type="button" :disabled="saving" @click="renew">Renew</button>
       <button class="btn btn-ghost" type="button" @click="cancel">Cancel</button>
     </div>
   </div>
@@ -52,20 +52,16 @@
 
 <script>
 import ShareButton from '@/components/ShareButton.vue';
-import { rotateGroupInvitation, revokeGroupInvitation } from '@/services/api';
-
-const PROMPTS = {
-  rotate: { title: 'Make a new code?', text: 'The current code stops working.', action: 'New code', danger: false },
-  revoke: { title: 'Revoke the invite?', text: 'Nobody can join with this code anymore.', action: 'Revoke', danger: true },
-};
+import CollapsibleCardV2 from './CollapsibleCardV2.vue';
+import { rotateGroupInvitation } from '@/services/api';
 
 const COPIED_MS = 2000;
 
 // Design v2 invitation block for group settings. The v1 modal keeps
-// InvitationActions.vue; both call the same two endpoints.
+// InvitationActions.vue; v2 can only renew the code.
 export default {
   name: 'InvitationV2',
-  components: { ShareButton },
+  components: { CollapsibleCardV2, ShareButton },
   props: {
     groupId: { type: String, required: true },
     code: { type: String, default: '' },
@@ -73,12 +69,7 @@ export default {
   },
   emits: ['updated', 'confirming'],
   data() {
-    return { saving: false, error: '', asking: '', copied: false, copiedTimer: null };
-  },
-  computed: {
-    prompt() {
-      return PROMPTS[this.asking] || PROMPTS.rotate;
-    },
+    return { saving: false, error: '', asking: false, copied: false, copiedTimer: null };
   },
   watch: {
     asking(value) {
@@ -93,12 +84,12 @@ export default {
     if (this.asking) this.$emit('confirming', false);
   },
   methods: {
-    ask(kind) {
+    ask() {
       this.error = '';
-      this.asking = kind;
+      this.asking = true;
     },
     cancel() {
-      this.asking = '';
+      this.asking = false;
     },
     resetCopied() {
       clearTimeout(this.copiedTimer);
@@ -119,20 +110,19 @@ export default {
         this.error = "Couldn't copy the code. Select it and copy it by hand.";
       }
     },
-    async update(kind) {
+    async renew() {
       if (this.saving) return;
       const groupId = this.groupId;
       this.saving = true;
       this.error = '';
       try {
-        const change = kind === 'revoke' ? revokeGroupInvitation : rotateGroupInvitation;
-        const invitation = await change(groupId);
+        const invitation = await rotateGroupInvitation(groupId);
         if (this.groupId === groupId) this.$emit('updated', invitation);
       } catch {
         this.error = 'Could not update the invitation.';
       } finally {
         this.saving = false;
-        this.asking = '';
+        this.asking = false;
       }
     },
   },
@@ -140,74 +130,80 @@ export default {
 </script>
 
 <style scoped>
-.invite-card {
-  padding: 20px;
-  background: var(--v2-surface);
-  border-radius: var(--v2-radius-lg, 16px);
-  min-width: 0;
-}
-
 .invite-code {
-  margin: 6px 0 4px;
+  padding: 14px 16px 2px;
   font-family: var(--v2-font-label);
-  font-size: 28px;
-  line-height: 1.2;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.25;
+  letter-spacing: 0.14em;
   color: var(--v2-text);
   overflow-wrap: anywhere;
   user-select: all;
 }
 
-.invite-empty {
-  margin: 6px 0 0;
-  color: var(--v2-text);
+.invite-note {
+  padding: 0 16px;
 }
 
-.invite-buttons {
+.invite-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
+@media (min-width: 600px) {
+  .invite-tiles {
+    grid-template-columns: repeat(3, 120px);
+  }
+}
+
+/* :deep because Share is ShareButton's own <button>. */
+.invite-tiles :deep(.invite-tile) {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 20px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  height: 68px;
+  padding: 0 4px;
+  border-radius: 10px;
+  background: var(--v2-surface-2);
+  color: var(--v2-text);
+  font-family: var(--v2-font-label);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
 }
 
-/* :deep because Share invite is ShareButton's own <button>. Equal halves
-   on a phone, capped so they don't stretch across a wide card. */
-.invite-buttons :deep(.btn) {
-  flex: 1 1 0;
-  min-width: 0;
-  max-width: 200px;
-  min-height: 44px;
-  padding: 0 14px;
+.invite-tiles :deep(.invite-tile svg) {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.invite-tiles :deep(.invite-tile:focus-visible) {
+  outline: 2px solid var(--v2-text);
+  outline-offset: 2px;
+}
+
+.invite-tiles :deep(.invite-tile[disabled]) {
+  opacity: 0.45;
+}
+
+.invite-empty {
+  padding: 14px 16px 16px;
+}
+
+.invite-empty .scope {
+  margin: 0 0 12px;
 }
 
 .invite-error {
-  margin: 12px 0 0;
-}
-
-.invite-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 20px;
-  margin-top: 4px;
-}
-
-.invite-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  min-width: 44px;
-  padding: 0;
-  color: var(--v2-text-muted);
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.invite-link:hover {
-  color: var(--v2-text);
-}
-
-.invite-link[disabled] {
-  opacity: 0.45;
+  margin: 0;
+  padding: 0 16px 16px;
 }
 </style>
