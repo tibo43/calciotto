@@ -237,6 +237,7 @@ import {
   knownFeatureStatus, loadFeatureStatus, rememberGuideCompletion, resetFeatureStatus
 } from '@/services/featureStatus';
 import { ensureDesignV2Fonts, hasDesignV2, removeDesignV2Fonts } from '@/services/designV2';
+import { shouldUseLoginV2 } from '@/services/loginV2';
 
 // Routes reachable without a token — nothing group-related is shown there.
 const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
@@ -376,7 +377,15 @@ export default {
       const requestId = ++this.designV2Request;
       if (!this.isAuthenticatedRoute) {
         this.checkingDesignV2 = false;
-        this.applyDesignV2(false);
+        // Public pages stay v1, except the login page on a browser that
+        // shouldUseLoginV2() picks (LoginGate.vue follows designV2On).
+        const loginV2 = this.$route.name === 'Login' && shouldUseLoginV2();
+        this.applyDesignV2(loginV2);
+        if (loginV2) {
+          this.guideMode = null;
+          this.guideError = '';
+          this.savingGuide = false;
+        }
         return;
       }
       const sessionKey = getSessionKey();

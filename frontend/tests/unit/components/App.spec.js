@@ -182,6 +182,43 @@ describe('App.vue design-v2', () => {
     expect(wrapper.classes()).toContain('design-v2');
   });
 
+  it('keeps public pages on v1 without the v2 login mark', async () => {
+    const { wrapper } = await mountAt('/login');
+    await flushPromises();
+    expect(wrapper.classes()).not.toContain('design-v2');
+    expect(wrapper.find('.topbar').exists()).toBe(false);
+    expect(getMyFeatureStatus).not.toHaveBeenCalled();
+  });
+
+  it('paints the v2 shell on the login page only, on a browser with the mark', async () => {
+    localStorage.setItem('calciotto-login-v2', '1');
+    const { wrapper, router } = await mountAt('/login');
+    await flushPromises();
+    expect(wrapper.classes()).toContain('design-v2');
+    expect(document.getElementById('design-v2-fonts')).not.toBeNull();
+    expect(wrapper.find('.topbar .brand').exists()).toBe(true);
+    expect(wrapper.find('.topbar .ctx-pair').exists()).toBe(false);
+    expect(wrapper.find('.theme-toggle').exists()).toBe(false);
+    expect(wrapper.find('.tabbar').exists()).toBe(false);
+    expect(getMyFeatureStatus).not.toHaveBeenCalled();
+    for (const page of ['/signup', '/forgot-password', '/reset-password']) {
+      await router.push(page);
+      await flushPromises();
+      expect(wrapper.classes()).not.toContain('design-v2');
+    }
+  });
+
+  it('shows the v2 login after a design-v2 player logs out', async () => {
+    getMyFeatureStatus.mockResolvedValue({ features: ['design-v2'] });
+    const { wrapper } = await mountAt('/');
+    await flushPromises();
+    localStorage.setItem('calciotto-login-v2', '1'); // written by api.js from that answer
+    await wrapper.vm.logout();
+    await flushPromises();
+    expect(wrapper.vm.$route.name).toBe('Login');
+    expect(wrapper.classes()).toContain('design-v2');
+  });
+
   it('ignores a features response that resolves after logout', async () => {
     const features = deferred();
     getMyFeatureStatus.mockReturnValue(features.promise);
