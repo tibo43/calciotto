@@ -77,6 +77,26 @@ test.describe('design v2 profile', () => {
     expectEverythingStubbed(unstubbed);
   });
 
+  test('group, not admin', async ({ page }) => {
+    const member = groupsWithDetails.map((group) => ({ ...group, role: 'member' }));
+    const { unstubbed } = await openProfile(page, GROUP, { groups: member });
+    await expect(page.getByRole('link', { name: WEBSITE_LABEL })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Group settings' })).toHaveCount(0);
+    await expect(page).toHaveScreenshot('v2-profile-group-member.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('profile, long name @mobile', async ({ page }) => {
+    const long = JSON.parse(JSON.stringify(stats));
+    long.Overall.Name = 'Maximilien Dumoulin-Castellanos';
+    const { unstubbed } = await openProfile(page, '/profile', { playerStats: long });
+    await expect(page.getByRole('heading', { name: 'Maximilien Dumoulin-Castellanos' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Manage account' })).toBeVisible();
+    await expect(page).toHaveScreenshot('v2-profile-long-name-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
   test('group @mobile', async ({ page }) => {
     const { unstubbed } = await openProfile(page, GROUP, { groups: groupsWithDetails });
     await expect(page.getByRole('link', { name: 'Group settings' })).toBeVisible();

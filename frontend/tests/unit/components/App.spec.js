@@ -2,6 +2,7 @@ import { shallowMount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import App from '@/App.vue';
 import PlayerGuide from '@/components/PlayerGuide.vue';
+import GearLink from '@/components/v2/GearLink.vue';
 import { getMyFeatureStatus, getSessionKey, clearToken, completeGuide } from '@/services/api';
 import { resetFeatureStatus } from '@/services/featureStatus';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
@@ -355,6 +356,22 @@ describe('App.vue v2 season selector', () => {
   afterEach(() => {
     document.getElementById('design-v2-fonts')?.remove();
     vi.restoreAllMocks();
+  });
+
+  it('shows the page action as a gear on the title row, and drops it when cleared', async () => {
+    const { wrapper } = await mountAt('/');
+    await flushPromises();
+    expect(wrapper.findComponent(GearLink).exists()).toBe(false);
+    wrapper.vm.v2Context.pageTitle = 'Giovedi';
+    wrapper.vm.v2Context.pageAction = { to: '/profile/groups/g/settings', label: 'Group settings' };
+    await wrapper.vm.$nextTick();
+    const gear = wrapper.findComponent(GearLink);
+    expect(gear.exists()).toBe(true);
+    expect(gear.props()).toEqual({ to: '/profile/groups/g/settings', label: 'Group settings' });
+    expect(gear.classes()).toEqual(expect.arrayContaining(['hero-manage', 'page-action']));
+    wrapper.vm.v2Context.pageAction = null;
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findComponent(GearLink).exists()).toBe(false);
   });
 
   it('shows a disabled No season yet control when the group has no seasons, in the same place', async () => {
