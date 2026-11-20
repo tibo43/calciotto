@@ -46,25 +46,56 @@ describe('buildNotification', () => {
     });
   });
 
-  it('settles a prediction with the score and the points earned or lost', () => {
+  it('settles a prediction with the winner and the points earned or lost', () => {
     expect(buildNotification({
       type: 'predictions_settled',
-      score: [{ team: 'Black', goals: 3 }, { team: 'White', goals: 1 }],
+      score: [{ team: 'Bianco', goals: 5 }, { team: 'Nero', goals: 3 }],
       points: (1 / 0.3) - 1
     })).toEqual({
       title: 'Predictions settled',
-      body: 'Final score: Black 3 – White 1. You earned 2.33 points.'
+      body: 'Bianco won! You earned 2.33 points.'
     });
     expect(buildNotification({
       type: 'predictions_settled',
-      score: [{ team: 'Black', goals: 1 }, { team: 'White', goals: 1 }],
+      score: [{ team: 'Bianco', goals: 5 }, { team: 'Nero', goals: 3 }],
       points: -1
-    }).body).toBe('Final score: Black 1 – White 1. You lost 1 point.');
+    }).body).toBe('Bianco won! You lost 1 point.');
+    expect(buildNotification({
+      type: 'predictions_settled',
+      score: [{ team: 'Bianco', goals: 0 }, { team: 'Nero', goals: 2 }],
+      points: 1.2
+    }).body).toBe('Nero won! You earned 1.20 points.');
+  });
+
+  it('says it is a draw when the goals are level', () => {
+    expect(buildNotification({
+      type: 'predictions_settled',
+      score: [{ team: 'Bianco', goals: 1 }, { team: 'Nero', goals: 1 }],
+      points: 1.5
+    }).body).toBe("It's a draw! You earned 1.50 points.");
+    expect(buildNotification({
+      type: 'predictions_settled',
+      score: [{ team: 'Bianco', goals: 0 }, { team: 'Nero', goals: 0 }],
+      points: -1
+    }).body).toBe("It's a draw! You lost 1 point.");
+  });
+
+  it('never repeats the score in the settled notification', () => {
+    const { body } = buildNotification({
+      type: 'predictions_settled',
+      score: [{ team: 'Bianco', goals: 5 }, { team: 'Nero', goals: 3 }],
+      points: 2
+    });
+    expect(body).not.toContain('Final score');
+    expect(body).not.toMatch(/\d+ – \d+|5|3/);
+  });
+
+  it('shows the points alone without a usable score', () => {
     expect(buildNotification({ type: 'predictions_settled', points: 1.5 }).body)
       .toBe('You earned 1.50 points.');
-    expect(buildNotification({ type: 'predictions_settled', points: -1.5 }).body)
+    expect(buildNotification({ type: 'predictions_settled', score: [], points: -1.5 }).body)
       .toBe('You lost 1.50 points.');
-    expect(buildNotification({ type: 'predictions_settled', points: 1 }).body)
+    expect(buildNotification({ type: 'predictions_settled', score: [{ team: 'Bianco', goals: 2 }], points: 1 }).body)
       .toBe('You earned 1 point.');
     expect(buildNotification({ type: 'predictions_settled', points: 2 }).body)
       .toBe('You earned 2 points.');

@@ -44,6 +44,20 @@ function formatScore(score) {
   return (score || []).map((line) => `${line.team} ${line.goals}`).join(' – ');
 }
 
+// The result half of a settled prediction, without repeating the score the
+// result notification already showed: "Bianco won! " with the real name of
+// the team that scored more, "It's a draw! " when the top scores are level,
+// and nothing when the score is missing or unusable.
+function formatOutcome(score) {
+  const lines = (Array.isArray(score) ? score : [])
+    .filter((line) => line && Number.isFinite(Number(line.goals)));
+  if (lines.length < 2) return '';
+  const top = Math.max(...lines.map((line) => Number(line.goals)));
+  const leaders = lines.filter((line) => Number(line.goals) === top);
+  if (leaders.length > 1) return "It's a draw! ";
+  return leaders[0].team ? `${leaders[0].team} won! ` : '';
+}
+
 // The points half of a settled prediction. A gain or a zero is "You earned
 // 2.33 points."; a loss is "You lost 1 point." — the absolute value, no
 // minus. A whole number drops the decimals; anything else keeps two. The
@@ -91,14 +105,11 @@ function buildNotification(data) {
         body: 'Vote for your Man of the Match.',
       };
     }
-    case 'predictions_settled': {
-      const score = formatScore(data.score);
-      const points = formatPointsSentence(data.points);
+    case 'predictions_settled':
       return {
         title: 'Predictions settled',
-        body: score ? `Final score: ${score}. ${points}` : points,
+        body: formatOutcome(data.score) + formatPointsSentence(data.points),
       };
-    }
     case 'member_joined':
       return {
         title: `${data.playerName || 'Someone'} joined ${data.groupName || 'your group'}`,

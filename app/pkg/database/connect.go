@@ -127,6 +127,11 @@ func withSchemaMigrationLock(db *gorm.DB, fn func(*gorm.DB) error) error {
 }
 
 func applySchema(db *gorm.DB) error {
+	// Before AutoMigrate, which would add the column without the backfill.
+	if err := AddPredictionsSettledNotifiedAt(db); err != nil {
+		return err
+	}
+
 	// Auto-migration des modèles pour créer les tables
 	// Match's four scheduling columns (added with the sign-up feature) need no
 	// backfill of their own: they are all nullable, and NULL is exactly the
@@ -223,6 +228,45 @@ func applySchema(db *gorm.DB) error {
 	}
 
 	return BackfillResultRecordedAt(db)
+}
+
+// AddPredictionsSettledNotifiedAt adds matches.predictions_settled_notified_at
+// to an existing matches table and backfills it in the same transaction, so
+// the column can never be there without its backfill, even if the process
+// dies halfway. A database that already has the column, or has no matches
+// table yet (a fresh one, which AutoMigrate creates with the column), is
+// left to AutoMigrate.
+func AddPredictionsSettledNotifiedAt(db *gorm.DB) error {
+	migrator := db.Migrator()
+	if !migrator.HasTable(&models.Match{}) || migrator.HasColumn(&models.Match{}, "PredictionsSettledNotifiedAt") {
+		return nil
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS predictions_settled_notified_at timestamptz`).Error; err != nil {
+			return err
+		}
+		return BackfillPredictionsSettledNotifiedAt(tx)
+	})
+}
+
+// BackfillPredictionsSettledNotifiedAt marks every match whose result is
+// already recorded as settled-and-notified. Until this column existed, the
+// score save itself sent predictions_settled; now the tick sends it
+// PredictionsSettledDelay after ResultRecordedAt to every match whose
+// predictions_settled_notified_at is NULL. Without this, the first tick
+// after the deploy would announce again every result recorded in the last
+// PredictionsSettledWindow (the tick's own bound, which already leaves
+// older results alone). It runs only with the statement that adds the
+// column (AddPredictionsSettledNotifiedAt), never on a later start: there,
+// a NULL on a recorded result is a notification still waiting for its
+// tick, and filling it would swallow it. Each match gets its own
+// result_recorded_at, the closest record of when it was settled.
+func BackfillPredictionsSettledNotifiedAt(db *gorm.DB) error {
+	return db.Exec(`
+		UPDATE matches SET predictions_settled_notified_at = result_recorded_at
+		WHERE result_recorded_at IS NOT NULL
+		  AND predictions_settled_notified_at IS NULL
+	`).Error
 }
 
 // BackfillResultRecordedAt marks old scheduled matches as recorded.

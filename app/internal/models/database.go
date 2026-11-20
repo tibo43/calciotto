@@ -248,6 +248,16 @@ type Match struct {
 	// UPDATE ... WHERE IS NULL, so it is sent once per match. Internal
 	// bookkeeping, never serialized.
 	PredictionsOpenNotifiedAt *time.Time `gorm:"type:timestamptz" json:"-"`
+	// PredictionsSettledNotifiedAt records when the "predictions settled"
+	// push went out (NotificationService.Tick, PredictionsSettledDelay after
+	// ResultRecordedAt, which is the clock: set once by the first score
+	// save, it is also when result_recorded went out). Claimed with UPDATE
+	// ... WHERE IS NULL, so it is sent once per match; also set, without
+	// sending, on a match nobody predicted. Every match whose result was
+	// already recorded when the column was added is backfilled
+	// (database.BackfillPredictionsSettledNotifiedAt): those were settled by
+	// the save itself. Internal bookkeeping, never serialized.
+	PredictionsSettledNotifiedAt *time.Time `gorm:"type:timestamptz" json:"-"`
 	// CreatedAt is the moment this row was logged — GORM's usual
 	// auto-populate-on-create convention, like MatchRegistration.CreatedAt and
 	// MatchVote.CreatedAt. It was originally added as the Man of the Match
