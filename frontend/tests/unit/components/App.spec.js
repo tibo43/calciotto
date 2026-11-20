@@ -106,29 +106,35 @@ describe('App.vue shell', () => {
     expect(console.error).toHaveBeenCalled();
   });
 
-  it.each(['/signup', '/forgot-password', '/reset-password'])(
-    'keeps %s on the original page styling, with no request',
+  it.each(['/login', '/signup', '/forgot-password', '/reset-password'])(
+    'paints %s in the v2 shell, with no menu, no theme toggle and no request',
     async (path) => {
       const { wrapper } = await mountAt(path);
       await flushPromises();
-      expect(wrapper.classes()).not.toContain('design-v2');
-      expect(wrapper.find('.top-navbar .theme-toggle').exists()).toBe(true);
+      expect(wrapper.classes()).toContain('design-v2');
+      expect(wrapper.find('.topbar .brand').exists()).toBe(true);
+      expect(wrapper.find('.topbar .ctx-pair').exists()).toBe(false);
+      expect(wrapper.find('.top-navbar').exists()).toBe(false);
+      expect(wrapper.find('.theme-toggle').exists()).toBe(false);
+      expect(wrapper.find('.tabbar').exists()).toBe(false);
       expect(getMyFeatureStatus).not.toHaveBeenCalled();
     }
   );
 
-  it('switches the class with the page, without refetching on the way back', async () => {
+  it('keeps the class from page to page, without refetching on the way back', async () => {
     const { wrapper, router } = await mountAt('/');
     await flushPromises();
     expect(wrapper.classes()).toContain('design-v2');
 
     await router.push('/signup');
     await flushPromises();
-    expect(wrapper.classes()).not.toContain('design-v2');
+    expect(wrapper.classes()).toContain('design-v2');
+    expect(wrapper.find('.tabbar').exists()).toBe(false);
 
     await router.push('/');
     await flushPromises();
     expect(wrapper.classes()).toContain('design-v2');
+    expect(wrapper.find('.tabbar').exists()).toBe(true);
     expect(getMyFeatureStatus).toHaveBeenCalledTimes(1);
   });
 
@@ -142,17 +148,6 @@ describe('App.vue shell', () => {
     await flushPromises();
 
     expect(getMyFeatureStatus).toHaveBeenCalledTimes(1);
-  });
-
-  it('paints the v2 shell on the login page, with no menu and no request', async () => {
-    const { wrapper } = await mountAt('/login');
-    await flushPromises();
-    expect(wrapper.classes()).toContain('design-v2');
-    expect(wrapper.find('.topbar .brand').exists()).toBe(true);
-    expect(wrapper.find('.topbar .ctx-pair').exists()).toBe(false);
-    expect(wrapper.find('.theme-toggle').exists()).toBe(false);
-    expect(wrapper.find('.tabbar').exists()).toBe(false);
-    expect(getMyFeatureStatus).not.toHaveBeenCalled();
   });
 
   it('ignores a features response that resolves after logout', async () => {

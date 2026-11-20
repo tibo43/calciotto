@@ -101,7 +101,7 @@ test.describe('login', () => {
   test('login v2 wrong password goes to the toast', async ({ page }) => {
     const { unstubbed } = await openLogin(page);
     await page.getByRole('button', { name: 'Log in', exact: true }).click();
-    await expect(page.locator('.toast-message.error')).toContainText('invalid email or password');
+    await expect(page.locator('.toast-message.error')).toContainText('Invalid email or password.');
     await expect(page.locator('main [role="alert"]')).toHaveCount(0);
     await expect(page).toHaveURL(/\/login$/);
     expectEverythingStubbed(unstubbed);
@@ -140,6 +140,9 @@ test.describe('login', () => {
     const height = page.viewportSize().height;
     expect(Math.round(height - (box.y + box.height))).toBe(12);
     expect(Math.round(box.x)).toBe(12);
+    const close = await toast.locator('.toast-close').boundingBox();
+    expect(Math.round(close.width)).toBe(44);
+    expect(Math.round(close.height)).toBe(44);
     await expect(page).toHaveScreenshot('login-v2-passkey-error-mobile.png');
     await expectNoHorizontalOverflow(page);
     expectEverythingStubbed(unstubbed);

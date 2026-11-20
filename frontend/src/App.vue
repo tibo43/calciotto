@@ -1,9 +1,9 @@
 <template>
-  <div id="app" :class="{ 'dark-mode': isDarkMode, 'design-v2': designV2 }">
+  <div id="app" class="design-v2" :class="{ 'dark-mode': isDarkMode }">
     <PlayerGuide v-if="guideMode" :required="guideMode === 'required'" :saving="savingGuide"
       :dark="isDarkMode" :error="guideError" @finish="finishGuide" @dismiss="closeGuide" @skip="skipGuide" />
-    <div v-else class="app-container" :class="{ wrap: designV2, 'is-confirming': designV2 && v2Context.confirming, 'is-picking-csc': designV2 && v2Context.pickingCsc }">
-        <header v-if="designV2" class="topbar">
+    <div v-else class="app-container wrap" :class="{ 'is-confirming': v2Context.confirming, 'is-picking-csc': v2Context.pickingCsc }">
+        <header class="topbar">
           <div class="topbar-left">
             <template v-if="v2Context.pageTitle">
               <router-link class="back" :to="v2Context.backTo || '/profile'" aria-label="Back">
@@ -48,40 +48,12 @@
           <!-- No theme toggle here: in v2 the theme is a setting, on the
                Account page (ProfileV2), not a control on every page. -->
         </header>
-        <!-- Signup, forgot password and reset password have no v2 version
-             yet: they keep the original top bar (brand and theme toggle). -->
-        <nav v-if="!designV2" class="top-navbar" :class="{ 'scrolled': isScrolled }">
-          <div class="nav-container">
-            <div class="nav-brand" @click="goHome">
-              <img class="brand-logo" :src="isDarkMode ? '/icons/icon-192.png' : '/icons/logo-light.png'"
-                alt="Calciotto">
-            </div>
-            <div class="nav-actions">
-              <button
-                class="theme-toggle"
-                @click="toggleTheme"
-                :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'"
-              >
-                <transition name="theme-icon" mode="out-in">
-                  <svg v-if="isDarkMode" key="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="5"/>
-                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-                  </svg>
-                  <svg v-else key="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                  </svg>
-                </transition>
-              </button>
-            </div>
-          </div>
-        </nav>
-
         <!-- Main Content -->
         <main class="main-content" :class="{ 'no-top-bar-on-mobile': isAuthenticatedRoute }">
           <router-view />
         </main>
 
-        <nav v-if="designV2 && isAuthenticatedRoute" class="tabbar" aria-label="Main">
+        <nav v-if="isAuthenticatedRoute" class="tabbar" aria-label="Main">
           <router-link v-for="item in v2NavItems" :key="item.to" :to="item.to" class="nav-ico" :class="{ 'is-on': item.on }"
             :aria-current="item.on ? 'page' : null">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="item.icon" /></svg>
@@ -106,10 +78,6 @@ import {
 // Routes reachable without a token — nothing group-related is shown there.
 const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
 
-// Public pages that have no v2 version yet: they keep the original styling
-// (no design-v2 class) and the original top bar.
-const V1_ROUTE_NAMES = ['Signup', 'ForgotPassword', 'ResetPassword'];
-
 export default {
   name: 'App',
   components: { GearLink, PlayerGuide },
@@ -121,7 +89,6 @@ export default {
   },
   data() {
     return {
-      isScrolled: false,
       isDarkMode: prefersDarkTheme(),
       guideMode: null,
       savingGuide: false,
@@ -139,9 +106,6 @@ export default {
     // read as the logged-in app shell instead of its own view.
     isAuthenticatedRoute() {
       return this.isAuthenticatedRouteName(this.$route.name);
-    },
-    designV2() {
-      return !V1_ROUTE_NAMES.includes(this.$route.name);
     },
     isV2Home() {
       // Only the home itself: a match page is not a tab of the menu, so it
@@ -194,20 +158,8 @@ export default {
     stopPushIfAppUninstalled();
 
     syncThemeColorMeta(this.isDarkMode);
-
-    // Add scroll listener
-    window.addEventListener('scroll', this.handleScroll);
-  },
-  beforeUnmount() {
-    window.removeEventListener('scroll', this.handleScroll);
   },
   methods: {
-    goHome() {
-      this.$router.push('/');
-    },
-    handleScroll() {
-      this.isScrolled = window.scrollY > 20;
-    },
     toggleTheme() {
       this.isDarkMode = !this.isDarkMode;
       localStorage.setItem('calciotto-theme', this.isDarkMode ? 'dark' : 'light');
@@ -339,91 +291,6 @@ export default {
   color: var(--text-primary);
 }
 
-/* Navigation Styles - Component-specific */
-.top-navbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--navbar-height);
-  background-color: rgba(248, 250, 252, 0.95);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border-color);
-  transition: all var(--transition-smooth);
-  z-index: 1000;
-}
-
-.dark-mode .top-navbar {
-  background-color: rgba(15, 23, 42, 0.95);
-}
-
-.top-navbar.scrolled {
-  box-shadow: var(--shadow-md);
-  background-color: rgba(248, 250, 252, 0.98);
-}
-
-.dark-mode .top-navbar.scrolled {
-  background-color: rgba(15, 23, 42, 0.98);
-}
-
-.nav-container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 0 1.5rem;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.nav-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  cursor: pointer;
-  transition: transform var(--transition-fast);
-}
-
-.nav-brand:hover {
-  transform: scale(1.05);
-}
-
-.brand-logo {
-  display: block;
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-}
-
-.nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.theme-toggle {
-  background: none;
-  border: none;
-  padding: 0.5rem;
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all var(--transition-fast);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.theme-toggle:hover {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.theme-toggle svg {
-  width: 20px;
-  height: 20px;
-}
-
 /* Main Content */
 .app-container {
   background-color: var(--bg-secondary);
@@ -450,47 +317,7 @@ export default {
   transform: translateY(-20px);
 }
 
-.theme-icon-enter-active,
-.theme-icon-leave-active {
-  transition: all var(--transition-fast);
-}
-
-.theme-icon-enter-from {
-  opacity: 0;
-  transform: rotate(-90deg) scale(0.8);
-}
-
-.theme-icon-leave-to {
-  opacity: 0;
-  transform: rotate(90deg) scale(0.8);
-}
-
-/* Mobile Responsive: everything (brand, Matches/Profile, logout, theme
-   toggle) stays on one row instead of opening a separate dropdown menu —
-   the nav links just drop their text label and become icon-only, matching
-   the existing icon-only actions, rather than being hidden off-screen
-   behind a hamburger toggle. */
 @media (max-width: 768px) {
-  .nav-container {
-    padding: 0 1rem;
-  }
-
-  /* No logo on a phone: the installed app already has it on the home
-     screen, and the bar there only exists on the public pages. */
-  .nav-brand {
-    display: none;
-  }
-
-  /* With the logo gone, the actions are the bar's only item on a public
-     page; space-between would otherwise put them on the left. */
-  .nav-actions {
-    margin-left: auto;
-  }
-
-  .nav-actions {
-    gap: 0.25rem;
-  }
-
   .main-content.no-top-bar-on-mobile {
     margin-top: 0;
     min-height: 100vh;

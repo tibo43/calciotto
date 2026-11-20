@@ -172,17 +172,17 @@ const routes = [
   {
     path: '/signup',
     name: 'Signup',
-    component: () => import('@/components/Signup.vue')
+    component: () => import('@/components/v2/SignupV2.vue')
   },
   {
     path: '/forgot-password',
     name: 'ForgotPassword',
-    component: () => import('@/components/ForgotPassword.vue')
+    component: () => import('@/components/v2/ForgotPasswordV2.vue')
   },
   {
     path: '/reset-password',
     name: 'ResetPassword',
-    component: () => import('@/components/ResetPassword.vue')
+    component: () => import('@/components/v2/ResetPasswordV2.vue')
   }
 ];
 

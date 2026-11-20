@@ -1,0 +1,67 @@
+/* The public auth pages (LoginV2, SignupV2, ForgotPasswordV2,
+   ResetPasswordV2) share this layout, each as <main class="page is-auth
+   auth-v2">: a 360px column on web, the full width on a phone. */
+@media (min-width: 900px) {
+  .auth-v2.page.is-auth {
+    max-width: 360px;
+  }
+}
+
+.auth-title {
+  font-family: var(--v2-font-display);
+  font-weight: 800;
+  font-size: 40px;
+  line-height: 0.95;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.auth-lead {
+  margin: 8px 0 28px;
+  font-size: 15px;
+  color: var(--v2-text-muted);
+}
+
+.auth-notice {
+  margin: -12px 0 24px;
+  font-size: 14px;
+  color: var(--v2-text-muted);
+}
+
+form .btn-block {
+  min-height: 48px;
+}
+
+.auth-links {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.auth-links a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* No tab bar on these pages: the phone toast sits 12px from the bottom. */
+@media (max-width: 899px) {
+  .auth-v2 :deep(.toast-container.toast-bottom) {
+    bottom: 12px;
+  }
+
+  .auth-v2 :deep(.toast-message) {
+    margin-bottom: 0;
+  }
+
+  /* Room under the last link for a two-line toast, so scrolling to the end
+     always shows it. */
+  .auth-v2.has-toast-room.page.is-auth {
+    padding-bottom: 96px;
+  }
+}

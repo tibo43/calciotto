@@ -87,7 +87,7 @@ describe('LoginV2.vue', () => {
     const { wrapper, push } = mountLogin();
     await fillAndSubmit(wrapper);
     await flushPromises();
-    expect(toast(wrapper)).toEqual({ message: 'invalid email or password', type: 'error' });
+    expect(toast(wrapper)).toEqual({ message: 'Invalid email or password.', type: 'error' });
     expect(wrapper.find('[role="alert"]').exists()).toBe(false);
     expect(push).not.toHaveBeenCalled();
   });
