@@ -684,22 +684,50 @@ type TickResult struct {
 	MotmAnnounced      int `json:"motm_announced"`
 }
 
-// Tick sends every time-driven notification that is due at now.
+// Tick sends every time-driven notification that is due at now. Each type is
+// its own step: one that fails (a query error) is logged and reported, and
+// the others still run, so one broken query can't silence every
+// notification. The error joins every failed step, so the scheduler still
+// sees a 500 and the counts of what did go out are kept.
 func (s *NotificationService) Tick(now time.Time) (TickResult, error) {
 	var result TickResult
+	steps := []struct {
+		name string
+		run  func() error
+	}{
+		{PushTypeRegistrationOpen, func() error { return s.tickRegistrationOpen(now, &result) }},
+		{PushTypePredictionsOpen, func() error { return s.tickPredictionsOpen(now, &result) }},
+		{PushTypePredictionsSettled, func() error { return s.tickPredictionsSettled(now, &result) }},
+		{PushTypeKickoffReminder, func() error { return s.tickKickoffReminders(now, &result) }},
+		{PushTypeMotmAnnounced, func() error {
+			sent, err := s.tickMotm(now)
+			result.MotmAnnounced = sent
+			return err
+		}},
+	}
+	var errs []error
+	for _, step := range steps {
+		if err := step.run(); err != nil {
+			log.Printf("[push] tick: %s failed: %v", step.name, err)
+			errs = append(errs, fmt.Errorf("%s: %w", step.name, err))
+		}
+	}
+	return result, errors.Join(errs...)
+}
 
+func (s *NotificationService) tickRegistrationOpen(now time.Time, result *TickResult) error {
 	var opening []models.Match
 	if err := s.DB.
 		Where("scheduled_at IS NOT NULL AND scheduled_at > ?", now).
 		Where("registration_opens_at <= ? AND registration_opens_at > ?", now, now.Add(-RegistrationOpenWindow)).
 		Where("registrations_closed_at IS NULL AND registration_open_notified_at IS NULL").
 		Find(&opening).Error; err != nil {
-		return result, err
+		return err
 	}
 	for _, match := range opening {
 		claimed, err := s.claim(match.ID, "registration_open_notified_at", now)
 		if err != nil {
-			return result, err
+			return err
 		}
 		if !claimed {
 			continue
@@ -709,13 +737,16 @@ func (s *NotificationService) Tick(now time.Time) (TickResult, error) {
 		}
 		result.RegistrationOpen++
 	}
+	return nil
+}
 
+func (s *NotificationService) tickPredictionsOpen(now time.Time, result *TickResult) error {
 	var composed []models.Match
 	if err := s.DB.
 		Where("scheduled_at IS NOT NULL AND scheduled_at > ?", now).
 		Where("team_assigned_notified_at IS NOT NULL AND predictions_open_notified_at IS NULL").
 		Find(&composed).Error; err != nil {
-		return result, err
+		return err
 	}
 	for _, match := range composed {
 		if !predictionsOpenDue(match, now) {
@@ -730,13 +761,16 @@ func (s *NotificationService) Tick(now time.Time) (TickResult, error) {
 			result.PredictionsOpen++
 		}
 	}
+	return nil
+}
 
+func (s *NotificationService) tickPredictionsSettled(now time.Time, result *TickResult) error {
 	var settled []models.Match
 	if err := s.DB.
 		Where("scheduled_at IS NOT NULL AND result_recorded_at IS NOT NULL AND predictions_settled_notified_at IS NULL").
 		Where("result_recorded_at <= ? AND result_recorded_at > ?", now.Add(-PredictionsSettledDelay), now.Add(-PredictionsSettledWindow)).
 		Find(&settled).Error; err != nil {
-		return result, err
+		return err
 	}
 	for _, match := range settled {
 		if !predictionsSettledDue(match, now) {
@@ -751,18 +785,21 @@ func (s *NotificationService) Tick(now time.Time) (TickResult, error) {
 			result.PredictionsSettled++
 		}
 	}
+	return nil
+}
 
+func (s *NotificationService) tickKickoffReminders(now time.Time, result *TickResult) error {
 	var starting []models.Match
 	if err := s.DB.
 		Where("scheduled_at > ? AND scheduled_at <= ?", now, now.Add(KickoffReminderLead)).
 		Where("kickoff_reminder_notified_at IS NULL").
 		Find(&starting).Error; err != nil {
-		return result, err
+		return err
 	}
 	for _, match := range starting {
 		claimed, err := s.claim(match.ID, "kickoff_reminder_notified_at", now)
 		if err != nil {
-			return result, err
+			return err
 		}
 		if !claimed {
 			continue
@@ -772,10 +809,7 @@ func (s *NotificationService) Tick(now time.Time) (TickResult, error) {
 		}
 		result.KickoffReminders++
 	}
-
-	motm, err := s.tickMotm(now)
-	result.MotmAnnounced = motm
-	return result, err
+	return nil
 }
 
 // claim marks a match's notification as sent, and reports whether this call
