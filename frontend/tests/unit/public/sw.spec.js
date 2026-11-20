@@ -1,8 +1,9 @@
 import { createRequire } from 'node:module';
+import { STAR_OF_THE_MATCH } from '@/services/v2Home';
 
 // The notification wording lives in public/sw.js (see its comment); the file
 // exports it for exactly this test.
-const { buildNotification } = createRequire(import.meta.url)('../../../public/sw.js');
+const { buildNotification, MOTM_TEXT } = createRequire(import.meta.url)('../../../public/sw.js');
 
 const KICKOFF = '2026-09-06T19:00:00Z';
 const kickoffText = new Date(KICKOFF).toLocaleString('en-US', {
@@ -11,6 +12,10 @@ const kickoffText = new Date(KICKOFF).toLocaleString('en-US', {
 const kickoffTime = new Date(KICKOFF).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
 describe('buildNotification', () => {
+  it("names the award like the v2 screens (its copy of STAR_OF_THE_MATCH)", () => {
+    expect(MOTM_TEXT.name).toBe(STAR_OF_THE_MATCH);
+  });
+
   it('announces open sign-ups with the group and kick-off', () => {
     expect(buildNotification({ type: 'registration_open', groupName: 'Calciotto Milano', kickoffAt: KICKOFF })).toEqual({
       title: 'Sign-ups are open',

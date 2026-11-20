@@ -58,14 +58,18 @@ function formatOutcome(score) {
   return leaders[0].team ? `${leaders[0].team} won! ` : '';
 }
 
-// Every word of the motm_announced notification (the Man of the Match vote,
-// shown to players as the "Star of the Match"), in one place so it can be
-// renamed here alone (the settings label is in
-// src/services/notificationLabels.js).
+// The design v2 name of the Man of the Match award, and every word of the
+// motm_announced notification built on it. This worker is served as is from
+// public/, outside the bundle, so it cannot import STAR_OF_THE_MATCH from
+// src/services/v2Home.js: `name` is a copy, and tests/unit/public/sw.spec.js
+// fails if the two differ. The result_recorded push uses it too.
+const MOTM_NAME = 'Star of the Match';
 const MOTM_TEXT = {
-  winnerTitle: "You're the Star of the Match!",
-  voterTitle: 'Star of the Match',
-  voterTitleTie: 'Stars of the Match',
+  name: MOTM_NAME,
+  winnerTitle: `You're the ${MOTM_NAME}!`,
+  voterTitle: MOTM_NAME,
+  // The plural, on a tie.
+  voterTitleTie: MOTM_NAME.replace(/^Star\b/, 'Stars'),
   body: 'See the game.',
 };
 
@@ -123,7 +127,7 @@ function buildNotification(data) {
         title: score ? `Final score: ${score}` : 'The result is in',
         // The design v2 calls the award the Star of the Match; v1 keeps
         // its name.
-        body: data.designV2 ? 'Vote for your Star of the Match.' : 'Vote for your Man of the Match.',
+        body: `Vote for your ${data.designV2 ? MOTM_TEXT.name : 'Man of the Match'}.`,
       };
     }
     case 'predictions_settled':
@@ -195,5 +199,5 @@ self.addEventListener('notificationclick', (event) => {
 
 // Lets the unit tests import the wording without a service worker around.
 if (typeof module === 'object' && module.exports) {
-  module.exports = { buildNotification };
+  module.exports = { buildNotification, MOTM_TEXT };
 }

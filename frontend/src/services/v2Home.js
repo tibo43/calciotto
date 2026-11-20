@@ -4,7 +4,10 @@ import { isMotmVotingOpen } from './motmVoting';
 
 // What the design v2 calls the Man of the Match award, everywhere it shows
 // it (the code keeps the motm names, and v1 keeps "Man of the Match" and
-// "MOTM"). One place, so the name can change here alone.
+// "MOTM"). One place, so the name can change here alone: the settings
+// label (notificationLabels.js) imports it. public/sw.js, outside the
+// bundle, keeps a copy (MOTM_TEXT.name) that tests/unit/public/sw.spec.js
+// pins to this one.
 export const STAR_OF_THE_MATCH = 'Star of the Match';
 // The short label, where space is tight: the Rankings tab and the profile
 // stat. Sentences keep the full name.
