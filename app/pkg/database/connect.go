@@ -62,6 +62,22 @@ func appDSN() string {
 	)
 }
 
+// appDialector opens the app's pool with pgx's simple protocol, so no
+// statement is ever prepared on the server. By default pgx prepares and
+// caches every query per connection, and in production that connection is
+// Neon's pooler (DATABASE_URL), which shares a prepared statement between
+// every client sending the same query text. After a migration adds a column,
+// a `SELECT *` prepared before it fails on every run with "cached plan must
+// not change result type" (SQLSTATE 0A000), until the pooler's own server
+// connections are recycled; a redeploy doesn't clear it. That is what took
+// the notifications tick down after #76 added matches.motm_notified_at. The
+// cost is re-planning each query, negligible at this app's traffic. The
+// migration connection (DATABASE_URL_UNPOOLED, see migrate) only runs DDL and
+// is closed after startup, so it keeps the default.
+func appDialector(dsn string) gorm.Dialector {
+	return postgres.New(postgres.Config{DSN: dsn, PreferSimpleProtocol: true})
+}
+
 // migrate applies the schema. When a separate direct URL is configured it opens
 // its own short-lived connection for the DDL and closes it again, so exactly one
 // pool — the app's — outlives startup; otherwise it reuses the pool it's given.
@@ -330,7 +346,7 @@ func InitLocalPerfDB() (*gorm.DB, error) {
 }
 
 func initDB(dsn, unpooled string) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(appDialector(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}

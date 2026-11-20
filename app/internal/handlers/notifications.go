@@ -151,7 +151,9 @@ func (h *NotificationHandler) Tick(c *gin.Context) {
 	}
 	result, err := h.Service.Tick(time.Now())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Still a 500, so the scheduler reports it, but every other step ran:
+		// sent says what went out anyway.
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "sent": result})
 		return
 	}
 	c.JSON(http.StatusOK, result)
