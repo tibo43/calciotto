@@ -1,6 +1,6 @@
-// The login page: today's Login.vue, and LoginV2.vue on a browser that
-// carries the v2 login mark (services/loginV2.js). No session, so the only
-// API calls are the ones a test makes on purpose.
+// The login page (LoginV2.vue, every browser's since design v2 became the
+// default). No session, so the only API calls are the ones a test makes on
+// purpose.
 
 const { test, expect } = require('@playwright/test');
 const { expectEverythingStubbed, expectNoHorizontalOverflow } = require('./fixtures/app');
@@ -11,10 +11,10 @@ const API = 'http://127.0.0.1:8080';
 const SESSION_API = '**/api';
 const PASSKEY_ERROR = 'Could not log in with a passkey. Try again or use your password.';
 
-// mark: the v2 login mark; passkey: the passkey login hint; device: what
+// passkey: the passkey login hint; device: what
 // navigator.credentials.get does ('wait' never answers, 'cancel' rejects
 // like a dismissed prompt). The theme follows the emulated device scheme.
-async function openLogin(page, { mark = true, passkey = true, dark = false, device = null, width } = {}) {
+async function openLogin(page, { passkey = true, dark = false, device = null, width } = {}) {
   const unstubbed = [];
   for (const origin of [API, SESSION_API]) {
     await page.route(`${origin}/**`, async (route) => {
@@ -32,14 +32,13 @@ async function openLogin(page, { mark = true, passkey = true, dark = false, devi
   }));
   if (width) await page.setViewportSize({ width, height: page.viewportSize().height });
   await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
-  await page.addInitScript(({ mark, passkey, device }) => {
-    if (mark) localStorage.setItem('calciotto-login-v2', '1');
+  await page.addInitScript(({ passkey, device }) => {
     if (passkey) localStorage.setItem('calciotto-passkey-login', '1');
     if (device === 'wait') navigator.credentials.get = () => new Promise(() => {});
     if (device === 'cancel') {
       navigator.credentials.get = () => Promise.reject(new DOMException('The operation was not allowed.', 'NotAllowedError'));
     }
-  }, { mark, passkey, device });
+  }, { passkey, device });
   await page.goto('/login');
   await page.addStyleTag({ content: '* { -webkit-font-smoothing: antialiased !important; }' });
   await page.fill('#email', 'thibaut@calciotto.test');
@@ -108,14 +107,6 @@ test.describe('login', () => {
     expectEverythingStubbed(unstubbed);
   });
 
-  test('login v1 without the mark', async ({ page }) => {
-    const { unstubbed } = await openLogin(page, { mark: false });
-    await expect(page.locator('#app.design-v2')).toHaveCount(0);
-    await expect(page.locator('.theme-toggle')).toHaveCount(1);
-    await expect(page).toHaveScreenshot('login-v1.png');
-    expectEverythingStubbed(unstubbed);
-  });
-
   test('login v2 @mobile', async ({ page }) => {
     const { unstubbed } = await openLogin(page, { dark: true, width: 360 });
     await expectV2(page);
@@ -151,13 +142,6 @@ test.describe('login', () => {
     expect(Math.round(box.x)).toBe(12);
     await expect(page).toHaveScreenshot('login-v2-passkey-error-mobile.png');
     await expectNoHorizontalOverflow(page);
-    expectEverythingStubbed(unstubbed);
-  });
-
-  test('login v1 without the mark @mobile', async ({ page }) => {
-    const { unstubbed } = await openLogin(page, { mark: false, dark: true, width: 360 });
-    await expect(page.locator('#app.design-v2')).toHaveCount(0);
-    await expect(page).toHaveScreenshot('login-v1-mobile.png');
     expectEverythingStubbed(unstubbed);
   });
 });

@@ -37,20 +37,11 @@ describe('buildNotification', () => {
       .toBe(`Kick-off at ${kickoffTime}.`);
   });
 
-  it('gives the final score and asks for a Man of the Match vote', () => {
+  it('gives the final score and asks for a Star of the Match vote', () => {
     expect(buildNotification({
       type: 'result_recorded',
-      score: [{ team: 'Black', goals: 3 }, { team: 'White', goals: 1 }]
-    })).toEqual({ title: 'Final score: Black 3 – White 1', body: 'Vote for your Man of the Match.' });
-  });
-
-  it('names the vote Star of the Match for a design v2 player', () => {
-    expect(buildNotification({
-      type: 'result_recorded',
-      designV2: true,
       score: [{ team: 'Black', goals: 3 }, { team: 'White', goals: 1 }]
     })).toEqual({ title: 'Final score: Black 3 – White 1', body: 'Vote for your Star of the Match.' });
-    expect(buildNotification({ type: 'result_recorded', designV2: false }).body).toBe('Vote for your Man of the Match.');
   });
 
   it('announces that predictions are open for the match', () => {

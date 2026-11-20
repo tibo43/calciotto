@@ -53,9 +53,8 @@ import (
 // out, so however many ticks see it, it is sent once, and a tick that runs
 // late still sends what is due.
 //
-// Everything is gated by the push-notifications hidden feature
-// (models.FeaturePushNotifications), checked when subscribing and again on
-// every send. On top of that, each player can turn any of them off
+// Every player can subscribe (models.FeaturePushNotifications is launched,
+// see models.LaunchedFeatures), and each can turn any of them off
 // (models.NotificationPreference). No row means on, so a player who has
 // never chosen still receives all of them. send skips a player for a type they
 // turned off; the match is still claimed, so turning it back on later does
@@ -127,7 +126,6 @@ const PredictionsSettledWindow = 24 * time.Hour
 const RegistrationOpenWindow = 6 * time.Hour
 
 var (
-	ErrPushFeatureNotEnabled   = errors.New("push notifications are not enabled for this player")
 	ErrUnknownNotificationType = errors.New("unknown notification type")
 	ErrInvalidPushSubscription = errors.New("a push subscription needs a supported HTTPS endpoint and both keys")
 	// ErrPushSubscriptionGone is what a PushSender returns when the push
@@ -144,10 +142,6 @@ type PushMessage struct {
 	GroupName string     `json:"groupName,omitempty"`
 	KickoffAt *time.Time `json:"kickoffAt,omitempty"`
 	TeamName  string     `json:"teamName,omitempty"`
-	// DesignV2 is set only on result_recorded, for a recipient with the
-	// design-v2 feature: the service worker then names the vote the way the
-	// v2 screens do ("Star of the Match" rather than "Man of the Match").
-	DesignV2 bool `json:"designV2,omitempty"`
 	// PlayerName is set only on member_joined: who joined the group.
 	PlayerName string      `json:"playerName,omitempty"`
 	Score      []PushScore `json:"score,omitempty"`
@@ -206,33 +200,12 @@ func NewNotificationService(db *gorm.DB, sender PushSender, matches *MatchServic
 	}
 }
 
-func (s *NotificationService) hasFeature(playerID uuid.UUID) (bool, error) {
-	return s.playerHasFeature(playerID, models.FeaturePushNotifications)
-}
-
-// playerHasFeature reports whether playerID has the hidden feature enabled
-// (models.PlayerFeature).
-func (s *NotificationService) playerHasFeature(playerID uuid.UUID, feature string) (bool, error) {
-	var count int64
-	err := s.DB.Model(&models.PlayerFeature{}).
-		Where("player_id = ? AND feature = ?", playerID, feature).
-		Count(&count).Error
-	return count > 0, err
-}
-
 // Subscribe records a device for the player. The same endpoint subscribing
 // again (a refreshed subscription, or another account on the same browser)
 // replaces the existing row.
 func (s *NotificationService) Subscribe(playerID uuid.UUID, input PushSubscriptionInput) error {
 	if !isAllowedPushEndpoint(input.Endpoint) || input.Keys.P256dh == "" || input.Keys.Auth == "" {
 		return ErrInvalidPushSubscription
-	}
-	enabled, err := s.hasFeature(playerID)
-	if err != nil {
-		return err
-	}
-	if !enabled {
-		return ErrPushFeatureNotEnabled
 	}
 	row := models.PushSubscription{PlayerID: playerID, Endpoint: input.Endpoint, P256dh: input.Keys.P256dh, Auth: input.Keys.Auth}
 	return s.DB.Clauses(clause.OnConflict{
@@ -280,16 +253,8 @@ func (s *NotificationService) preferences(playerID uuid.UUID) (map[string]bool, 
 	return prefs, nil
 }
 
-// GetPreferences returns every type for the player. 403-shaped
-// ErrPushFeatureNotEnabled without the feature, the same gate as Subscribe.
+// GetPreferences returns every type for the player.
 func (s *NotificationService) GetPreferences(playerID uuid.UUID) (map[string]bool, error) {
-	enabled, err := s.hasFeature(playerID)
-	if err != nil {
-		return nil, err
-	}
-	if !enabled {
-		return nil, ErrPushFeatureNotEnabled
-	}
 	return s.preferences(playerID)
 }
 
@@ -298,19 +263,12 @@ func (s *NotificationService) GetPreferences(playerID uuid.UUID) (map[string]boo
 // nothing is written. enabled is written with an explicit upsert because a
 // struct update would skip false, and "off" is the whole point of the row.
 func (s *NotificationService) UpdatePreferences(playerID uuid.UUID, updates map[string]bool) (map[string]bool, error) {
-	enabled, err := s.hasFeature(playerID)
-	if err != nil {
-		return nil, err
-	}
-	if !enabled {
-		return nil, ErrPushFeatureNotEnabled
-	}
 	for kind := range updates {
 		if !knownPushType(kind) {
 			return nil, fmt.Errorf("%w: %s", ErrUnknownNotificationType, kind)
 		}
 	}
-	err = s.DB.Transaction(func(tx *gorm.DB) error {
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		for kind, on := range updates {
 			row := models.NotificationPreference{PlayerID: playerID, Type: kind, Enabled: on}
 			if err := tx.Clauses(clause.OnConflict{
@@ -329,7 +287,7 @@ func (s *NotificationService) UpdatePreferences(playerID uuid.UUID, updates map[
 }
 
 // send delivers each player's message to every device they subscribed, if
-// they still have the feature and have not turned that notification off.
+// they have not turned that notification off.
 // Failures are logged, never returned: one dead phone must not stop the
 // others, nor fail the admin action that triggered it. A failure to read
 // preferences sends nothing — the same as a failure to read subscriptions —
@@ -349,7 +307,6 @@ func (s *NotificationService) send(groupID uuid.UUID, messages map[uuid.UUID]Pus
 	}
 	var subs []models.PushSubscription
 	if err := s.DB.
-		Joins("JOIN player_features ON player_features.player_id = push_subscriptions.player_id AND player_features.feature = ?", models.FeaturePushNotifications).
 		Joins("JOIN group_memberships ON group_memberships.player_id = push_subscriptions.player_id AND group_memberships.group_id = ?", groupID).
 		Where("push_subscriptions.player_id IN ?", playerIDs).
 		Find(&subs).Error; err != nil {
@@ -585,10 +542,6 @@ func (s *NotificationService) notifyResult(match models.Match) error {
 	messages := map[uuid.UUID]PushMessage{}
 	for _, team := range details.Teams {
 		for _, player := range team.Players {
-			v2, err := s.playerHasFeature(player.ID, models.FeatureDesignV2)
-			if err != nil {
-				return err
-			}
 			messages[player.ID] = PushMessage{
 				Type:      PushTypeResultRecorded,
 				URL:       MatchDeepLink(match.ID),
@@ -596,7 +549,6 @@ func (s *NotificationService) notifyResult(match models.Match) error {
 				GroupName: group,
 				TeamName:  team.Name,
 				Score:     score,
-				DesignV2:  v2,
 			}
 		}
 	}

@@ -38,9 +38,10 @@ func getMyFeatures(t *testing.T, router *gin.Engine, token string) (int, []strin
 	return rec.Code, body.Features
 }
 
-// TestGetMyFeatures_Integration covers GET /players/me/features: an empty
-// list (not null) by default, the caller's own features once rows exist, and
-// never another player's.
+// TestGetMyFeatures_Integration covers GET /players/me/features: the launched
+// features for everyone, plus the caller's own hidden ones once rows exist
+// (a row for a launched feature is not listed twice), and never another
+// player's.
 func TestGetMyFeatures_Integration(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -54,8 +55,9 @@ func TestGetMyFeatures_Integration(t *testing.T) {
 	_, token := authenticatedRenamePlayer(t, playerService, authService, "Zzz Integration Features Owner", "features-owner@example.com")
 	otherIDStr, _ := authenticatedRenamePlayer(t, playerService, authService, "Zzz Integration Features Other", "features-other@example.com")
 
-	if code, features := getMyFeatures(t, router, token); code != http.StatusOK || features == nil || len(features) != 0 {
-		t.Fatalf("with no feature: status %d, features %#v, want 200 and an empty list", code, features)
+	launched := []string{models.FeatureDesignV2, models.FeaturePushNotifications, models.FeaturePWAInstall}
+	if code, features := getMyFeatures(t, router, token); code != http.StatusOK || !reflect.DeepEqual(features, launched) {
+		t.Fatalf("with no row: status %d, features %#v, want 200 and %#v", code, features, launched)
 	}
 
 	ownerID, err := authService.ParseToken(token)
@@ -74,7 +76,7 @@ func TestGetMyFeatures_Integration(t *testing.T) {
 	}
 
 	code, features := getMyFeatures(t, router, token)
-	if want := []string{"another-feature", models.FeaturePWAInstall}; code != http.StatusOK || !reflect.DeepEqual(features, want) {
+	if want := []string{"another-feature", models.FeatureDesignV2, models.FeaturePushNotifications, models.FeaturePWAInstall}; code != http.StatusOK || !reflect.DeepEqual(features, want) {
 		t.Errorf("with features: status %d, features %#v, want 200 and %#v", code, features, want)
 	}
 

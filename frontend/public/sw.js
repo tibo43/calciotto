@@ -125,9 +125,7 @@ function buildNotification(data) {
       const score = formatScore(data.score);
       return {
         title: score ? `Final score: ${score}` : 'The result is in',
-        // The design v2 calls the award the Star of the Match; v1 keeps
-        // its name.
-        body: `Vote for your ${data.designV2 ? MOTM_TEXT.name : 'Man of the Match'}.`,
+        body: `Vote for your ${MOTM_TEXT.name}.`,
       };
     }
     case 'predictions_settled':

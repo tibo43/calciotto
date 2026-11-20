@@ -60,22 +60,10 @@ func newMotmEnv(t *testing.T, played time.Time) *motmEnv {
 	m.carol, m.carolEP = env.member(t, "Carol", true)
 	m.dave, m.daveEP = env.member(t, "Dave", true)
 	m.eve, m.eveEP = env.member(t, "Eve", true)
-	for _, id := range []uuid.UUID{m.alice, m.bob, m.carol, m.dave, m.eve} {
-		m.designV2(t, id)
-	}
 	m.matchID = m.playedMatch(t, played)
 	m.aliceName = m.name(t, m.alice)
 	m.bobName = m.name(t, m.bob)
 	return m
-}
-
-// designV2 gives a player the design-v2 feature, without which they are
-// never told the Star of the Match.
-func (m *motmEnv) designV2(t *testing.T, id uuid.UUID) {
-	t.Helper()
-	if err := m.tx.Create(&models.PlayerFeature{PlayerID: id, Feature: models.FeatureDesignV2}).Error; err != nil {
-		t.Fatalf("enable design-v2: %v", err)
-	}
 }
 
 func (m *motmEnv) playedMatch(t *testing.T, played time.Time) uuid.UUID {
@@ -263,35 +251,6 @@ func TestNotifications_Integration_MotmRespectsPreference(t *testing.T) {
 	m.wantMotm(t, m.bobEP, false, m.aliceName)
 	if m.notifiedAt(t) == nil {
 		t.Fatal("the match was not claimed")
-	}
-}
-
-// Only design-v2 players are told: a winner or a voter without the feature
-// gets nothing, the others are told as usual, and the match is claimed.
-func TestNotifications_Integration_MotmOnlyForDesignV2(t *testing.T) {
-	m := newMotmEnv(t, time.Date(2026, time.January, 10, 0, 0, 0, 0, time.UTC))
-	m.vote(t, m.bob, m.alice)
-	m.vote(t, m.carol, m.alice)
-	m.vote(t, m.dave, m.bob)
-	m.vote(t, m.eve, m.alice)
-	if err := m.tx.Where("player_id IN ? AND feature = ?", []uuid.UUID{m.alice, m.carol}, models.FeatureDesignV2).Delete(&models.PlayerFeature{}).Error; err != nil {
-		t.Fatalf("remove design-v2: %v", err)
-	}
-
-	at := m.announceAt(t)
-	if sent := m.tick(t, at); sent != 1 {
-		t.Fatalf("the tick sent %d, want 1", sent)
-	}
-	m.wantTypes(t, m.aliceEP) // the winner, without design-v2
-	m.wantTypes(t, m.carolEP) // a voter, without design-v2
-	m.wantMotm(t, m.bobEP, false, m.aliceName)
-	m.wantMotm(t, m.daveEP, false, m.aliceName)
-	m.wantMotm(t, m.eveEP, false, m.aliceName)
-	if got := m.notifiedAt(t); got == nil || !got.Equal(at) {
-		t.Fatalf("motm_notified_at = %v, want %v", got, at)
-	}
-	if sent := m.tick(t, at.Add(time.Minute)); sent != 0 || len(m.sender.sent) != 0 {
-		t.Fatalf("a later tick sent again: %d %+v", sent, m.sender.sent)
 	}
 }
 

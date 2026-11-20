@@ -41,7 +41,7 @@ func (f *fakePushSender) reset() { f.sent = map[string][]services.PushMessage{} 
 
 // notificationEnv is a group with its two teams, a NotificationService wired
 // into its MatchService the way main.go does it (but sending inline), and a
-// helper to add members who have the feature and one subscribed device.
+// helper to add members, with or without one subscribed device.
 type notificationEnv struct {
 	tx            *gorm.DB
 	sender        *fakePushSender
@@ -79,9 +79,9 @@ func newNotificationEnvOn(t *testing.T, tx *gorm.DB) *notificationEnv {
 	return &notificationEnv{tx: tx, sender: sender, notifications: notifications, matches: matches, groupID: group.ID, groupName: group.Name, teamA: teams[0], teamB: teams[1]}
 }
 
-// member creates a group member; withFeature also enables push for them and
-// subscribes one device, whose endpoint is returned.
-func (e *notificationEnv) member(t *testing.T, name string, withFeature bool) (uuid.UUID, string) {
+// member creates a group member; subscribed also subscribes one device for
+// them. The device's endpoint is returned either way.
+func (e *notificationEnv) member(t *testing.T, name string, subscribed bool) (uuid.UUID, string) {
 	t.Helper()
 	id, err := services.NewPlayerService(e.tx).CreatePlayer("Zzz Push " + name + " " + uuid.NewString())
 	if err != nil {
@@ -91,10 +91,7 @@ func (e *notificationEnv) member(t *testing.T, name string, withFeature bool) (u
 		t.Fatalf("AddPlayerToGroup: %v", err)
 	}
 	endpoint := "https://fcm.googleapis.com/fixture/" + id.String()
-	if withFeature {
-		if err := e.tx.Create(&models.PlayerFeature{PlayerID: id, Feature: models.FeaturePushNotifications}).Error; err != nil {
-			t.Fatalf("enable feature: %v", err)
-		}
+	if subscribed {
 		if err := e.notifications.Subscribe(id, subscription(endpoint)); err != nil {
 			t.Fatalf("Subscribe: %v", err)
 		}
@@ -162,12 +159,14 @@ func (e *notificationEnv) settle(t *testing.T, matchID uuid.UUID) services.TickR
 	return result
 }
 
-func TestNotifications_Integration_SubscribeRequiresFeature(t *testing.T) {
+// Push is launched: a player with no player_features row at all can
+// subscribe. A subscription still needs its keys.
+func TestNotifications_Integration_SubscribeWithoutAFeatureRow(t *testing.T) {
 	env := newNotificationEnv(t)
-	playerID, endpoint := env.member(t, "NoFeature", false)
+	playerID, endpoint := env.member(t, "NoRow", false)
 
-	if err := env.notifications.Subscribe(playerID, subscription(endpoint)); !errors.Is(err, services.ErrPushFeatureNotEnabled) {
-		t.Errorf("Subscribe without the feature = %v, want ErrPushFeatureNotEnabled", err)
+	if err := env.notifications.Subscribe(playerID, subscription(endpoint)); err != nil {
+		t.Errorf("Subscribe without a feature row = %v, want nil", err)
 	}
 	if err := env.notifications.Subscribe(playerID, services.PushSubscriptionInput{Endpoint: endpoint}); !errors.Is(err, services.ErrInvalidPushSubscription) {
 		t.Errorf("Subscribe without keys = %v, want ErrInvalidPushSubscription", err)
@@ -204,7 +203,7 @@ func TestNotifications_Integration_TeamAssignedThenResult(t *testing.T) {
 	env := newNotificationEnv(t)
 	alice, aliceEndpoint := env.member(t, "Alice", true)
 	bob, bobEndpoint := env.member(t, "Bob", true)
-	carol, carolEndpoint := env.member(t, "Carol", false) // on the roster, no feature
+	carol, carolEndpoint := env.member(t, "Carol", false) // on the roster, no device
 
 	kickoff := time.Now().Add(48 * time.Hour)
 	matchID := env.scheduledMatch(t, kickoff, kickoff.Add(-72*time.Hour), 10)
@@ -244,7 +243,7 @@ func TestNotifications_Integration_TeamAssignedThenResult(t *testing.T) {
 		t.Fatalf("Bob got %+v, want only team_assigned from the save", env.sender.sent[bobEndpoint])
 	}
 	if len(env.sender.sent[carolEndpoint]) != 0 {
-		t.Errorf("Carol, without the feature, got %+v", env.sender.sent[carolEndpoint])
+		t.Errorf("Carol, without a device, got %+v", env.sender.sent[carolEndpoint])
 	}
 
 	// Saving again with Bob moved: only Bob hears about it.
@@ -395,24 +394,17 @@ func TestNotifications_Integration_TickKickoffReminder(t *testing.T) {
 	}
 }
 
-func TestNotifications_Integration_FeatureRemovedAndGoneSubscriptions(t *testing.T) {
+func TestNotifications_Integration_GoneSubscriptions(t *testing.T) {
 	env := newNotificationEnv(t)
 	now := time.Now()
-	removed, removedEndpoint := env.member(t, "Removed", true)
 	_, goneEndpoint := env.member(t, "Gone", true)
 	env.sender.gone[goneEndpoint] = true
 
-	if err := env.tx.Where("player_id = ?", removed).Delete(&models.PlayerFeature{}).Error; err != nil {
-		t.Fatalf("remove feature: %v", err)
-	}
 	env.scheduledMatch(t, now.Add(72*time.Hour), now.Add(-time.Minute), 10)
 	if _, err := env.notifications.Tick(now); err != nil {
 		t.Fatalf("Tick: %v", err)
 	}
 
-	if len(env.sender.sent[removedEndpoint]) != 0 {
-		t.Errorf("a player whose feature was removed still got %+v", env.sender.sent[removedEndpoint])
-	}
 	var count int64
 	env.tx.Model(&models.PushSubscription{}).Where("endpoint = ?", goneEndpoint).Count(&count)
 	if count != 0 {
@@ -432,7 +424,7 @@ func TestNotifications_Integration_PredictionsOpenOnceThenSettledForPredictors(t
 	bob, bobEndpoint := env.member(t, "Bob", true)       // roster, predicts the other team
 	_, carolEndpoint := env.member(t, "Carol", true)     // member, never predicts
 	eve, eveEndpoint := env.member(t, "Eve", true)       // not on the roster, predicts a draw
-	dave, daveEndpoint := env.member(t, "Dave", false)   // predicts, feature off
+	dave, daveEndpoint := env.member(t, "Dave", false)   // predicts, no device
 
 	kickoff := time.Now().Add(48 * time.Hour)
 	matchID := env.scheduledMatch(t, kickoff, kickoff.Add(-72*time.Hour), 10)
@@ -512,7 +504,7 @@ func TestNotifications_Integration_PredictionsOpenOnceThenSettledForPredictors(t
 	}
 
 	// The delay has long passed and the roster is now full: the next tick
-	// tells every member with the feature, whether or not they are playing.
+	// tells every subscribed member, whether or not they are playing.
 	env.sender.reset()
 	sentAt := firstTeam.Add(services.PredictionsOpenDelay + 2*time.Minute)
 	if result := tick(sentAt); result.PredictionsOpen != 1 {
@@ -528,7 +520,7 @@ func TestNotifications_Integration_PredictionsOpenOnceThenSettledForPredictors(t
 		}
 	}
 	if len(env.sender.sent[daveEndpoint]) != 0 {
-		t.Errorf("Dave, without the feature, got %+v", env.sender.sent[daveEndpoint])
+		t.Errorf("Dave, without a device, got %+v", env.sender.sent[daveEndpoint])
 	}
 	firstClaim := notifiedAt()
 	if firstClaim == nil || !firstClaim.Equal(sentAt) {
@@ -646,7 +638,7 @@ func TestNotifications_Integration_PredictionsOpenOnceThenSettledForPredictors(t
 		t.Errorf("Carol, who did not predict, got %+v", env.sender.sent[carolEndpoint])
 	}
 	if len(env.sender.sent[daveEndpoint]) != 0 {
-		t.Errorf("Dave, who predicted without the feature, got %+v", env.sender.sent[daveEndpoint])
+		t.Errorf("Dave, who predicted without a device, got %+v", env.sender.sent[daveEndpoint])
 	}
 
 	// Editing the score later changes what the leaderboard derives, and does
@@ -761,7 +753,6 @@ func wantAllOnExcept(t *testing.T, got map[string]bool, off ...string) {
 func TestNotifications_Integration_PreferencesDefaultAllOn(t *testing.T) {
 	env := newNotificationEnv(t)
 	playerID, _ := env.member(t, "Chooser", true)
-	noFeature, _ := env.member(t, "NoFeature", false)
 
 	got, err := env.notifications.GetPreferences(playerID)
 	if err != nil {
@@ -769,12 +760,6 @@ func TestNotifications_Integration_PreferencesDefaultAllOn(t *testing.T) {
 	}
 	wantAllOnExcept(t, got)
 
-	if _, err := env.notifications.GetPreferences(noFeature); !errors.Is(err, services.ErrPushFeatureNotEnabled) {
-		t.Errorf("GetPreferences without the feature = %v, want ErrPushFeatureNotEnabled", err)
-	}
-	if _, err := env.notifications.UpdatePreferences(noFeature, map[string]bool{services.PushTypeKickoffReminder: false}); !errors.Is(err, services.ErrPushFeatureNotEnabled) {
-		t.Errorf("UpdatePreferences without the feature = %v, want ErrPushFeatureNotEnabled", err)
-	}
 	if _, err := env.notifications.UpdatePreferences(playerID, map[string]bool{"not_a_type": false}); !errors.Is(err, services.ErrUnknownNotificationType) {
 		t.Errorf("unknown type = %v, want ErrUnknownNotificationType", err)
 	}

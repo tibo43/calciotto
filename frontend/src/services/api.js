@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { hasPasskeyAccess, rememberPasskeyAccess } from './passkeyAccess';
-import { rememberDesignV2Login } from './loginV2';
 import { resolveApiBaseUrl } from '@/config/apiBaseUrl';
 
 const API_BASE_URL = resolveApiBaseUrl(
@@ -144,7 +143,6 @@ api.interceptors.response.use(
       if (current && (sessionID(current) || current) === (sessionID(token) || token)) {
         const features = response.data?.features;
         rememberPasskeyAccess(hasPasskeyAccess(features));
-        rememberDesignV2Login(Array.isArray(features) && features.includes('design-v2'));
       }
     }
     return response;
@@ -761,7 +759,6 @@ export const updateNotificationPreferences = async (preferences) => {
 export const deleteMyAccount = async (password) => {
   const response = await api.delete('/players/me', { data: { password } });
   rememberPasskeyAccess(false);
-  rememberDesignV2Login(false);
   return response.data;
 };
 

@@ -1,6 +1,5 @@
 import * as api from '@/services/api';
 import { shouldOfferPasskeyLogin } from '@/services/passkeyAccess';
-import { hasDesignV2LoginMark } from '@/services/loginV2';
 
 // api.js installs the interceptors at import time, so keep one shared mock for
 // each Axios instance and inspect the registered callbacks below.
@@ -344,43 +343,6 @@ describe('the passkey login hint', () => {
     api.setToken('next-player');
     handleResponse({ config, data: { features: bothFlags } });
     expect(shouldOfferPasskeyLogin()).toBe(false);
-  });
-});
-
-describe('the v2 login mark', () => {
-  const featureRequest = () => prepareRequest({ headers: {}, url: '/players/me/features' });
-
-  beforeEach(() => {
-    localStorage.clear();
-    mockInstance.delete.mockReset();
-  });
-  afterEach(() => localStorage.clear());
-
-  it('follows each features answer and survives logout', () => {
-    api.setToken('v2-player');
-    handleResponse({ config: featureRequest(), data: { features: ['design-v2'] } });
-    expect(hasDesignV2LoginMark()).toBe(true);
-    api.clearToken();
-    expect(hasDesignV2LoginMark()).toBe(true);
-    api.setToken('v1-player');
-    expect(hasDesignV2LoginMark()).toBe(true);
-    handleResponse({ config: featureRequest(), data: { features: ['pwa-install'] } });
-    expect(hasDesignV2LoginMark()).toBe(false);
-  });
-
-  it('ignores a features answer from a previous account', () => {
-    api.setToken('first-player');
-    const config = featureRequest();
-    api.setToken('next-player');
-    handleResponse({ config, data: { features: ['design-v2'] } });
-    expect(hasDesignV2LoginMark()).toBe(false);
-  });
-
-  it('is removed when the account is deleted', async () => {
-    localStorage.setItem('calciotto-login-v2', '1');
-    mockInstance.delete.mockResolvedValue({ status: 200, data: { deleted: true } });
-    await api.deleteMyAccount('s3cret-pass');
-    expect(hasDesignV2LoginMark()).toBe(false);
   });
 });
 

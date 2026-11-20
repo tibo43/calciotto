@@ -1,6 +1,6 @@
 <template>
-  <!-- Push notifications on this device. A hidden feature: Profile.vue only
-       renders this for players with PUSH_FEATURE. While they are on, the
+  <!-- Push notifications on this device. Profile.vue renders this for
+       players with PUSH_FEATURE (launched: everyone). While they are on, the
        card lists each notification so the player can turn types off. -->
   <div class="notifications-card card-base" :class="{ 'is-expanded': showPreferences }">
     <div class="notifications-icon" aria-hidden="true">

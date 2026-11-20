@@ -22,7 +22,6 @@ func TestPasskeys_Integration_AccountRecoveryClearsCredentials(t *testing.T) {
 			otherID := newClaimedPlayer(t, tx, "Other account", "passkey-recovery-other@example.test", password)
 			for _, id := range []uuid.UUID{playerID, otherID} {
 				features := []models.PlayerFeature{
-					{PlayerID: id, Feature: models.FeatureDesignV2},
 					{PlayerID: id, Feature: models.FeaturePasskeys},
 				}
 				if err := tx.Create(&features).Error; err != nil {

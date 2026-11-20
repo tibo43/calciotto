@@ -143,7 +143,7 @@ describe('App.vue design-v2', () => {
     expect(wrapper.classes()).toContain('design-v2');
   });
 
-  it.each(['/login', '/signup', '/forgot-password', '/reset-password'])(
+  it.each(['/signup', '/forgot-password', '/reset-password'])(
     'keeps %s on the current design, with no request',
     async (path) => {
       const { wrapper } = await mountAt(path);
@@ -159,7 +159,7 @@ describe('App.vue design-v2', () => {
     await flushPromises();
     expect(wrapper.classes()).toContain('design-v2');
 
-    await router.push('/login');
+    await router.push('/signup');
     await flushPromises();
     expect(wrapper.classes()).not.toContain('design-v2');
 
@@ -183,16 +183,7 @@ describe('App.vue design-v2', () => {
     expect(wrapper.classes()).toContain('design-v2');
   });
 
-  it('keeps public pages on v1 without the v2 login mark', async () => {
-    const { wrapper } = await mountAt('/login');
-    await flushPromises();
-    expect(wrapper.classes()).not.toContain('design-v2');
-    expect(wrapper.find('.topbar').exists()).toBe(false);
-    expect(getMyFeatureStatus).not.toHaveBeenCalled();
-  });
-
-  it('paints the v2 shell on the login page only, on a browser with the mark', async () => {
-    localStorage.setItem('calciotto-login-v2', '1');
+  it('paints the v2 shell on the login page only, on any browser', async () => {
     const { wrapper, router } = await mountAt('/login');
     await flushPromises();
     expect(wrapper.classes()).toContain('design-v2');
@@ -213,7 +204,6 @@ describe('App.vue design-v2', () => {
     getMyFeatureStatus.mockResolvedValue({ features: ['design-v2'] });
     const { wrapper } = await mountAt('/');
     await flushPromises();
-    localStorage.setItem('calciotto-login-v2', '1'); // written by api.js from that answer
     await wrapper.vm.logout();
     await flushPromises();
     expect(wrapper.vm.$route.name).toBe('Login');
@@ -235,9 +225,12 @@ describe('App.vue design-v2', () => {
     features.resolve({ features: ['design-v2'] });
     await flushPromises();
 
+    // The login page is v2 on its own; the late answer must not bring back
+    // the signed-in shell.
     expect(wrapper.vm.$route.name).toBe('Login');
-    expect(wrapper.classes()).not.toContain('design-v2');
-    expect(document.getElementById('design-v2-fonts')).toBeNull();
+    expect(wrapper.classes()).toContain('design-v2');
+    expect(wrapper.find('.tabbar').exists()).toBe(false);
+    expect(wrapper.find('.topbar .ctx-pair').exists()).toBe(false);
   });
 
   it('asks again for the next account after logout', async () => {

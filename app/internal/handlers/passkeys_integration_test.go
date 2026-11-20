@@ -93,12 +93,13 @@ func TestPasskeys_Integration_ChallengeAndAccountScope(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// design-v2 is launched to everyone; a row for it changes nothing, the
+	// passkeys row is what opens enrollment.
 	addFeature(ownerID, models.FeatureDesignV2)
-	addFeature(otherID, models.FeaturePasskeys)
 	send(http.MethodPost, keyPath+"/options", origin, ownerToken, credentials, http.StatusForbidden)
 	send(http.MethodPost, keyPath+"/options", origin, otherToken, credentials, http.StatusForbidden)
 	addFeature(ownerID, models.FeaturePasskeys)
-	addFeature(otherID, models.FeatureDesignV2)
+	addFeature(otherID, models.FeaturePasskeys)
 	send(http.MethodPost, keyPath+"/options", origin, ownerToken, map[string]string{"password": uuid.NewString()}, http.StatusBadRequest)
 	enrollment := send(http.MethodPost, keyPath+"/options", origin, ownerToken, credentials, http.StatusOK)
 	var creation struct {
