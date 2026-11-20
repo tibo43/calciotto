@@ -229,6 +229,14 @@ type Match struct {
 	// prediction a win. NULL for an unscheduled match — that is recorded
 	// after the fact by construction and never carries predictions.
 	ResultRecordedAt *time.Time `gorm:"type:timestamptz" json:"result_recorded_at,omitempty"`
+	// MotmNotifiedAt records when the Man of the Match push went out
+	// (NotificationService.Tick, at services.MotmAnnounceAt once the vote has
+	// closed). Claimed with UPDATE ... WHERE IS NULL, so it is sent once per
+	// match; also set, without sending, on a match nobody voted on. Every
+	// match whose announcement time had already passed when the column was
+	// added is backfilled (database.AddMotmNotifiedAt). Internal bookkeeping,
+	// never serialized.
+	MotmNotifiedAt *time.Time `gorm:"type:timestamptz" json:"-"`
 	// RegistrationOpenNotifiedAt and KickoffReminderNotifiedAt record when the
 	// "sign-ups are open" and "kick-off soon" push notifications went out
 	// (NotificationService.Tick), so each is sent once however many ticks

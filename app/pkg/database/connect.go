@@ -141,6 +141,10 @@ func applySchema(db *gorm.DB) error {
 	// NotificationPreference needs no backfill: no row for a (player, type)
 	// means that notification is on, which is what every existing player
 	// should get. See models.NotificationPreference.
+	// Before AutoMigrate, which would add the column without its backfill.
+	if err := AddMotmNotifiedAt(db); err != nil {
+		return err
+	}
 	if err := db.AutoMigrate(&models.Group{}, &models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{}, &models.MatchRegistration{}, &models.MatchVote{}, &models.MatchPrediction{}, &models.GroupMembership{}, &models.PasswordResetToken{}, &models.AuthSession{}, &models.Passkey{}, &models.PasskeyChallenge{}, &models.PlayerFeature{}, &models.PushSubscription{}, &models.NotificationPreference{}); err != nil {
 		return err
 	}

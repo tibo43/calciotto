@@ -16,7 +16,8 @@ import (
 
 // Push notifications: who gets told what, and when.
 //
-// Six notifications, all for scheduled matches only:
+// Seven notifications about a match (scheduled ones only, except
+// motm_announced, which follows the vote every match has):
 //   - registration_open: the match's sign-up list has opened (every group
 //     member not already signed up).
 //   - team_assigned: an admin saved a roster that puts the player on a team,
@@ -27,6 +28,10 @@ import (
 //     member, once per match, sent by the tick).
 //   - kickoff_reminder: kick-off is at most KickoffReminderLead away (the
 //     roster once composed, otherwise the confirmed sign-ups).
+//   - motm_announced: the Man of the Match vote has closed, announced at
+//     MotmAnnounceAt (09:00 in Rome on the closing day): the winners, ties
+//     included, and every other player who voted (once per match, sent by
+//     the tick; see notifications_motm.go).
 //   - result_recorded: an admin saved the score for the first time, so the
 //     result is in and Man of the Match voting is open (the roster, who are
 //     the only ones allowed to vote).
@@ -50,9 +55,9 @@ import (
 //
 // Everything is gated by the push-notifications hidden feature
 // (models.FeaturePushNotifications), checked when subscribing and again on
-// every send. On top of that, each player can turn any of the six off
+// every send. On top of that, each player can turn any of them off
 // (models.NotificationPreference). No row means on, so a player who has
-// never chosen still receives all six. send skips a player for a type they
+// never chosen still receives all of them. send skips a player for a type they
 // turned off; the match is still claimed, so turning it back on later does
 // not replay a notification that already went out.
 //
@@ -67,6 +72,7 @@ const (
 	PushTypeKickoffReminder    = "kickoff_reminder"
 	PushTypeResultRecorded     = "result_recorded"
 	PushTypePredictionsSettled = "predictions_settled"
+	PushTypeMotmAnnounced      = "motm_announced"
 	// PushTypeMemberJoined goes to a group's admins only, so an invite code
 	// that reached the wrong person shows up the moment it is used.
 	PushTypeMemberJoined = "member_joined"
@@ -78,6 +84,7 @@ var AllPushTypes = []string{
 	PushTypeRegistrationOpen,
 	PushTypeTeamAssigned,
 	PushTypeResultRecorded,
+	PushTypeMotmAnnounced,
 	PushTypePredictionsOpen,
 	PushTypePredictionsSettled,
 	PushTypeKickoffReminder,
@@ -144,6 +151,11 @@ type PushMessage struct {
 	// on their one prediction (the odds minus the implicit token, or −1).
 	// A pointer so the field is absent on every other notification.
 	Points *float64 `json:"points,omitempty"`
+	// Winner and Winners are set only on motm_announced: whether this
+	// recipient is (one of) the Man of the Match, and the winners' names,
+	// several on a tie.
+	Winner  bool     `json:"winner,omitempty"`
+	Winners []string `json:"winners,omitempty"`
 }
 
 // PushScore is one team's line of a recorded result.
@@ -191,9 +203,15 @@ func NewNotificationService(db *gorm.DB, sender PushSender, matches *MatchServic
 }
 
 func (s *NotificationService) hasFeature(playerID uuid.UUID) (bool, error) {
+	return s.playerHasFeature(playerID, models.FeaturePushNotifications)
+}
+
+// playerHasFeature reports whether playerID has the hidden feature enabled
+// (models.PlayerFeature).
+func (s *NotificationService) playerHasFeature(playerID uuid.UUID, feature string) (bool, error) {
 	var count int64
 	err := s.DB.Model(&models.PlayerFeature{}).
-		Where("player_id = ? AND feature = ?", playerID, models.FeaturePushNotifications).
+		Where("player_id = ? AND feature = ?", playerID, feature).
 		Count(&count).Error
 	return count > 0, err
 }
@@ -258,7 +276,7 @@ func (s *NotificationService) preferences(playerID uuid.UUID) (map[string]bool, 
 	return prefs, nil
 }
 
-// GetPreferences returns all six types for the player. 403-shaped
+// GetPreferences returns every type for the player. 403-shaped
 // ErrPushFeatureNotEnabled without the feature, the same gate as Subscribe.
 func (s *NotificationService) GetPreferences(playerID uuid.UUID) (map[string]bool, error) {
 	enabled, err := s.hasFeature(playerID)
@@ -654,6 +672,7 @@ type TickResult struct {
 	PredictionsOpen    int `json:"predictions_open"`
 	KickoffReminders   int `json:"kickoff_reminders"`
 	PredictionsSettled int `json:"predictions_settled"`
+	MotmAnnounced      int `json:"motm_announced"`
 }
 
 // Tick sends every time-driven notification that is due at now.
@@ -744,7 +763,10 @@ func (s *NotificationService) Tick(now time.Time) (TickResult, error) {
 		}
 		result.KickoffReminders++
 	}
-	return result, nil
+
+	motm, err := s.tickMotm(now)
+	result.MotmAnnounced = motm
+	return result, err
 }
 
 // claim marks a match's notification as sent, and reports whether this call

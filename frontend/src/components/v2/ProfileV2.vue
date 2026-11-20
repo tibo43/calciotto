@@ -301,12 +301,14 @@ import { buildGroupInviteShareText } from '@/services/shareMessages';
 import InvitationV2 from './InvitationV2.vue';
 import GroupDetailsForm from './GroupDetailsForm.vue';
 import GearLink from './GearLink.vue';
+import { MOTM_ANNOUNCED_LABEL } from '@/services/notificationLabels';
 
 const PREFERENCE_GROUPS = [
   { label: 'Match', items: [
     { key: 'registration_open', label: 'Sign-ups open' },
     { key: 'team_assigned', label: 'Your team is set' },
     { key: 'result_recorded', label: 'Final score' },
+    { key: 'motm_announced', label: MOTM_ANNOUNCED_LABEL },
   ] },
   { label: 'Predictions', items: [
     { key: 'predictions_open', label: 'Predictions open' },
