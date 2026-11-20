@@ -90,7 +90,7 @@ describe('MatchView.vue (design v2)', () => {
   it('keeps every MOTM count muted while the vote is open, the one ahead included', async () => {
     const votes = { Tally: [{ PlayerID: 'p2', Name: 'Paolo', Votes: 2 }], MyVoteFor: null };
     const { wrapper } = await mountView(playedMatch(), { votes });
-    expect(wrapper.text()).toContain('MOTM vote open');
+    expect(wrapper.text()).toContain('Star of the Match vote open');
     expect(wrapper.findAll('.player.is-winner')).toHaveLength(0);
   });
 
@@ -152,7 +152,7 @@ describe('MatchView.vue (design v2)', () => {
 
     expect(removeMotmVote).toHaveBeenCalledWith('match');
     expect(voteForMotm).not.toHaveBeenCalled();
-    expect(toastText(wrapper)).toBe('Your Man of the Match vote has been removed.');
+    expect(toastText(wrapper)).toBe('Your Star of the Match vote has been removed.');
   });
 
   it('casts a vote on any other player', async () => {
@@ -164,6 +164,29 @@ describe('MatchView.vue (design v2)', () => {
     await flushPromises();
 
     expect(voteForMotm).toHaveBeenCalledWith('match', 'p3');
+  });
+
+  it("shows the backend's refusal with the v2 name of the award", async () => {
+    const { wrapper } = await mountView(playedMatch(), { votes: { Tally: [], MyVoteFor: null } });
+    voteForMotm.mockRejectedValue({ response: { data: { error: 'voting for man of the match is closed for this match' } } });
+
+    const luca = wrapper.findAll('button.player').find((button) => button.text().includes('Luca'));
+    await luca.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.toast-message').classes()).toContain('error');
+    expect(toastText(wrapper)).toBe('Voting for Star of the Match is closed for this match.');
+  });
+
+  it('falls back to the generic message when the refusal has no reason', async () => {
+    const { wrapper } = await mountView(playedMatch(), { votes: { Tally: [], MyVoteFor: null } });
+    voteForMotm.mockRejectedValue(new Error('Network Error'));
+
+    const luca = wrapper.findAll('button.player').find((button) => button.text().includes('Luca'));
+    await luca.trigger('click');
+    await flushPromises();
+
+    expect(toastText(wrapper)).toBe('Error updating your Star of the Match vote.');
   });
 });
 

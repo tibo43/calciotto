@@ -102,7 +102,9 @@ function buildNotification(data) {
       const score = formatScore(data.score);
       return {
         title: score ? `Final score: ${score}` : 'The result is in',
-        body: 'Vote for your Man of the Match.',
+        // The design v2 calls the award the Star of the Match; v1 keeps
+        // its name.
+        body: data.designV2 ? 'Vote for your Star of the Match.' : 'Vote for your Man of the Match.',
       };
     }
     case 'predictions_settled':

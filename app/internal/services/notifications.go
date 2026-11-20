@@ -137,6 +137,10 @@ type PushMessage struct {
 	GroupName string     `json:"groupName,omitempty"`
 	KickoffAt *time.Time `json:"kickoffAt,omitempty"`
 	TeamName  string     `json:"teamName,omitempty"`
+	// DesignV2 is set only on result_recorded, for a recipient with the
+	// design-v2 feature: the service worker then names the vote the way the
+	// v2 screens do ("Star of the Match" rather than "Man of the Match").
+	DesignV2 bool `json:"designV2,omitempty"`
 	// PlayerName is set only on member_joined: who joined the group.
 	PlayerName string      `json:"playerName,omitempty"`
 	Score      []PushScore `json:"score,omitempty"`
@@ -191,9 +195,15 @@ func NewNotificationService(db *gorm.DB, sender PushSender, matches *MatchServic
 }
 
 func (s *NotificationService) hasFeature(playerID uuid.UUID) (bool, error) {
+	return s.playerHasFeature(playerID, models.FeaturePushNotifications)
+}
+
+// playerHasFeature reports whether playerID has the hidden feature enabled
+// (models.PlayerFeature).
+func (s *NotificationService) playerHasFeature(playerID uuid.UUID, feature string) (bool, error) {
 	var count int64
 	err := s.DB.Model(&models.PlayerFeature{}).
-		Where("player_id = ? AND feature = ?", playerID, models.FeaturePushNotifications).
+		Where("player_id = ? AND feature = ?", playerID, feature).
 		Count(&count).Error
 	return count > 0, err
 }
@@ -563,6 +573,10 @@ func (s *NotificationService) notifyResult(match models.Match) error {
 	messages := map[uuid.UUID]PushMessage{}
 	for _, team := range details.Teams {
 		for _, player := range team.Players {
+			v2, err := s.playerHasFeature(player.ID, models.FeatureDesignV2)
+			if err != nil {
+				return err
+			}
 			messages[player.ID] = PushMessage{
 				Type:      PushTypeResultRecorded,
 				URL:       MatchDeepLink(match.ID),
@@ -570,6 +584,7 @@ func (s *NotificationService) notifyResult(match models.Match) error {
 				GroupName: group,
 				TeamName:  team.Name,
 				Score:     score,
+				DesignV2:  v2,
 			}
 		}
 	}

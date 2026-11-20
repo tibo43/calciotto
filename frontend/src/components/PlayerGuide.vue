@@ -25,6 +25,9 @@
 </template>
 
 <script>
+import { STAR_OF_THE_MATCH } from '@/services/v2Home';
+
+// Shown on design v2 only (App.vue), hence the v2 name of the award.
 const steps = [
   {
     title: 'Welcome to Calciotto',
@@ -38,7 +41,7 @@ const steps = [
   },
   {
     title: 'Rankings',
-    description: 'Points tracks match results. Scorers lists goals. MOTM counts Man of the Match awards from post-match votes.',
+    description: `Points tracks match results. Scorers lists goals. ${STAR_OF_THE_MATCH} counts the awards from post-match votes.`,
     image: 'rankings.jpg',
   },
   {

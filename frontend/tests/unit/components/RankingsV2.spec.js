@@ -62,3 +62,17 @@ describe('RankingsV2.vue empty group', () => {
     wrapper.unmount();
   });
 });
+
+describe('RankingsV2.vue Star of the Match tab', () => {
+  beforeEach(() => {
+    getToken.mockReturnValue('');
+  });
+
+  it('names the motm tab Stars, and its empty title No stars yet', async () => {
+    const wrapper = mountRankings({ seasons: ['2026-2027'], route: { query: { tab: 'motm' } } });
+    await flushPromises();
+    expect(wrapper.findAll('.subnav a').map((tab) => tab.text())).toEqual(['Points', 'Scorers', 'Stars']);
+    expect(wrapper.find('h1').text()).toBe('No stars yet');
+    wrapper.unmount();
+  });
+});

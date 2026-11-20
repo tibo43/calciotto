@@ -1,4 +1,4 @@
-import { splitHomeMatches, heroDateLabel, placesLeft, registrationMeta, kickoffLabel, homeVoteLine, rowSubLine, weekdayTimeLabel, dayMonthLabel, matchVoteCopy, goalLine, myTeam, nextWaitingPosition } from '@/services/v2Home';
+import { splitHomeMatches, heroDateLabel, placesLeft, registrationMeta, kickoffLabel, homeVoteLine, rowSubLine, weekdayTimeLabel, dayMonthLabel, matchVoteCopy, goalLine, myTeam, nextWaitingPosition, voteErrorMessage } from '@/services/v2Home';
 
 const NOW = new Date('2026-09-04T10:00:00+02:00').getTime();
 
@@ -60,7 +60,7 @@ describe('v2 labels', () => {
   });
 });
 
-describe('MOTM copy', () => {
+describe('Star of the Match copy', () => {
   const openMatch = { ID: 'm', Date: '2026-09-03' };
   const closedMatch = { ID: 'm', Date: '2026-08-30' };
   const tally = { Tally: [{ PlayerID: 'a', Name: 'Marco Rossi', Votes: 4 }] };
@@ -72,7 +72,7 @@ describe('MOTM copy', () => {
   };
 
   it('points home at the match while voting is open', () => {
-    expect(homeVoteLine(openMatch, NOW)).toBe('MOTM vote open · Vote in match details');
+    expect(homeVoteLine(openMatch, NOW)).toBe('Star of the Match vote open · Vote in match details');
   });
 
   it('says nothing once voting has closed, or for a match still ahead', () => {
@@ -89,8 +89,8 @@ describe('MOTM copy', () => {
 
   it('puts MOTM vote open in place of a Latest row kick-off time while voting is open', () => {
     const friday = { ...openMatch, ScheduledAt: '2026-09-04T08:00:00+02:00', ResultRecordedAt: '2026-09-04T09:30:00+02:00', Date: '2026-09-04' };
-    expect(rowSubLine(friday, NOW)).toBe('MOTM vote open');
-    expect(rowSubLine({ ...friday, ScheduledAt: null }, NOW)).toBe('MOTM vote open');
+    expect(rowSubLine(friday, NOW)).toBe('Star of the Match vote open');
+    expect(rowSubLine({ ...friday, ScheduledAt: null }, NOW)).toBe('Star of the Match vote open');
     const at = '2026-08-28T08:00:00+02:00';
     expect(rowSubLine({ ...closedMatch, ScheduledAt: at }, NOW)).toBe(weekdayTimeLabel(at));
     expect(weekdayTimeLabel(at)).not.toBe('');
@@ -99,9 +99,9 @@ describe('MOTM copy', () => {
   });
 
   it('gives the deadline, a tie, and a no-vote close on the match page', () => {
-    expect(matchVoteCopy(openMatch, tally, NOW)).toBe('MOTM vote open until 4 Sep midnight · tap a player to change');
-    expect(matchVoteCopy(closedMatch, tie, NOW)).toBe('MOTM vote closed · tie, both receive the award');
-    expect(matchVoteCopy(closedMatch, { Tally: [] }, NOW)).toBe('MOTM vote closed · no votes, no winner');
+    expect(matchVoteCopy(openMatch, tally, NOW)).toBe('Star of the Match vote open until 4 Sep midnight · tap a player to change');
+    expect(matchVoteCopy(closedMatch, tie, NOW)).toBe('Star of the Match vote closed · tie, both receive the award');
+    expect(matchVoteCopy(closedMatch, { Tally: [] }, NOW)).toBe('Star of the Match vote closed · no votes, no winner');
   });
 });
 
@@ -121,3 +121,41 @@ describe('nextWaitingPosition', () => {
   });
 });
 
+
+describe('voteErrorMessage', () => {
+  const refusal = (error) => ({ response: { data: { error } } });
+  const GENERIC = 'Error updating your Star of the Match vote.';
+
+  it("renames the award in each of the backend's vote refusals, whatever the case", () => {
+    expect(voteErrorMessage(refusal('you cannot vote for yourself for man of the match')))
+      .toBe('You cannot vote for yourself for Star of the Match.');
+    expect(voteErrorMessage(refusal("only players on this match's roster can vote for man of the match")))
+      .toBe("Only players on this match's roster can vote for Star of the Match.");
+    expect(voteErrorMessage(refusal('voting for man of the match is closed for this match')))
+      .toBe('Voting for Star of the Match is closed for this match.');
+    expect(voteErrorMessage(refusal('Man Of The Match: MAN OF THE MATCH, men of the match')))
+      .toBe('Star of the Match: Star of the Match, Star of the Match.');
+  });
+
+  it('writes the reason as a sentence: capital first letter, one closing full stop', () => {
+    expect(voteErrorMessage(refusal('voting for man of the match is closed for this match')))
+      .toBe('Voting for Star of the Match is closed for this match.');
+    expect(voteErrorMessage(refusal('Already a sentence.'))).toBe('Already a sentence.');
+    expect(voteErrorMessage(refusal('  is it closed?  '))).toBe('Is it closed?');
+    expect(voteErrorMessage(refusal('closed!'))).toBe('Closed!');
+  });
+
+  it('keeps a reason that never names the award', () => {
+    expect(voteErrorMessage(refusal('match not found'))).toBe('Match not found.');
+  });
+
+  it('gives the generic message for a reason still naming the award the old way, or no reason', () => {
+    expect(voteErrorMessage(refusal('MOTM voting is closed'))).toBe(GENERIC);
+    expect(voteErrorMessage(refusal('motm'))).toBe(GENERIC);
+    expect(voteErrorMessage(refusal('man-of-the-match vote closed'))).toBe('Star of the Match vote closed.');
+    expect(voteErrorMessage(refusal(''))).toBe(GENERIC);
+    expect(voteErrorMessage(refusal({ code: 1 }))).toBe(GENERIC);
+    expect(voteErrorMessage(new Error('Failed to cast Man of the Match vote'))).toBe(GENERIC);
+    expect(voteErrorMessage(undefined)).toBe(GENERIC);
+  });
+});
