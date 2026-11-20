@@ -341,3 +341,18 @@ describe('ProfileV2.vue preferred positions (Account)', () => {
     expect(updateMyPositions).not.toHaveBeenCalled();
   });
 });
+
+describe('ProfileV2.vue Star of the Match', () => {
+  it('labels the awards stat Stars', async () => {
+    const { wrapper } = await mountProfile();
+    const labels = wrapper.findAll('.stat').map((stat) => stat.text());
+    expect(labels.some((text) => /Stars$/.test(text))).toBe(true);
+    expect(wrapper.text()).not.toContain('MOTM');
+    expect(wrapper.find('.stats').text()).not.toContain('Star of the Match');
+  });
+
+  it('names the titles Star of the Match in the account deletion text', async () => {
+    const { wrapper } = await mountProfile({ routeName: 'ProfileAccount' });
+    expect(wrapper.find('.danger').text()).toContain('Match history (goals, Star of the Match titles) stays');
+  });
+});

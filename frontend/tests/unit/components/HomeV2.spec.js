@@ -67,7 +67,7 @@ describe('HomeV2.vue with nothing scheduled', () => {
   it('shows the MOTM line only while the header match vote is open', async () => {
     const yesterday = { ...played('y', 1), ResultRecordedAt: new Date(Date.now() - DAY).toISOString() };
     const open = await mountHome([yesterday]);
-    expect(open.find('.motm-row').text()).toBe('MOTM vote open · Vote in match details');
+    expect(open.find('.motm-row').text()).toBe('Star of the Match vote open · Vote in match details');
     expect(JSON.parse(open.find('.motm-row').attributes('data-to')).params.id).toBe('y');
     const closed = await mountHome([played('last', 3)]);
     expect(closed.find('.motm-row').exists()).toBe(false);
@@ -109,7 +109,7 @@ describe('HomeV2.vue Latest matches rows', () => {
     const wrapper = await mountHome([next, yesterday, played('old', 9)]);
     const [row, old] = wrapper.findAll('.list .row');
     expect(row.attributes('aria-describedby')).toBe('row-sub-y');
-    expect(row.find('#row-sub-y').text()).toBe('MOTM vote open');
+    expect(row.find('#row-sub-y').text()).toBe('Star of the Match vote open');
     expect(old.attributes('aria-describedby')).toBeUndefined();
   });
 });
@@ -174,7 +174,7 @@ describe('HomeV2.vue with a match scheduled', () => {
     expect(getMatchVotes).not.toHaveBeenCalled();
   });
 
-  it('marks that match row « MOTM vote open » in grey, in place of its kick-off time, while its vote is open', async () => {
+  it('marks that match row « Star of the Match vote open » in grey, in place of its kick-off time, while its vote is open', async () => {
     const yesterday = {
       ...played('y', 1), ScheduledAt: new Date(Date.now() - DAY).toISOString(),
       ResultRecordedAt: new Date(Date.now() - DAY).toISOString(),
@@ -184,7 +184,7 @@ describe('HomeV2.vue with a match scheduled', () => {
     const [row, older] = wrapper.findAll('.list .row');
     expect(JSON.parse(row.attributes('data-to')).params.id).toBe('y');
     expect(row.findAll('.row-sub')).toHaveLength(1);
-    expect(row.find('.row-sub').text()).toBe('MOTM vote open');
+    expect(row.find('.row-sub').text()).toBe('Star of the Match vote open');
     expect(row.find('.row-sub').classes()).toContain('row-sub-vote');
     expect(older.find('.row-sub').text()).toMatch(/^\w+ \d{2}:\d{2}$/);
     expect(older.find('.row-sub-vote').exists()).toBe(false);

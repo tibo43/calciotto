@@ -2,6 +2,38 @@ import { parseCalendarDay } from './datetime';
 import { deriveRegistrationState, REGISTRATION_NOT_OPEN_YET, REGISTRATION_OPEN } from './matchRegistration';
 import { isMotmVotingOpen } from './motmVoting';
 
+// What the design v2 calls the Man of the Match award, everywhere it shows
+// it (the code keeps the motm names, and v1 keeps "Man of the Match" and
+// "MOTM"). One place, so the name can change here alone: the settings
+// label (notificationLabels.js) imports it. public/sw.js, outside the
+// bundle, keeps a copy (MOTM_TEXT.name) that tests/unit/public/sw.spec.js
+// pins to this one.
+export const STAR_OF_THE_MATCH = 'Star of the Match';
+// The short label, where space is tight: the Rankings tab and the profile
+// stat. Sentences keep the full name.
+export const STARS = 'Stars';
+export const VOTE_OPEN_LINE = `${STAR_OF_THE_MATCH} vote open`;
+
+const OLD_AWARD_NAME = /\bm[ae]n[\s_-]+of[\s_-]+the[\s_-]+match\b/gi;
+const OLD_AWARD_LEFT = /\bmotm\b|\bm[ae]n[\s_-]+of[\s_-]+the[\s_-]+match\b/i;
+const VOTE_ERROR_FALLBACK = `Error updating your ${STAR_OF_THE_MATCH} vote.`;
+
+// The toast text after a failed vote. The backend's own reason is kept, but
+// its messages say "man of the match" (shared with v1, so not changed
+// there): that name becomes STAR_OF_THE_MATCH, and a reason that would
+// still show the old name in any other form (MOTM…) gives way to the
+// generic message, as does no reason at all. The reason is shown as a
+// sentence: capital first letter, full stop at the end.
+export function voteErrorMessage(error) {
+  const reason = error?.response?.data?.error;
+  if (typeof reason !== 'string' || !reason.trim()) return VOTE_ERROR_FALLBACK;
+  const renamed = reason.trim().replace(OLD_AWARD_NAME, STAR_OF_THE_MATCH);
+  if (OLD_AWARD_LEFT.test(renamed)) return VOTE_ERROR_FALLBACK;
+  // As a sentence: a capital first letter and a closing full stop.
+  const sentence = renamed.charAt(0).toUpperCase() + renamed.slice(1);
+  return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
+}
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -124,19 +156,19 @@ export function motmWinners(votes) {
   return rows.filter((row) => Number(row.Votes) === max);
 }
 
-// The home's MOTM line: only for a match that is over and whose vote is
+// The home's Star of the Match line: only for a match that is over and whose vote is
 // still open. A closed vote, or another match's, says nothing there.
 export function homeVoteLine(match, nowMs) {
   if (!match || !isMatchOver(match, nowMs)) return null;
-  return isMotmVotingOpen(match, nowMs) ? 'MOTM vote open · Vote in match details' : null;
+  return isMotmVotingOpen(match, nowMs) ? `${STAR_OF_THE_MATCH} vote open · Vote in match details` : null;
 }
 
-// A Latest matches row's grey sub-line: « MOTM vote open » while that
-// match's vote is still open, in place of its weekday and kick-off time
-// (never both); else that time, or nothing.
+// A Latest matches row's grey sub-line: VOTE_OPEN_LINE (« Star of the Match
+// vote open ») while that match's vote is still open, in place of its
+// weekday and kick-off time (never both); else that time, or nothing.
 export function rowSubLine(match, nowMs) {
   if (!match) return '';
-  if (isMatchOver(match, nowMs) && isMotmVotingOpen(match, nowMs)) return 'MOTM vote open';
+  if (isMatchOver(match, nowMs) && isMotmVotingOpen(match, nowMs)) return VOTE_OPEN_LINE;
   return weekdayTimeLabel(match.ScheduledAt);
 }
 
@@ -145,16 +177,16 @@ export function matchVoteCopy(match, votes, nowMs) {
   if (isMotmVotingOpen(match, nowMs)) {
     const until = voteDeadlineLabel(match);
     return until
-      ? `MOTM vote open until ${until} midnight · tap a player to change`
-      : 'MOTM vote open · tap a player to change';
+      ? `${STAR_OF_THE_MATCH} vote open until ${until} midnight · tap a player to change`
+      : `${STAR_OF_THE_MATCH} vote open · tap a player to change`;
   }
   const winners = motmWinners(votes);
-  if (!winners.length) return 'MOTM vote closed · no votes, no winner';
+  if (!winners.length) return `${STAR_OF_THE_MATCH} vote closed · no votes, no winner`;
   if (winners.length > 1) {
     const who = winners.length === 2 ? 'both' : 'all of them';
-    return `MOTM vote closed · tie, ${who} receive the award`;
+    return `${STAR_OF_THE_MATCH} vote closed · tie, ${who} receive the award`;
   }
-  return 'MOTM vote closed';
+  return `${STAR_OF_THE_MATCH} vote closed`;
 }
 
 export function goalLine(player) {

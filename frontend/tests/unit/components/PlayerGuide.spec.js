@@ -8,6 +8,17 @@ const toLastStep = async (wrapper) => {
 };
 
 describe('PlayerGuide.vue', () => {
+  it('names the award Star of the Match on the Rankings step', async () => {
+    const wrapper = mount(PlayerGuide, { props: { required: true } });
+    for (let step = 1; step < 3; step += 1) {
+      await wrapper.find('.guide-actions .btn:not(.btn-ghost)').trigger('click');
+    }
+    expect(wrapper.find('.guide-title').text()).toBe('Rankings');
+    expect(wrapper.find('.guide-description').text()).toBe(
+      'Points tracks match results. Scorers lists goals. Star of the Match counts the awards from post-match votes.'
+    );
+  });
+
   it('walks through the steps and finishes on the last one', async () => {
     const wrapper = mount(PlayerGuide, { props: { required: true } });
     expect(wrapper.find('.label').text()).toBe('Step 1 of 5');

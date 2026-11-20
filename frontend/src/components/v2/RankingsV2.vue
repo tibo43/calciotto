@@ -8,7 +8,7 @@
         Scorers
       </router-link>
       <router-link to="/rankings?tab=motm" :class="{ 'is-on': tab === 'motm' }">
-        MOTM
+        {{ stars }}
       </router-link>
     </nav>
 
@@ -124,6 +124,7 @@
 
 <script>
 import { getPointsStandings, getScorers, getMotmStandings, getSeasons, getToken } from '@/services/api';
+import { STARS } from '@/services/v2Home';
 import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
 
 function currentPlayerId() {
@@ -149,6 +150,7 @@ export default {
   },
   data() {
     return {
+      stars: STARS,
       loading: true,
       failed: false,
       points: [],
@@ -174,7 +176,7 @@ export default {
     },
     emptyTitle() {
       if (this.tab === 'scorers') return 'No goals yet';
-      if (this.tab === 'motm') return 'No MOTM awards yet';
+      if (this.tab === 'motm') return `No ${STARS.toLowerCase()} yet`;
       return 'No standings yet';
     },
   },

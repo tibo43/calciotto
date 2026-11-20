@@ -122,9 +122,9 @@
               <!-- « A vs » then « B »: on one line when they fit, else B on
                    the next line; a name too long for the column wraps. -->
               <div class="row-title row-teams"><span class="row-side"><span class="row-team">{{ teamName(match, 0) }}</span>&nbsp;<span class="row-vs">vs</span>{{ ' ' }}</span><span class="row-side"><span class="row-team">{{ teamName(match, 1) }}</span></span></div>
-              <!-- One grey line: « MOTM vote open » while its vote is open,
+              <!-- One grey line: « Star of the Match vote open » while its vote is open,
                    else its weekday and kick-off time; the row leads to it. -->
-              <div v-if="rowSubLine(match, nowMs)" :id="`row-sub-${match.ID}`" class="row-sub" :class="{ 'row-sub-vote': rowSubLine(match, nowMs) === 'MOTM vote open' }">{{ rowSubLine(match, nowMs) }}</div>
+              <div v-if="rowSubLine(match, nowMs)" :id="`row-sub-${match.ID}`" class="row-sub" :class="{ 'row-sub-vote': rowSubLine(match, nowMs) === voteOpenLine }">{{ rowSubLine(match, nowMs) }}</div>
             </div>
             <div class="score">{{ scoreOf(match) }}</div>
           </router-link>
@@ -160,7 +160,7 @@ import { getMatchesDetails, getMatchRegistrations, registerForMatch, unregisterF
 import { deriveRegistrationState, registrationsAreOpen, teamsAreComposed } from '@/services/matchRegistration';
 import {
   splitHomeMatches, heroDateLabel, rowDateLabel, dayMonthLabel, kickoffLabel, weekdayTimeLabel,
-  registrationMeta, placesLeft, homeVoteLine, rowSubLine, myTeam, nextWaitingPosition,
+  registrationMeta, placesLeft, homeVoteLine, rowSubLine, myTeam, nextWaitingPosition, VOTE_OPEN_LINE,
 } from '@/services/v2Home';
 import fitTwoLines from '@/directives/fitTwoLines';
 
@@ -191,6 +191,7 @@ export default {
   },
   data() {
     return {
+      voteOpenLine: VOTE_OPEN_LINE,
       loading: true,
       failed: false,
       matches: [],

@@ -178,7 +178,7 @@
       <section class="danger">
         <p class="label">Danger zone</p>
         <h2 class="h2">Delete my account</h2>
-        <p>This can't be undone. Your name, email and password are erased, and you're removed from every group. Match history (goals, MOTM titles) stays for the other players, and is no longer tied to an account.</p>
+        <p>This can't be undone. Your name, email and password are erased, and you're removed from every group. Match history (goals, {{ starOfTheMatch }} titles) stays for the other players, and is no longer tied to an account.</p>
         <span class="withdraw-wrap">
           <button class="btn btn-danger" type="button" :aria-expanded="deleting.toString()" @click="openDelete">Delete my account</button>
           <div v-if="deleting" class="confirm-pop" role="dialog" aria-labelledby="delete-title">
@@ -294,6 +294,7 @@ import {
 } from '@/services/api';
 import { POSITIONS, normalizePositions } from '@/services/v2Positions';
 import { actionErrorMessage } from '@/services/v2Match';
+import { STAR_OF_THE_MATCH, STARS } from '@/services/v2Home';
 import AppToast from '@/components/AppToast.vue';
 import { getPushState, enablePush, disablePush, PUSH_STATE, PUSH_FEATURE } from '@/services/pushNotifications';
 import { getInstallTracker, INSTALL_STATE, PWA_INSTALL_FEATURE } from '@/services/pwaInstall';
@@ -343,6 +344,7 @@ export default {
   },
   data() {
     return {
+      starOfTheMatch: STAR_OF_THE_MATCH,
       loading: true,
       failed: false,
       overall: {},
@@ -443,7 +445,7 @@ export default {
         { label: 'Points', value: row.Points || 0 },
         { label: 'Goals', value: row.GoalsFor || 0 },
         { label: 'OG', value: row.OwnGoals || 0 },
-        { label: 'MOTM', value: row.MotmAwards || 0 },
+        { label: STARS, value: row.MotmAwards || 0 },
         { label: 'Pred. pts', value: this.predictionLabel(row.PredictionPoints) },
       ];
     },

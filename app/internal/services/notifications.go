@@ -144,6 +144,10 @@ type PushMessage struct {
 	GroupName string     `json:"groupName,omitempty"`
 	KickoffAt *time.Time `json:"kickoffAt,omitempty"`
 	TeamName  string     `json:"teamName,omitempty"`
+	// DesignV2 is set only on result_recorded, for a recipient with the
+	// design-v2 feature: the service worker then names the vote the way the
+	// v2 screens do ("Star of the Match" rather than "Man of the Match").
+	DesignV2 bool `json:"designV2,omitempty"`
 	// PlayerName is set only on member_joined: who joined the group.
 	PlayerName string      `json:"playerName,omitempty"`
 	Score      []PushScore `json:"score,omitempty"`
@@ -581,6 +585,10 @@ func (s *NotificationService) notifyResult(match models.Match) error {
 	messages := map[uuid.UUID]PushMessage{}
 	for _, team := range details.Teams {
 		for _, player := range team.Players {
+			v2, err := s.playerHasFeature(player.ID, models.FeatureDesignV2)
+			if err != nil {
+				return err
+			}
 			messages[player.ID] = PushMessage{
 				Type:      PushTypeResultRecorded,
 				URL:       MatchDeepLink(match.ID),
@@ -588,6 +596,7 @@ func (s *NotificationService) notifyResult(match models.Match) error {
 				GroupName: group,
 				TeamName:  team.Name,
 				Score:     score,
+				DesignV2:  v2,
 			}
 		}
 	}
