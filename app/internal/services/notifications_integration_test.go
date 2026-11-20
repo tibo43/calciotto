@@ -12,6 +12,7 @@ import (
 	"app/internal/models"
 	"app/internal/services"
 	"app/internal/testutil"
+	"app/pkg/database"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -53,8 +54,11 @@ type notificationEnv struct {
 
 func newNotificationEnv(t *testing.T) *notificationEnv {
 	t.Helper()
-	db := testutil.OpenDB(t)
-	tx := testutil.BeginTx(t, db)
+	return newNotificationEnvOn(t, testutil.BeginTx(t, testutil.OpenDB(t)))
+}
+
+func newNotificationEnvOn(t *testing.T, tx *gorm.DB) *notificationEnv {
+	t.Helper()
 
 	group, err := services.NewGroupService(tx).CreateGroup("Zzz Notifications "+uuid.NewString(), services.DefaultTeamSpecs)
 	if err != nil {
@@ -137,6 +141,25 @@ func (e *notificationEnv) types(endpoint string) []string {
 	}
 	sort.Strings(types)
 	return types
+}
+
+// settle runs the tick that sends predictions_settled for matchID:
+// PredictionsSettledDelay after its ResultRecordedAt. It returns that tick's
+// result; what was sent is in e.sender.sent, added to anything already there.
+func (e *notificationEnv) settle(t *testing.T, matchID uuid.UUID) services.TickResult {
+	t.Helper()
+	var match models.Match
+	if err := e.tx.First(&match, "id = ?", matchID).Error; err != nil {
+		t.Fatalf("reload match: %v", err)
+	}
+	if match.ResultRecordedAt == nil {
+		t.Fatal("settle: the result is not recorded")
+	}
+	result, err := e.notifications.Tick(match.ResultRecordedAt.Add(services.PredictionsSettledDelay))
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	return result
 }
 
 func TestNotifications_Integration_SubscribeRequiresFeature(t *testing.T) {
@@ -555,6 +578,15 @@ func TestNotifications_Integration_PredictionsOpenOnceThenSettledForPredictors(t
 		{ID: env.teamA.ID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: 3}}},
 		{ID: env.teamB.ID, Players: []models.PlayerCustom{{ID: bob, GoalsScored: 1}}},
 	})
+	// The save sends the result only; the settlement is the tick's.
+	for _, endpoint := range []string{aliceEndpoint, bobEndpoint, eveEndpoint} {
+		if got := messagesOfType(env.sender.sent[endpoint], services.PushTypePredictionsSettled); len(got) != 0 {
+			t.Fatalf("the score save sent predictions_settled to %s: %+v", endpoint, got)
+		}
+	}
+	if result := env.settle(t, matchID); result.PredictionsSettled != 1 {
+		t.Fatalf("settle tick result %+v, want one predictions_settled", result)
+	}
 
 	details, err := env.matches.GetMatchDetailsByID(matchID, env.groupID)
 	if err != nil {
@@ -618,12 +650,15 @@ func TestNotifications_Integration_PredictionsOpenOnceThenSettledForPredictors(t
 	}
 
 	// Editing the score later changes what the leaderboard derives, and does
-	// not send the result or the settlement again.
+	// not send the result or the settlement again, nor does a later tick.
 	env.sender.reset()
 	save([]models.TeamWithPlayers{
 		{ID: env.teamA.ID, Players: []models.PlayerCustom{{ID: alice, GoalsScored: 4}}},
 		{ID: env.teamB.ID, Players: []models.PlayerCustom{{ID: bob}}},
 	})
+	if result := env.settle(t, matchID); result.PredictionsSettled != 0 {
+		t.Fatalf("a tick after the settlement sent it again: %+v", result)
+	}
 	if len(env.sender.sent) != 0 {
 		t.Fatalf("a score correction sent %+v", env.sender.sent)
 	}
@@ -657,6 +692,7 @@ func TestNotifications_Integration_SettledDrawPaysDrawOdds(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpdateMatch (draw): %v", err)
 	}
+	env.settle(t, matchID)
 
 	settled := messagesOfType(env.sender.sent[aliceEndpoint], services.PushTypePredictionsSettled)
 	even := services.ComputeMatchOdds(services.EloStartingRating, services.EloStartingRating)
@@ -876,6 +912,7 @@ func TestNotifications_Integration_SendRespectsEachPreference(t *testing.T) {
 		services.PushTypePredictionsSettled: true,
 	})
 	saveRoster(teams, []uuid.UUID{alice}, []uuid.UUID{bob})
+	env.settle(t, teams)
 	env.wantTypes(t, aliceEndpoint, services.PushTypePredictionsSettled)
 	env.wantTypes(t, bobEndpoint, services.PushTypeResultRecorded, services.PushTypePredictionsSettled)
 
@@ -899,6 +936,7 @@ func TestNotifications_Integration_SendRespectsEachPreference(t *testing.T) {
 		services.PushTypePredictionsSettled: false,
 	})
 	saveRoster(scored, []uuid.UUID{alice}, []uuid.UUID{bob})
+	env.settle(t, scored)
 	env.wantTypes(t, aliceEndpoint, services.PushTypeResultRecorded)
 	env.wantTypes(t, bobEndpoint, services.PushTypeResultRecorded, services.PushTypePredictionsSettled)
 }
@@ -1121,5 +1159,304 @@ func TestNotifications_Integration_PredictionsOpenNeverAfterKickoff(t *testing.T
 	}
 	if got := p.reload(t).PredictionsOpenNotifiedAt; got != nil {
 		t.Fatalf("predictions_open claimed after kick-off at %v", got)
+	}
+}
+
+// record moves kick-off into the past and saves Alice on team A with goalsA
+// and Bob on team B with goalsB: the save that records the result. It
+// returns the match's ResultRecordedAt.
+func (p *predictionsEnv) record(t *testing.T, goalsA, goalsB int) time.Time {
+	t.Helper()
+	if err := p.tx.Model(&models.Match{}).Where("id = ?", p.matchID).Update("scheduled_at", time.Now().Add(-time.Hour)).Error; err != nil {
+		t.Fatalf("move kick-off: %v", err)
+	}
+	p.saveScore(t, goalsA, goalsB)
+	recorded := p.reload(t).ResultRecordedAt
+	if recorded == nil {
+		t.Fatal("the save after kick-off did not record the result")
+	}
+	return *recorded
+}
+
+func (p *predictionsEnv) saveScore(t *testing.T, goalsA, goalsB int) {
+	t.Helper()
+	if err := p.matches.UpdateMatch(p.matchID, p.groupID, []models.TeamWithPlayers{
+		{ID: p.teamA.ID, Players: []models.PlayerCustom{{ID: p.alice, GoalsScored: goalsA}}},
+		{ID: p.teamB.ID, Players: []models.PlayerCustom{{ID: p.bob, GoalsScored: goalsB}}},
+	}); err != nil {
+		t.Fatalf("UpdateMatch (score): %v", err)
+	}
+}
+
+// predictBoth has Alice back team A and Bob team B.
+func (p *predictionsEnv) predictBoth(t *testing.T) {
+	t.Helper()
+	predict := services.NewMatchPredictionService(p.tx, p.matches)
+	if err := predict.Predict(p.matchID, p.alice, &p.teamA.ID); err != nil {
+		t.Fatalf("Alice predict: %v", err)
+	}
+	if err := predict.Predict(p.matchID, p.bob, &p.teamB.ID); err != nil {
+		t.Fatalf("Bob predict: %v", err)
+	}
+}
+
+// tickSettled clears what was sent, ticks at at and returns how many
+// predictions_settled that tick sent.
+func (p *predictionsEnv) tickSettled(t *testing.T, at time.Time) int {
+	t.Helper()
+	p.sender.reset()
+	result, err := p.notifications.Tick(at)
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	return result.PredictionsSettled
+}
+
+// wantPoints is what ComputePredictionStandings gives each player for the
+// match as it stands now.
+func (p *predictionsEnv) wantPoints(t *testing.T) map[uuid.UUID]float64 {
+	t.Helper()
+	details, err := p.matches.GetMatchDetailsByID(p.matchID, p.groupID)
+	if err != nil {
+		t.Fatalf("GetMatchDetailsByID: %v", err)
+	}
+	all, err := p.matches.GetMatchesDetails(p.groupID, "")
+	if err != nil {
+		t.Fatalf("GetMatchesDetails: %v", err)
+	}
+	byMatch, err := services.NewMatchPredictionService(p.tx, p.matches).TallyPredictionsForMatches([]uuid.UUID{p.matchID})
+	if err != nil {
+		t.Fatalf("TallyPredictionsForMatches: %v", err)
+	}
+	points := map[uuid.UUID]float64{}
+	for _, row := range services.ComputePredictionStandings(all, []models.MatchWithDetails{*details}, byMatch) {
+		points[row.PlayerID] = row.Points
+	}
+	return points
+}
+
+func (p *predictionsEnv) settledPoints(t *testing.T, endpoint string) float64 {
+	t.Helper()
+	settled := messagesOfType(p.sender.sent[endpoint], services.PushTypePredictionsSettled)
+	if len(settled) != 1 || settled[0].Points == nil {
+		t.Fatalf("%s got %+v, want one predictions_settled with points", endpoint, p.sender.sent[endpoint])
+	}
+	return *settled[0].Points
+}
+
+// The score save sends result_recorded only. predictions_settled waits
+// PredictionsSettledDelay after ResultRecordedAt: a tick one minute short
+// sends nothing, the first tick at or after it sends once, with the points
+// ComputePredictionStandings gives, and predictions_settled_notified_at is
+// that tick's time. Nothing sends it again.
+func TestNotifications_Integration_PredictionsSettledWaitsForTheDelay(t *testing.T) {
+	p := newPredictionsEnv(t, time.Now().Add(9*time.Hour))
+	p.save(t, []uuid.UUID{p.alice}, []uuid.UUID{p.bob})
+	p.predictBoth(t)
+	p.sender.reset()
+
+	recorded := p.record(t, 3, 1)
+	p.wantTypes(t, p.aliceEndpoint, services.PushTypeResultRecorded)
+	p.wantTypes(t, p.bobEndpoint, services.PushTypeResultRecorded)
+	if got := p.reload(t).PredictionsSettledNotifiedAt; got != nil {
+		t.Fatalf("the score save claimed predictions_settled at %v", got)
+	}
+
+	for _, early := range []time.Time{recorded, recorded.Add(services.PredictionsSettledDelay - time.Minute)} {
+		if sent := p.tickSettled(t, early); sent != 0 || len(p.sender.sent) != 0 {
+			t.Fatalf("a tick at %v, before the delay, sent %d: %+v", early, sent, p.sender.sent)
+		}
+	}
+
+	due := recorded.Add(services.PredictionsSettledDelay)
+	if sent := p.tickSettled(t, due); sent != 1 {
+		t.Fatalf("the tick at the delay sent %d, want 1", sent)
+	}
+	p.wantTypes(t, p.aliceEndpoint, services.PushTypePredictionsSettled)
+	p.wantTypes(t, p.bobEndpoint, services.PushTypePredictionsSettled)
+	want := p.wantPoints(t)
+	if got := p.settledPoints(t, p.aliceEndpoint); math.Abs(got-want[p.alice]) > 1e-9 || got <= 0 {
+		t.Errorf("Alice settled %v, want the standings' %v (a win)", got, want[p.alice])
+	}
+	if got := p.settledPoints(t, p.bobEndpoint); got != want[p.bob] || got != -1 {
+		t.Errorf("Bob settled %v, want the standings' %v (−1)", got, want[p.bob])
+	}
+	if got := p.reload(t).PredictionsSettledNotifiedAt; got == nil || !got.Equal(due) {
+		t.Fatalf("predictions_settled_notified_at = %v, want %v", got, due)
+	}
+
+	if sent := p.tickSettled(t, due.Add(time.Minute)); sent != 0 || len(p.sender.sent) != 0 {
+		t.Fatalf("a later tick sent again: %d %+v", sent, p.sender.sent)
+	}
+	p.saveScore(t, 4, 1)
+	if sent := p.tickSettled(t, due.Add(2*time.Minute)); sent != 0 || len(p.sender.sent) != 0 {
+		t.Fatalf("a correction after the settlement sent again: %d %+v", sent, p.sender.sent)
+	}
+}
+
+// A score corrected within the delay is settled on its final value: the
+// first save starts the clock, the correction moves neither the clock nor
+// sends anything, and the tick reads the match as it stands.
+func TestNotifications_Integration_PredictionsSettledUsesTheScoreAtSendTime(t *testing.T) {
+	p := newPredictionsEnv(t, time.Now().Add(9*time.Hour))
+	p.save(t, []uuid.UUID{p.alice}, []uuid.UUID{p.bob})
+	p.predictBoth(t)
+
+	recorded := p.record(t, 3, 1) // Alice's pick wins...
+	p.sender.reset()
+	p.saveScore(t, 1, 3) // ...until the admin fixes a swapped score.
+	if len(p.sender.sent) != 0 {
+		t.Fatalf("the correction sent %+v", p.sender.sent)
+	}
+	if got := p.reload(t).ResultRecordedAt; got == nil || !got.Equal(recorded) {
+		t.Fatalf("the correction moved result_recorded_at from %v to %v", recorded, got)
+	}
+
+	if sent := p.tickSettled(t, recorded.Add(services.PredictionsSettledDelay)); sent != 1 {
+		t.Fatalf("the tick at the delay sent %d, want 1", sent)
+	}
+	want := p.wantPoints(t)
+	if got := p.settledPoints(t, p.aliceEndpoint); got != -1 || want[p.alice] != -1 {
+		t.Errorf("Alice settled %v (standings %v), want −1 on the corrected score", got, want[p.alice])
+	}
+	if got := p.settledPoints(t, p.bobEndpoint); got <= 0 || math.Abs(got-want[p.bob]) > 1e-9 {
+		t.Errorf("Bob settled %v, want the standings' %v (a win)", got, want[p.bob])
+	}
+	settled := messagesOfType(p.sender.sent[p.aliceEndpoint], services.PushTypePredictionsSettled)[0]
+	goals := map[string]int{}
+	for _, line := range settled.Score {
+		goals[line.Team] = line.Goals
+	}
+	if goals[p.teamA.Name] != 1 || goals[p.teamB.Name] != 3 {
+		t.Errorf("settled score = %+v, want the corrected %s 1 – %s 3", settled.Score, p.teamA.Name, p.teamB.Name)
+	}
+}
+
+// A roster no longer fully composed at the tick has nothing to settle: the
+// match stays unclaimed and the first tick after it is composed again sends
+// it, within PredictionsSettledWindow.
+func TestNotifications_Integration_PredictionsSettledWaitsForAComposedRoster(t *testing.T) {
+	p := newPredictionsEnv(t, time.Now().Add(9*time.Hour))
+	p.save(t, []uuid.UUID{p.alice}, []uuid.UUID{p.bob})
+	p.predictBoth(t)
+	recorded := p.record(t, 2, 0)
+
+	p.save(t, []uuid.UUID{p.alice, p.bob}, nil)
+	due := recorded.Add(services.PredictionsSettledDelay)
+	if sent := p.tickSettled(t, due); sent != 0 || len(p.sender.sent) != 0 {
+		t.Fatalf("a one-sided roster was settled: %d %+v", sent, p.sender.sent)
+	}
+	if got := p.reload(t).PredictionsSettledNotifiedAt; got != nil {
+		t.Fatalf("a one-sided roster claimed predictions_settled at %v", got)
+	}
+
+	p.saveScore(t, 2, 0)
+	if sent := p.tickSettled(t, due.Add(time.Minute)); sent != 1 {
+		t.Fatalf("the tick after the roster was recomposed sent %d, want 1", sent)
+	}
+	p.wantTypes(t, p.aliceEndpoint, services.PushTypePredictionsSettled)
+}
+
+// A match nobody predicted is claimed at the first due tick and sends
+// nothing, so later ticks stop looking at it.
+func TestNotifications_Integration_PredictionsSettledNobodyPredicted(t *testing.T) {
+	p := newPredictionsEnv(t, time.Now().Add(9*time.Hour))
+	p.save(t, []uuid.UUID{p.alice}, []uuid.UUID{p.bob})
+	recorded := p.record(t, 1, 0)
+
+	due := recorded.Add(services.PredictionsSettledDelay)
+	if sent := p.tickSettled(t, due); sent != 0 || len(p.sender.sent) != 0 {
+		t.Fatalf("a match nobody predicted sent %d: %+v", sent, p.sender.sent)
+	}
+	if got := p.reload(t).PredictionsSettledNotifiedAt; got == nil || !got.Equal(due) {
+		t.Fatalf("predictions_settled_notified_at = %v, want %v (done, nothing sent)", got, due)
+	}
+}
+
+// A result recorded longer than PredictionsSettledWindow before any tick saw
+// it is never announced: that bound is what keeps old results — the ones
+// already settled by the save before this notification moved to the tick —
+// from a burst of pushes, on top of the startup backfill.
+func TestNotifications_Integration_PredictionsSettledNeverAfterTheWindow(t *testing.T) {
+	p := newPredictionsEnv(t, time.Now().Add(9*time.Hour))
+	p.save(t, []uuid.UUID{p.alice}, []uuid.UUID{p.bob})
+	p.predictBoth(t)
+	recorded := p.record(t, 3, 1)
+
+	if sent := p.tickSettled(t, recorded.Add(services.PredictionsSettledWindow)); sent != 0 || len(p.sender.sent) != 0 {
+		t.Fatalf("a tick past the window sent %d: %+v", sent, p.sender.sent)
+	}
+	if got := p.reload(t).PredictionsSettledNotifiedAt; got != nil {
+		t.Fatalf("a tick past the window claimed predictions_settled at %v", got)
+	}
+
+	// The same holds for a match played days ago, ticked now.
+	if err := p.tx.Model(&models.Match{}).Where("id = ?", p.matchID).Update("result_recorded_at", time.Now().Add(-48*time.Hour)).Error; err != nil {
+		t.Fatalf("age the result: %v", err)
+	}
+	if sent := p.tickSettled(t, time.Now()); sent != 0 || len(p.sender.sent) != 0 {
+		t.Fatalf("an old result was announced: %d %+v", sent, p.sender.sent)
+	}
+}
+
+// TestAddPredictionsSettledNotifiedAt_Integration replays the deploy that
+// adds the column: every result already recorded is marked settled with its
+// own result_recorded_at (the save itself sent the old notification), even
+// one recorded a minute ago, so the tick, which only looks at NULLs, has
+// nothing to send. A match with no result keeps NULL. A later start, the
+// column present, backfills nothing: a NULL there is a notification still
+// waiting for its tick.
+//
+// After the column is dropped and added back it is the table's last one, so
+// a statement prepared on matches earlier in this run would fail with
+// "cached plan must not change result type": the reads below are raw
+// statements of their own. The rollback restores the original table.
+func TestAddPredictionsSettledNotifiedAt_Integration(t *testing.T) {
+	tx := testutil.BeginTx(t, testutil.OpenDB(t))
+	env := newNotificationEnvOn(t, tx)
+	p := &predictionsEnv{notificationEnv: env}
+	p.alice, p.aliceEndpoint = env.member(t, "Alice", true)
+	p.bob, p.bobEndpoint = env.member(t, "Bob", true)
+	p.matchID = env.scheduledMatch(t, time.Now().Add(9*time.Hour), time.Now().Add(-72*time.Hour), 10)
+	p.save(t, []uuid.UUID{p.alice}, []uuid.UUID{p.bob})
+	p.predictBoth(t)
+	recorded := p.record(t, 3, 1)
+	pending := env.scheduledMatch(t, time.Now().Add(9*time.Hour), time.Now().Add(-72*time.Hour), 10)
+
+	settledAt := func(matchID uuid.UUID) *time.Time {
+		t.Helper()
+		var at []time.Time
+		if err := tx.Raw(`SELECT predictions_settled_notified_at AS at FROM matches WHERE id = ? AND predictions_settled_notified_at IS NOT NULL /* backfill test */`, matchID).Pluck("at", &at).Error; err != nil {
+			t.Fatalf("read predictions_settled_notified_at: %v", err)
+		}
+		if len(at) == 0 {
+			return nil
+		}
+		return &at[0]
+	}
+
+	// The database as it was before this release: no such column.
+	if err := tx.Exec(`ALTER TABLE matches DROP COLUMN predictions_settled_notified_at`).Error; err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if err := database.AddPredictionsSettledNotifiedAt(tx); err != nil {
+		t.Fatalf("AddPredictionsSettledNotifiedAt: %v", err)
+	}
+	if got := settledAt(p.matchID); got == nil || !got.Equal(recorded) {
+		t.Fatalf("recorded match: predictions_settled_notified_at = %v, want its result_recorded_at %v", got, recorded)
+	}
+	if got := settledAt(pending); got != nil {
+		t.Fatalf("match without a result backfilled to %v", got)
+	}
+
+	// A later start: the column exists, so a NULL is left for the tick.
+	if err := tx.Exec(`UPDATE matches SET predictions_settled_notified_at = NULL WHERE id = ?`, p.matchID).Error; err != nil {
+		t.Fatalf("clear column: %v", err)
+	}
+	if err := database.AddPredictionsSettledNotifiedAt(tx); err != nil {
+		t.Fatalf("AddPredictionsSettledNotifiedAt (second start): %v", err)
+	}
+	if got := settledAt(p.matchID); got != nil {
+		t.Fatalf("a later start backfilled predictions_settled_notified_at to %v", got)
 	}
 }
