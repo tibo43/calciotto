@@ -35,13 +35,17 @@ import (
 //   - result_recorded: an admin saved the score for the first time, so the
 //     result is in and Man of the Match voting is open (the roster, who are
 //     the only ones allowed to vote).
-//   - predictions_settled: that same first score save. Only players who
-//     placed a prediction — "who played" means who took part in the
-//     predictions, not who was on the roster — each told the points that
-//     prediction earned.
+//   - predictions_settled: PredictionsSettledDelay after that first score
+//     save (Match.ResultRecordedAt), so the result notification is read
+//     before this one arrives. Only players who placed a prediction — "who
+//     played" means who took part in the predictions, not who was on the
+//     roster — each told the points that prediction earned (sent by the
+//     tick, once per match).
 //
-// Three event-driven ones go out from MatchService.UpdateMatch through
-// RosterSaved. The three time-driven ones need a clock, and the backend's
+// The two event-driven ones (team_assigned, result_recorded) go out from
+// MatchService.UpdateMatch through RosterSaved. The four time-driven ones
+// (registration_open, kickoff_reminder, and the two prediction ones, which
+// wait a delay after an event) need a clock, and the backend's
 // free Koyeb instance sleeps when idle, so an in-process timer would not
 // fire: cron-job.org calls POST https://calciotto.koyeb.app/internal/notifications/tick
 // every minute with Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>,
@@ -99,6 +103,22 @@ const KickoffReminderLead = 30 * time.Minute
 // kick-off comes sooner than that, it is sent as soon as the roster allows,
 // since predictions close at kick-off.
 const PredictionsOpenDelay = 10 * time.Minute
+
+// PredictionsSettledDelay is how long after the result was recorded
+// (Match.ResultRecordedAt, the first score save after kick-off) the tick
+// sends predictions_settled. Sent in the same save as result_recorded, the
+// two arrived in the same instant and a phone could show only the last one.
+// The tick runs every minute, so it arrives between this delay and about a
+// minute more after the save.
+const PredictionsSettledDelay = 3 * time.Minute
+
+// PredictionsSettledWindow bounds how late predictions_settled may still go
+// out: a result recorded longer ago than this before any tick sent it is
+// left alone instead of announced as news. With the startup backfill
+// (database.BackfillPredictionsSettledNotifiedAt) it is what keeps every
+// match settled before this notification moved to the tick from being
+// announced again.
+const PredictionsSettledWindow = 24 * time.Hour
 
 // RegistrationOpenWindow bounds how late a "sign-ups are open" notification
 // may still go out. A list that opened longer ago than this before any tick
@@ -464,16 +484,11 @@ func (s *NotificationService) rosterSaved(event RosterSavedEvent, now time.Time)
 		return nil
 	}
 	if event.ResultRecorded {
-		// Independent of each other: one failing to load its rows must not
-		// swallow the other. Both are already once-only, because
-		// ResultRecorded is true only for the save that first set
-		// ResultRecordedAt — a later correction of the score sends neither.
-		errResult := s.notifyResult(match)
-		errSettled := s.notifyPredictionsSettled(match)
-		if errResult != nil {
-			return errResult
-		}
-		return errSettled
+		// Once-only, because ResultRecorded is true only for the save that
+		// first set ResultRecordedAt — a later correction of the score does
+		// not send it again. predictions_settled is not sent here: the tick
+		// sends it PredictionsSettledDelay after ResultRecordedAt.
+		return s.notifyResult(match)
 	}
 	if !now.Before(*match.ScheduledAt) {
 		return nil
@@ -580,31 +595,48 @@ func (s *NotificationService) notifyResult(match models.Match) error {
 	return nil
 }
 
+// predictionsSettledDue reports whether the tick at now should send
+// predictions_settled for match: from PredictionsSettledDelay after the
+// result was recorded, and no later than PredictionsSettledWindow after it.
+func predictionsSettledDue(match models.Match, now time.Time) bool {
+	if match.ResultRecordedAt == nil {
+		return false
+	}
+	recorded := *match.ResultRecordedAt
+	return !now.Before(recorded.Add(PredictionsSettledDelay)) && now.Before(recorded.Add(PredictionsSettledWindow))
+}
+
 // notifyPredictionsSettled tells each player who placed a prediction what it
-// earned. The points are ComputePredictionStandings' own result for this one
-// match — odds − 1 on a hit, −1 on a miss — so the notification and the
-// leaderboard cannot disagree about the save that recorded the result. A
-// roster that is not fully composed has nothing to settle (the same skip
-// that function makes), and a match nobody predicted sends nothing.
-func (s *NotificationService) notifyPredictionsSettled(match models.Match) error {
+// earned, from the match as it stands at this tick, so a score corrected
+// within PredictionsSettledDelay is settled on its final value. The points
+// are ComputePredictionStandings' own result for this one match — odds − 1
+// on a hit, −1 on a miss — so the notification and the leaderboard cannot
+// disagree. A roster that is not fully composed has nothing to settle (the
+// same skip that function makes): the match stays unclaimed and a later tick
+// within PredictionsSettledWindow sends it once the roster is full again. A
+// match nobody predicted is claimed and sends nothing. The claim comes after
+// the reads, so a failed read leaves the match for the next tick, and two
+// racing ticks still send once. It reports whether this call sent it.
+func (s *NotificationService) notifyPredictionsSettled(match models.Match, now time.Time) (bool, error) {
 	details, err := s.Matches.GetMatchDetailsByID(match.ID, match.GroupID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !rosterFullyComposed(details.Teams) {
-		return nil
+		return false, nil
 	}
 	byMatch, err := NewMatchPredictionService(s.DB, s.Matches).TallyPredictionsForMatches([]uuid.UUID{match.ID})
 	if err != nil {
-		return err
+		return false, err
 	}
 	entries := byMatch[match.ID]
 	if len(entries) == 0 {
-		return nil
+		_, err := s.claim(match.ID, "predictions_settled_notified_at", now)
+		return false, err
 	}
 	allMatches, err := s.Matches.GetMatchesDetails(match.GroupID, "")
 	if err != nil {
-		return err
+		return false, err
 	}
 	rows := ComputePredictionStandings(allMatches, []models.MatchWithDetails{*details}, map[uuid.UUID][]models.MatchPredictionEntry{
 		match.ID: entries,
@@ -626,16 +658,21 @@ func (s *NotificationService) notifyPredictionsSettled(match models.Match) error
 			}
 		}
 	}
+	claimed, err := s.claim(match.ID, "predictions_settled_notified_at", now)
+	if err != nil || !claimed {
+		return false, err
+	}
 	s.send(match.GroupID, messages)
-	return nil
+	return true, nil
 }
 
 // TickResult counts what one Tick sent, for the scheduler's log.
 type TickResult struct {
-	RegistrationOpen int `json:"registration_open"`
-	PredictionsOpen  int `json:"predictions_open"`
-	KickoffReminders int `json:"kickoff_reminders"`
-	MotmAnnounced    int `json:"motm_announced"`
+	RegistrationOpen   int `json:"registration_open"`
+	PredictionsOpen    int `json:"predictions_open"`
+	KickoffReminders   int `json:"kickoff_reminders"`
+	PredictionsSettled int `json:"predictions_settled"`
+	MotmAnnounced      int `json:"motm_announced"`
 }
 
 // Tick sends every time-driven notification that is due at now.
@@ -682,6 +719,27 @@ func (s *NotificationService) Tick(now time.Time) (TickResult, error) {
 		}
 		if sent {
 			result.PredictionsOpen++
+		}
+	}
+
+	var settled []models.Match
+	if err := s.DB.
+		Where("scheduled_at IS NOT NULL AND result_recorded_at IS NOT NULL AND predictions_settled_notified_at IS NULL").
+		Where("result_recorded_at <= ? AND result_recorded_at > ?", now.Add(-PredictionsSettledDelay), now.Add(-PredictionsSettledWindow)).
+		Find(&settled).Error; err != nil {
+		return result, err
+	}
+	for _, match := range settled {
+		if !predictionsSettledDue(match, now) {
+			continue
+		}
+		sent, err := s.notifyPredictionsSettled(match, now)
+		if err != nil {
+			log.Printf("[push] predictions-settled notification for match %s failed: %v", match.ID, err)
+			continue
+		}
+		if sent {
+			result.PredictionsSettled++
 		}
 	}
 

@@ -44,6 +44,20 @@ function formatScore(score) {
   return (score || []).map((line) => `${line.team} ${line.goals}`).join(' – ');
 }
 
+// The result half of a settled prediction, without repeating the score the
+// result notification already showed: "Bianco won! " with the real name of
+// the team that scored more, "It's a draw! " when the top scores are level,
+// and nothing when the score is missing or unusable.
+function formatOutcome(score) {
+  const lines = (Array.isArray(score) ? score : [])
+    .filter((line) => line && Number.isFinite(Number(line.goals)));
+  if (lines.length < 2) return '';
+  const top = Math.max(...lines.map((line) => Number(line.goals)));
+  const leaders = lines.filter((line) => Number(line.goals) === top);
+  if (leaders.length > 1) return "It's a draw! ";
+  return leaders[0].team ? `${leaders[0].team} won! ` : '';
+}
+
 // Every word of the motm_announced notification (the Man of the Match vote,
 // shown to players as the "Star of the Match"), in one place so it can be
 // renamed here alone (the settings label is in
@@ -110,14 +124,11 @@ function buildNotification(data) {
         body: 'Vote for your Man of the Match.',
       };
     }
-    case 'predictions_settled': {
-      const score = formatScore(data.score);
-      const points = formatPointsSentence(data.points);
+    case 'predictions_settled':
       return {
         title: 'Predictions settled',
-        body: score ? `Final score: ${score}. ${points}` : points,
+        body: formatOutcome(data.score) + formatPointsSentence(data.points),
       };
-    }
     case 'motm_announced': {
       if (data.winner) {
         return { title: MOTM_TEXT.winnerTitle, body: MOTM_TEXT.body };
