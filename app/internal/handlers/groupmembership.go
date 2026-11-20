@@ -1,0 +1,148 @@
+package handlers
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+
+	"app/internal/services"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+)
+
+// RequireGroupMembership must run after AuthMiddleware (which sets
+// "player_id" in the context). It resolves the target group the same way
+// resolveGroupID does for read handlers — a group_id query param, else the
+// JSON body's group_id/GroupID field, else a group the authenticated player
+// actually belongs to — and rejects with 403 unless the authenticated player
+// belongs to that group. Use it on routes that carry the group_id in the
+// query string or the request body (matches, standings). For routes carrying
+// it as a URL param instead (the /groups/:id/* routes), use
+// RequireGroupMembershipByPathParam.
+func RequireGroupMembership(membershipService *services.GroupMembershipService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		playerID, ok := playerIDFromContext(c)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+			return
+		}
+
+		groupID, ok := resolveGroupIDForMembership(c, membershipService)
+		if !ok {
+			return
+		}
+
+		authorizeGroupMembership(c, membershipService, groupID, playerID)
+	}
+}
+
+// RequireGroupMembershipByPathParam is RequireGroupMembership for routes
+// where the group id is the URL param named paramName (e.g. "id" in
+// /groups/:id/players), rather than a query param or body field.
+func RequireGroupMembershipByPathParam(membershipService *services.GroupMembershipService, paramName string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		playerID, ok := playerIDFromContext(c)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+			return
+		}
+
+		groupID, err := uuid.Parse(c.Param(paramName))
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+			return
+		}
+
+		authorizeGroupMembership(c, membershipService, groupID, playerID)
+	}
+}
+
+func authorizeGroupMembership(c *gin.Context, membershipService *services.GroupMembershipService, groupID, playerID uuid.UUID) {
+	isMember, err := membershipService.IsMember(groupID, playerID)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !isMember {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not a member of this group"})
+		return
+	}
+	c.Next()
+}
+
+func playerIDFromContext(c *gin.Context) (uuid.UUID, bool) {
+	val, exists := c.Get("player_id")
+	if !exists {
+		return uuid.Nil, false
+	}
+	id, ok := val.(uuid.UUID)
+	return id, ok
+}
+
+// authorizedGroupIDFromContext returns the group checked by the authorization
+// middleware. A missing value indicates an incorrectly wired route.
+func authorizedGroupIDFromContext(c *gin.Context) (uuid.UUID, bool) {
+	val, exists := c.Get(authorizedGroupIDKey)
+	if !exists {
+		return uuid.Nil, false
+	}
+	id, ok := val.(uuid.UUID)
+	return id, ok
+}
+
+// resolveGroupIDForMembership is the middleware-side entry point: exactly the
+// same resolution resolveGroupID performs (resolveScopedGroupID, in
+// groupscope.go — one implementation, not a second copy that happens to
+// agree), plus the JSON body checked in between the query string and the
+// caller's own first group. The body step is needed because POST /matches
+// carries group_id there rather than in the query string, under two different
+// JSON keys (models.Match uses "group_id", models.MatchWithDetails uses
+// "GroupID").
+//
+// The only other difference is how a failure is reported: this runs as
+// middleware, so it aborts the chain rather than writing a response the next
+// handler would then append to. See resolveScopedGroupID for the ordering, and
+// for why this deliberately never falls back to the old sort-by-random-UUID
+// default (GroupService.GetDefaultGroup, since removed).
+func resolveGroupIDForMembership(c *gin.Context, membershipService *services.GroupMembershipService) (uuid.UUID, bool) {
+	groupID, failure := resolveScopedGroupID(c, membershipService, peekGroupIDFromBody)
+	if failure != nil {
+		c.AbortWithStatusJSON(failure.status, gin.H{"error": failure.message})
+		return uuid.Nil, false
+	}
+	return groupID, true
+}
+
+// peekGroupIDFromBody reads the request body to look for a group_id, then
+// restores it so the handler's own ShouldBindJSON can still read it.
+func peekGroupIDFromBody(c *gin.Context) (uuid.UUID, bool) {
+	body, err := c.GetRawData()
+	if err != nil {
+		return uuid.Nil, false
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(body))
+
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return uuid.Nil, false
+	}
+
+	for _, key := range []string{"group_id", "GroupID"} {
+		raw, ok := payload[key]
+		if !ok {
+			continue
+		}
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil {
+			continue
+		}
+		id, err := uuid.Parse(s)
+		if err != nil {
+			continue
+		}
+		return id, true
+	}
+	return uuid.Nil, false
+}

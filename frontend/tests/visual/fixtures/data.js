@@ -1,0 +1,370 @@
+// The API responses the visual tests render. Hand-written rather than captured
+// from a running backend, for one reason: `cmd/seed` builds its matches on "the
+// last N Sundays" with weighted-random goals, so real seeded data changes every
+// day and would make every screenshot a fresh diff. These fixtures are frozen,
+// and so is the clock the pages read (see FIXED_NOW).
+//
+// The shapes are the Go DTOs' JSON, PascalCase included — `MatchWithDetails`,
+// `TeamWithPlayers`, `PlayerCustom`, `PointsStandingRow`, `ScorerRow`,
+// `MatchRegistrationEntry` in internal/models/customModels.go, and the
+// lowercase `GroupWithRole`/`PlayerWithRole`. Getting a key's case wrong here
+// would render a blank cell instead of failing, so they are worth checking
+// against the structs rather than against memory.
+
+// Friday 4 September 2026, 10:00 Paris — two days before the scheduled match
+// below kicks off, and inside the 2026-2027 season. Every page under test reads
+// `Date.now()` (the sign-up panel derives its whole state from it), so the tests
+// pin it rather than letting the calendar decide what the screenshots contain.
+const FIXED_NOW = new Date('2026-09-04T10:00:00+02:00');
+
+const GROUP_ID = '11111111-1111-4111-8111-111111111111';
+const OTHER_GROUP_ID = '22222222-2222-4222-8222-222222222222';
+
+// The player the fake JWT belongs to. Present in the sign-up list on purpose:
+// it is what renders the "you" badge, so the tests cover that branch.
+const CURRENT_PLAYER_ID = '33333333-3333-4333-8333-333333333333';
+
+const TEAM_RED = {
+  ID: 'aaaaaaaa-0000-4000-8000-000000000001',
+  Name: 'Les Rouges',
+  Colour: 'red',
+};
+const TEAM_BLUE = {
+  ID: 'aaaaaaaa-0000-4000-8000-000000000002',
+  Name: 'Les Bleus',
+  Colour: 'blue',
+};
+
+const player = (n, name, goals) => ({
+  ID: `bbbbbbbb-0000-4000-8000-0000000000${String(n).padStart(2, '0')}`,
+  Name: name,
+  GoalNumber: goals,
+});
+
+const groups = [
+  { id: GROUP_ID, name: 'Calciotto Milano', role: 'admin', is_favorite: true },
+  { id: OTHER_GROUP_ID, name: 'Sunday League', role: 'member', is_favorite: false },
+];
+
+// Ascending, as the backend returns them — MatchesAndStandings preselects the
+// last one, so "2026-2027" is what every screenshot is scoped to.
+const seasons = ['2025-2026', '2026-2027'];
+
+// A played match, both teams filled: the ordinary case, and the only one the
+// standings count.
+const playedMatch = {
+  ID: 'cccccccc-0000-4000-8000-000000000001',
+  GroupID: GROUP_ID,
+  Date: '2026-08-30',
+  Teams: [
+    {
+      ...TEAM_BLUE,
+      Score: 4,
+      Players: [
+        player(1, 'Marco Rossi', 2),
+        player(2, 'Luca Bianchi', 1),
+        player(3, 'Thibaut Fabre', 1),
+        player(4, 'Giovanni Esposito', 0),
+      ],
+    },
+    {
+      ...TEAM_RED,
+      Score: 6,
+      Players: [
+        player(5, 'Andrea Conti', 3),
+        player(6, 'Matteo Ricci', 2),
+        player(7, 'Federico Greco', 1),
+        player(8, 'Alessandro Moretti', 0),
+      ],
+    },
+  ],
+};
+
+const olderPlayedMatch = {
+  ID: 'cccccccc-0000-4000-8000-000000000002',
+  GroupID: GROUP_ID,
+  Date: '2026-09-01',
+  Teams: [
+    {
+      ...TEAM_BLUE,
+      Score: 3,
+      Players: [player(1, 'Marco Rossi', 1), player(6, 'Matteo Ricci', 2)],
+    },
+    {
+      ...TEAM_RED,
+      Score: 3,
+      Players: [player(5, 'Andrea Conti', 2), player(3, 'Thibaut Fabre', 1)],
+    },
+  ],
+};
+
+// A scheduled match with sign-ups open: no roster yet, which is its normal
+// state — the teams are composed only once the list is closed.
+const scheduledOpenMatch = {
+  ID: 'cccccccc-0000-4000-8000-000000000003',
+  GroupID: GROUP_ID,
+  // Derived by the backend from ScheduledAt's calendar day, and equal to it
+  // here for the same reason: they can never disagree.
+  Date: '2026-09-06',
+  ScheduledAt: '2026-09-06T20:30:00+02:00',
+  RegistrationOpensAt: '2026-09-01T18:00:00+02:00',
+  MaxPlayers: 16,
+  RegistrationCount: 18,
+  Teams: [
+    { ...TEAM_BLUE, Score: 0, Players: [] },
+    { ...TEAM_RED, Score: 0, Players: [] },
+  ],
+};
+
+// The same match after the admin closed the list — the state in which
+// "Fill teams from sign-ups" is offered.
+const scheduledClosedMatch = {
+  ...scheduledOpenMatch,
+  ID: 'cccccccc-0000-4000-8000-000000000004',
+  RegistrationsClosedAt: '2026-09-04T09:00:00+02:00',
+};
+
+// Newest last, as GetMatchesDetails returns them (ordered by date).
+const matches = [olderPlayedMatch, playedMatch, scheduledOpenMatch];
+
+// 18 sign-ups against MaxPlayers: 16 → the last two are the waiting list, which
+// is derived from this order rather than stored. The current player sits at #14
+// so the "you" badge lands in the confirmed list.
+const registrationNames = [
+  'Andrea Conti', 'Marco Rossi', 'Luca Bianchi', 'Matteo Ricci',
+  'Federico Greco', 'Alessandro Moretti', 'Giovanni Esposito', 'Davide Fontana',
+  'Simone Barbieri', 'Riccardo Gallo', 'Stefano Marino', 'Antonio Villa',
+  'Paolo Ferrari', 'Thibaut Fabre', 'Nicola Sanna', 'Emanuele Costa',
+  'Gabriele Longo', 'Vincenzo Pace',
+];
+
+const registrations = registrationNames.map((name, index) => ({
+  PlayerID: name === 'Thibaut Fabre'
+    ? CURRENT_PLAYER_ID
+    : `dddddddd-0000-4000-8000-0000000000${String(index + 1).padStart(2, '0')}`,
+  Name: name,
+  Position: index + 1,
+  IsWaiting: index + 1 > scheduledOpenMatch.MaxPlayers,
+  RegisteredAt: new Date(Date.UTC(2026, 8, 1, 16, 5 * index)).toISOString(),
+}));
+
+// One row with IsMember false on purpose: it is what renders the
+// "(left the group)" tag, a branch no unit test can show visually.
+const pointsStandings = [
+  { PlayerID: 'e1', Name: 'Andrea Conti', Played: 9, Won: 6, Drawn: 2, Lost: 1, GoalsFor: 14, OwnGoals: 0, Points: 20, IsMember: true },
+  { PlayerID: 'e2', Name: 'Marco Rossi', Played: 9, Won: 5, Drawn: 2, Lost: 2, GoalsFor: 11, OwnGoals: 1, Points: 17, IsMember: true },
+  { PlayerID: 'e3', Name: 'Matteo Ricci', Played: 8, Won: 4, Drawn: 3, Lost: 1, GoalsFor: 9, OwnGoals: 0, Points: 15, IsMember: true },
+  { PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', Played: 9, Won: 4, Drawn: 1, Lost: 4, GoalsFor: 7, OwnGoals: 2, Points: 13, IsMember: true },
+  { PlayerID: 'e5', Name: 'Luca Bianchi', Played: 7, Won: 3, Drawn: 1, Lost: 3, GoalsFor: 5, OwnGoals: 0, Points: 10, IsMember: true },
+  { PlayerID: 'e6', Name: 'Davide Fontana', Played: 6, Won: 2, Drawn: 1, Lost: 3, GoalsFor: 4, OwnGoals: 0, Points: 7, IsMember: false },
+];
+
+const topScorers = [
+  { PlayerID: 'e1', Name: 'Andrea Conti', Played: 9, Goals: 14, OwnGoals: 0, IsMember: true },
+  { PlayerID: 'e2', Name: 'Marco Rossi', Played: 9, Goals: 11, OwnGoals: 1, IsMember: true },
+  { PlayerID: 'e3', Name: 'Matteo Ricci', Played: 8, Goals: 9, OwnGoals: 0, IsMember: true },
+  { PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', Played: 9, Goals: 7, OwnGoals: 2, IsMember: true },
+  { PlayerID: 'e6', Name: 'Davide Fontana', Played: 6, Goals: 4, OwnGoals: 0, IsMember: false },
+];
+
+// GET /standings/motm — models.MotmStandingRow. Same "one IsMember: false row"
+// convention as pointsStandings/topScorers above.
+const motmStandings = [
+  { PlayerID: 'e1', Name: 'Andrea Conti', Awards: 5, IsMember: true },
+  { PlayerID: 'e2', Name: 'Marco Rossi', Awards: 3, IsMember: true },
+  { PlayerID: 'e6', Name: 'Davide Fontana', Awards: 1, IsMember: false },
+];
+
+// GET /matches/:id/votes — models.MatchVoteSummary. A single default tally
+// reused regardless of which match is selected, the same "only GET is
+// exercised" simplification `registrations` above already makes: PlayerID
+// matches Marco Rossi (player 1), who's on the roster of every fixture match
+// that has one, so the gold leader marker and the vote-count pill both have
+// something real to render. MyVoteFor stays null — none of these tests click
+// a star, so there is no "is-voted" state worth fixturing.
+const motmVotes = {
+  Tally: [{ PlayerID: player(1, 'Marco Rossi', 0).ID, Name: 'Marco Rossi', Votes: 2 }],
+  MyVoteFor: null,
+};
+
+// GET /groups/:id/players — PlayerWithRole, so lowercase keys with `role`
+// alongside. The credential-less entry is the admin-created "ghost player" the
+// roster shows an "Invite" action for.
+// GET /players/me/stats — the cross-group profile Profile.vue renders. One
+// entry per group in `groups` above, so the two cards line up with the roles
+// GET /groups/me reports (admin here, member there): the roster panel's
+// action buttons are gated per group, so a fixture with only an admin group
+// couldn't photograph both branches. The long name on the second card is
+// deliberate — it is what exercises the member row's name truncation.
+const playerStats = {
+  Overall: {
+    PlayerID: CURRENT_PLAYER_ID,
+    Name: 'Thibaut Fabre',
+    Played: 24, Won: 13, Drawn: 4, Lost: 7,
+    GoalsFor: 19, OwnGoals: 2, Points: 43, IsMember: true, MotmAwards: 5,
+  },
+  PerGroup: [
+    {
+      GroupID: GROUP_ID, GroupName: 'Calciotto Milano',
+      PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre',
+      Played: 18, Won: 10, Drawn: 3, Lost: 5,
+      GoalsFor: 14, OwnGoals: 2, Points: 33, IsMember: true, MotmAwards: 4,
+    },
+    {
+      GroupID: OTHER_GROUP_ID, GroupName: 'Sunday League',
+      PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre',
+      Played: 6, Won: 3, Drawn: 1, Lost: 2,
+      GoalsFor: 5, OwnGoals: 0, Points: 10, IsMember: true, MotmAwards: 1,
+    },
+  ],
+};
+
+const groupMembers = [
+  { id: CURRENT_PLAYER_ID, name: 'Thibaut Fabre', has_account: true, role: 'admin' },
+  { id: 'e1', name: 'Andrea Conti', has_account: true, role: 'member' },
+  { id: 'e2', name: 'Marco Rossi', has_account: false, role: 'member' },
+];
+
+// Same roster, with one deliberately over-long name. Used only by
+// profile.spec.js: the roster's admin actions are icon-only so they stay on
+// the member's own line at phone width, which only holds if the *name* is
+// what gives way — this is the row that photographs that. Kept as its own
+// fixture rather than a fourth entry in `groupMembers` above, which every
+// match-details baseline also renders through the Add Player list.
+const groupMembersLongName = [
+  groupMembers[0],
+  { id: 'e3', name: 'Alessandro Bartolomeo Della Fontana', has_account: true, role: 'member' },
+  ...groupMembers.slice(1),
+];
+
+// GET /groups/:id/invite-code — fetched by MatchDetails.vue for an admin
+// viewing a scheduled match, to append to its "Share match" message.
+// Scheduled, fully composed matches the predictions page can offer a pick on.
+// The clock is FIXED_NOW (4 Sep 2026), so the September kick-offs are still
+// open and the August ones are settled.
+const predictionOpenPicked = {
+  ID: 'eeeeeeee-0000-4000-8000-000000000001',
+  GroupID: GROUP_ID,
+  Date: '2026-09-06',
+  ScheduledAt: '2026-09-06T20:30:00+02:00',
+  Teams: [
+    { ...TEAM_BLUE, Score: 0, Players: [player(1, 'Marco Rossi', 0), player(2, 'Luca Bianchi', 0)] },
+    { ...TEAM_RED, Score: 0, Players: [player(5, 'Andrea Conti', 0), player(6, 'Matteo Ricci', 0)] },
+  ],
+};
+const predictionOpenEmpty = {
+  ID: 'eeeeeeee-0000-4000-8000-000000000002',
+  GroupID: GROUP_ID,
+  Date: '2026-09-13',
+  ScheduledAt: '2026-09-13T18:00:00+02:00',
+  Teams: [
+    { ...TEAM_BLUE, Score: 0, Players: [player(1, 'Marco Rossi', 0), player(2, 'Luca Bianchi', 0)] },
+    { ...TEAM_RED, Score: 0, Players: [player(5, 'Andrea Conti', 0), player(6, 'Matteo Ricci', 0)] },
+  ],
+};
+const predictionWon = {
+  ID: 'eeeeeeee-0000-4000-8000-000000000003',
+  GroupID: GROUP_ID,
+  Date: '2026-08-30',
+  ScheduledAt: '2026-08-30T20:30:00+02:00',
+  ResultRecordedAt: '2026-08-30T22:00:00+02:00',
+  Teams: [
+    { ...TEAM_BLUE, Score: 4, Players: [player(1, 'Marco Rossi', 0), player(2, 'Luca Bianchi', 0)] },
+    { ...TEAM_RED, Score: 2, Players: [player(5, 'Andrea Conti', 0), player(6, 'Matteo Ricci', 0)] },
+  ],
+};
+const predictionLost = {
+  ID: 'eeeeeeee-0000-4000-8000-000000000004',
+  GroupID: GROUP_ID,
+  Date: '2026-08-23',
+  ScheduledAt: '2026-08-23T20:30:00+02:00',
+  ResultRecordedAt: '2026-08-23T22:00:00+02:00',
+  Teams: [
+    { ...TEAM_BLUE, Score: 3, Players: [player(1, 'Marco Rossi', 0), player(2, 'Luca Bianchi', 0)] },
+    { ...TEAM_RED, Score: 3, Players: [player(5, 'Andrea Conti', 0), player(6, 'Matteo Ricci', 0)] },
+  ],
+};
+const predictionMatches = [predictionOpenPicked, predictionOpenEmpty, predictionWon, predictionLost];
+
+const predictionSummary = (odds, mine) => ({
+  Entries: mine === undefined ? [] : [{ PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', PredictedTeamID: mine }],
+  Count: mine === undefined ? 0 : 1,
+  Revealed: false,
+  Odds: odds,
+  MyPrediction: mine === undefined ? null : { PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', PredictedTeamID: mine },
+});
+const predictionSummaries = {
+  [predictionOpenPicked.ID]: predictionSummary({ TeamAOdds: 1.85, DrawOdds: 3.4, TeamBOdds: 2.1 }, TEAM_BLUE.ID),
+  [predictionOpenEmpty.ID]: predictionSummary({ TeamAOdds: 2.2, DrawOdds: 3.1, TeamBOdds: 2.4 }, undefined),
+  [predictionWon.ID]: predictionSummary({ TeamAOdds: 1.7, DrawOdds: 3.5, TeamBOdds: 2.3 }, TEAM_BLUE.ID),
+  [predictionLost.ID]: predictionSummary({ TeamAOdds: 2.05, DrawOdds: 3.2, TeamBOdds: 2.25 }, TEAM_RED.ID),
+};
+
+const predictionHistory = (flags) => flags.map((correct, index) => ({
+  MatchID: `ffffffff-0000-4000-8000-0000000000${index}`,
+  Date: '2026-08-01',
+  TeamAID: TEAM_BLUE.ID,
+  TeamAName: 'Les Bleus',
+  TeamBID: TEAM_RED.ID,
+  TeamBName: 'Les Rouges',
+  ScoreA: correct ? 2 : 1,
+  ScoreB: correct ? 1 : 2,
+  PredictedTeamID: TEAM_BLUE.ID,
+  Odds: 1.8,
+  Correct: correct,
+  Points: correct ? 0.8 : -1,
+}));
+const predictionStandings = [
+  { PlayerID: 'e1', Name: 'Andrea Conti', Points: 8.4, IsMember: true, History: predictionHistory([true, true, false, true, true]) },
+  { PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', Points: 6.1, IsMember: true, History: predictionHistory([true, false, true, true, false]) },
+  { PlayerID: 'e2', Name: 'Marco Rossi', Points: -0.9, IsMember: true, History: predictionHistory([false, true, true, false, true]) },
+  { PlayerID: 'e6', Name: 'Davide Fontana', Points: 0, IsMember: false, History: predictionHistory([false, false, true]) },
+];
+
+const teams = [
+  { id: 'aaaaaaaa-0000-4000-8000-000000000002', name: 'Les Bleus', colour: 'blue' },
+  { id: 'aaaaaaaa-0000-4000-8000-000000000001', name: 'Les Rouges', colour: 'red' },
+];
+
+const inviteCode = 'ABC23XYZ';
+
+// GET /players/me/features — no hidden feature enabled.
+const features = [];
+
+// GET /players/me/notification-preferences — every type on, which is what a
+// player who has never chosen gets back.
+const notificationPreferences = {
+  registration_open: true,
+  team_assigned: true,
+  result_recorded: true,
+  predictions_open: true,
+  predictions_settled: true,
+  kickoff_reminder: true,
+};
+
+module.exports = {
+  features,
+  notificationPreferences,
+  FIXED_NOW,
+  GROUP_ID,
+  CURRENT_PLAYER_ID,
+  groups,
+  seasons,
+  matches,
+  playedMatch,
+  scheduledOpenMatch,
+  scheduledClosedMatch,
+  registrations,
+  pointsStandings,
+  topScorers,
+  motmStandings,
+  motmVotes,
+  predictionMatches,
+  predictionSummaries,
+  predictionStandings,
+  groupMembers,
+  groupMembersLongName,
+  playerStats,
+  teams,
+  inviteCode,
+};

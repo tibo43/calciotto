@@ -1,0 +1,157 @@
+<template>
+  <div class="auth-page">
+    <div class="auth-card card-base card-large">
+      <h1 class="page-title">Log in</h1>
+
+      <p v-if="resetConfirmed" class="auth-notice">Your password has been updated. Log in with it below.</p>
+      <p v-if="accountDeleted" class="auth-notice">Your account has been deleted.</p>
+
+      <form @submit.prevent="submit">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input id="email" v-model="email" type="email" class="form-input" required autocomplete="email" />
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input id="password" v-model="password" type="password" class="form-input" required
+            autocomplete="current-password" />
+        </div>
+
+        <p v-if="error" class="error-message" role="alert">{{ error }}</p>
+
+        <button type="submit" class="btn-base btn-primary btn-large" :disabled="busy"
+          style="width: 100%; justify-content: center;">
+          {{ isSubmitting ? 'Logging in...' : 'Log in' }}
+        </button>
+      </form>
+
+      <button v-if="passkeysAvailable" class="btn-base btn-secondary passkey-login" type="button"
+        :disabled="busy" @click="submitPasskey">
+        {{ isUsingPasskey ? 'Waiting for your device…' : 'Log in with a passkey' }}
+      </button>
+
+      <p class="auth-switch">
+        <router-link to="/forgot-password">Forgot password?</router-link>
+      </p>
+
+      <p class="auth-switch auth-switch-secondary">
+        No account yet? <router-link to="/signup">Sign up</router-link>
+      </p>
+    </div>
+  </div>
+</template>
+
+<script>
+import { login, setToken } from '@/services/api';
+import { signInWithPasskey, supportsPasskeys } from '@/services/passkeys';
+import { shouldOfferPasskeyLogin } from '@/services/passkeyAccess';
+
+export default {
+  name: 'LoginPage',
+  data() {
+    return {
+      email: '',
+      password: '',
+      error: '',
+      isSubmitting: false,
+      isUsingPasskey: false,
+      passkeysAvailable: supportsPasskeys() && shouldOfferPasskeyLogin(),
+    };
+  },
+  computed: {
+    busy() {
+      return this.isSubmitting || this.isUsingPasskey;
+    },
+    // Set by ResetPassword.vue when it hands the user back here after a
+    // successful reset.
+    resetConfirmed() {
+      return this.$route.query.reset === 'success';
+    },
+    // Set by DeleteAccountModal.vue after a successful self-service account
+    // deletion — a plain query param rather than router-passed state, since
+    // that redirect is a hard `window.location.href` navigation (the app's
+    // own session is over at that point, so there's no Vue router instance
+    // left to carry state through).
+    accountDeleted() {
+      return this.$route.query.accountDeleted === 'success';
+    },
+  },
+  methods: {
+    async submit() {
+      if (this.busy) return;
+      this.error = '';
+      this.isSubmitting = true;
+      try {
+        const { token } = await login(this.email, this.password);
+        this.openSession(token);
+      } catch (err) {
+        this.error = err.response?.data?.error || 'Login failed. Please check your credentials.';
+      } finally {
+        this.isSubmitting = false;
+      }
+    },
+    async submitPasskey() {
+      if (this.busy || !this.passkeysAvailable) return;
+      this.error = '';
+      this.isUsingPasskey = true;
+      try {
+        const { token } = await signInWithPasskey();
+        this.openSession(token);
+      } catch {
+        this.error = 'Could not log in with a passkey. Try again or use your password.';
+      } finally {
+        this.isUsingPasskey = false;
+      }
+    },
+    openSession(token) {
+      setToken(token);
+      this.$router.push('/');
+    },
+  },
+};
+</script>
+
+<style scoped>
+.auth-page {
+  min-height: calc(100vh - var(--navbar-height));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+}
+
+.auth-card .page-title {
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.auth-notice {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.passkey-login {
+  margin-top: 0.75rem;
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.auth-switch {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.auth-switch-secondary {
+  margin-top: 0.5rem;
+}
+</style>

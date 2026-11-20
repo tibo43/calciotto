@@ -1,0 +1,259 @@
+package handlers
+
+import (
+	"errors"
+	"net/http"
+	"strconv"
+	"time"
+
+	"app/internal/models"
+	"app/internal/services"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+)
+
+type MatchHandler struct {
+	Service           *services.MatchService
+	MembershipService *services.GroupMembershipService
+}
+
+func NewMatchHandler(service *services.MatchService, membershipService *services.GroupMembershipService) *MatchHandler {
+	return &MatchHandler{Service: service, MembershipService: membershipService}
+}
+
+// createMatchRequest is the wire shape of POST /matches, deliberately a
+// dedicated struct (as the auth handlers already do) rather than models.Match.
+//
+// Binding straight into the model would now let a client set
+// registrations_closed_at while creating the match — sign-ups closed before
+// anyone could make one — which is not an admin action that exists. A request
+// struct that simply has no such field makes that unrepresentable rather than
+// something a later filter has to remember to strip.
+//
+// The three scheduling fields are pointers so that "absent" and "zero" stay
+// distinguishable: absent means an ordinary unscheduled match, which is what
+// every existing caller sends. MatchSpec validates them as all-or-nothing.
+//
+// The timestamps are plain *time.Time, so encoding/json parses them as RFC3339
+// and keeps the offset the client sent. That is load-bearing and must not be
+// "normalized" to UTC here: MatchService.CreateMatch derives the match's
+// calendar Date from ScheduledAt *in the timestamp's own location*, so a 21:00
+// Paris kick-off keeps the day the client meant — converting first would silently
+// move some matches to the previous day.
+type createMatchRequest struct {
+	Date                models.Date `json:"date"`
+	GroupID             uuid.UUID   `json:"group_id"`
+	ScheduledAt         *time.Time  `json:"scheduled_at"`
+	RegistrationOpensAt *time.Time  `json:"registration_opens_at"`
+	MaxPlayers          *int        `json:"max_players"`
+	// RegisterCreator enrolls the JWT caller on the new match's sign-up list
+	// at create time, the same MatchRegistration row a later Participate
+	// would write. Omitted/false is a no-op, which is what every existing
+	// caller sends. The player always comes from the token, never from the
+	// body — there is no "register someone else" capability here either.
+	RegisterCreator bool `json:"register_creator"`
+}
+
+// CreateMatch writes to the group already checked by RequireGroupAdmin.
+func (h *MatchHandler) CreateMatch(c *gin.Context) {
+	var req createMatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	groupID, ok := authorizedGroupIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved for this match"})
+		return
+	}
+	if req.GroupID != uuid.Nil && req.GroupID != groupID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id does not match the authorized group"})
+		return
+	}
+
+	spec := services.MatchSpec{
+		Date:                req.Date,
+		ScheduledAt:         req.ScheduledAt,
+		RegistrationOpensAt: req.RegistrationOpensAt,
+		MaxPlayers:          req.MaxPlayers,
+	}
+	if req.RegisterCreator {
+		playerID, ok := playerIDFromContext(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+			return
+		}
+		spec.RegisterCreatorID = playerID
+	}
+
+	id, err := h.Service.CreateMatch(spec, groupID)
+	if err != nil {
+		switch {
+		// An incoherent schedule is the client's mistake, not the server's:
+		// half a schedule, a window opening after kick-off, a roster size
+		// that would bench everyone, or asking to auto-enroll on a match
+		// that has no sign-up list. Mapped to 400 the way every other handler
+		// maps its service's validation sentinels.
+		case errors.Is(err, services.ErrIncompleteSchedule),
+			errors.Is(err, services.ErrRegistrationOpensAfterKickoff),
+			errors.Is(err, services.ErrInvalidMaxPlayers),
+			errors.Is(err, services.ErrRegisterCreatorOnUnscheduledMatch):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, id)
+}
+
+func (h *MatchHandler) GetMatchesDetails(c *gin.Context) {
+	groupID, ok := resolveGroupID(c, h.MembershipService)
+	if !ok {
+		return
+	}
+	limit := services.MaxMatchPageSize
+	if raw := c.Query("limit"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": services.ErrInvalidMatchLimit.Error()})
+			return
+		}
+		limit = value
+	}
+	matches, next, err := h.Service.GetMatchesDetailsPage(groupID, c.Query("season"), c.Query("cursor"), limit)
+	if errors.Is(err, services.ErrInvalidMatchCursor) || errors.Is(err, services.ErrInvalidMatchLimit) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to load matches"})
+		return
+	}
+	if next != "" {
+		c.Header("X-Next-Cursor", next)
+	}
+	// A group with no matches yet is a normal state (e.g. a brand-new group),
+	// not an error — but GORM leaves the slice nil, which would serialize as
+	// `null` and force every caller to special-case it (see GroupHandler.GetMyGroups
+	// for the same fix applied to GET /groups/me).
+	if matches == nil {
+		matches = []models.MatchWithDetails{}
+	}
+	c.JSON(http.StatusOK, matches)
+}
+
+func (h *MatchHandler) GetMatchDetailsByID(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		return
+	}
+	groupID, ok := resolveGroupID(c, h.MembershipService)
+	if !ok {
+		return
+	}
+	matches, err := h.Service.GetMatchDetailsByID(id, groupID)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrMatchNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, matches)
+}
+
+// DeleteMatch uses the match's group, as authorized by the middleware. The
+// optional query parameter remains an assertion about the match's group.
+func (h *MatchHandler) DeleteMatch(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		return
+	}
+	groupID, ok := authorizedGroupIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved for this match"})
+		return
+	}
+	if raw := c.Query("group_id"); raw != "" {
+		requestedGroupID, err := uuid.Parse(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group_id"})
+			return
+		}
+		if requestedGroupID != groupID {
+			abortMatchNotFound(c)
+			return
+		}
+	}
+
+	if err := h.Service.DeleteMatch(id, groupID); err != nil {
+		switch {
+		case errors.Is(err, services.ErrMatchNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}
+
+// UpdateMatch is wired with requireGroupAdminByMatchID (see main.go), the
+// match-scoped middleware pair from matchscope.go — not the body/query-resolving
+// requireGroupAdmin it used to use. The path names a *match*, so the group has
+// to be derived from that match and never from the body: with the old wiring an
+// admin of group A could send their own group_id (which is what the admin check
+// ran against) alongside the ID of a match in group B, and the service, reading
+// the match id off the body, rewrote group B's roster and scores. The two ids
+// this handler passes down are therefore the URL's match id and the group the
+// middleware already authorized — the body's own ID/GroupID fields are ignored
+// entirely.
+func (h *MatchHandler) UpdateMatch(c *gin.Context) {
+	matchID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		return
+	}
+	// A missing authorized group means the route was wired without the
+	// match-scoped middleware — a programming error, not a client one, hence
+	// 500 (same contract as the registration/vote handlers).
+	groupID, ok := authorizedGroupIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved for this match"})
+		return
+	}
+
+	var match models.MatchWithDetails
+	if err := c.ShouldBindJSON(&match); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.Service.UpdateMatch(matchID, groupID, match.Teams); err != nil {
+		switch {
+		case errors.Is(err, services.ErrMatchNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, services.ErrTeamNotInGroup), errors.Is(err, services.ErrPlayerNotInGroup):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	// The response echoes the payload as it always did, but with both ids
+	// overwritten by the authoritative ones: a client must never read back its
+	// own body's ID/GroupID as though the server had accepted them.
+	match.ID = matchID
+	match.GroupID = groupID
+	c.JSON(http.StatusOK, match)
+}

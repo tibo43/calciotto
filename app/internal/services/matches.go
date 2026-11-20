@@ -1,0 +1,932 @@
+package services
+
+import (
+	"errors"
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"app/internal/models"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+// ErrMatchNotFound is returned when the requested match either does not
+// exist at all, or exists but does not belong to the group it was requested
+// under — the latter is the mechanism that stops a match ID from one group
+// from being used to read another group's data, so it deliberately shares
+// the same sentinel/404 as a plain missing match rather than leaking a
+// distinct "forbidden" signal.
+var ErrMatchNotFound = errors.New("match not found")
+
+// ErrTeamNotInGroup is returned by UpdateMatch when the payload names a team
+// that belongs to a different group than the match being edited. It is a
+// client mistake rather than a missing resource — the match was found, the
+// request is simply incoherent — so handlers map it to 400, unlike
+// ErrMatchNotFound's 404.
+var ErrTeamNotInGroup = errors.New("team does not belong to this group")
+
+// The sentinels below reject an incoherent *schedule* at creation time.
+// A match with no scheduling at all stays perfectly valid — see MatchSpec.
+var (
+	// ErrIncompleteSchedule guards the all-or-nothing rule: a scheduled match
+	// with no maximum number of players, or with no moment at which sign-ups
+	// open, has no defined behaviour at all (nobody could ever register, or
+	// nobody could ever land on the waiting list), so a half-filled schedule
+	// is refused rather than stored and interpreted later.
+	ErrIncompleteSchedule = errors.New("a scheduled match requires a kick-off time, a registration opening time and a maximum number of players")
+	// ErrRegistrationOpensAfterKickoff rejects a window that never opens
+	// before the match starts: kick-off is a hard backstop on registrations
+	// (see RegistrationWindowError), so opening sign-ups at or after it would
+	// create a match nobody can ever sign up for.
+	ErrRegistrationOpensAfterKickoff = errors.New("registrations must open strictly before kick-off")
+	// ErrInvalidMaxPlayers rejects a non-positive roster size, which would
+	// put every single sign-up on the waiting list.
+	ErrInvalidMaxPlayers = errors.New("maximum number of players must be greater than zero")
+	// ErrRegisterCreatorOnUnscheduledMatch rejects auto-enrolling the creator
+	// on a match that has no sign-up list at all. An unscheduled match is a
+	// record of a game already played — there is nothing to Participate in —
+	// so the flag is a client mistake rather than something to silently ignore.
+	ErrRegisterCreatorOnUnscheduledMatch = errors.New("cannot auto-register the creator on an unscheduled match")
+)
+
+// MatchSpec is everything CreateMatch needs to know about the match being
+// created, as a struct rather than a growing positional parameter list — the
+// same call GroupService.CreateGroup makes with TeamSpec.
+//
+// The three scheduling fields are all-or-nothing: supply none of them for the
+// original behaviour (an admin recording a match, scored right away), or all
+// three to open the match to sign-ups. Date is only read in the unscheduled
+// case: when ScheduledAt is set, Date is *derived* from it so the calendar day
+// and the kick-off timestamp can never drift apart (see models.Match).
+// RegisterCreatorID is independent of that triple — see its own comment.
+type MatchSpec struct {
+	Date                models.Date
+	ScheduledAt         *time.Time
+	RegistrationOpensAt *time.Time
+	MaxPlayers          *int
+	// RegisterCreatorID, when not uuid.Nil, enrolls that player on the new
+	// match's sign-up list in the same transaction as the match itself. The
+	// resulting MatchRegistration row is identical to one written by a later
+	// Participate (same table, same unique index, waiting list still derived
+	// from CreatedAt vs MaxPlayers). Seed and every caller that doesn't care
+	// leave this at the zero value, which is a no-op.
+	//
+	// Only valid on a scheduled spec: validate() returns
+	// ErrRegisterCreatorOnUnscheduledMatch otherwise. It deliberately does
+	// *not* go through RegistrationWindowError — the list is being born
+	// rather than joined, so a match whose window opens on Friday can still
+	// put its creator at #1 on Wednesday. Subsequent Register/Unregister
+	// calls stay gated on the window as before.
+	RegisterCreatorID uuid.UUID
+}
+
+// IsScheduled mirrors models.Match.IsScheduled: a spec asks for a scheduled
+// match iff it carries a kick-off time.
+func (spec MatchSpec) IsScheduled() bool {
+	return spec.ScheduledAt != nil
+}
+
+// validate enforces the schedule's internal coherence. Note what it
+// deliberately does *not* check: a ScheduledAt in the past is accepted, since
+// backfilling a match that already happened is legitimate and the unscheduled
+// flow has always accepted any date.
+func (spec MatchSpec) validate() error {
+	if spec.ScheduledAt == nil && spec.RegistrationOpensAt == nil && spec.MaxPlayers == nil {
+		if spec.RegisterCreatorID != uuid.Nil {
+			return ErrRegisterCreatorOnUnscheduledMatch
+		}
+		return nil
+	}
+	if spec.ScheduledAt == nil || spec.RegistrationOpensAt == nil || spec.MaxPlayers == nil {
+		return ErrIncompleteSchedule
+	}
+	if !spec.RegistrationOpensAt.Before(*spec.ScheduledAt) {
+		return ErrRegistrationOpensAfterKickoff
+	}
+	if *spec.MaxPlayers <= 0 {
+		return ErrInvalidMaxPlayers
+	}
+	return nil
+}
+
+type MatchService struct {
+	DB *gorm.DB
+	// Notifier hears about every saved roster (UpdateMatch), which is what
+	// sends the team, result and predictions-settled push notifications
+	// (and starts the clock for predictions-open, which the tick sends). Nil unless main.go wires one in, so tests and the cmd/
+	// tools are unaffected.
+	Notifier MatchEventNotifier
+}
+
+// MatchEventNotifier is told, after the save has committed, that a match's
+// roster was saved. NotificationService implements it; an interface keeps
+// MatchService from depending on how notifications are sent.
+type MatchEventNotifier interface {
+	RosterSaved(event RosterSavedEvent)
+}
+
+// RosterSavedEvent describes one UpdateMatch call. Before and After map each
+// player on the roster to their team, so a listener can tell who was newly
+// placed or moved. ResultRecorded is true only for the save that first set
+// Match.ResultRecordedAt, i.e. the admin entering the score after kick-off.
+type RosterSavedEvent struct {
+	Match          models.Match
+	Before         map[uuid.UUID]uuid.UUID
+	After          map[uuid.UUID]uuid.UUID
+	ResultRecorded bool
+}
+
+func NewMatchService(db *gorm.DB) *MatchService {
+	return &MatchService{DB: db}
+}
+
+// CreateMatch creates a match in groupID, optionally scheduled for a future
+// kick-off with player sign-ups (see MatchSpec for the all-or-nothing rule).
+//
+// When the spec is scheduled, Date is derived from ScheduledAt's calendar day
+// rather than taken from the spec: Date remains the field seasons, ordering and
+// the existing JSON contract are built on, so it must stay a single write path
+// — a caller able to supply both could store a match dated one day and kicking
+// off on another. models.DateOf does that in the kick-off's own location, so an
+// evening kick-off keeps the day the client meant.
+//
+// When RegisterCreatorID is set, the match and that player's MatchRegistration
+// are written in one transaction, so a failed sign-up cannot leave behind a
+// match the caller thought they were already on. The unscheduled / no-flag
+// path stays a single INSERT — wrapping it in a transaction would change
+// nothing a caller can observe and would make every existing seed/test pay
+// for a savepoint they don't use.
+func (s *MatchService) CreateMatch(spec MatchSpec, groupID uuid.UUID) (uuid.UUID, error) {
+	if err := spec.validate(); err != nil {
+		return uuid.Nil, err
+	}
+
+	match := &models.Match{
+		GroupID:             groupID,
+		Date:                spec.Date,
+		ScheduledAt:         spec.ScheduledAt,
+		RegistrationOpensAt: spec.RegistrationOpensAt,
+		MaxPlayers:          spec.MaxPlayers,
+	}
+	if spec.IsScheduled() {
+		match.Date = models.DateOf(*spec.ScheduledAt)
+	}
+
+	if spec.RegisterCreatorID == uuid.Nil {
+		result := s.DB.Create(match)
+		if result.Error != nil {
+			return uuid.Nil, result.Error
+		}
+		return match.ID, nil
+	}
+
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(match).Error; err != nil {
+			return err
+		}
+		return tx.Create(&models.MatchRegistration{
+			MatchID:  match.ID,
+			PlayerID: spec.RegisterCreatorID,
+		}).Error
+	})
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return match.ID, nil
+}
+
+// GetGroupIDByMatchID answers "which group does this match belong to", and
+// returns ErrMatchNotFound when the id names no match at all.
+//
+// It exists for the /matches/:id/... routes, whose path carries a *match* id
+// and no group id: the authorization middleware has to derive the group from
+// the match before it can check membership or admin rights (see
+// RequireGroupMembershipByMatchPathParam). Deriving it is the whole point —
+// letting the caller name the group instead, the way POST /matches does with
+// its body, would let a member of group A act on a match in group B simply by
+// supplying their own group id.
+//
+// It lives here rather than in the handler because touching the database is
+// the service layer's job, and it selects only group_id: nothing upstream
+// needs the rest of the row.
+func (s *MatchService) GetGroupIDByMatchID(matchID uuid.UUID) (uuid.UUID, error) {
+	var match models.Match
+	if err := s.DB.Select("group_id").Where("id = ?", matchID).First(&match).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return uuid.Nil, ErrMatchNotFound
+		}
+		return uuid.Nil, err
+	}
+	return match.GroupID, nil
+}
+
+// GetMatchesDetails is the unpaginated service read used by aggregators.
+func (s *MatchService) GetMatchesDetails(groupID uuid.UUID, season string) ([]models.MatchWithDetails, error) {
+	query, ok := s.matchSelection(groupID, season)
+	if !ok {
+		return []models.MatchWithDetails{}, nil
+	}
+	return s.readMatchesDetails(groupID, query)
+}
+
+const MaxMatchPageSize = 100
+
+var (
+	ErrInvalidMatchCursor = errors.New("invalid match cursor")
+	ErrInvalidMatchLimit  = fmt.Errorf("limit must be between 1 and %d", MaxMatchPageSize)
+)
+
+func (s *MatchService) GetMatchesDetailsPage(groupID uuid.UUID, season, cursor string, limit int) ([]models.MatchWithDetails, string, error) {
+	if limit < 1 || limit > MaxMatchPageSize {
+		return nil, "", ErrInvalidMatchLimit
+	}
+	query, ok := s.matchSelection(groupID, season)
+	if !ok {
+		return []models.MatchWithDetails{}, "", nil
+	}
+	if cursor != "" {
+		day, rawID, found := strings.Cut(cursor, ".")
+		date, dateErr := time.Parse("2006-01-02", day)
+		id, idErr := uuid.Parse(rawID)
+		if !found || dateErr != nil || idErr != nil {
+			return nil, "", ErrInvalidMatchCursor
+		}
+		query = query.Where("(date, id) < (?, ?)", models.DateOf(date), id)
+	}
+	matches, err := s.readMatchesDetails(groupID, query.Order("date DESC, id DESC").Limit(limit+1))
+	if err != nil {
+		return nil, "", err
+	}
+	if len(matches) <= limit {
+		return matches, "", nil
+	}
+	last := matches[limit-1]
+	return matches[:limit], last.Date.String() + "." + last.ID.String(), nil
+}
+
+func (s *MatchService) matchSelection(groupID uuid.UUID, season string) (*gorm.DB, bool) {
+	query := s.DB.Model(&models.Match{}).Where("group_id = ?", groupID)
+	if season == "" {
+		return query, true
+	}
+	year, _, _ := strings.Cut(season, "-")
+	start, err := strconv.Atoi(year)
+	if err != nil || start < 0 || start > 9998 || fmt.Sprintf("%d-%d", start, start+1) != season {
+		return nil, false
+	}
+	from := models.DateOf(time.Date(start, time.September, 1, 0, 0, 0, 0, time.UTC))
+	until := models.DateOf(time.Date(start+1, time.September, 1, 0, 0, 0, 0, time.UTC))
+	return query.Where("date >= ? AND date < ?", from, until), true
+}
+
+func (s *MatchService) readMatchesDetails(groupID uuid.UUID, selection *gorm.DB) ([]models.MatchWithDetails, error) {
+	var rowsMatches []models.RowsMatchDetails
+	var err error
+
+	// Execute the SQL query and scan the results into a flat structure
+	result := s.DB.Raw(`
+        SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
+               matches.created_at as match_created_at,
+               matches.scheduled_at as match_scheduled_at,
+               matches.registration_opens_at as match_registration_opens_at,
+               matches.registrations_closed_at as match_registrations_closed_at,
+               matches.max_players as match_max_players,
+               matches.result_recorded_at as match_result_recorded_at,
+               teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
+               players.id as player_id, players.name as player_name,
+			   match_players.goals_scored as goals_scored,
+			   match_players.own_goals as own_goals
+        FROM (?) AS matches
+        LEFT JOIN match_players ON match_players.match_id = matches.id
+        LEFT JOIN teams ON teams.id = match_players.team_id
+        LEFT JOIN players ON players.id = match_players.player_id
+		ORDER BY match_date DESC, match_id DESC
+    `, selection).Scan(&rowsMatches)
+
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	// Sign-up counts come from their own query, never from the join above — see
+	// RowsMatchDetails for why joining match_registrations there would corrupt
+	// every score it also produces.
+	//
+	// Skipped entirely for a group with no scheduled match, which is every group
+	// that predates this feature — and this function is also what the four
+	// StandingsService calls go through, so an unconditional second round-trip
+	// would be charged to every standings request for nothing.
+	var registrationCounts map[uuid.UUID]int
+	for _, rowMatches := range rowsMatches {
+		if rowMatches.MatchScheduledAt != nil {
+			registrationCounts, err = s.registrationCountsForSelection(selection)
+			if err != nil {
+				return nil, err
+			}
+			break
+		}
+	}
+
+	// Map the flat results into the hierarchical structure
+	matchesMap := make(map[uuid.UUID]*models.MatchWithDetails)
+
+	for _, rowMatches := range rowsMatches {
+		// Get or create the match
+		match, exists := matchesMap[rowMatches.MatchID]
+		if !exists {
+			match = &models.MatchWithDetails{
+				ID:                    rowMatches.MatchID,
+				GroupID:               rowMatches.MatchGroupID,
+				Date:                  rowMatches.MatchDate,
+				CreatedAt:             rowMatches.MatchCreatedAt,
+				ScheduledAt:           rowMatches.MatchScheduledAt,
+				RegistrationOpensAt:   rowMatches.MatchRegistrationOpensAt,
+				RegistrationsClosedAt: rowMatches.MatchRegistrationsClosedAt,
+				MaxPlayers:            rowMatches.MatchMaxPlayers,
+				ResultRecordedAt:      rowMatches.MatchResultRecordedAt,
+				Teams:                 []models.TeamWithPlayers{},
+			}
+			// Present iff the match is scheduled — a nil count means "there is
+			// nothing to sign up for here", which is not the same as zero
+			// sign-ups. This is the only place a match is built in this
+			// function, including for a match with no match_players rows at all
+			// (the LEFT JOIN still yields one row for it, with a NULL team),
+			// which is precisely the normal state of a scheduled match.
+			if match.IsScheduled() {
+				count := registrationCounts[rowMatches.MatchID]
+				match.RegistrationCount = &count
+			}
+			matchesMap[rowMatches.MatchID] = match
+		}
+
+		// Get or create the team
+		var team *models.TeamWithPlayers
+		for i := range match.Teams {
+			if match.Teams[i].ID == rowMatches.TeamID {
+				team = &match.Teams[i]
+				break
+			}
+		}
+		if team == nil {
+			newTeam := models.TeamWithPlayers{
+				ID:      rowMatches.TeamID,
+				Name:    rowMatches.TeamName,
+				Colour:  rowMatches.TeamColour,
+				Score:   0,
+				Players: []models.PlayerCustom{},
+			}
+			match.Teams = append(match.Teams, newTeam)
+			team = &match.Teams[len(match.Teams)-1] // Point to the newly appended team
+		}
+
+		// Add the player to the team
+		team.Players = append(team.Players, models.PlayerCustom{
+			ID:          rowMatches.PlayerID,
+			Name:        rowMatches.PlayerName,
+			GoalsScored: rowMatches.GoalsScored,
+			OwnGoals:    rowMatches.OwnGoals,
+		})
+	}
+
+	// Fetch this group's teams once, used below to backfill any team that has no roster yet in a given match.
+	var allTeams []models.Team
+	if result := s.DB.Where("group_id = ?", groupID).Find(&allTeams); result.Error != nil {
+		return nil, result.Error
+	}
+
+	// Convert the map to a slice
+	var matches []models.MatchWithDetails
+	for _, match := range matchesMap {
+		// Own goals are scored by a team's own player but count toward the
+		// OTHER team's Score (see MatchPlayer.OwnGoals) — sum each team's own
+		// own-goal total first, over every team in this match (not just the
+		// ones that survive the filter below), so it can be credited to
+		// whichever other team(s) remain.
+		ownGoalsByTeam := make(map[uuid.UUID]int)
+		totalOwnGoals := 0
+		for _, team := range match.Teams {
+			for _, player := range team.Players {
+				ownGoalsByTeam[team.ID] += player.OwnGoals
+				totalOwnGoals += player.OwnGoals
+			}
+		}
+
+		// Filter out teams with missing ID or Colour
+		var validTeams []models.TeamWithPlayers
+		for _, team := range match.Teams {
+			if team.ID != uuid.Nil && team.Colour != "" && len(team.Players) > 0 {
+				for _, player := range team.Players {
+					// Update the team's score based on the number of goals scored by players
+					team.Score += player.GoalsScored
+				}
+				// Credit every other team's own goals to this team's score.
+				team.Score += totalOwnGoals - ownGoalsByTeam[team.ID]
+				validTeams = append(validTeams, team)
+			}
+		}
+
+		// Backfill any team that has no players assigned yet in this match, so a match
+		// always shows every team instead of only the ones with a roster so far.
+		for _, allTeam := range allTeams {
+			found := false
+			for _, team := range validTeams {
+				if team.ID == allTeam.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				validTeams = append(validTeams, models.TeamWithPlayers{
+					ID:      allTeam.ID,
+					Name:    allTeam.Name,
+					Colour:  allTeam.Colour,
+					Score:   0,
+					Players: []models.PlayerCustom{},
+				})
+			}
+		}
+
+		// Only include matches with valid teams
+		if len(validTeams) > 0 {
+			match.Teams = validTeams
+			matches = append(matches, *match)
+		}
+	}
+
+	// Sort matches by date in descending order
+	sort.Slice(matches, func(i, j int) bool {
+		if !matches[i].Date.Before(matches[j].Date) && !matches[j].Date.Before(matches[i].Date) {
+			return matches[i].ID.String() > matches[j].ID.String()
+		}
+		return matches[j].Date.Before(matches[i].Date)
+	})
+	// Sort matched teams same colour in first position
+	for _, match := range matches {
+		sort.Slice(match.Teams, func(i, j int) bool {
+			return match.Teams[i].Colour < match.Teams[j].Colour
+		})
+	}
+
+	// sort players in each team by their goal number in descending order
+	for _, match := range matches {
+		for _, team := range match.Teams {
+			sort.Slice(team.Players, func(i, j int) bool {
+				return team.Players[i].GoalsScored > team.Players[j].GoalsScored
+			})
+		}
+	}
+	return matches, nil
+}
+
+// GetMatchDetailsByID returns the match with the given id, scoped to
+// groupID — a match belonging to a different group is treated as not found,
+// so a match ID from one group can't be used to read another group's data.
+func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*models.MatchWithDetails, error) {
+
+	var rowsMatch []*models.RowsMatchDetails
+
+	// Execute the SQL query and scan the results into a flat structure
+	result := s.DB.Raw(`
+        SELECT matches.id as match_id, matches.group_id as match_group_id, matches.date as match_date,
+               matches.created_at as match_created_at,
+               matches.scheduled_at as match_scheduled_at,
+               matches.registration_opens_at as match_registration_opens_at,
+               matches.registrations_closed_at as match_registrations_closed_at,
+               matches.max_players as match_max_players,
+               matches.result_recorded_at as match_result_recorded_at,
+               teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
+               players.id as player_id, players.name as player_name,
+			   match_players.goals_scored as goals_scored,
+			   match_players.own_goals as own_goals
+        FROM matches
+        LEFT JOIN match_players ON match_players.match_id = matches.id
+        LEFT JOIN teams ON teams.id = match_players.team_id
+        LEFT JOIN players ON players.id = match_players.player_id
+		WHERE matches.id = ? AND matches.group_id = ?
+		ORDER BY match_date DESC`, id, groupID).Scan(&rowsMatch)
+
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	if len(rowsMatch) == 0 {
+		return nil, ErrMatchNotFound
+	}
+
+	// Initialisez l'objet match. The Match* columns repeat identically on every
+	// row of the join, so row 0 is as good as any — including when it is the
+	// single all-NULL-team row of a match with no roster yet, which is the
+	// normal state of a scheduled match nobody has been assigned to.
+	match := &models.MatchWithDetails{
+		ID:                    id,
+		GroupID:               rowsMatch[0].MatchGroupID,
+		Date:                  rowsMatch[0].MatchDate,
+		CreatedAt:             rowsMatch[0].MatchCreatedAt,
+		ScheduledAt:           rowsMatch[0].MatchScheduledAt,
+		RegistrationOpensAt:   rowsMatch[0].MatchRegistrationOpensAt,
+		RegistrationsClosedAt: rowsMatch[0].MatchRegistrationsClosedAt,
+		MaxPlayers:            rowsMatch[0].MatchMaxPlayers,
+		ResultRecordedAt:      rowsMatch[0].MatchResultRecordedAt,
+		Teams:                 []models.TeamWithPlayers{},
+	}
+
+	// A separate count rather than another join, for the reason spelled out on
+	// RowsMatchDetails; present iff the match is scheduled, as in
+	// GetMatchesDetails.
+	if match.IsScheduled() {
+		count, err := s.registrationCount(id)
+		if err != nil {
+			return nil, err
+		}
+		match.RegistrationCount = &count
+	}
+
+	for _, rowMatch := range rowsMatch {
+		if rowMatch.TeamID == uuid.Nil {
+			// No match_players row at all for this match yet.
+			continue
+		}
+
+		// Get or create the team
+		var team *models.TeamWithPlayers
+		for i := range match.Teams {
+			if match.Teams[i].ID == rowMatch.TeamID {
+				team = &match.Teams[i]
+				break
+			}
+		}
+
+		if team == nil {
+			newTeam := models.TeamWithPlayers{
+				ID:      rowMatch.TeamID,
+				Name:    rowMatch.TeamName,
+				Colour:  rowMatch.TeamColour,
+				Score:   0,
+				Players: []models.PlayerCustom{},
+			}
+			match.Teams = append(match.Teams, newTeam)
+			team = &match.Teams[len(match.Teams)-1] // Point to the newly appended team
+		}
+
+		team.Players = append(team.Players, models.PlayerCustom{
+			ID:          rowMatch.PlayerID,
+			Name:        rowMatch.PlayerName,
+			GoalsScored: rowMatch.GoalsScored,
+			OwnGoals:    rowMatch.OwnGoals,
+		})
+	}
+
+	// Calculez le score pour chaque équipe. Own goals are scored by a team's
+	// own player but count toward the OTHER team's Score — same rule as
+	// GetMatchesDetails above.
+	ownGoalsByTeam := make(map[uuid.UUID]int)
+	totalOwnGoals := 0
+	for _, team := range match.Teams {
+		for _, player := range team.Players {
+			ownGoalsByTeam[team.ID] += player.OwnGoals
+			totalOwnGoals += player.OwnGoals
+		}
+	}
+	for i := range match.Teams {
+		score := 0
+		for _, player := range match.Teams[i].Players {
+			score += player.GoalsScored
+		}
+		score += totalOwnGoals - ownGoalsByTeam[match.Teams[i].ID]
+		match.Teams[i].Score = score
+	}
+
+	// Backfill any team that has no players assigned yet in this match, so the match
+	// always shows every team instead of only the ones with a roster so far.
+	var allTeams []models.Team
+	if result := s.DB.Where("group_id = ?", groupID).Find(&allTeams); result.Error != nil {
+		return nil, result.Error
+	}
+	for _, allTeam := range allTeams {
+		found := false
+		for _, team := range match.Teams {
+			if team.ID == allTeam.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			match.Teams = append(match.Teams, models.TeamWithPlayers{
+				ID:      allTeam.ID,
+				Name:    allTeam.Name,
+				Colour:  allTeam.Colour,
+				Score:   0,
+				Players: []models.PlayerCustom{},
+			})
+		}
+	}
+
+	// Triez les équipes par couleur (ordre alphabétique)
+	if len(match.Teams) > 0 {
+		sort.Slice(match.Teams, func(i, j int) bool {
+			return match.Teams[i].Colour < match.Teams[j].Colour
+		})
+	}
+
+	// Triez les joueurs dans chaque équipe par leur nombre de buts en ordre décroissant
+	for i := range match.Teams {
+		team := &match.Teams[i]
+		sort.Slice(team.Players, func(k, l int) bool {
+			return team.Players[k].GoalsScored > team.Players[l].GoalsScored
+		})
+	}
+
+	return match, nil
+}
+
+// registrationCountsForSelection returns sign-up totals for the selected
+// scheduled matches. A match with no sign-ups has no entry in the map.
+//
+// This exists as its own query rather than as a fifth LEFT JOIN in
+// GetMatchesDetails because match_registrations is a *second* one-to-many on
+// matches: joined alongside match_players it would multiply the rows (one per
+// registration × one per assigned player), and every score and goal total in
+// this file is derived by summing those rows. One extra round-trip is the price
+// of not silently corrupting all of them.
+func (s *MatchService) registrationCountsForSelection(selection *gorm.DB) (map[uuid.UUID]int, error) {
+	var rows []struct {
+		MatchID uuid.UUID
+		Total   int
+	}
+	if err := s.DB.Model(&models.MatchRegistration{}).
+		Select("match_id, COUNT(*) AS total").
+		Where("match_id IN (?)", s.DB.Table("(?) AS selected_matches", selection).Select("id").Where("scheduled_at IS NOT NULL")).
+		Group("match_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	counts := make(map[uuid.UUID]int, len(rows))
+	for _, row := range rows {
+		counts[row.MatchID] = row.Total
+	}
+	return counts, nil
+}
+
+// registrationCount returns the sign-up total for a single match. The match
+// id is already known to belong to the authorized group by the time this runs
+// (GetMatchDetailsByID scopes its own lookup on group_id), so there is nothing
+// left to scope here.
+func (s *MatchService) registrationCount(matchID uuid.UUID) (int, error) {
+	var total int64
+	if err := s.DB.Model(&models.MatchRegistration{}).
+		Where("match_id = ?", matchID).
+		Count(&total).Error; err != nil {
+		return 0, err
+	}
+	return int(total), nil
+}
+
+// DeleteMatch removes the match with the given id, scoped to groupID the same
+// way GetMatchDetailsByID is — a match belonging to a different group (or not
+// existing at all) is reported as ErrMatchNotFound rather than being
+// reachable. MatchPlayer.MatchID has no ON DELETE CASCADE, so every
+// match_players row for this match is deleted first, inside the same
+// transaction as the match itself, or the match delete would fail with a
+// foreign-key violation instead of a clean application-level result.
+// MatchRegistration and MatchVote rows are cleaned up in the same transaction
+// too — see the comments below for why nothing forces that one.
+func (s *MatchService) DeleteMatch(matchID, groupID uuid.UUID) error {
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		var match models.Match
+		if err := tx.Select("id").Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&match, "id = ? AND group_id = ?", matchID, groupID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrMatchNotFound
+			}
+			return err
+		}
+		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchPlayer{}).Error; err != nil {
+			return err
+		}
+		// Sign-ups go the same way. MatchRegistration declares no association
+		// on Match, so unlike match_players there is no FK forcing this — but
+		// leaving a deleted match's sign-up list behind would be dead rows
+		// nothing can ever read or clean up again.
+		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchRegistration{}).Error; err != nil {
+			return err
+		}
+		// Man of the Match votes, for the same reason as sign-ups: MatchVote
+		// declares no association on Match either, so nothing forces this, but
+		// a deleted match's votes would otherwise be unreachable orphan rows.
+		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchVote{}).Error; err != nil {
+			return err
+		}
+		// Predictions, same reasoning again: no association, no FK, just
+		// rows nothing could ever read once their match is gone.
+		if err := tx.Where("match_id = ?", matchID).Delete(&models.MatchPrediction{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.Match{}, "id = ?", matchID).Error
+	})
+}
+
+// UpdateMatch rewrites the roster and goal counts of one match, as a diff
+// against what is currently stored (rows created, updated or deleted per
+// team).
+//
+// matchID and groupID are separate parameters rather than fields read off the
+// payload, and that is the whole point: the caller — MatchHandler.UpdateMatch
+// — takes them from the URL and from the group its middleware already
+// authorized (see matchscope.go), never from the request body. A body-supplied
+// match id was a genuine cross-tenant hole: an admin of group A could send
+// their own group_id (satisfying the admin check) together with the id of a
+// match belonging to group B, and this method would happily rewrite group B's
+// scores and roster. That is why the DTO is no longer accepted whole: only
+// teams is content, and both ids are the caller's authority.
+//
+// Both are then re-verified here rather than trusted, the same defence-in-depth
+// DeleteMatch already applies:
+//
+//   - the match itself is loaded by (id, group_id), so a match from another
+//     group reads as ErrMatchNotFound exactly as it does for every read path
+//     (GetMatchDetailsByID) and for DeleteMatch — absent, not forbidden;
+//   - every team id in the payload must belong to that same group, else
+//     ErrTeamNotInGroup. Without that second check an admin could still attach
+//     one of their *own* group's teams to another group's match, which is the
+//     same corruption by a different route — and it mirrors what
+//     TeamService.UpdateTeam already does by scoping its lookup to
+//     (team_id, group_id).
+func (s *MatchService) UpdateMatch(matchID, groupID uuid.UUID, teams []models.TeamWithPlayers) error {
+	var match models.Match
+	var before map[uuid.UUID]uuid.UUID
+	resultRecorded := false
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := lockGroup(tx, groupID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrMatchNotFound
+			}
+			return err
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&match, "id = ? AND group_id = ?", matchID, groupID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrMatchNotFound
+			}
+			return err
+		}
+		if err := NewMatchService(tx).assertTeamsInGroup(teams, groupID); err != nil {
+			return err
+		}
+		var rows []models.MatchPlayer
+		if err := tx.Where("match_id = ?", matchID).Find(&rows).Error; err != nil {
+			return err
+		}
+		before = make(map[uuid.UUID]uuid.UUID, len(rows))
+		for _, row := range rows {
+			before[row.PlayerID] = row.TeamID
+		}
+		if err := validateRosterAdditions(tx, groupID, before, teams); err != nil {
+			return err
+		}
+
+		var dbMatchPlayers []models.MatchPlayer
+
+		for i := range teams {
+			team := &teams[i]
+			result := tx.Where("match_id = ?", matchID).Where("team_id = ?", team.ID).Find(&dbMatchPlayers)
+			if result.Error != nil {
+				return result.Error
+			}
+			for j := range team.Players {
+				player := &team.Players[j]
+				// Check if the player already exists in the team composition
+				exists := false
+				for _, dbMatchPlayer := range dbMatchPlayers {
+					if dbMatchPlayer.PlayerID == player.ID {
+						exists = true
+						break
+					}
+				}
+				if !exists {
+					// Create a new team composition if it doesn't exist
+					newMatchPlayer := models.MatchPlayer{
+						MatchID:     matchID,
+						TeamID:      team.ID,
+						PlayerID:    player.ID,
+						GoalsScored: player.GoalsScored,
+						OwnGoals:    player.OwnGoals,
+					}
+					result := tx.Create(&newMatchPlayer)
+					if result.Error != nil {
+						return result.Error
+					}
+				}
+			}
+
+			for _, dbMatchPlayer := range dbMatchPlayers {
+				toDelete := true
+				for j := range team.Players {
+					player := &team.Players[j]
+					if dbMatchPlayer.PlayerID == player.ID {
+						toDelete = false
+						result := tx.Model(&models.MatchPlayer{}).Where("match_id = ?", matchID).Where("team_id = ?", team.ID).Where("player_id = ?", player.ID).Updates(map[string]any{
+							"goals_scored": player.GoalsScored,
+							"own_goals":    player.OwnGoals,
+						})
+						if result.Error != nil {
+							return result.Error
+						}
+						break
+					}
+				}
+				if toDelete {
+					result := tx.Where("match_id = ?", matchID).Where("team_id = ?", team.ID).Where("player_id = ?", dbMatchPlayer.PlayerID).Delete(&models.MatchPlayer{})
+					if result.Error != nil {
+						return result.Error
+					}
+				}
+			}
+		}
+
+		// A save after kick-off is the admin recording the result, which
+		// is what settles the match's predictions. The first such save is
+		// kept: later corrections change the score, and every standing is
+		// derived from the score, so nothing else needs to move.
+		if match.IsScheduled() && match.ResultRecordedAt == nil && !time.Now().Before(*match.ScheduledAt) {
+			if err := tx.Model(&models.Match{}).Where("id = ?", matchID).Update("result_recorded_at", time.Now()).Error; err != nil {
+				return err
+			}
+			resultRecorded = true
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	if s.Notifier != nil {
+		after := make(map[uuid.UUID]uuid.UUID)
+		for i := range teams {
+			for j := range teams[i].Players {
+				after[teams[i].Players[j].ID] = teams[i].ID
+			}
+		}
+		s.Notifier.RosterSaved(RosterSavedEvent{Match: match, Before: before, After: after, ResultRecorded: resultRecorded})
+	}
+	return nil
+}
+
+// assertTeamsInGroup rejects a payload naming a team that is not one of
+// groupID's own. The group's teams are fetched once and checked in Go rather
+// than one existence query per team: a group has exactly two teams (see
+// GroupService.CreateGroup), so this is a single, tiny query either way, and
+// the GORM query builder is enough for it — no join, no raw SQL.
+func (s *MatchService) assertTeamsInGroup(teams []models.TeamWithPlayers, groupID uuid.UUID) error {
+	if len(teams) == 0 {
+		return nil
+	}
+
+	var groupTeamIDs []uuid.UUID
+	if err := s.DB.Model(&models.Team{}).Where("group_id = ?", groupID).Pluck("id", &groupTeamIDs).Error; err != nil {
+		return err
+	}
+	inGroup := make(map[uuid.UUID]bool, len(groupTeamIDs))
+	for _, id := range groupTeamIDs {
+		inGroup[id] = true
+	}
+
+	for i := range teams {
+		if !inGroup[teams[i].ID] {
+			return ErrTeamNotInGroup
+		}
+	}
+	return nil
+}
+
+var ErrPlayerNotInGroup = errors.New("new roster players must belong to this group")
+
+func validateRosterAdditions(tx *gorm.DB, groupID uuid.UUID, existing map[uuid.UUID]uuid.UUID, teams []models.TeamWithPlayers) error {
+	added := make(map[uuid.UUID]struct{})
+	for _, team := range teams {
+		for _, player := range team.Players {
+			if _, exists := existing[player.ID]; !exists {
+				added[player.ID] = struct{}{}
+			}
+		}
+	}
+	if len(added) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, 0, len(added))
+	for id := range added {
+		ids = append(ids, id)
+	}
+	var count int64
+	if err := tx.Model(&models.GroupMembership{}).Where("group_id = ? AND player_id IN ?", groupID, ids).Count(&count).Error; err != nil {
+		return err
+	}
+	if count != int64(len(ids)) {
+		return ErrPlayerNotInGroup
+	}
+	return nil
+}

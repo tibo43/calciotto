@@ -1,0 +1,388 @@
+package main
+
+import (
+	"errors"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"app/internal/handlers"
+	"app/internal/services"
+
+	"app/pkg/database"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"golang.org/x/time/rate"
+)
+
+func main() {
+	// Initialize database connection
+	db, err := database.InitDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Initialize Gin router
+	r := gin.New()
+	r.Use(gin.Logger(), gin.CustomRecoveryWithWriter(io.Discard, func(c *gin.Context, cause any) {
+		// Recovery must not dump request headers containing session credentials.
+		log.Printf("panic handling %s %s (%T)", c.Request.Method, c.FullPath(), cause)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+	}))
+	origins := allowedOrigins()
+
+	// Decide whose X-Forwarded-For to believe *before* any route is served:
+	// gin trusts every caller by default, which made c.ClientIP() — and
+	// therefore the per-IP rate limiters on the four /auth/* routes below —
+	// take its value from a header the client itself could set. See
+	// handlers.ConfigureTrustedProxies for the policy and the TRUSTED_PROXIES
+	// env var that overrides it.
+	if err := handlers.ConfigureTrustedProxies(r); err != nil {
+		log.Fatalf("invalid %s: %v", "TRUSTED_PROXIES", err)
+	}
+
+	// Configuration CORS
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     origins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length", "X-Next-Cursor"},
+		AllowCredentials: true,
+	}))
+	r.Use(handlers.LimitRequestBody(256 << 10))
+
+	// JWT_SECRET has no hardcoded fallback: an empty signing key would let
+	// anyone forge tokens, so fail fast at startup instead of running insecure.
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET environment variable is required")
+	}
+
+	// Initialize handlers
+	groupService := services.NewGroupService(db)
+	groupMembershipService := services.NewGroupMembershipService(db)
+	authService := services.NewAuthService(db, jwtSecret)
+	playerHandler := handlers.NewPlayerHandler(services.NewPlayerService(db))
+	groupHandler := handlers.NewGroupHandler(groupService, groupMembershipService)
+	teamHandler := handlers.NewTeamHandler(services.NewTeamService(db))
+	matchService := services.NewMatchService(db)
+	// Push notifications (services/notifications.go). Without the three
+	// VAPID settings nothing is delivered, but the rest works, the same
+	// degraded-but-running choice as Brevo for emails.
+	var pushSender services.PushSender
+	vapidPublicKey := os.Getenv("VAPID_PUBLIC_KEY")
+	if vapidPrivateKey, vapidSubject := os.Getenv("VAPID_PRIVATE_KEY"), os.Getenv("VAPID_SUBJECT"); vapidPublicKey != "" && vapidPrivateKey != "" && vapidSubject != "" {
+		pushSender = &services.WebPushSender{PublicKey: vapidPublicKey, PrivateKey: vapidPrivateKey, Subject: vapidSubject}
+	} else {
+		log.Println("VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT not all set: push notifications will not be delivered")
+		vapidPublicKey = ""
+	}
+	notificationService := services.NewNotificationService(db, pushSender, matchService)
+	matchService.Notifier = notificationService
+	authService.Notifier = notificationService
+	notificationHandler := handlers.NewNotificationHandler(notificationService, vapidPublicKey, os.Getenv("NOTIFICATIONS_TICK_SECRET"))
+	matchHandler := handlers.NewMatchHandler(matchService, groupMembershipService)
+	matchRegistrationHandler := handlers.NewMatchRegistrationHandler(services.NewMatchRegistrationService(db))
+	matchVoteHandler := handlers.NewMatchVoteHandler(services.NewMatchVoteService(db))
+	matchPredictionHandler := handlers.NewMatchPredictionHandler(services.NewMatchPredictionService(db, matchService))
+	standingsHandler := handlers.NewStandingsHandler(services.NewStandingsService(db, groupMembershipService), groupMembershipService)
+	authHandler := handlers.NewAuthHandler(authService)
+	authHandler.SessionOrigins = origins
+	authHandler.SecureCookies = gin.Mode() == gin.ReleaseMode
+	passkeyService, err := services.NewPasskeyService(authService, origins)
+	if err != nil {
+		log.Fatal(err)
+	}
+	passkeyHandler := handlers.NewPasskeyHandler(passkeyService, authHandler)
+
+	// Auth middleware chains, reused across the group-scoped routes below.
+	authRequired := handlers.AuthMiddleware(authService)
+	requireGroupMember := handlers.RequireGroupMembership(groupMembershipService)
+	requireGroupMemberByPathID := handlers.RequireGroupMembershipByPathParam(groupMembershipService, "id")
+	requireGroupAdmin := handlers.RequireGroupAdmin(groupMembershipService)
+	requireGroupAdminByPathID := handlers.RequireGroupAdminByPathParam(groupMembershipService, "id")
+	// The /matches/:id/registrations routes name a *match*, not a group, so
+	// they need the pair that derives the group from the match rather than
+	// trusting a group id the caller supplies (see matchscope.go).
+	requireGroupMemberByMatchID := handlers.RequireGroupMembershipByMatchPathParam(matchService, groupMembershipService, "id")
+	requireGroupAdminByMatchID := handlers.RequireGroupAdminByMatchPathParam(matchService, groupMembershipService, "id")
+
+	// Setup routes
+	// Players — there is no admin-only "create a player" route any more:
+	// ghost (credential-less) players were removed, so every player row now
+	// comes from POST /auth/signup instead. See CLAUDE.md.
+	// Cross-group profile of the caller themselves: authRequired only, with no
+	// requireGroupMember — there is no single group_id to authorize against
+	// here, and the handler only ever reports on the groups the JWT's own
+	// player belongs to (see StandingsHandler.GetPlayerProfile).
+	r.GET("/players/me/stats", authRequired, standingsHandler.GetPlayerProfile)
+	// Same reasoning as /players/me/stats: this only ever acts on the JWT's
+	// own player id, so no group-scoping middleware is needed.
+	r.PATCH("/players/me", authRequired, playerHandler.UpdateMyName)
+	// Hidden features enabled for the caller (models.PlayerFeature), which
+	// are switched on by hand in the database. Same scoping as above.
+	r.GET("/players/me/features", authRequired, playerHandler.GetMyFeatures)
+	r.PUT("/players/me/guide", authRequired, playerHandler.CompleteGuide)
+	// The caller's own preferred positions (GK/DEF/MID/FWD), shown on the v2
+	// Account page. Same scoping as above: only ever the JWT's own player.
+	r.GET("/players/me/positions", authRequired, playerHandler.GetMyPositions)
+	r.PUT("/players/me/positions", authRequired, playerHandler.UpdateMyPositions)
+	// Push notifications for the caller's own devices (the subscribe route
+	// refuses a player without the push-notifications feature).
+	r.GET("/push/public-key", authRequired, notificationHandler.GetPublicKey)
+	r.POST("/players/me/push-subscription", authRequired, notificationHandler.Subscribe)
+	r.DELETE("/players/me/push-subscription", authRequired, notificationHandler.Unsubscribe)
+	// Which of the six notifications this player wants. Same feature gate as
+	// subscribe: the card that calls these is hidden without it.
+	r.GET("/players/me/notification-preferences", authRequired, notificationHandler.GetPreferences)
+	r.PUT("/players/me/notification-preferences", authRequired, notificationHandler.UpdatePreferences)
+	// Called by an external scheduler (cron-job.org) every minute:
+	// POST https://calciotto.koyeb.app/internal/notifications/tick with
+	// Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>. Authenticated by
+	// that shared secret, and not registered at all when it isn't configured.
+	if notificationHandler.TickSecret != "" {
+		r.POST("/internal/notifications/tick", notificationHandler.Tick)
+	} else {
+		log.Println("NOTIFICATIONS_TICK_SECRET not set: sign-up and kick-off notifications will not be sent")
+	}
+	// Self-service "delete my account" — the current password is required in
+	// the body as a safety confirmation. Lives on AuthHandler rather than
+	// PlayerHandler since it's fundamentally a credential-lifecycle action,
+	// the same reasoning Login/Signup/ResetPassword already live there — see
+	// AuthService.DeleteAccount for what actually happens (anonymize, not
+	// erase) and why.
+	r.DELETE("/players/me", authRequired, authHandler.DeleteAccount)
+	r.GET("/players/me/passkeys", authRequired, passkeyHandler.List)
+	r.POST("/players/me/passkeys/options", authRequired, handlers.RateLimit(rate.Every(6*time.Second), 10), passkeyHandler.RegistrationOptions)
+	r.POST("/players/me/passkeys", authRequired, handlers.RateLimit(rate.Every(6*time.Second), 10), passkeyHandler.Register)
+	r.DELETE("/players/me/passkeys/:id", authRequired, passkeyHandler.Remove)
+
+	// Groups
+	// POST /groups and POST /groups/join are temporarily disabled (both
+	// handlers always answer 403 — see GroupHandler.CreateGroup/JoinGroup): a
+	// player can no longer self-service creating or joining a group.
+	// authRequired stays so an unauthenticated caller still gets 401 before
+	// reaching that 403. The only way into a group now is an admin sharing the
+	// invite-code link (GroupSettingsModal.vue) that pre-fills the mandatory
+	// invite code on POST /auth/signup — see CLAUDE.md.
+	r.POST("/groups", authRequired, groupHandler.CreateGroup)
+	r.POST("/groups/join", authRequired, groupHandler.JoinGroup)
+	r.GET("/groups", authRequired, groupHandler.GetGroups)
+	r.GET("/groups/me", authRequired, groupHandler.GetMyGroups)
+	r.GET("/groups/:id", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupByID)
+	r.PUT("/groups/:id/details", authRequired, requireGroupAdminByPathID, groupHandler.UpdateGroupDetails)
+	r.GET("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.GetInviteCode)
+	r.POST("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.ChangeInvitation)
+	r.DELETE("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.ChangeInvitation)
+	r.GET("/groups/:id/teams", authRequired, requireGroupMemberByPathID, teamHandler.GetTeamsByGroup)
+	// Admin-only "rename/recolour a team" — same admin gate as the member-role
+	// and invite routes above; TeamService.UpdateTeam additionally scopes the
+	// lookup to :id so :teamId can't reach into another group.
+	r.PATCH("/groups/:id/teams/:teamId", authRequired, requireGroupAdminByPathID, teamHandler.UpdateTeam)
+	// Adding another player to a group is **admin-only**: the body names an
+	// arbitrary player id, so under plain membership any member could enrol
+	// anyone they knew the id of, with no invite code and no admin rights —
+	// which contradicts the invite-only model the rest of this file enforces
+	// (POST /groups and POST /groups/join are disabled precisely so that the
+	// only way in is an admin's invite link). No frontend code calls this
+	// route today; it is kept, gated, rather than removed, since it is the
+	// only server-side way an admin can enrol an existing player directly.
+	r.POST("/groups/:id/players", authRequired, requireGroupAdminByPathID, groupHandler.AddPlayerToGroup)
+	r.GET("/groups/:id/players", authRequired, requireGroupMemberByPathID, groupHandler.GetGroupMembers)
+	// Self-service "leave a group" — the caller can only ever remove their own
+	// membership (from the JWT), never someone else's; removing another
+	// member is handled by the admin-only route below instead.
+	r.DELETE("/groups/:id/members/me", authRequired, requireGroupMemberByPathID, groupHandler.LeaveGroup)
+	r.PATCH("/groups/:id/favorite", authRequired, requireGroupMemberByPathID, groupHandler.SetFavoriteGroup)
+	// Admin-only "remove a member" — unlike the self-service route above, this
+	// targets another player's membership, so it's gated by
+	// RequireGroupAdminByPathParam rather than plain group membership.
+	r.DELETE("/groups/:id/members/:playerId", authRequired, requireGroupAdminByPathID, groupHandler.RemoveMember)
+	// Admin-only "change a member's role" — the only way a group gains an
+	// admin besides its creator, so it has to be reachable by any existing
+	// admin, and by no one else.
+	r.PATCH("/groups/:id/members/:playerId/role", authRequired, requireGroupAdminByPathID, groupHandler.UpdateMemberRole)
+
+	// Matches
+	// Creating a match and editing its scores are admin-only; reading them
+	// stays open to any member (requireGroupMember). POST /matches carries the
+	// group_id in the body and has no match to derive it from — it is creating
+	// one — hence the body/query-resolving requireGroupAdmin.
+	r.POST("/matches", authRequired, requireGroupAdmin, matchHandler.CreateMatch)
+	r.GET("/matches/details", authRequired, requireGroupMember, matchHandler.GetMatchesDetails)
+	r.GET("/matches/:id/details", authRequired, requireGroupMember, matchHandler.GetMatchDetailsByID)
+	// PUT /matches/:id uses the *match-scoped* admin middleware, unlike POST
+	// above: the path already names the match, so the group must be derived
+	// from it rather than from the body. It used to use requireGroupAdmin,
+	// which authorized against a group the caller supplied — letting an admin
+	// of group A pass their own group_id together with the ID of a match in
+	// group B and rewrite that match's roster and scores (see
+	// MatchHandler.UpdateMatch / MatchService.UpdateMatch).
+	r.PUT("/matches/:id", authRequired, requireGroupAdminByMatchID, matchHandler.UpdateMatch)
+	r.DELETE("/matches/:id", authRequired, requireGroupAdminByMatchID, matchHandler.DeleteMatch)
+
+	// Sign-ups for a scheduled match. All six are gated by the match-scoped
+	// middlewares: the path carries a match id, so the group is derived from
+	// the match itself — a member of another group gets 404, not 403, so match
+	// ids stay unenumerable (see matchscope.go).
+	//
+	// Signing up, withdrawing and reading the list are open to any member: the
+	// player always comes from the JWT, so a member can only ever add or remove
+	// *themselves*. The DELETE has no /me suffix for that reason — there is no
+	// other sign-up it could target.
+	r.POST("/matches/:id/registrations", authRequired, requireGroupMemberByMatchID, matchRegistrationHandler.Register)
+	r.DELETE("/matches/:id/registrations", authRequired, requireGroupMemberByMatchID, matchRegistrationHandler.Unregister)
+	r.GET("/matches/:id/registrations", authRequired, requireGroupMemberByMatchID, matchRegistrationHandler.ListRegistrations)
+	// Freezing the roster (in order to compose the teams) and undoing a
+	// mis-clicked close are admin actions, like every other write on a match.
+	r.POST("/matches/:id/registrations/close", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.CloseRegistrations)
+	r.POST("/matches/:id/registrations/reopen", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.ReopenRegistrations)
+	// Changing how many sign-ups count as confirmed — the rest of the list
+	// becomes the waiting list, in sign-up order, with no row rewritten. It
+	// lives under /registrations because the cap is only ever read as that
+	// list's confirmed/waiting boundary (see ComputeRegistrationPositions),
+	// and it is deliberately *not* gated on the registration window: dropping
+	// the cap is typically what an admin does right after closing sign-ups, in
+	// order to compose the teams.
+	r.PATCH("/matches/:id/registrations/max-players", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.SetMaxPlayers)
+	// Preferred positions of the match's group members, for composing the
+	// teams. Admin-only: positions are never shown to a plain member, so they
+	// are not on the sign-up list or the match details (which every member
+	// reads) but behind the match-scoped admin gate (member 403, non-member 404).
+	r.GET("/matches/:id/positions", authRequired, requireGroupAdminByMatchID, playerHandler.GetMatchPositions)
+
+	// Man of the Match voting. Same match-scoped middleware pair as the
+	// sign-up routes above, and every route is open to any member — there is
+	// no admin-only action anywhere in this feature, and no close/reopen
+	// concept either (a fixed window closes voting on its own, see
+	// MatchVoteService.VotingWindowError).
+	//
+	// Plain membership is the *route's* requirement, not the whole rule: only
+	// a player who actually played in this match may cast a vote, which
+	// MatchVoteService.Vote enforces itself (ErrVoterNotOnRoster). It lives
+	// there rather than in a stricter guard here because "is a member of the
+	// group" and "is on this match's roster" are different questions, and
+	// reading the tally (GET) is deliberately open to the former.
+	r.POST("/matches/:id/votes", authRequired, requireGroupMemberByMatchID, matchVoteHandler.Vote)
+	r.DELETE("/matches/:id/votes", authRequired, requireGroupMemberByMatchID, matchVoteHandler.Unvote)
+	r.GET("/matches/:id/votes", authRequired, requireGroupMemberByMatchID, matchVoteHandler.ListVotes)
+
+	// Win/draw/loss predictions — same match-scoped middleware as votes
+	// above and for the same reason, but deliberately its own, unrelated
+	// feature: no admin-only route, no roster-eligibility check (see
+	// MatchPredictionHandler's own doc comment).
+	r.POST("/matches/:id/predictions", authRequired, requireGroupMemberByMatchID, matchPredictionHandler.Predict)
+	r.GET("/matches/:id/predictions", authRequired, requireGroupMemberByMatchID, matchPredictionHandler.ListPredictions)
+
+	// Standings
+	r.GET("/standings/points", authRequired, requireGroupMember, standingsHandler.GetPointsStandings)
+	r.GET("/standings/scorers", authRequired, requireGroupMember, standingsHandler.GetScorers)
+	r.GET("/standings/motm", authRequired, requireGroupMember, standingsHandler.GetMotmStandings)
+	r.GET("/standings/predictions", authRequired, requireGroupMember, standingsHandler.GetPredictionStandings)
+	r.GET("/standings/seasons", authRequired, requireGroupMember, standingsHandler.GetSeasons)
+
+	// Auth entry points are unauthenticated by necessity (a caller signing up,
+	// logging in or resetting a lost password has no token yet), which also
+	// makes them the only routes in this app an anonymous script can hit
+	// repeatedly for free. Each gets its own rate limiter (see ratelimit.go),
+	// keyed on the player rather than on Vercel since the frontend reaches them
+	// through its /api/auth rewrite (ProxiedRateLimit): bcrypt already
+	// slows down one guess against Login, but not a script making thousands: a
+	// generous burst absorbs a legitimate user mistyping their password a few
+	// times in a row, then throttles hard.
+	loginRateLimit := handlers.ProxiedRateLimit(rate.Every(6*time.Second), 10) // ~10/min, burst 10
+	// Signup's rate/burst are the one pair overridable via env
+	// (SIGNUP_RATE_LIMIT_PER_HOUR/SIGNUP_RATE_LIMIT_BURST), both defaulting to
+	// 5/hour, burst 5 when unset. The local performance fixtures can raise
+	// these temporarily to create multiple synthetic accounts from one IP.
+	signupPerHour := envIntOrDefault("SIGNUP_RATE_LIMIT_PER_HOUR", 5)
+	signupBurst := envIntOrDefault("SIGNUP_RATE_LIMIT_BURST", 5)
+	signupRateLimit := handlers.ProxiedRateLimit(rate.Every(time.Hour/time.Duration(signupPerHour)), signupBurst)
+	forgotPasswordRateLimit := handlers.ProxiedRateLimit(rate.Every(12*time.Minute), 5) // ~5/hour, burst 5 — also caps Brevo email spend, see CLAUDE.md
+	resetPasswordRateLimit := handlers.ProxiedRateLimit(rate.Every(3*time.Minute), 20)  // ~20/hour, burst 20 — tokens are unguessable 32-byte values, this is a courtesy cap, not the real defense
+
+	r.POST("/auth/signup", signupRateLimit, authHandler.Signup)
+	r.POST("/auth/login", loginRateLimit, authHandler.Login)
+	r.POST("/auth/passkeys/options", handlers.ProxiedRateLimit(rate.Every(6*time.Second), 10), passkeyHandler.LoginOptions)
+	r.POST("/auth/passkeys/login", handlers.ProxiedRateLimit(rate.Every(6*time.Second), 10), passkeyHandler.Login)
+	r.POST("/auth/refresh", handlers.ProxiedRateLimit(rate.Every(time.Second), 60), authHandler.RefreshSession)
+	r.POST("/auth/logout", handlers.ProxiedRateLimit(rate.Every(time.Second), 60), authHandler.Logout)
+	// Public like signup/login above: someone who forgot their password has by
+	// definition no token to authenticate the request with.
+	r.POST("/auth/forgot-password", forgotPasswordRateLimit, authHandler.ForgotPassword)
+	r.POST("/auth/reset-password", resetPasswordRateLimit, authHandler.ResetPassword)
+	// Add more routes as needed
+
+	// Liveness probe for the platform's healthcheck. It deliberately does NOT
+	// touch the database: the host restarts an instance whose healthcheck
+	// fails, so reporting unhealthy on a transient database hiccup (Neon
+	// waking from scale-to-zero, a pooler blip) would turn a few seconds of
+	// slow queries into a restart loop. InitDB already fails fast at startup
+	// if the database is unreachable, which is the check that matters.
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// Start server. The host assigns the port through PORT (Koyeb does), so it
+	// can't be hardcoded; 8080 keeps docker-compose and `go run .` unchanged.
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	server := &http.Server{
+		Addr: ":" + port, Handler: r,
+		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second,
+		WriteTimeout: 35 * time.Second, IdleTimeout: time.Minute,
+		MaxHeaderBytes: 64 << 10,
+	}
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatal(err)
+	}
+}
+
+// allowedOrigins lists the browser origins allowed to call this API
+// cross-origin. In production the frontend is served from its own domain
+// (Vercel), so the list has to be configurable rather than hardcoded:
+// CORS_ALLOWED_ORIGINS holds it as a comma-separated list. An unset — or
+// entirely blank — value falls back to the local dev origins, so
+// `docker compose up` keeps working with no extra configuration. Note the
+// fallback rather than an empty slice: gin-contrib/cors with no allowed
+// origin and AllowAllOrigins false rejects every cross-origin request, which
+// would be a silent, hard-to-diagnose outage rather than a startup failure.
+func allowedOrigins() []string {
+	raw := os.Getenv("CORS_ALLOWED_ORIGINS")
+
+	origins := make([]string, 0, 2)
+	for _, origin := range strings.Split(raw, ",") {
+		if origin = strings.TrimSpace(origin); origin != "" {
+			origins = append(origins, origin)
+		}
+	}
+
+	if len(origins) == 0 {
+		return []string{"http://localhost:4000", "http://127.0.0.1:4000"}
+	}
+	return origins
+}
+
+// envIntOrDefault reads a positive integer from an env var, falling back to
+// def when the var is unset, empty, or not a valid positive integer — used to
+// make the signup rate limit tunable for a load test without a code change,
+// while defaulting to today's hardcoded behavior when nothing overrides it.
+func envIntOrDefault(key string, def int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return def
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		log.Printf("invalid %s=%q, using default %d", key, raw, def)
+		return def
+	}
+	return n
+}

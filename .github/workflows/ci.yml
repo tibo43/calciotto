@@ -1,0 +1,263 @@
+name: CI
+
+# The build/test half of CI, and the only half a pull request ever sees: three
+# jobs, no deployment. That split is what keeps a PR's check list down to what
+# it can actually act on — a job whose `if:` is false is still *reported*, as a
+# skipped check, so leaving the deploy jobs here meant every PR listing two
+# permanently-skipped entries that read like something went wrong.
+#
+# `push` is deliberately absent. Deployment lives in deploy.yml, triggered on a
+# push to master, and it *calls this workflow* (`workflow_call` below) before
+# deploying anything — so master still runs these exact three jobs, from this
+# one definition, and `needs:` remains a real gate rather than the "fires on
+# completion, not on success" guarantee a `workflow_run` trigger would give.
+# The practical trade-off of PR-only triggering: pushing a branch with no PR
+# open runs no CI at all. A draft PR is enough to start it.
+#
+# The three `outputs` exist so deploy.yml can gate on each job separately
+# rather than on this workflow as a whole — specifically so a visual diff still
+# blocks a frontend deploy without blocking a backend one. See the deployment
+# comment in deploy.yml.
+on:
+  pull_request:
+  workflow_call:
+    outputs:
+      backend:
+        description: "'success' when the Go build/vet/test job passed, empty otherwise"
+        value: ${{ jobs.backend.outputs.result }}
+      frontend:
+        description: "'success' when the lint/unit-test/build job passed, empty otherwise"
+        value: ${{ jobs.frontend.outputs.result }}
+      visual:
+        description: "'success' when the Playwright visual job passed, empty otherwise"
+        value: ${{ jobs.visual.outputs.result }}
+
+# Successive pushes to a PR's branch each fire their own `synchronize` event, so
+# this keeps the newer run cancelling the older. `head_ref` is only set on a
+# pull_request event (the PR's source branch); when deploy.yml calls this
+# workflow on a master push it is empty and `ref_name` (`master`) is used
+# instead, which is also why `cancel-in-progress` is false there — cutting that
+# run off would take the deploy that needs it down with it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+jobs:
+  backend:
+    name: Backend (Go)
+    outputs:
+      result: ${{ steps.result.outputs.value }}
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: calciotto
+          POSTGRES_PASSWORD: calciotto
+          POSTGRES_DB: calciotto
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U calciotto -d calciotto"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: app/go.mod
+          # Not optional, and for exactly the reason `cache-dependency-path` is
+          # spelled out for setup-node below: this module lives in app/, not at
+          # the repo root, so the action's default lookup finds nothing, logs
+          # "Restore cache failed: Dependencies file is not found", and silently
+          # caches nothing — every run re-downloading the whole module graph.
+          # It failed that way from the day this workflow was written; the
+          # warning only became visible once the node20 deprecation noise
+          # around it was cleared.
+          cache-dependency-path: app/go.sum
+
+      - name: Build
+        working-directory: app
+        run: go build ./...
+
+      # gofmt is the Go half of what `npm run lint` does for the frontend, and
+      # until now nothing checked it: `internal/models/database.go` had drifted
+      # (struct-tag alignment in Match) and no build ever noticed. `gofmt -l`
+      # prints the offending files and exits 0 either way, hence the explicit
+      # test — a bare `gofmt -l .` would pass while reporting problems. `-l`
+      # rather than `-w`: CI reports, the author fixes, so a formatting change
+      # always lands in a commit someone reviewed.
+      - name: Format
+        working-directory: app
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt: not formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        working-directory: app
+        run: go vet ./...
+
+      # staticcheck catches what `go vet` deliberately doesn't: unused code,
+      # simplifiable constructs, misuse of stdlib APIs. Pinned rather than
+      # @latest for two reasons — a floating version turns an upstream release
+      # into a surprise red build on an unrelated PR, and staticcheck v0.8+
+      # requires Go 1.26, which would make `go run` download a second toolchain
+      # on every run. v0.7.0 is the newest that builds against this module's own
+      # Go version. The module is clean under it as of this commit; adopting it
+      # later, with a backlog, is what makes a linter never get adopted.
+      - name: Staticcheck
+        working-directory: app
+        env:
+          # Fail loudly if the pin ever stops matching go.mod's Go version,
+          # rather than silently downloading another toolchain to paper over it.
+          GOTOOLCHAIN: local
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+
+      - name: Test
+        working-directory: app
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: calciotto
+          DB_PASSWORD: calciotto
+          DB_NAME: calciotto
+          JWT_SECRET: ci-placeholder-jwt-secret
+        run: go test ./... -count=1
+
+      # Last step, and deliberately without an `if:` — a step defaults to
+      # `success()`, so this is reached only when every step above passed. The
+      # deploy workflow reads these three outputs to gate on each job
+      # individually (see .github/workflows/deploy.yml); a job that failed
+      # leaves its output empty rather than 'success'.
+      - name: Record result
+        id: result
+        run: echo "value=success" >> "$GITHUB_OUTPUT"
+
+  frontend:
+    name: Frontend (Vue)
+    outputs:
+      result: ${{ steps.result.outputs.value }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          # `npm ci` was the single longest step in this job (20s of a 41s run)
+          # with nothing cached. `cache-dependency-path` is required because the
+          # lockfile is not at the repo root — without it the action looks for
+          # ./package-lock.json, finds nothing, and silently caches nothing.
+          # `setup-go` needs the exact same treatment, and for a long time
+          # did not get it — see its own `cache-dependency-path` above. Its
+          # caching is on by default, which is what made the omission look
+          # harmless: the step still succeeded, it just restored nothing.
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Unit test
+        working-directory: frontend
+        run: npm run test:unit
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      # Last step, and deliberately without an `if:` — a step defaults to
+      # `success()`, so this is reached only when every step above passed. The
+      # deploy workflow reads these three outputs to gate on each job
+      # individually (see .github/workflows/deploy.yml); a job that failed
+      # leaves its output empty rather than 'success'.
+      - name: Record result
+        id: result
+        run: echo "value=success" >> "$GITHUB_OUTPUT"
+
+  visual:
+    name: Frontend visual regression
+    outputs:
+      result: ${{ steps.result.outputs.value }}
+    runs-on: ubuntu-latest
+    # Runs *inside* the Playwright image rather than installing browsers onto
+    # the runner, and the tag is pinned to the @playwright/test version in
+    # frontend/package.json. This is the load-bearing part of the whole job:
+    # pixel baselines are only comparable when the font stack and the browser
+    # build are identical to the ones that produced them, and this is the same
+    # image `npm run test:visual` uses locally (see
+    # frontend/tests/visual/run-in-docker.sh). Bump the two together, or every
+    # screenshot fails at once.
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      # Playwright's own recommendation for Chromium in a container: the default
+      # 64MB /dev/shm makes the browser crash on a large page, which would show
+      # up here as a flaky screenshot rather than as what it is. The local
+      # runner passes the same flag (run-in-docker.sh).
+      options: --ipc=host
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # No actions/setup-node: the image ships its own Node, and pulling a
+      # different one in would change nothing about the rendering while adding a
+      # way for the two environments to drift apart.
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # The tests are served the production build (dist/), not the dev server:
+      # what is worth pinning is what users get, HMR and eval-source-map
+      # excluded.
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Visual tests
+        working-directory: frontend
+        run: npx playwright test
+
+      # Uploaded on every run, not just on failure: the HTML reporter writes
+      # frontend/playwright-report/ either way, and on a passing run it's the
+      # only place to actually look at the current baselines (each test embeds
+      # its screenshot) without checking the PNGs out locally. On a failing run
+      # it carries the expected/actual/diff triptych, the only practical way to
+      # judge a visual diff from a log. `always()` rather than the default
+      # (which skips a step after an earlier failure) — playwright test itself
+      # already exited non-zero by the time this runs, so success() would never
+      # even be evaluated without it.
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          retention-days: 7
+
+      # Last step, and deliberately without an `if:` — a step defaults to
+      # `success()`, so this is reached only when every step above passed. The
+      # deploy workflow reads these three outputs to gate on each job
+      # individually (see .github/workflows/deploy.yml); a job that failed
+      # leaves its output empty rather than 'success'.
+      - name: Record result
+        id: result
+        run: echo "value=success" >> "$GITHUB_OUTPUT"

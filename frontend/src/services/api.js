@@ -1,0 +1,939 @@
+import axios from 'axios';
+import { hasPasskeyAccess, rememberPasskeyAccess } from './passkeyAccess';
+import { rememberDesignV2Login } from './loginV2';
+
+const API_BASE_URL = import.meta.env.VUE_APP_API_BASE_URL || 'http://127.0.0.1:8080';
+
+const TOKEN_KEY = 'calciotto-token';
+let sessionGeneration = 0;
+
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export const setToken = (token) => {
+  sessionGeneration++;
+  rememberPasskeyAccess(false);
+  localStorage.setItem(TOKEN_KEY, token);
+};
+export const clearToken = () => {
+  sessionGeneration++;
+  localStorage.removeItem(TOKEN_KEY);
+};
+
+// Overridable via VUE_APP_API_TIMEOUT_MS (a Vercel build-time var, same
+// mechanism as VUE_APP_API_BASE_URL in deploy.yml) so a
+// deliberate load test can raise it temporarily to see the backend's real
+// response time under concurrent load, instead of every request past 10s
+// being aborted client-side (ECONNABORTED, no `.response`) and surfacing as
+// a generic "...failed. Please try again." even when the backend went on to
+// complete the request successfully — see CLAUDE.md's perf load-test notes.
+// Defaults to today's exact 10000 when unset or invalid.
+const apiTimeoutMs = parseInt(import.meta.env.VUE_APP_API_TIMEOUT_MS, 10) || 10000;
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: apiTimeoutMs,
+  headers: {
+    'Content-Type': 'application/json',
+  }
+});
+
+const sessionAPI = axios.create({
+  baseURL: '/api',
+  timeout: apiTimeoutMs,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+function sessionID(token) {
+  try {
+    const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return claims.session_id || null;
+  } catch {
+    return null;
+  }
+}
+
+// The session id stays the same when a short-lived access token is renewed.
+export function getSessionKey() {
+  const token = getToken();
+  return token && (sessionID(token) || token);
+}
+
+function withSessionLock(fn) {
+  return navigator.locks ? navigator.locks.request('calciotto-session', fn) : fn();
+}
+
+let refreshInFlight;
+
+function renewAccessToken(token, generation) {
+  if (refreshInFlight && refreshInFlight.generation === generation && refreshInFlight.token === token) {
+    return refreshInFlight.promise;
+  }
+  const pending = { generation, token };
+  refreshInFlight = pending;
+  pending.promise = Promise.resolve().then(() => withSessionLock(async () => {
+    const id = sessionID(token);
+    const current = getToken();
+    if (generation !== sessionGeneration || sessionID(current) !== id) {
+      return null;
+    }
+    if (current !== token) {
+      return current;
+    }
+    let response;
+    const config = { headers: { 'X-Session-ID': id } };
+    try {
+      response = await sessionAPI.post('/auth/refresh', null, config);
+    } catch (error) {
+      if (error.response?.status !== 409) throw error;
+      // A concurrent tab rotated the cookie. Give its response time to arrive.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (generation !== sessionGeneration || sessionID(getToken()) !== id) {
+        return null;
+      }
+      response = await sessionAPI.post('/auth/refresh', null, config);
+    }
+    const next = response.data.token;
+    if (generation !== sessionGeneration || sessionID(getToken()) !== id || sessionID(next) !== id) {
+      return null;
+    }
+    localStorage.setItem(TOKEN_KEY, next);
+    return next;
+  })).finally(() => {
+    if (refreshInFlight === pending) refreshInFlight = undefined;
+  });
+  return pending.promise;
+}
+
+async function discardExpiredSession(token, generation) {
+  if (generation !== sessionGeneration || getToken() !== token) return;
+  clearToken();
+  const clearedGeneration = sessionGeneration;
+  const { forgetPushOnThisBrowser } = await import('@/services/pushNotifications');
+  if (clearedGeneration !== sessionGeneration || getToken()) return;
+  await forgetPushOnThisBrowser();
+  if (clearedGeneration === sessionGeneration && !getToken() && window.location.pathname !== '/login') {
+    window.location.href = '/login';
+  }
+}
+
+api.interceptors.request.use((config) => {
+  const token = getToken();
+  if (config.calciottoRefreshed && (
+    config.calciottoSession.generation !== sessionGeneration ||
+    sessionID(config.calciottoSession.token) !== sessionID(token)
+  )) {
+    throw new Error('the session changed while retrying the request');
+  }
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+    config.calciottoSession = { token, generation: sessionGeneration };
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => {
+    const { url, calciottoSession } = response.config;
+    if (url === '/players/me/features' && calciottoSession?.generation === sessionGeneration) {
+      const current = getToken();
+      const { token } = calciottoSession;
+      if (current && (sessionID(current) || current) === (sessionID(token) || token)) {
+        const features = response.data?.features;
+        rememberPasskeyAccess(hasPasskeyAccess(features));
+        rememberDesignV2Login(Array.isArray(features) && features.includes('design-v2'));
+      }
+    }
+    return response;
+  },
+  async (error) => {
+    const request = error.config;
+    const snapshot = request?.calciottoSession;
+    if (error.response?.status !== 401 || request?.calciottoRefreshed || !snapshot) throw error;
+    const { token, generation } = snapshot;
+    if (generation !== sessionGeneration) throw error;
+    if (!sessionID(token)) {
+      await discardExpiredSession(token, generation);
+      throw error;
+    }
+
+    let renewed;
+    try {
+      renewed = await renewAccessToken(token, generation);
+    } catch (refreshError) {
+      if (refreshError.response?.status === 401) {
+        await discardExpiredSession(token, generation);
+      }
+      throw refreshError;
+    }
+    if (!renewed || generation !== sessionGeneration || sessionID(getToken()) !== sessionID(token)) {
+      throw error;
+    }
+    return api({ ...request, calciottoRefreshed: true });
+  }
+);
+
+// Auth
+export const login = async (email, password) => {
+  const response = await sessionAPI.post('/auth/login', { email, password });
+  return response.data;
+};
+
+export const beginPasskeyLogin = async () => {
+  const response = await sessionAPI.post('/auth/passkeys/options', {});
+  return response.data;
+};
+
+export const finishPasskeyLogin = async (challengeId, credential) => {
+  const response = await sessionAPI.post('/auth/passkeys/login', { challenge_id: challengeId, credential });
+  return response.data;
+};
+
+export const beginPasskeyRegistration = async (name, password) => {
+  const response = await api.post('/players/me/passkeys/options', { name, password });
+  return response.data;
+};
+
+export const finishPasskeyRegistration = async (challengeId, credential) => {
+  const response = await api.post('/players/me/passkeys', { challenge_id: challengeId, credential });
+  return response.data;
+};
+
+export const getMyPasskeys = async () => {
+  const response = await api.get('/players/me/passkeys');
+  return response.data;
+};
+
+export const removeMyPasskey = async (id) => {
+  await api.delete(`/players/me/passkeys/${id}`);
+};
+
+export const signup = async (name, email, password, inviteCode = '') => {
+  const response = await sessionAPI.post('/auth/signup', { name, email, password, invite_code: inviteCode });
+  return response.data;
+};
+
+export const logoutSession = async () => {
+  const token = getToken();
+  const id = sessionID(token);
+  if (!id) return;
+  await withSessionLock(() => {
+    if (sessionID(getToken()) === id) {
+      return sessionAPI.post('/auth/logout', null, { headers: { 'X-Session-ID': id } });
+    }
+  });
+};
+
+// Always resolves with the same generic message whether or not the email is
+// registered — the backend deliberately doesn't say, so callers must not try to
+// infer it either.
+export const forgotPassword = async (email) => {
+  const response = await sessionAPI.post('/auth/forgot-password', { email });
+  return response.data;
+};
+
+// 400 covers every token failure alike (unknown, expired, already used) — the
+// backend gives one generic message on purpose.
+export const resetPassword = async (token, newPassword) => {
+  const response = await sessionAPI.post('/auth/reset-password', { token, new_password: newPassword });
+  rememberPasskeyAccess(false);
+  return response.data;
+};
+
+// Builds a `?a=b&c=d` suffix out of the params that actually have a value.
+//
+// Both params it carries are optional in the same way — leaving one out asks
+// the backend for its own default rather than for nothing. No season means
+// every season mixed together (the behaviour before seasons existed); no
+// group_id means the caller's first group (resolveGroupID's fallback), which
+// is only ever the right answer for a player who belongs to a single group.
+const query = (params) => {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) {
+      search.append(key, value);
+    }
+  });
+  const queryString = search.toString();
+  return queryString ? `?${queryString}` : '';
+};
+
+// Matches
+// season is optional and behaves exactly like it does on the standings
+// endpoints below: leaving it out asks for every season at once.
+export const getMatchesDetails = async (groupId, season) => {
+  try {
+    const matches = [];
+    let cursor;
+    do {
+      const response = await api.get(`/matches/details${query({ group_id: groupId, season, cursor })}`);
+      if (response.status !== 200) {
+        throw new Error('Failed to fetch matches details');
+      }
+      matches.push(...response.data);
+      const next = response.headers?.['x-next-cursor'];
+      if (next && next === cursor) throw new Error('The match cursor did not advance');
+      cursor = next;
+    } while (cursor);
+    return matches;
+  } catch (error) {
+    console.error('Error fetching matches details:', error);
+    throw error;
+  }
+};
+
+// New function for getting single match details by ID
+export const getMatchDetailsByID = async (matchId, groupId) => {
+  try {
+    const response = await api.get(`/matches/${matchId}/details${query({ group_id: groupId })}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch match details');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching match details:', error);
+    throw error;
+  }
+};
+
+// The match is created in groupId when one is given. The key has to be the
+// snake_case `group_id`: CreateMatch binds the body into models.Match, whose
+// tag is `json:"group_id"`, and Go's case-insensitive fallback does not see
+// past the underscore — a `GroupID` key would silently bind to nothing and
+// the match would land in the player's first group instead.
+//
+// `scheduling` is optional and, when given, must be complete: the backend
+// treats scheduled_at/registration_opens_at/max_players as all-or-nothing and
+// 400s on one or two of the three. Omitting it entirely creates an ordinary
+// match, exactly as before — the payload is then byte-identical to the
+// unscheduled one, since nothing is spread in. `register_creator` is a
+// further opt-in on top of that: only sent when the create-modal checkbox
+// was ticked, so a scheduled create that doesn't auto-enroll stays
+// byte-identical to the pre-flag payload.
+//
+// The two timestamps must be RFC3339 carrying the browser's own UTC offset
+// (see services/datetime.js): the backend derives the match's `date` from
+// scheduled_at's calendar day in the offset it was sent in, so a `Z`-suffixed
+// value would file a late-evening kick-off under the wrong day. `date` is only
+// read for an unscheduled match.
+export const createMatch = async (matchData, groupId, scheduling) => {
+  try {
+    let payload = groupId ? { ...matchData, group_id: groupId } : matchData;
+    if (scheduling) {
+      payload = {
+        ...payload,
+        scheduled_at: scheduling.scheduledAt,
+        registration_opens_at: scheduling.registrationOpensAt,
+        max_players: scheduling.maxPlayers,
+      };
+      // Opt-in: only spread when the checkbox was ticked, so an ordinary
+      // scheduled create stays byte-identical to the pre-flag payload.
+      if (scheduling.registerCreator) {
+        payload.register_creator = true;
+      }
+    }
+    const response = await api.post(`/matches`, payload);
+    if (response.status !== 200) {
+      throw new Error('Failed to create match');
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error('Error creating match:', error);
+    throw error;
+  }
+};
+
+// New function for updating a match
+export const updateMatch = async (matchId, matchData) => {
+  try {
+    const response = await api.put(`/matches/${matchId}`, matchData);
+    if (response.status !== 200) {
+      throw new Error('Failed to update match');
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error('Error updating match:', error);
+    throw error;
+  }
+};
+
+// Admin-only: permanently removes a match and its rosters. groupId travels as
+// a query param (a DELETE has no body), same as getMatchesDetails/
+// getMatchDetailsByID above.
+export const deleteMatch = async (matchId, groupId) => {
+  try {
+    const response = await api.delete(`/matches/${matchId}${query({ group_id: groupId })}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to delete match');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting match:', error);
+    throw error;
+  }
+};
+
+// Sign-ups on a scheduled match.
+//
+// None of these six takes a group_id, unlike every other match call above:
+// the backend resolves the group from the match named in the path and
+// authorizes against *that* (requireGroupMemberByMatchID /
+// requireGroupAdminByMatchID in main.go). Passing one would be the hole that
+// design closes — a caller could name a match in group A while presenting a
+// group B they happen to belong to.
+//
+// A non-member gets 404, not 403, so this API surface never confirms that a
+// match id exists to someone with no business knowing.
+
+// Signs the *caller* up — the player comes from the JWT, which is why there is
+// no body and no player argument.
+//
+// Reaching MaxPlayers is not an error: the surplus sign-up succeeds with
+// IsWaiting true. The resolved entry
+// ({ PlayerID, Name, Position, IsWaiting, RegisteredAt }) is therefore the
+// only place the caller learns "you are #17, on the waiting list", so callers
+// must read it rather than assume a flat success.
+export const registerForMatch = async (matchId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/registrations`);
+    if (response.status !== 200) {
+      throw new Error('Failed to sign up for the match');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error signing up for match:', error);
+    throw error;
+  }
+};
+
+// Withdraws the caller's own sign-up. Gated on the same window as signing up:
+// once an admin has closed the list (or kick-off has passed) this returns 409
+// too, which is why the UI hides the button rather than letting it fail.
+export const unregisterFromMatch = async (matchId) => {
+  try {
+    const response = await api.delete(`/matches/${matchId}/registrations`);
+    if (response.status !== 200) {
+      throw new Error('Failed to withdraw from the match');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error withdrawing from match:', error);
+    throw error;
+  }
+};
+
+// The ordered list, `[]` when empty. Position is 1-based and contiguous, and
+// IsWaiting is server-derived: the first MaxPlayers entries are the confirmed
+// roster. Never recompute that split from MaxPlayers on this side — the two
+// would disagree the moment an admin changes the cap.
+export const getMatchRegistrations = async (matchId) => {
+  try {
+    const response = await api.get(`/matches/${matchId}/registrations`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch match registrations');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching match registrations:', error);
+    throw error;
+  }
+};
+
+// Admin-only: freezes the roster so the teams can be composed.
+export const closeMatchRegistrations = async (matchId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/registrations/close`);
+    if (response.status !== 200) {
+      throw new Error('Failed to close sign-ups');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error closing match sign-ups:', error);
+    throw error;
+  }
+};
+
+// Admin-only: undoes a mis-clicked close. It only clears the closed flag — it
+// cannot bring back a list that kick-off has already closed.
+export const reopenMatchRegistrations = async (matchId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/registrations/reopen`);
+    if (response.status !== 200) {
+      throw new Error('Failed to reopen sign-ups');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error reopening match sign-ups:', error);
+    throw error;
+  }
+};
+
+// Admin-only: changes how many sign-ups count as confirmed. The rest of the
+// list becomes the waiting list, in sign-up order — no sign-up is deleted and
+// nobody is re-registered, which is why this answers with the recomputed list
+// (the same shape getMatchRegistrations returns) rather than a flat success:
+// the new confirmed/waiting split is the whole result of the call, and it stays
+// server-derived here exactly as it is everywhere else.
+//
+// Unlike registering and withdrawing, this is *not* gated on the sign-up
+// window: closing the list is usually what precedes adjusting the cap, since
+// both are steps of composing the teams.
+export const setMatchMaxPlayers = async (matchId, maxPlayers) => {
+  try {
+    const response = await api.patch(`/matches/${matchId}/registrations/max-players`, {
+      max_players: maxPlayers
+    });
+    if (response.status !== 200) {
+      throw new Error('Failed to update the maximum number of players');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error updating match max players:', error);
+    throw error;
+  }
+};
+
+// Man of the Match voting. Like the six sign-up calls above, none of these
+// three carry a group_id: the backend derives the group from the match named
+// in the path (RequireGroupMembershipByMatchPathParam), so sending one would
+// be the same hole that design already closes.
+
+// Casts or replaces the *caller's* vote — the voter comes from the JWT, so
+// there is no voter argument, only the id of the player being voted for.
+// Unlike registerForMatch, calling this again after already voting is not an
+// error: it is an upsert, and the response (the same shape getMatchVotes
+// returns) reflects the *new* choice.
+export const voteForMotm = async (matchId, votedForId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/votes`, { voted_for_id: votedForId });
+    if (response.status !== 200) {
+      throw new Error('Failed to cast Man of the Match vote');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error casting Man of the Match vote:', error);
+    throw error;
+  }
+};
+
+// Removes the caller's own vote, if any. A no-op success when they had not
+// voted — never a 404 — so this never needs special-casing "nothing to undo".
+export const removeMotmVote = async (matchId) => {
+  try {
+    const response = await api.delete(`/matches/${matchId}/votes`);
+    if (response.status !== 200) {
+      throw new Error('Failed to remove Man of the Match vote');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error removing Man of the Match vote:', error);
+    throw error;
+  }
+};
+
+// The tally ({ Tally: [{ PlayerID, Name, Votes }], MyVoteFor }), open to any
+// member — seeing who is leading isn't privileged, only voting is scoped to
+// the caller's own choice.
+export const getMatchVotes = async (matchId) => {
+  try {
+    const response = await api.get(`/matches/${matchId}/votes`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch Man of the Match votes');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching Man of the Match votes:', error);
+    throw error;
+  }
+};
+
+// Win/draw/loss predictions — same "no groupId, the backend derives it from
+// the match in the path" rule as the vote calls above, and a deliberately
+// separate, unrelated feature: no admin-only action, and any group member
+// may predict a match's outcome whether or not they're playing in it.
+
+// Casts or replaces the caller's own prediction. predictedTeamId is the
+// backed team's id, or null for a predicted draw — an upsert, like
+// voteForMotm: calling this again after already predicting is not an error,
+// it simply replaces the choice. The response (the same shape
+// getMatchPredictions returns) reflects the odds and the new choice.
+export const predictForMatch = async (matchId, predictedTeamId) => {
+  try {
+    const response = await api.post(`/matches/${matchId}/predictions`, { predicted_team_id: predictedTeamId });
+    if (response.status !== 200) {
+      throw new Error('Failed to cast prediction');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error casting prediction:', error);
+    throw error;
+  }
+};
+
+// { Entries: [{ PlayerID, Name, PredictedTeamID }], Odds: { TeamAOdds, DrawOdds, TeamBOdds } | null, MyPrediction },
+// open to any member — seeing who predicted what isn't privileged, only
+// predicting is scoped to the caller's own choice. Odds is null until the
+// roster is fully composed on both sides (nothing to derive a rating gap
+// from yet).
+export const getMatchPredictions = async (matchId) => {
+  try {
+    const response = await api.get(`/matches/${matchId}/predictions`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch predictions');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching predictions:', error);
+    throw error;
+  }
+};
+
+export const getPredictionStandings = async (season, groupId) => {
+  try {
+    const response = await api.get(`/standings/predictions${query({ season, group_id: groupId })}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch prediction standings');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching prediction standings:', error);
+    throw error;
+  }
+};
+
+// Standings
+export const getPointsStandings = async (season, groupId) => {
+  try {
+    const response = await api.get(`/standings/points${query({ season, group_id: groupId })}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch points standings');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching points standings:', error);
+    throw error;
+  }
+};
+
+export const getScorers = async (season, groupId) => {
+  try {
+    const response = await api.get(`/standings/scorers${query({ season, group_id: groupId })}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch scorers');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching scorers:', error);
+    throw error;
+  }
+};
+
+export const getMotmStandings = async (season, groupId) => {
+  try {
+    const response = await api.get(`/standings/motm${query({ season, group_id: groupId })}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch Man of the Match standings');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching Man of the Match standings:', error);
+    throw error;
+  }
+};
+
+export const getSeasons = async (groupId) => {
+  try {
+    const response = await api.get(`/standings/seasons${query({ group_id: groupId })}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch seasons');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching seasons:', error);
+    throw error;
+  }
+};
+
+// Player profile
+// Cross-group stats of the authenticated player themselves — the backend
+// takes the player from the JWT, so there is no id to pass here. season is
+// optional and applies to both the overall totals and the per-group rows.
+export const getPlayerProfile = async (season) => {
+  try {
+    const response = await api.get(`/players/me/stats${query({ season })}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch player profile');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching player profile:', error);
+    throw error;
+  }
+};
+
+// Lets the authenticated player rename themselves. Same "no id needed" shape
+// as getPlayerProfile — the backend takes the player from the JWT — but this
+// one rejects with a 400 (surfaced via error.response.data.error) if another
+// player anywhere already holds the requested name.
+export const updateMyName = async (name) => {
+  const response = await api.patch('/players/me', { name });
+  return response.data;
+};
+
+export const getMyFeatureStatus = async () => {
+  const response = await api.get('/players/me/features');
+  return {
+    features: Array.isArray(response.data?.features) ? response.data.features : [],
+    guideCompleted: response.data?.guide_completed,
+  };
+};
+
+export const getMyFeatures = async () => (await getMyFeatureStatus()).features;
+
+export const completeGuide = async () => {
+  await api.put('/players/me/guide');
+};
+
+// Preferred positions (design v2). The player's own, read and replaced on the
+// Account page; a refused PUT rejects with the server's reason in
+// error.response.data.error, as everywhere else.
+export const getMyPositions = async () => {
+  const response = await api.get('/players/me/positions');
+  return Array.isArray(response.data?.PreferredPositions) ? response.data.PreferredPositions : [];
+};
+
+export const updateMyPositions = async (positions) => {
+  const response = await api.put('/players/me/positions', { PreferredPositions: positions });
+  return Array.isArray(response.data?.PreferredPositions) ? response.data.PreferredPositions : [];
+};
+
+// Every position set in the match's group, as [{ PlayerID, PreferredPositions }].
+// Admin-only on the server (a member gets 403): only call it for an admin.
+export const getMatchPositions = async (matchId) => {
+  const response = await api.get(`/matches/${matchId}/positions`);
+  return Array.isArray(response.data) ? response.data : [];
+};
+
+// Push notifications (see services/pushNotifications.js). The public key is
+// '' when the backend has no VAPID keys configured.
+export const getPushPublicKey = async () => {
+  const response = await api.get('/push/public-key');
+  return response.data?.public_key || '';
+};
+
+// `subscription` is the browser's PushSubscription.toJSON(): { endpoint, keys }.
+export const savePushSubscription = async (subscription) => {
+  const response = await api.post('/players/me/push-subscription', subscription);
+  return response.data;
+};
+
+export const deletePushSubscription = async (endpoint) => {
+  const response = await api.delete('/players/me/push-subscription', { data: { endpoint } });
+  return response.data;
+};
+
+// Which of the six notifications this player wants. Missing types are the
+// caller's problem to treat as on — the backend already fills them in.
+export const getNotificationPreferences = async () => {
+  const response = await api.get('/players/me/notification-preferences');
+  const preferences = response.data?.preferences;
+  return preferences && typeof preferences === 'object' ? preferences : {};
+};
+
+// `preferences` is a subset, one key per switch the player just moved.
+export const updateNotificationPreferences = async (preferences) => {
+  const response = await api.put('/players/me/notification-preferences', { preferences });
+  const saved = response.data?.preferences;
+  return saved && typeof saved === 'object' ? saved : {};
+};
+
+// Self-service "delete my account". The backend anonymizes the account
+// rather than erasing it (see AuthService.DeleteAccount) so every other
+// player's shared match history stays intact — but from this app's point of
+// view the account is gone: the caller should clear their token and navigate
+// away immediately after this resolves, the same way a failed 401 anywhere
+// else in this file already forces a logout.
+export const deleteMyAccount = async (password) => {
+  const response = await api.delete('/players/me', { data: { password } });
+  rememberPasskeyAccess(false);
+  rememberDesignV2Login(false);
+  return response.data;
+};
+
+// Groups
+// Only /groups/me is scoped to the caller — the plain GET /groups is public
+// and lists every group in the system, which is never what this app wants.
+export const getMyGroups = async () => {
+  try {
+    const response = await api.get(`/groups/me`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch my groups');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching my groups:', error);
+    throw error;
+  }
+};
+
+// The caller becomes the new group's first member, server-side. teams must
+// be exactly the group's two team specs, e.g.
+// [{ name: 'Les Rouges', colour: 'red' }, { name: 'Les Bleus', colour: 'blue' }]
+// — the backend rejects anything but exactly 2.
+export const createGroup = async (name, teams) => {
+  try {
+    const response = await api.post(`/groups`, { name, teams });
+    if (response.status !== 200) {
+      throw new Error('Failed to create group');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error creating group:', error);
+    throw error;
+  }
+};
+
+// 404 means "unknown code", 400 means "already a member" — callers are
+// expected to surface the backend's own message rather than flatten both into
+// one generic failure.
+export const joinGroup = async (inviteCode) => {
+  try {
+    const response = await api.post(`/groups/join`, { invite_code: inviteCode });
+    if (response.status !== 200) {
+      throw new Error('Failed to join group');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error joining group:', error);
+    throw error;
+  }
+};
+
+// The invite code never rides along in the group JSON (it's json:"-" on the
+// Go model), so it has to be fetched per group, on demand.
+export const getInviteCode = async (groupId) => {
+  try {
+    const response = await api.get(`/groups/${groupId}/invite-code`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch invite code');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching invite code:', error);
+    throw error;
+  }
+};
+
+export const rotateGroupInvitation = async (groupId) => {
+  const response = await api.post(`/groups/${groupId}/invite-code`);
+  return response.data;
+};
+
+export const revokeGroupInvitation = async (groupId) => {
+  const response = await api.delete(`/groups/${groupId}/invite-code`);
+  return response.data;
+};
+
+export const updateGroupDetails = async (groupId, details) => {
+  const response = await api.put(`/groups/${groupId}/details`, details);
+  return response.data;
+};
+
+// Members — fetched on demand per group, same pattern as the invite code and
+// teams above: a group's roster isn't part of the group JSON either. Each
+// entry is a Player (lowercase fields: id, name) plus its role
+// ("admin"/"member") in this group and has_account (false for a ghost player
+// with no account); no email address is ever part of it. A different casing
+// convention than getMyGroups' entries, since this mirrors Player's own JSON
+// tags rather than PlayerCustom's PascalCase ones.
+export const getGroupMembers = async (groupId) => {
+  try {
+    const response = await api.get(`/groups/${groupId}/players`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch group members');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching group members:', error);
+    throw error;
+  }
+};
+
+// Admin-only: promotes/demotes a member. role must be "admin" or "member" —
+// the backend rejects anything else, plus self-targeting and demoting the
+// group's last admin (services.ErrCannotChangeOwnRole/ErrLastAdmin).
+export const updateMemberRole = async (groupId, playerId, role) => {
+  try {
+    const response = await api.patch(`/groups/${groupId}/members/${playerId}/role`, { role });
+    if (response.status !== 200) {
+      throw new Error('Failed to update member role');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error updating member role:', error);
+    throw error;
+  }
+};
+
+// Admin-only: removes a member from the group. This only ever deletes the
+// GroupMembership row — it never touches the player's match history
+// (MatchPlayer rows are untouched), so their past goals/standings survive.
+export const removeMember = async (groupId, playerId) => {
+  try {
+    const response = await api.delete(`/groups/${groupId}/members/${playerId}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to remove member');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error removing member:', error);
+    throw error;
+  }
+};
+
+// Self-service: marks groupId as the caller's favorite — the group
+// resolveActiveGroup() falls back to on a fresh device/session instead of an
+// arbitrary "first group" ordering. Every group a player belongs to keeps
+// exactly one favorite; this only moves the flag, it never turns it off.
+export const setFavoriteGroup = async (groupId) => {
+  try {
+    const response = await api.patch(`/groups/${groupId}/favorite`);
+    if (response.status !== 200) {
+      throw new Error('Failed to set favorite group');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error setting favorite group:', error);
+    throw error;
+  }
+};
+
+// Teams — fetched on demand per group, same pattern as the invite code
+// above: a group's teams aren't part of the group JSON either.
+export const getTeamsByGroup = async (groupId) => {
+  try {
+    const response = await api.get(`/groups/${groupId}/teams`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch teams');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching teams:', error);
+    throw error;
+  }
+};
+
+// Admin-only: renames a team and/or changes its colour. The backend replaces
+// both fields wholesale (no partial patch), so both must always be sent.
+export const updateTeam = async (groupId, teamId, name, colour) => {
+  try {
+    const response = await api.patch(`/groups/${groupId}/teams/${teamId}`, { name, colour });
+    if (response.status !== 200) {
+      throw new Error('Failed to update team');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error updating team:', error);
+    throw error;
+  }
+};

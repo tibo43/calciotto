@@ -1,0 +1,2879 @@
+<template>
+  <div class="match-detail-container">
+    <!-- Loading State -->
+    <div v-if="isLoading" class="loading-container">
+      <div class="loading-spinner"></div>
+      <p class="loading-text">Loading match details...</p>
+    </div>
+
+    <!-- Match Content -->
+    <div v-else-if="match && match.Teams && match.Teams.length > 0" class="match-content">
+      <div class="container">
+        <!-- Match Score Overview -->
+        <div class="score-overview card-base">
+          <div class="match-title">
+            <div class="match-title-left">
+              <button @click="goBack" class="match-back-btn" aria-label="Back to Matches">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="15,18 9,12 15,6" />
+                </svg>
+              </button>
+            </div>
+            <div class="match-title-right">
+              <span class="match-date">{{ formatDate(match?.Date) }}</span>
+              <div class="match-status-badge" :class="getMatchStatus()">
+                {{ getMatchStatusText() }}
+              </div>
+            </div>
+          </div>
+
+          <div v-if="showTeamRoster" class="teams-score">
+            <!-- Team 1 -->
+            <div class="team-score">
+              <div class="team-info">
+                <div class="team-color" :style="{ backgroundColor: getTeamColor(match.Teams[0].Colour) }"></div>
+                <h3 class="team-name">{{ match.Teams[0].Name }}</h3>
+              </div>
+              <div class="score">{{ match.Teams[0].Score || 0 }}</div>
+            </div>
+
+            <!-- VS Divider -->
+            <div class="vs-divider">
+              <div class="vs-circle">
+                <span>VS</span>
+              </div>
+            </div>
+
+            <!-- Team 2 -->
+            <div class="team-score">
+              <div class="team-info">
+                <div class="team-color" :style="{ backgroundColor: getTeamColor(match.Teams[1].Colour) }"></div>
+                <h3 class="team-name">{{ match.Teams[1].Name }}</h3>
+              </div>
+              <div class="score">{{ match.Teams[1].Score || 0 }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sign-up panel — scheduled matches only. An ordinary match carries
+             none of these fields, so the whole block is absent for it, exactly
+             as it was before this feature existed.
+
+             Note what is NOT admin-gated here: Participate and Withdraw. Every
+             other control on this page is (see v-if="isAdmin" throughout), but
+             signing yourself up is the one thing an ordinary member comes here
+             to do — gating it would ship a feature only admins could use. Only
+             Close/Reopen are admin actions. -->
+        <div v-if="isScheduled" class="signup-panel card-base">
+          <div class="signup-header">
+            <div class="signup-kickoff">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12,6 12,12 16,14" />
+              </svg>
+              <div class="signup-kickoff-text">
+                <span class="signup-label">Kick-off</span>
+                <span class="signup-kickoff-value">{{ kickoffLabel }}</span>
+              </div>
+            </div>
+
+            <!-- Badge, count and Participate/Withdraw all on one line: the
+                 badge alone used to read as a status display with nothing to
+                 act on right next to it. Close/Reopen/Fill-teams stay below in
+                 .signup-actions — those are admin-only occasional actions, not
+                 the one a member comes here to take. -->
+            <div class="signup-status-group">
+              <div class="signup-state-badge" :class="registrationState">{{ registrationStateLabel }}</div>
+              <span class="signup-count-inline">{{ signupCountLabel }}</span>
+              <!-- Open to every member, admin or not. -->
+              <button v-if="canParticipate" @click="participate" :disabled="isUpdatingRegistration"
+                class="btn-base btn-primary btn-small participate-btn">
+                <svg v-if="!isUpdatingRegistration" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="8.5" cy="7" r="4" />
+                  <line x1="20" y1="8" x2="20" y2="14" />
+                  <line x1="23" y1="11" x2="17" y2="11" />
+                </svg>
+                <div v-else class="loading-spinner-small"></div>
+                {{ isUpdatingRegistration ? 'Signing up...' : 'Participate' }}
+              </button>
+
+              <!-- Disappears rather than failing when the list closes:
+                   DELETE /matches/:id/registrations is gated on the very same
+                   window as the POST, so a visible Withdraw button on a closed
+                   list would be a button that always 409s. -->
+              <button v-if="canWithdraw" @click="confirmWithdraw" :disabled="isUpdatingRegistration"
+                class="btn-base btn-cancel btn-small withdraw-btn">
+                <svg v-if="!isUpdatingRegistration" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="8.5" cy="7" r="4" />
+                  <line x1="23" y1="11" x2="17" y2="11" />
+                </svg>
+                <div v-else class="loading-spinner-small"></div>
+                {{ isUpdatingRegistration ? 'Withdrawing...' : 'Withdraw' }}
+              </button>
+            </div>
+          </div>
+
+          <p class="signup-state-detail">{{ registrationStateDetail }}</p>
+
+          <div class="signup-actions">
+            <!-- Close/Reopen and Share match sit next to each other
+                 deliberately (rather than Share trailing after the
+                 max-players form, further down the DOM): both are things an
+                 admin does about the sign-up window itself, so they read as
+                 one pair — and it's what puts them on the same wrapped line
+                 on a narrow screen, not just on desktop where there was
+                 always room to spare. -->
+            <button v-if="canCloseRegistrations" @click="closeRegistrations" :disabled="isUpdatingRegistrationState"
+              class="btn-base btn-cancel btn-small registration-toggle-btn">
+              <div v-if="isUpdatingRegistrationState" class="loading-spinner-small"></div>
+              {{ isUpdatingRegistrationState ? 'Closing...' : 'Close sign-ups' }}
+            </button>
+
+            <button v-if="canReopenRegistrations" @click="reopenRegistrations" :disabled="isUpdatingRegistrationState"
+              class="btn-base btn-cancel btn-small registration-toggle-btn">
+              <div v-if="isUpdatingRegistrationState" class="loading-spinner-small"></div>
+              {{ isUpdatingRegistrationState ? 'Reopening...' : 'Reopen sign-ups' }}
+            </button>
+
+            <ShareButton v-if="isAdmin && registrationsOpen" :text="matchShareText" label="Share match"
+              class="btn-base btn-cancel btn-small" compact-on-mobile />
+
+            <!-- Admin-only, and deliberately offered whether sign-ups are open or
+                 closed: dropping the cap is typically what an admin does right
+                 after closing the list, in order to compose the teams (16 asked
+                 for, 12 signed up, so 10 play and 2 are reserves). The split it
+                 produces is server-derived like everything else about this list
+                 — the response is the recomputed list, not a local guess. -->
+            <form v-if="isAdmin" class="max-players-editor" @submit.prevent="updateMaxPlayers">
+              <label class="max-players-label" for="max-players-input">Confirmed places</label>
+              <input id="max-players-input" v-model="maxPlayersInput" type="number" min="1" step="1"
+                class="max-players-input" :disabled="isUpdatingMaxPlayers" />
+              <button type="submit" class="btn-base btn-cancel btn-small"
+                :disabled="isUpdatingMaxPlayers || !canUpdateMaxPlayers">
+                <div v-if="isUpdatingMaxPlayers" class="loading-spinner-small"></div>
+                {{ isUpdatingMaxPlayers ? 'Updating...' : 'Update' }}
+              </button>
+            </form>
+
+            <!-- Admin-only, and only once the list is closed: the product flow
+                 is "close sign-ups in order to compose the teams", and offering
+                 this mid-registration would invite an admin to build teams from
+                 a roster still changing under them. -->
+            <button v-if="canFillTeamsFromSignups" @click="openComposeChoice"
+              class="btn-base btn-cancel btn-small fill-teams-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <polyline points="16,11 18,13 22,9" />
+              </svg>
+              Fill teams from sign-ups
+            </button>
+          </div>
+
+          <div v-if="isLoadingRegistrations" class="signup-loading">
+            <div class="loading-spinner-small"></div>
+            <span>Loading sign-ups...</span>
+          </div>
+
+          <!-- The confirmed/waiting split comes straight from each entry's
+               server-side IsWaiting, never from comparing Position against
+               MaxPlayers here: the two would disagree the moment an admin
+               changes the cap. -->
+          <div v-else class="signup-lists">
+            <div class="signup-list">
+              <h4 class="signup-list-title">
+                Confirmed
+                <span class="count-badge">{{ confirmedRegistrations.length }} / {{ maxPlayers }}</span>
+              </h4>
+              <ul class="signup-entries">
+                <li v-for="entry in confirmedRegistrations" :key="entry.PlayerID" class="signup-entry"
+                  :class="{ 'is-me': entry.PlayerID === currentPlayerId }">
+                  <span class="signup-position">{{ entry.Position }}</span>
+                  <span class="signup-name">{{ formatPlayerNameForDisplay(entry.Name) }}</span>
+                  <span v-if="entry.PlayerID === currentPlayerId" class="signup-you">you</span>
+                </li>
+                <li v-if="confirmedRegistrations.length === 0" class="signup-empty">Nobody has signed up yet</li>
+              </ul>
+            </div>
+
+            <div v-if="waitingRegistrations.length > 0" class="signup-list signup-list-waiting">
+              <h4 class="signup-list-title">
+                Waiting list
+                <span class="count-badge">{{ waitingRegistrations.length }}</span>
+              </h4>
+              <ul class="signup-entries">
+                <li v-for="entry in waitingRegistrations" :key="entry.PlayerID" class="signup-entry"
+                  :class="{ 'is-me': entry.PlayerID === currentPlayerId }">
+                  <span class="signup-position">{{ entry.Position }}</span>
+                  <span class="signup-name">{{ formatPlayerNameForDisplay(entry.Name) }}</span>
+                  <span v-if="entry.PlayerID === currentPlayerId" class="signup-you">you</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Team Management Section -->
+        <div v-if="match.Teams && match.Teams.length > 0" class="team-management card-base card-large">
+          <div class="management-header">
+            <!-- Global actions — they apply to the whole match, not to
+                 whichever team tab happens to be selected, so they come
+                 before the team switcher rather than being grouped with it. -->
+            <div class="action-buttons">
+              <button v-if="isAdmin" @click="saveChanges" class="btn-base btn-primary btn-small" :disabled="isSaving || !showTeamRoster"
+                :title="showTeamRoster ? '' : 'Nothing to save yet — compose the teams first'"
+                :aria-label="isSaving ? 'Saving...' : 'Save Changes'">
+                <svg v-if="!isSaving" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17,21 17,13 7,13 7,21" />
+                  <polyline points="7,3 7,8 15,8" />
+                </svg>
+                <div v-else class="loading-spinner-small"></div>
+                <span class="action-btn-label">{{ isSaving ? 'Saving...' : 'Save Changes' }}</span>
+              </button>
+              <!-- Clearly separated from Save Changes so a click can't be
+                   mistaken between the two destructive/non-destructive actions. -->
+              <button v-if="isAdmin" @click="confirmDeleteMatch" class="btn-base btn-danger btn-small delete-match-btn"
+                :disabled="isDeleting" :aria-label="isDeleting ? 'Deleting...' : 'Delete Match'">
+                <svg v-if="!isDeleting" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3,6 5,6 21,6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+                <div v-else class="loading-spinner-small"></div>
+                <span class="action-btn-label">{{ isDeleting ? 'Deleting...' : 'Delete Match' }}</span>
+              </button>
+              <!-- Sharing the composed roster, admin-only — this page is
+                   already gated to admins by the router guard (canEditMatch),
+                   but the v-if is kept anyway, the same defense-in-depth
+                   every other control here follows. Only offered once
+                   showTeamRoster is true: there is nothing to share before
+                   the teams exist. Placed with the other whole-match actions
+                   rather than the team switcher below, since it applies to
+                   both teams at once, not to whichever tab is active. -->
+              <ShareButton v-if="isAdmin && showTeamRoster" :text="teamsShareText" label="Share teams"
+                class="btn-base btn-cancel btn-small" compact-on-mobile />
+            </div>
+
+            <!-- Team switcher + "Add player to this team" right next to it —
+                 Add Player acts on whichever tab is active, so it lives here
+                 rather than among the global actions above. -->
+            <div v-if="showTeamRoster" class="tabs-buttons">
+              <button v-for="(team, index) in match.Teams" :key="team.ID" @click="activeTeam = index"
+                :class="['tab-button', { active: activeTeam === index }]">
+                <div class="team-color-small" :style="{ backgroundColor: getTeamColor(team.Colour) }"></div>
+                {{ team.Name }} ({{ team.Players ? team.Players.length : 0 }})
+              </button>
+              <button v-if="isAdmin" @click="showModal" class="add-player-icon-btn" aria-label="Add player">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+            </div>
+            <!-- The roster itself only shows up once there's one to show —
+                 see showTeamRoster. Composing it is "Fill teams from
+                 sign-ups", in the sign-up panel above, once sign-ups close. -->
+            <p v-else class="no-roster-hint">
+              Teams will appear here once sign-ups close and are composed.
+            </p>
+          </div>
+
+          <!-- Players List — one compact row per player (avatar, name, goal
+               counter, remove) instead of a header row plus a separate goal
+               row, so the list needs far less scrolling. -->
+          <div v-if="showTeamRoster && match.Teams[activeTeam] && match.Teams[activeTeam].Players" class="players-grid">
+            <div v-for="(player, playerIndex) in match.Teams[activeTeam].Players" :key="playerIndex"
+              class="player-card">
+              <div class="player-info">
+                <h4 class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</h4>
+              </div>
+
+              <div class="goal-management">
+                <button v-if="isAdmin" @click="updateGoals(playerIndex, -1)"
+                  :disabled="!player.GoalNumber || player.GoalNumber <= 0" class="goal-btn decrease">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+
+                <span class="goal-count">{{ player.GoalNumber || 0 }}</span>
+
+                <button v-if="isAdmin" @click="updateGoals(playerIndex, 1)" class="goal-btn increase">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Own goals: credited to this player, but they count toward
+                   the OTHER team's score (see updateOwnGoals/updateTeamScore)
+                   — kept as a second, visually distinct counter rather than
+                   folded into the goal counter above, since a "goal" and an
+                   "own goal" mean opposite things for the score. -->
+              <div class="goal-management own-goal-management">
+                <button v-if="isAdmin" @click="updateOwnGoals(playerIndex, -1)"
+                  :disabled="!player.OwnGoals || player.OwnGoals <= 0" class="goal-btn own-goal-btn decrease"
+                  title="Remove an own goal">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+
+                <span class="goal-count own-goal-count" title="Own goals (count toward the other team)">
+                  {{ player.OwnGoals || 0 }} OG
+                </span>
+
+                <button v-if="isAdmin" @click="updateOwnGoals(playerIndex, 1)" class="goal-btn own-goal-btn increase"
+                  title="Add an own goal">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+              </div>
+
+              <button v-if="isAdmin" @click="removePlayer(playerIndex)" class="btn-danger-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div v-else class="error-state">
+      <div class="empty-content">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="15" y1="9" x2="9" y2="15" />
+          <line x1="9" y1="9" x2="15" y2="15" />
+        </svg>
+        <h3 class="empty-title">Match not found</h3>
+        <p class="empty-description">The match you're looking for doesn't exist or failed to load.</p>
+        <button @click="goBack" class="btn-base btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15,18 9,12 15,6" />
+          </svg>
+          Go Back
+        </button>
+      </div>
+    </div>
+
+    <!-- Compose-choice modal — "Fill teams from sign-ups" opens this rather
+         than acting immediately: there are now two ways to build the roster
+         from the sign-up list, and this is where an admin picks one. -->
+    <div v-if="showComposeChoiceModal" class="modal-overlay" @click="closeComposeChoiceModal">
+      <div class="modal-container compose-choice-modal" @click.stop>
+        <div class="modal-header">
+          <h3>Compose the teams</h3>
+          <button @click="closeComposeChoiceModal" class="modal-close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body compose-choice-body">
+          <!-- Hidden, not disabled, once nothing is left to auto-place —
+               see allConfirmedAlreadyPlaced. -->
+          <button v-if="!allConfirmedAlreadyPlaced" @click="chooseAutoFill" class="compose-choice-option compose-choice-auto">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="compose-choice-icon">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <polyline points="16,11 18,13 22,9" />
+            </svg>
+            <span class="compose-choice-text">
+              <strong>Auto-split</strong>
+              <!-- The single most important sentence in this option: it only
+                   fills the two team tabs below, and an admin who walks away
+                   without pressing Save Changes loses the lot. -->
+              <span>
+                Splits the {{ confirmedRegistrations.length }} confirmed
+                player{{ confirmedRegistrations.length === 1 ? '' : 's' }} across the two teams in sign-up order.
+                Anyone already in a team stays where they are. Nothing is saved — review the teams below, then press
+                "Save Changes".
+              </span>
+            </span>
+          </button>
+
+          <button @click="chooseManual" class="compose-choice-option compose-choice-manual">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="compose-choice-icon">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M16 12l-4-4-4 4" />
+              <path d="M16 16l-4-4-4 4" />
+            </svg>
+            <span class="compose-choice-text">
+              <strong>Build manually</strong>
+              <span>
+                Pick players yourself. Sign-ups appear first — confirmed before waiting — the rest of the group is
+                still one search away.
+              </span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Enhanced Multi-Player Modal -->
+    <div v-if="showAddPlayerModal" class="modal-overlay" @click="closeModal">
+      <div class="enhanced-multi-player-modal" @click.stop>
+        <div class="modal-header enhanced-modal-header">
+          <h3>Add Players to {{ match.Teams[activeTeam].Name }} Team</h3>
+          <button @click="closeModal" class="modal-close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-body enhanced-modal-body">
+          <!-- Search Section -->
+          <div class="search-section">
+            <div class="form-group">
+              <label for="playerSearch">Search Players</label>
+              <div class="input-wrapper">
+                <input v-model="playerSearchTerm" type="text" id="playerSearch" class="form-input"
+                  placeholder="Search for players to add..." @input="onPlayerSearch">
+                <div v-if="isLoadingPlayers" class="search-loading">
+                  <div class="spinner-small"></div>
+                </div>
+              </div>
+              <p v-if="playerSearchTerm && filteredAvailablePlayers.length === 0" class="no-matching-players-hint">
+                No matching players in this group.
+              </p>
+            </div>
+          </div>
+
+          <!-- Two-column layout -->
+          <div class="players-columns">
+            <!-- Selected Players Column -->
+            <div class="column selected-column">
+              <div class="column-header">
+                <h4>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon">
+                    <path d="M9 12l2 2 4-4" />
+                    <circle cx="12" cy="12" r="10" />
+                  </svg>
+                  Selected Players
+                  <span class="count-badge">{{ selectedPlayers.length }}</span>
+                </h4>
+              </div>
+
+              <div class="column-content custom-scrollbar">
+                <div v-if="selectedPlayers.length === 0" class="empty-state">
+                  <div class="empty-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="16" />
+                      <line x1="8" y1="12" x2="16" y2="12" />
+                    </svg>
+                  </div>
+                  <p>No players selected</p>
+                  <span>Select players from the right to add them</span>
+                </div>
+
+                <div v-else class="selected-players-list">
+                  <div v-for="(player, index) in selectedPlayers" :key="`selected-${player.ID || player.Name}`"
+                    class="selected-player-item">
+                    <div class="player-info">
+                      <span class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</span>
+                    </div>
+                    <button @click="removeSelectedPlayer(index)" class="remove-selected-btn">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Available Players Column -->
+            <div class="column available-column">
+              <div class="column-header">
+                <h4>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M16 12l-4-4-4 4" />
+                    <path d="M16 16l-4-4-4 4" />
+                  </svg>
+                  Available Players
+                  <span class="count-badge">{{ filteredAvailablePlayers.length }}</span>
+                </h4>
+              </div>
+
+              <div class="column-content custom-scrollbar">
+                <div v-if="filteredAvailablePlayers.length === 0 && !isLoadingPlayers" class="empty-state">
+                  <div class="empty-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                    </svg>
+                  </div>
+                  <p v-if="playerSearchTerm">No players found</p>
+                  <p v-else>No available players</p>
+                  <span v-if="playerSearchTerm">Try adjusting your search term</span>
+                </div>
+
+                <div v-else class="available-players-list">
+                  <button v-for="player in filteredAvailablePlayers" :key="`available-${player.ID || player.Name}`"
+                    @click="addPlayerToSelection(player)" class="available-player-item"
+                    :disabled="isPlayerSelected(player) || isPlayerInAnyTeam(player.Name)">
+                    <div class="player-info">
+                      <span class="player-name">{{ formatPlayerNameForDisplay(player.Name) }}</span>
+                      <!-- Only present for a scheduled match with no search
+                           term active — see tierCandidatesBySignup. -->
+                      <span v-if="player.registrationBadge" class="registration-badge"
+                        :class="{ waiting: player.registrationBadge.waiting }">
+                        #{{ player.registrationBadge.position }}{{ player.registrationBadge.waiting ? ' waiting' : '' }}
+                      </span>
+                    </div>
+                    <div class="player-status">
+                      <span v-if="isPlayerSelected(player)" class="status-selected">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M9 12l2 2 4-4" />
+                          <circle cx="12" cy="12" r="10" />
+                        </svg>
+                      </span>
+                      <span v-else-if="isPlayerInAnyTeam(player.Name)" class="status-in-match">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="15" y1="9" x2="9" y2="15" />
+                          <line x1="9" y1="9" x2="15" y2="15" />
+                        </svg>
+                      </span>
+                      <span v-else class="status-available">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="8" x2="12" y2="16" />
+                          <line x1="8" y1="12" x2="16" y2="12" />
+                        </svg>
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer enhanced-footer">
+            <div class="footer-info">
+              <div class="selection-summary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="summary-icon">
+                  <path d="M9 12l2 2 4-4" />
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
+                <span v-if="selectedPlayers.length > 0" class="selection-count">
+                  {{ selectedPlayers.length }} player{{ selectedPlayers.length !== 1 ? 's' : '' }} selected
+                </span>
+                <span v-else class="selection-count empty">
+                  No players selected
+                </span>
+              </div>
+            </div>
+            <div class="footer-buttons">
+              <button @click="closeModal" class="btn-base btn-cancel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+                Cancel
+              </button>
+              <button @click="addSelectedPlayersToTeam" :disabled="selectedPlayers.length === 0"
+                class="btn-base btn-primary enhanced-confirm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 12l2 2 4-4" />
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
+                Add {{ selectedPlayers.length || '' }} Player{{ selectedPlayers.length !== 1 ? 's' : '' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <AppToast ref="toast" />
+  </div>
+</template>
+
+<script>
+import AppToast from '@/components/AppToast.vue';
+import {
+  getMatchDetailsByID,
+  updateMatch,
+  deleteMatch,
+  getGroupMembers,
+  getMatchRegistrations,
+  registerForMatch,
+  unregisterFromMatch,
+  closeMatchRegistrations,
+  reopenMatchRegistrations,
+  setMatchMaxPlayers,
+  getInviteCode,
+  getToken
+} from '@/services/api';
+import { resolveActiveGroup } from '@/services/activeGroup';
+import { formatDateTimeForDisplay, formatCalendarDayLong } from '@/services/datetime';
+import {
+  isScheduledMatch,
+  deriveRegistrationState,
+  registrationsAreOpen,
+  registrationStateLabel,
+  fillTeamsFromRegistrations,
+  teamsAreComposed,
+  REGISTRATION_NOT_OPEN_YET,
+  REGISTRATION_OPEN,
+  REGISTRATION_CLOSED_BY_ADMIN,
+  REGISTRATION_CLOSED_AT_KICKOFF
+} from '@/services/matchRegistration';
+import { buildMatchShareText, buildTeamsShareText } from '@/services/shareMessages';
+import ShareButton from '@/components/ShareButton.vue';
+import { encodeMatchId } from '@/services/shortLink';
+
+// Same shape as Profile.vue's own helper — the app has no auth store, and the
+// player id is only ever needed to answer "which of these rows is me", so both
+// pages decode the JWT payload locally rather than a third place holding state.
+function currentPlayerIdFromToken() {
+  const token = getToken();
+  if (!token) {
+    return '';
+  }
+  try {
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return decoded.player_id || '';
+  } catch (error) {
+    console.error('Error decoding token:', error);
+    return '';
+  }
+}
+
+export default {
+  name: 'MatchDetail',
+  components: { AppToast, ShareButton },
+  data() {
+    return {
+      match: null,
+      matchSnapshot: null,
+      isLoading: true,
+      isSaving: false,
+      isDeleting: false,
+      // Resolved once on load, reused when loading the match (scoped to the
+      // same group) and when deleting it.
+      activeGroupId: '',
+      // Whether the caller is an admin of the active group — gates every
+      // editing control (add/remove player, goals, save, delete). Editing and
+      // deleting a match are admin-only on the backend (RequireGroupAdmin in
+      // main.go); a non-admin can still view the match read-only.
+      isAdmin: false,
+      activeTeam: 0,
+      showAddPlayerModal: false,
+      // "Fill teams from sign-ups" opens this chooser rather than acting
+      // immediately — see canFillTeamsFromSignups/allConfirmedAlreadyPlaced.
+      showComposeChoiceModal: false,
+      // New properties for player dropdown
+      allPlayers: [],
+      selectedPlayers: [],
+      filteredAvailablePlayers: [],
+      isLoadingPlayers: false,
+      playerSearchTerm: '',
+      // --- Sign-ups (scheduled matches only) ---
+      // The ordered list from GET /matches/:id/registrations, exactly as the
+      // server sent it: never reordered or patched locally, since the whole
+      // waiting-list design is server-derived ordering.
+      registrations: [],
+      isLoadingRegistrations: false,
+      // Participate/Withdraw in flight vs. Close/Reopen in flight — separate
+      // flags so an admin closing the list doesn't grey out the member-facing
+      // buttons (and vice versa).
+      isUpdatingRegistration: false,
+      isUpdatingRegistrationState: false,
+      // Kept out of `match` on purpose. Close/Reopen change this flag
+      // server-side, and writing it back into `match` would make
+      // hasUnsavedChanges() see the match as dirty against matchSnapshot and
+      // pop the "leave without saving?" confirm — or, if the snapshot were
+      // refreshed too, silently swallow real unsaved goal edits. Seeded from
+      // the match on load, then owned here.
+      registrationsClosedAt: null,
+      // The cap, kept out of `match` for exactly the same reason as
+      // registrationsClosedAt above: an admin changing it must not make the
+      // match look dirty against matchSnapshot. maxPlayers is what the server
+      // last confirmed (and what the counts render); maxPlayersInput is the
+      // editable draft, so a half-typed value never re-splits the list.
+      maxPlayers: null,
+      maxPlayersInput: '',
+      isUpdatingMaxPlayers: false,
+      // Sampled ONCE, in created(). There is deliberately no polling timer and
+      // no reactive clock: this app has no reactive store and re-reads its data
+      // on navigation, so a player who had this page open from before sign-ups
+      // opened sees the Participate button after a reload — which is also how
+      // they find out at all, since nothing notifies them.
+      nowMs: 0,
+      currentPlayerId: '',
+      // Loaded before sharing so the button can open the native picker on click.
+      groupInviteCode: '',
+    };
+  },
+  async created() {
+    this.nowMs = Date.now();
+    this.currentPlayerId = currentPlayerIdFromToken();
+    try {
+      const { groups, activeGroupId } = await resolveActiveGroup();
+      this.activeGroupId = activeGroupId;
+      this.isAdmin = groups.find(g => g.id === activeGroupId)?.role === 'admin';
+    } catch (error) {
+      // Degrade instead of breaking the page: no group_id (backend's own
+      // first-group fallback) and isAdmin left false, which just hides the
+      // admin-only controls.
+      console.error('Error resolving the active group:', error);
+    }
+    await this.loadMatch();
+
+    if (this.isAdmin && this.isScheduled) {
+      try {
+        const data = await getInviteCode(this.activeGroupId);
+        this.groupInviteCode = data.invite_code || '';
+      } catch (error) {
+        console.error('Error fetching the group invite code:', error);
+      }
+    }
+  },
+  beforeRouteLeave(to, from, next) {
+    if (this.hasUnsavedChanges()) {
+      const leave = window.confirm('You have unsaved changes. Leave without saving?');
+      next(leave);
+      return;
+    }
+    next();
+  },
+  computed: {
+    // A scheduled match is one that carries a kick-off; an ordinary match has
+    // none of the scheduling keys at all.
+    isScheduled() {
+      return isScheduledMatch(this.match);
+    },
+
+    // Gates the score header and the whole roster/team-management block
+    // below it (tabs, Add Player, the player list): an unscheduled match has
+    // always had a populated roster from the moment it's created, so this is
+    // always true for one and changes nothing. A scheduled match starts (and
+    // stays, through the whole sign-up window) with both teams empty — that's
+    // its normal state, not a placeholder worth rendering — so those stay
+    // hidden until an admin has actually put someone on a team, whether by
+    // hand or via "Fill teams from sign-ups". Save Changes/Delete Match are
+    // deliberately NOT behind this gate (see the template): an admin needs to
+    // be able to cancel a still-empty scheduled match regardless.
+    showTeamRoster() {
+      return !this.isScheduled || teamsAreComposed(this.match);
+    },
+
+    // The closed flag comes from local state rather than from `match` (see the
+    // data comment on registrationsClosedAt); everything else is read straight
+    // off the match.
+    registrationState() {
+      if (!this.match) return '';
+      return deriveRegistrationState({
+        ScheduledAt: this.match.ScheduledAt,
+        RegistrationOpensAt: this.match.RegistrationOpensAt,
+        RegistrationsClosedAt: this.registrationsClosedAt
+      }, this.nowMs);
+    },
+
+    registrationsOpen() {
+      return registrationsAreOpen(this.registrationState);
+    },
+
+    kickoffLabel() {
+      return formatDateTimeForDisplay(this.match && this.match.ScheduledAt);
+    },
+
+    registrationStateLabel() {
+      return registrationStateLabel(this.registrationState);
+    },
+
+    // Mirrors MatchesPanel.vue's own signupCountLabel wording ("X / 16 signed
+    // up") so the two views never disagree — but reads count from the live
+    // `registrations` list this page already loads, rather than
+    // match.RegistrationCount, which nothing here ever refreshes locally.
+    signupCountLabel() {
+      return `${this.registrations.length} / ${this.maxPlayers} signed up`;
+    },
+
+    // A cap that is unchanged, empty or non-positive has nothing to send: the
+    // backend refuses a non-positive one (ErrInvalidMaxPlayers) and treats an
+    // unchanged one as a no-op, so the button is disabled rather than round-
+    // tripping to be told so.
+    canUpdateMaxPlayers() {
+      const parsed = Number(this.maxPlayersInput);
+      if (!Number.isInteger(parsed) || parsed < 1) return false;
+      return parsed !== this.maxPlayers;
+    },
+
+    // The full /matches/:id/edit URL reads badly in a chat next to "Join
+    // Calciotto" — window.location.origin + the encoded id is the same
+    // "tinylink" the /m/:code route (router/index.js) decodes back.
+    matchShareText() {
+      const shortUrl = `${window.location.origin}/m/${encodeMatchId(this.match.ID)}`;
+      return buildMatchShareText({
+        kickoffLabel: this.kickoffLabel,
+        matchUrl: shortUrl,
+        groupInviteCode: this.groupInviteCode
+      });
+    },
+
+    // "Share teams" — only ever rendered once showTeamRoster is
+    // true (see the button's own v-if), so match.Teams is guaranteed
+    // composed here. kickoffLabel needs ScheduledAt, which an unscheduled
+    // match never has, so this falls back to the plain calendar day for one
+    // — the same distinction kickoffLabel/formatDate already draw elsewhere
+    // on this page.
+    teamsShareText() {
+      const dateTimeLabel = this.isScheduled ? this.kickoffLabel : this.formatDate(this.match.Date);
+      const teams = this.match.Teams.map(team => ({
+        name: team.Name,
+        players: team.Players.map(player => this.formatPlayerNameForDisplay(player.Name))
+      }));
+      return buildTeamsShareText({ dateTimeLabel, teams });
+    },
+
+    // Deliberately says nothing about being told when sign-ups open: there is
+    // no notification of any kind in this feature, so the copy must not imply
+    // one — players find out by opening the app.
+    registrationStateDetail() {
+      switch (this.registrationState) {
+        case REGISTRATION_OPEN:
+          return 'Sign-ups are open until an admin closes them. Going over the maximum is fine — extra players join the waiting list.';
+        case REGISTRATION_NOT_OPEN_YET:
+          return `Sign-ups open on ${formatDateTimeForDisplay(this.match.RegistrationOpensAt)}. Nothing will notify you, so check back here then.`;
+        case REGISTRATION_CLOSED_BY_ADMIN:
+          return 'An admin has closed sign-ups. You can no longer sign up or withdraw.';
+        case REGISTRATION_CLOSED_AT_KICKOFF:
+          return 'Kick-off has passed, so sign-ups are closed for good.';
+        default:
+          return '';
+      }
+    },
+
+    // Both of these hang off the same `registrationsOpen`, because the backend
+    // gates signing up and withdrawing on the identical window.
+    isRegistered() {
+      if (!this.currentPlayerId) return false;
+      return this.registrations.some(entry => entry.PlayerID === this.currentPlayerId);
+    },
+
+    canParticipate() {
+      return this.isScheduled && this.registrationsOpen && !this.isLoadingRegistrations && !this.isRegistered;
+    },
+
+    canWithdraw() {
+      return this.isScheduled && this.registrationsOpen && !this.isLoadingRegistrations && this.isRegistered;
+    },
+
+    // Admin-only, and only in the state each action can actually change: there
+    // is nothing to close on an already-closed list, and reopening one that
+    // kick-off closed would clear the flag without reopening anything.
+    canCloseRegistrations() {
+      return this.isScheduled && this.isAdmin && this.registrationState === REGISTRATION_OPEN;
+    },
+
+    canReopenRegistrations() {
+      return this.isScheduled && this.isAdmin && this.registrationState === REGISTRATION_CLOSED_BY_ADMIN;
+    },
+
+    // "Fill teams from sign-ups" is offered to an admin only once the list is
+    // closed — either by them (closed-by-admin) or by kick-off passing
+    // (closed-at-kickoff), the two states registrationsAreOpen() rejects. The
+    // roster is composed when it is final, which is the flow the product
+    // described: an admin closes sign-ups *in order to* pick the teams.
+    // Gates the button that opens the compose-choice modal (Auto-split vs
+    // Build manually), not either action itself — the button stays offered
+    // even once every confirmed sign-up already has a team, because "build
+    // manually" (add a late substitute, reassign someone from the waiting
+    // list, etc.) is still meaningful then. allConfirmedAlreadyPlaced instead
+    // gates only the Auto-split *option* inside the modal — see there.
+    canFillTeamsFromSignups() {
+      return this.isScheduled
+        && this.isAdmin
+        && !this.isLoadingRegistrations
+        && (this.registrationState === REGISTRATION_CLOSED_BY_ADMIN
+          || this.registrationState === REGISTRATION_CLOSED_AT_KICKOFF);
+    },
+
+    // True once every confirmed sign-up already has a team — offering
+    // Auto-split at that point would promise composition work there's none
+    // left to do (running it would be a same-state no-op). Reuses
+    // fillTeamsFromRegistrations itself — the exact function Auto-split
+    // calls — rather than re-deriving "already placed" a second way that
+    // could quietly drift from it.
+    //
+    // Deliberately narrower than "nothing to fill": an empty confirmed list
+    // returns false here on purpose, leaving Auto-split offered and
+    // fillTeamsFromSignups()'s own "nothing to fill the teams with" error
+    // message intact — an admin who closed sign-ups on an empty list should
+    // find out why clicking does nothing, not have the option vanish with no
+    // explanation.
+    allConfirmedAlreadyPlaced() {
+      if (this.confirmedRegistrations.length === 0) return false;
+      if (!this.match.Teams || this.match.Teams.length < 2) return false;
+      const rosters = this.match.Teams.map(team => team.Players || []);
+      return fillTeamsFromRegistrations(this.confirmedRegistrations, rosters).addedCount === 0;
+    },
+
+    confirmedRegistrations() {
+      return this.registrations.filter(entry => !entry.IsWaiting);
+    },
+
+    waitingRegistrations() {
+      return this.registrations.filter(entry => entry.IsWaiting);
+    }
+  },
+  methods: {
+    hasUnsavedChanges() {
+      if (this.isSaving || !this.match) return false;
+      return JSON.stringify(this.match) !== this.matchSnapshot;
+    },
+
+    async loadMatch() {
+      this.isLoading = true;
+      try {
+        const matchId = this.$route.params.id;
+        // GetMatchDetailsByID filters on (match id, group id), so a match from
+        // another group reads as "not found" — which is what we want: the URL
+        // alone must not pull a match out of a group we aren't scoped to.
+        // updateMatch needs no group of its own; it posts back this.match,
+        // whose GroupID already comes from this response.
+        this.match = await getMatchDetailsByID(matchId, this.activeGroupId);
+
+        // Ensure each player has GoalNumber/OwnGoals properties
+        if (this.match && this.match.Teams) {
+          this.match.Teams.forEach(team => {
+            if (team.Players) {
+              team.Players.forEach(player => {
+                if (!player.GoalNumber) {
+                  player.GoalNumber = 0;
+                }
+                if (!player.OwnGoals) {
+                  player.OwnGoals = 0;
+                }
+              });
+            }
+          });
+        }
+
+        this.matchSnapshot = JSON.stringify(this.match);
+
+        // Snapshot the closed flag out of the match and into local state, so
+        // Close/Reopen never touch `match` (and so never make it look dirty).
+        this.registrationsClosedAt = (this.match && this.match.RegistrationsClosedAt) || null;
+      this.setMaxPlayersState((this.match && this.match.MaxPlayers) || null);
+      } catch (error) {
+        console.error('Error fetching match:', error);
+        this.showMessage('Error loading match details', 'error');
+      } finally {
+        this.isLoading = false;
+      }
+
+      // After isLoading flips, so the panel renders its own spinner rather than
+      // holding the whole page back on a list that no unscheduled match has.
+      if (this.isScheduled) {
+        await this.loadRegistrations();
+      }
+    },
+
+    // --- Sign-ups -----------------------------------------------------------
+    // Always a full re-fetch, never a local patch: position and IsWaiting are
+    // derived server-side from the stored order, and the promotion of the first
+    // reserve when someone withdraws is exactly the thing the list is meant to
+    // show happening. Patching locally is how the display drifts from reality.
+    async loadRegistrations() {
+      this.isLoadingRegistrations = true;
+      try {
+        const entries = await getMatchRegistrations(this.match.ID);
+        this.registrations = Array.isArray(entries) ? entries : [];
+      } catch (error) {
+        console.error('Error loading registrations:', error);
+        this.showMessage('Error loading the sign-up list', 'error');
+        this.registrations = [];
+      } finally {
+        this.isLoadingRegistrations = false;
+      }
+    },
+
+    async participate() {
+      if (this.isUpdatingRegistration) return;
+      this.isUpdatingRegistration = true;
+      try {
+        // Landing past the maximum is a success, not an error — the entry that
+        // comes back is the only place the caller learns it, so say so
+        // explicitly instead of a bare "signed up".
+        const entry = await registerForMatch(this.match.ID);
+        await this.loadRegistrations();
+        if (entry && entry.IsWaiting) {
+          this.showMessage(`Signed up — you are #${entry.Position}, on the waiting list.`, 'success');
+        } else {
+          const position = entry && entry.Position ? ` You are #${entry.Position}.` : '';
+          this.showMessage(`You're in for this match.${position}`, 'success');
+        }
+      } catch (error) {
+        console.error('Error signing up for match:', error);
+        // A 409 says precisely why (not open yet, closed, already registered) —
+        // worth showing verbatim rather than flattening. Reload either way: a
+        // rejection usually means this page's view of the list is stale.
+        this.showMessage(this.registrationErrorMessage(error, 'Error signing up for this match.'), 'error');
+        await this.loadRegistrations();
+      } finally {
+        this.isUpdatingRegistration = false;
+      }
+    },
+
+    // Same window as signing up, so the button this confirms is only ever
+    // rendered while the list is open — see canWithdraw.
+    confirmWithdraw() {
+      if (this.isUpdatingRegistration) return;
+      const confirmed = window.confirm('Withdraw from this match? Your place goes to the first player on the waiting list.');
+      if (!confirmed) return;
+      this.withdraw();
+    },
+
+    async withdraw() {
+      this.isUpdatingRegistration = true;
+      try {
+        await unregisterFromMatch(this.match.ID);
+        await this.loadRegistrations();
+        this.showMessage('You have withdrawn from this match.', 'success');
+      } catch (error) {
+        console.error('Error withdrawing from match:', error);
+        this.showMessage(this.registrationErrorMessage(error, 'Error withdrawing from this match.'), 'error');
+        await this.loadRegistrations();
+      } finally {
+        this.isUpdatingRegistration = false;
+      }
+    },
+
+    async closeRegistrations() {
+      if (this.isUpdatingRegistrationState) return;
+      this.isUpdatingRegistrationState = true;
+      try {
+        await closeMatchRegistrations(this.match.ID);
+        // The backend stamps its own timestamp; only the fact that one exists
+        // matters to the state derivation, so a local instant is enough until
+        // the next load reads the real one back.
+        this.registrationsClosedAt = new Date().toISOString();
+        this.showMessage('Sign-ups closed.', 'success');
+      } catch (error) {
+        console.error('Error closing sign-ups:', error);
+        this.showMessage(this.registrationErrorMessage(error, 'Error closing sign-ups.'), 'error');
+      } finally {
+        this.isUpdatingRegistrationState = false;
+      }
+    },
+
+    async reopenRegistrations() {
+      if (this.isUpdatingRegistrationState) return;
+      this.isUpdatingRegistrationState = true;
+      try {
+        await reopenMatchRegistrations(this.match.ID);
+        this.registrationsClosedAt = null;
+        this.showMessage('Sign-ups reopened.', 'success');
+      } catch (error) {
+        console.error('Error reopening sign-ups:', error);
+        this.showMessage(this.registrationErrorMessage(error, 'Error reopening sign-ups.'), 'error');
+      } finally {
+        this.isUpdatingRegistrationState = false;
+      }
+    },
+
+    // Answers with the recomputed sign-up list, so the confirmed/waiting split
+    // is adopted straight from the server rather than re-derived here from the
+    // new cap — the same rule the rest of this panel follows. On failure the
+    // list is reloaded anyway, since a rejection usually means this page's view
+    // of it is stale.
+    async updateMaxPlayers() {
+      if (this.isUpdatingMaxPlayers || !this.canUpdateMaxPlayers) return;
+      const requested = Number(this.maxPlayersInput);
+      this.isUpdatingMaxPlayers = true;
+      try {
+        const entries = await setMatchMaxPlayers(this.match.ID, requested);
+        this.registrations = Array.isArray(entries) ? entries : this.registrations;
+        this.setMaxPlayersState(requested);
+        const benched = this.registrations.filter(entry => entry.IsWaiting).length;
+        const benchNote = benched > 0 ? ` ${benched} player(s) moved to the waiting list.` : '';
+        this.showMessage(`Confirmed places set to ${requested}.${benchNote}`, 'success');
+      } catch (error) {
+        console.error('Error updating max players:', error);
+        this.showMessage(this.registrationErrorMessage(error, 'Error updating the number of confirmed places.'), 'error');
+        await this.loadRegistrations();
+      } finally {
+        this.isUpdatingMaxPlayers = false;
+      }
+    },
+
+    // The confirmed cap and its editable draft always move together: the input
+    // is a draft of this value, never a second source of truth for it.
+    setMaxPlayersState(value) {
+      this.maxPlayers = value;
+      this.maxPlayersInput = value === null || value === undefined ? '' : String(value);
+    },
+
+    registrationErrorMessage(error, fallback) {
+      return error?.response?.data?.error || fallback;
+    },
+
+    // Populates the two team rosters from the confirmed sign-up list and stops
+    // there. It writes nothing to the server on purpose: mutating `match` marks
+    // it dirty, so the existing "Save Changes" button persists it through the
+    // PUT /matches/:id diff (which already creates/updates/deletes match_players
+    // rows), and the existing beforeRouteLeave guard catches an admin who walks
+    // away. That also means the split can be corrected by hand before anything
+    // is written — the whole point, since this is a mechanical split and not a
+    // balanced one.
+    // The "Fill teams from sign-ups" button's own click target: offers a
+    // choice rather than acting immediately, since there are now two ways to
+    // compose the roster from the sign-up list — see the modal below.
+    openComposeChoice() {
+      if (!this.canFillTeamsFromSignups) return;
+      this.showComposeChoiceModal = true;
+    },
+
+    closeComposeChoiceModal() {
+      this.showComposeChoiceModal = false;
+    },
+
+    chooseAutoFill() {
+      this.showComposeChoiceModal = false;
+      this.fillTeamsFromSignups();
+    },
+
+    // Opens the existing Add Player modal — the same one the per-team "+"
+    // icon opens once a roster exists — which is what makes this the bridge
+    // across the one gap that icon can't reach on its own: before any player
+    // has been placed, .team-management (and its "+" icon) stays hidden by
+    // showTeamRoster, but this button lives in .signup-actions, a sibling
+    // that's never behind that gate. filterAvailablePlayers() is what makes
+    // the modal itself worth opening here rather than at the icon alone: for
+    // a scheduled match it always tiers sign-ups first, regardless of which
+    // of the two entry points opened it.
+    async chooseManual() {
+      this.showComposeChoiceModal = false;
+      await this.showModal();
+    },
+
+    fillTeamsFromSignups() {
+      if (!this.canFillTeamsFromSignups) return;
+      if (!this.match || !this.match.Teams || this.match.Teams.length < 2) return;
+
+      const { rosters, addedCount, skippedCount } = fillTeamsFromRegistrations(
+        this.registrations,
+        this.match.Teams.map(team => team.Players || [])
+      );
+
+      if (addedCount === 0) {
+        this.showMessage(
+          skippedCount > 0
+            ? 'Everyone on the confirmed sign-up list is already in a team.'
+            : 'Nobody is on the confirmed sign-up list, so there is nothing to fill the teams with.',
+          'error'
+        );
+        return;
+      }
+
+      this.match.Teams.forEach((team, index) => {
+        team.Players = rosters[index];
+      });
+      // Scores are deliberately left alone: every player added here starts at 0
+      // goals, so each team's sum is unchanged, and recomputing would risk
+      // overwriting a score an admin has already edited on this page.
+
+      const skipped = skippedCount > 0
+        ? ` ${skippedCount} already in a team ${skippedCount === 1 ? 'was' : 'were'} left where they are.`
+        : '';
+      this.showMessage(
+        `Added ${addedCount} player${addedCount === 1 ? '' : 's'} to the teams.${skipped} Nothing is saved yet — press "Save Changes".`,
+        'success'
+      );
+    },
+
+    // Load all players when modal opens
+    async loadAllPlayers() {
+      if (this.allPlayers && this.allPlayers.length > 0) {
+        this.filterAvailablePlayers();
+        return;
+      }
+
+      this.isLoadingPlayers = true;
+      try {
+        await this.reloadAllPlayers();
+      } finally {
+        this.isLoadingPlayers = false;
+      }
+    },
+
+    // Filter players to show only those not in current team
+    filterAvailablePlayers() {
+      if (!this.allPlayers || !Array.isArray(this.allPlayers) || this.allPlayers.length === 0) {
+        this.filteredAvailablePlayers = [];
+        return;
+      }
+
+      if (!this.match || !this.match.Teams || !this.match.Teams[this.activeTeam]) {
+        this.filteredAvailablePlayers = [];
+        return;
+      }
+
+      const currentTeamPlayers = this.match.Teams[this.activeTeam].Players || [];
+      const currentTeamPlayerNames = currentTeamPlayers.map(p => p.Name.toLowerCase());
+
+      const candidates = this.allPlayers.filter(player =>
+        player && player.Name && !currentTeamPlayerNames.includes(player.Name.toLowerCase())
+      );
+
+      const searchTerm = this.playerSearchTerm && this.playerSearchTerm.trim().toLowerCase();
+
+      // Once there's something to search for, it searches the whole group —
+      // sign-up or not. Tiering only shapes the *default*, empty-search view.
+      if (searchTerm) {
+        this.filteredAvailablePlayers = candidates.filter(player =>
+          player.Name.toLowerCase().includes(searchTerm)
+        );
+        return;
+      }
+
+      this.filteredAvailablePlayers = this.isScheduled
+        ? this.tierCandidatesBySignup(candidates)
+        : candidates;
+    },
+
+    // For a scheduled match, with no search term: confirmed sign-ups first
+    // (in Position order), then the waiting list, and the rest of the group
+    // left out of this default view entirely — reachable the moment a search
+    // term narrows the list above. The people most likely to actually play
+    // are what an admin composing by hand wants in front of them; a group
+    // that outgrew its regular sign-ups would otherwise bury them in a list
+    // of everyone who's ever joined.
+    //
+    // registrationBadge carries just enough for the template to render a
+    // marker (`#<position>`, muted when waiting) without it re-deriving
+    // anything position-related itself — that stays server-derived, same
+    // rule as everywhere else this feature touches Position/IsWaiting.
+    tierCandidatesBySignup(candidates) {
+      const byId = new Map(candidates.map(player => [player.ID, player]));
+      const tiered = [];
+      const placed = new Set();
+
+      const addTier = (entries, waiting) => {
+        entries.forEach(entry => {
+          const player = byId.get(entry.PlayerID);
+          if (player && !placed.has(player.ID)) {
+            tiered.push({ ...player, registrationBadge: { position: entry.Position, waiting } });
+            placed.add(player.ID);
+          }
+        });
+      };
+
+      addTier(this.confirmedRegistrations, false);
+      addTier(this.waitingRegistrations, true);
+
+      return tiered;
+    },
+
+    // Scoped to this match's own group (this.activeGroupId, resolved once in
+    // created() via resolveActiveGroup()) rather than every player in the
+    // database: a player removed from the group — or belonging to a
+    // different group entirely — must not be offered here.
+    async reloadAllPlayers() {
+      if (!this.activeGroupId) {
+        // No group resolved (resolveActiveGroup failed) — degrade to an
+        // empty list rather than requesting a malformed URL.
+        this.allPlayers = [];
+        this.filterAvailablePlayers();
+        return;
+      }
+      try {
+        const members = await getGroupMembers(this.activeGroupId);
+        // getGroupMembers returns PlayerWithRole, which embeds Player's own
+        // lowercase JSON fields (id, name) plus role — translate to the
+        // PascalCase {ID, Name} shape the rest of this component already
+        // uses for players (matching PlayerCustom's convention from the
+        // getPlayers() call this replaces), role is not needed here.
+        this.allPlayers = Array.isArray(members)
+          ? members.map(member => ({ ID: member.id, Name: member.name }))
+          : [];
+        this.filterAvailablePlayers();
+      } catch (error) {
+        console.error('Error reloading players:', error);
+        this.showMessage('Error reloading players list', 'error');
+        // Don't reset allPlayers on error, keep the current data
+      }
+    },
+
+    // Handle search input
+    onPlayerSearch() {
+      // Clear any existing timeout
+      if (this.searchTimeout) {
+        clearTimeout(this.searchTimeout);
+      }
+
+      // Debounce the search
+      this.searchTimeout = setTimeout(() => {
+        this.filterAvailablePlayers();
+      }, 300);
+    },
+
+    addPlayerToSelection(player) {
+      if (this.isPlayerSelected(player) || this.isPlayerInAnyTeam(player.Name)) {
+        return;
+      }
+
+      const playerToAdd = {
+        ID: player.ID,
+        Name: player.Name,
+        initialGoals: 0  // Default to 0 goals
+      };
+
+      this.selectedPlayers.push(playerToAdd);
+    },
+
+    // Remove a player from selection
+    removeSelectedPlayer(index) {
+      this.selectedPlayers.splice(index, 1);
+    },
+
+    // Check if player is already selected
+    isPlayerSelected(player) {
+      return this.selectedPlayers.some(selectedPlayer =>
+        selectedPlayer.Name.toLowerCase() === player.Name.toLowerCase()
+      );
+    },
+
+    // Add all selected players to the team
+    async addSelectedPlayersToTeam() {
+      if (this.selectedPlayers.length === 0) {
+        this.showMessage('Please select at least one player', 'error');
+        return;
+      }
+
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam]) {
+        console.error('Invalid team data');
+        return;
+      }
+
+      if (!this.match.Teams[this.activeTeam].Players) {
+        this.match.Teams[this.activeTeam].Players = [];
+      }
+
+      // Add each selected player to the team
+      this.selectedPlayers.forEach(selectedPlayer => {
+        // Double-check if player is not already in the team
+        if (!this.isPlayerInCurrentTeam(selectedPlayer.Name)) {
+          const newPlayer = {
+            ID: selectedPlayer.ID,
+            Name: selectedPlayer.Name,
+            GoalNumber: selectedPlayer.initialGoals || 0,
+            OwnGoals: 0
+          };
+
+          this.match.Teams[this.activeTeam].Players.push(newPlayer);
+        }
+      });
+
+      // Update team score
+      this.updateTeamScore();
+
+      // Close modal and show success message
+      this.closeModal();
+    },
+
+    // Check if player is in current team
+    isPlayerInCurrentTeam(playerName) {
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        return false;
+      }
+
+      return this.match.Teams[this.activeTeam].Players.some(player =>
+        player.Name.toLowerCase() === playerName.toLowerCase()
+      );
+    },
+
+    // Check if player is in any team in this match
+    isPlayerInAnyTeam(playerName) {
+      if (!this.match.Teams) return false;
+
+      return this.match.Teams.some(team =>
+        team.Players && team.Players.some(player =>
+          player.Name.toLowerCase() === playerName.toLowerCase()
+        )
+      );
+    },
+
+    // Show modal and load players
+    async showModal() {
+      this.showAddPlayerModal = true;
+      await this.loadAllPlayers();
+    },
+
+    closeModal() {
+      this.showAddPlayerModal = false;
+      this.selectedPlayers = [];
+      this.playerSearchTerm = '';
+      this.filteredAvailablePlayers = [];
+      if (this.searchTimeout) {
+        clearTimeout(this.searchTimeout);
+      }
+    },
+
+    // Existing methods remain the same...
+    goBack() {
+      this.$router.go(-1);
+    },
+
+    updateGoals(playerIndex, change) {
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        console.error('Invalid team or players data');
+        return;
+      }
+
+      const player = this.match.Teams[this.activeTeam].Players[playerIndex];
+      if (!player) {
+        console.error('Player not found at index:', playerIndex);
+        return;
+      }
+
+      const newGoals = (player.GoalNumber || 0) + change;
+
+      if (newGoals >= 0) {
+        player.GoalNumber = newGoals;
+        this.updateTeamScore();
+      }
+    },
+
+    updateOwnGoals(playerIndex, change) {
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        console.error('Invalid team or players data');
+        return;
+      }
+
+      const player = this.match.Teams[this.activeTeam].Players[playerIndex];
+      if (!player) {
+        console.error('Player not found at index:', playerIndex);
+        return;
+      }
+
+      const newOwnGoals = (player.OwnGoals || 0) + change;
+
+      if (newOwnGoals >= 0) {
+        player.OwnGoals = newOwnGoals;
+        this.updateTeamScore();
+      }
+    },
+
+    // Own goals are scored by a team's own player but count toward the
+    // OTHER team's score (mirrors MatchService's scoring in the Go
+    // backend's matches.go), so every team's score has to be recomputed
+    // together here rather than just the team currently being edited.
+    updateTeamScore() {
+      if (!this.match.Teams) {
+        return;
+      }
+
+      const ownGoalsByTeam = this.match.Teams.map((team) =>
+        (team.Players || []).reduce((total, player) => total + (player.OwnGoals || 0), 0)
+      );
+      const totalOwnGoals = ownGoalsByTeam.reduce((total, goals) => total + goals, 0);
+
+      this.match.Teams.forEach((team, index) => {
+        const goalsScored = (team.Players || []).reduce((total, player) => total + (player.GoalNumber || 0), 0);
+        team.Score = goalsScored + (totalOwnGoals - ownGoalsByTeam[index]);
+      });
+    },
+
+    removePlayer(playerIndex) {
+      if (!this.match.Teams || !this.match.Teams[this.activeTeam] || !this.match.Teams[this.activeTeam].Players) {
+        console.error('Invalid team or players data');
+        return;
+      }
+
+      this.match.Teams[this.activeTeam].Players.splice(playerIndex, 1);
+      this.updateTeamScore();
+    },
+
+    hasEmptyTeam() {
+      if (!this.match || !this.match.Teams) return true;
+
+      return this.match.Teams.some(team =>
+        !team.Players || team.Players.length === 0
+      );
+    },
+
+    async saveChanges() {
+      // This guard predates scheduled matches, back when a match's only
+      // lifecycle was "an admin records a game that already happened" — an
+      // empty team there really was a mistake worth catching. For a scheduled
+      // match, an empty (or lopsided) team is the *normal* state right up
+      // until sign-ups close and someone composes the roster: right after
+      // creation both teams are empty by construction, and even a single
+      // confirmed sign-up leaves one team empty until a second player joins
+      // it. Blocking Save there would make it impossible to ever persist a
+      // scheduled match's own schedule fields, or to save a partial manual
+      // pick, without an unrelated roster requirement in the way. The backend
+      // enforces no such minimum either — MatchService.UpdateMatch's diff
+      // persists whatever teams/players it's given, including empty ones — so
+      // this was purely a frontend-only restriction to lift.
+      if (!this.isScheduled && this.hasEmptyTeam()) {
+        this.showMessage('Each team requires at least 1 player', 'error');
+        return;
+      }
+      this.isSaving = true;
+      try {
+        await updateMatch(this.match.ID, this.match);
+        // Update the snapshot before navigating away: beforeRouteLeave's
+        // hasUnsavedChanges() check runs as part of this same navigation,
+        // and would otherwise see the just-saved match as still "dirty"
+        // against the pre-save snapshot and pop the "leave without
+        // saving?" confirm right after a successful save.
+        this.matchSnapshot = JSON.stringify(this.match);
+        this.goBack();
+      } catch (error) {
+        console.error('Error saving match:', error);
+        this.showMessage('Error saving changes', 'error');
+      } finally {
+        this.isSaving = false;
+      }
+    },
+
+    // Same confirm-before-acting pattern as beforeRouteLeave's unsaved-changes
+    // guard above — a plain window.confirm rather than a custom modal, since
+    // that's the existing precedent in this file for a destructive/irreversible
+    // action the user could regret.
+    confirmDeleteMatch() {
+      if (this.isDeleting) return;
+      const confirmed = window.confirm('Delete this match? This cannot be undone.');
+      if (!confirmed) return;
+      this.deleteMatchNow();
+    },
+
+    async deleteMatchNow() {
+      this.isDeleting = true;
+      try {
+        await deleteMatch(this.match.ID, this.activeGroupId);
+        this.goBack();
+      } catch (error) {
+        console.error('Error deleting match:', error);
+        this.showMessage('Error deleting match. Please try again.', 'error');
+      } finally {
+        this.isDeleting = false;
+      }
+    },
+
+    showMessage(text, type = 'success') {
+      this.$refs.toast.show(text, type);
+    },
+
+    formatDate(dateString) {
+      return formatCalendarDayLong(dateString);
+    },
+
+    getTeamColor(colour) {
+      if (colour && colour.startsWith('#')) {
+        return colour;
+      }
+
+      const colorMap = {
+        'red': '#ef4444',
+        'blue': '#3b82f6',
+        'green': '#10b981',
+        'yellow': '#f59e0b',
+        'purple': '#8b5cf6',
+        'orange': '#f97316',
+        'pink': '#ec4899',
+        'cyan': '#06b6d4',
+        'white': '#f8fafc',
+        'black': '#1f2937'
+      };
+
+      return colorMap[colour.toLowerCase()] || '#6b7280';
+    },
+
+    formatPlayerNameForDisplay(name) {
+      // Convert to title case for display (capitalize first letter of each word)
+      return name.split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    },
+
+    getTotalPlayers() {
+      if (!this.match || !this.match.Teams) return 0;
+      return this.match.Teams.reduce((total, team) => total + (team.Players ? team.Players.length : 0), 0);
+    },
+
+    // Purely Date-based: a match is "Completed" starting midnight the day
+    // *after* it was played, and "Upcoming" for every moment up to and
+    // including its own match day — identical rule to MatchesPanel.vue's own
+    // matchStatus (see its comment for the full rationale), which this used
+    // to disagree with. This predates scheduled matches as a goal-count
+    // heuristic ("any goal recorded" was a reasonable proxy for "has this
+    // been played" back when a match was always scored immediately after the
+    // fact), then predates *this* Date-based version as a kick-off+goal-count
+    // heuristic — both replaced once real feedback pointed out a match could
+    // show "Completed" for some matches and not others depending on
+    // scheduling and on whether goals had been entered yet. Constructing the
+    // next day via `new Date(y, m - 1, d + 1)` (rather than adding 24 hours
+    // in milliseconds) is what keeps this correct across a DST transition —
+    // JS normalizes the day-overflow using the local calendar, not
+    // fixed-width time arithmetic.
+    getMatchStatus() {
+      const [year, month, day] = this.match.Date.split('-').map(Number);
+      const dayAfter = new Date(year, month - 1, day + 1).getTime();
+      return this.nowMs >= dayAfter ? 'completed' : 'upcoming';
+    },
+
+    getMatchStatusText() {
+      const status = this.getMatchStatus();
+      switch (status) {
+        case 'upcoming': return 'Upcoming';
+        case 'completed': return 'Completed';
+        default: return 'Unknown';
+      }
+    }
+  }
+};
+</script>
+
+<style scoped>
+/* Component-specific styles that couldn't be moved to global */
+
+.match-detail-container {
+  background-color: var(--bg-secondary);
+}
+
+/* Match Content */
+.match-content {
+  padding: 2rem 0;
+}
+
+/* Score Overview */
+.score-overview {
+  margin-bottom: 2rem;
+}
+
+.match-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.match-title-left,
+.match-title-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.match-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.match-back-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.match-back-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.match-date {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.match-status-badge {
+  padding: 0.3rem 0.65rem;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.match-status-badge.upcoming {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.match-status-badge.completed {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.teams-score {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+/* One row per team — name/colour and score side by side — at every
+   breakpoint, rather than a large stacked block on desktop and a
+   separately-tuned compact row on mobile. */
+.team-score {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.1rem;
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+}
+
+.team-score:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.team-info {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: left;
+  min-width: 0;
+}
+
+.team-info .team-color {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+  flex-shrink: 0;
+}
+
+.team-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: capitalize;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.score {
+  font-size: 1.75rem;
+  font-weight: 900;
+  color: var(--primary-color);
+  text-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.vs-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vs-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 800;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-lg);
+}
+
+/* Sign-up panel (scheduled matches only) */
+.signup-panel {
+  margin-bottom: 2rem;
+}
+
+.signup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.signup-kickoff {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.signup-kickoff svg {
+  width: 22px;
+  height: 22px;
+  color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.signup-kickoff-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.signup-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.signup-kickoff-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.signup-status-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.signup-count-inline {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Same pill shape as .match-status-badge above, so the two badges on this page
+   read as the same kind of thing. */
+.signup-state-badge {
+  padding: 0.3rem 0.65rem;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.signup-state-badge.open {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.signup-state-badge.not-open-yet {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.signup-state-badge.closed-by-admin,
+.signup-state-badge.closed-at-kickoff {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.signup-state-detail {
+  margin: 1rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.signup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+/* Sits in the same row as Close/Reopen, as one unit: label, field and button
+   are one action, so they keep a tighter gap than .signup-actions' own. */
+.max-players-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.max-players-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.max-players-input {
+  width: 4.5rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.max-players-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+/* Marked out from Close/Reopen next to it: this is the one button in the panel
+   that changes the page's own unsaved state rather than the server's. */
+.fill-teams-btn {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.fill-teams-hint {
+  margin: 0.75rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* The "nothing is saved" half of the sentence has to survive being skim-read. */
+.fill-teams-hint strong {
+  color: var(--text-primary);
+}
+
+.signup-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.signup-lists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.signup-list-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.signup-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  /* A 30-strong waiting list must not push the team management section off
+     the bottom of the page. */
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.signup-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius);
+  font-size: 0.875rem;
+}
+
+.signup-entry.is-me {
+  border: 1px solid var(--primary-color);
+}
+
+.signup-position {
+  min-width: 1.5rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.signup-name {
+  flex: 1;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.signup-you {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--primary-color);
+}
+
+/* The waiting list is deliberately muted: it is real information, but the
+   confirmed roster is what a player scans for first. */
+.signup-list-waiting .signup-entry {
+  opacity: 0.8;
+}
+
+.signup-empty {
+  padding: 0.5rem 0.65rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-style: italic;
+}
+
+@media (max-width: 768px) {
+  .signup-lists {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Team Management */
+.team-management {
+  margin-bottom: 2rem;
+}
+
+.management-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+}
+
+.tabs-buttons {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.no-roster-hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* "Add player to this team" — sits right next to the team switcher it acts
+   on, rather than among the global Save/Delete actions. Dashed border
+   echoes the "+" add-match card used in the matches list, for a consistent
+   "+" affordance across the app. */
+.add-player-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--border-radius);
+  background: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.add-player-icon-btn:hover {
+  border-color: var(--primary-color);
+  background-color: var(--bg-tertiary);
+}
+
+.add-player-icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.tab-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.tab-button:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.tab-button.active {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+/* Pushed to the far end of the action bar and separated with extra margin so
+   a click can't land here by mistake while reaching for Save Changes. */
+.delete-match-btn {
+  margin-left: 1.5rem;
+}
+
+/* Players list — one compact row per player instead of a taller card with
+   a header row and a separate goal row, so the list needs far less
+   scrolling to see everyone on a team. Bounded to whatever's left below
+   the score card and the Save/Delete/tabs header above it, with its own
+   scrollbar — a roster with many players then scrolls inside this list
+   instead of growing the whole page and pushing Save Changes/Delete
+   Match out of easy reach (same pattern as MatchesPanel.vue's own
+   two-column team list). The 560px offset estimates that chrome's
+   height; max() keeps a handful of rows visible either way. */
+.players-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: max(9rem, calc(100vh - 560px));
+  overflow-y: auto;
+}
+
+.player-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius);
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+}
+
+.player-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.player-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.player-info .player-name {
+  /* It's an <h4>, which carries its own default vertical margin (unlike
+     the <span> used for a player name elsewhere in this file) — left in
+     place, that margin box (not the visible text) is what .player-card's
+     align-items:center actually centers, throwing off the row's height
+     and vertical alignment for no visual benefit. */
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-danger-icon {
+  background-color: var(--danger-color);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-danger-icon:hover {
+  background-color: var(--danger-hover);
+}
+
+.btn-danger-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Goal Management */
+.goal-management {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.goal-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--primary-color);
+  background-color: var(--bg-primary);
+  color: var(--primary-color);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.goal-btn:hover:not(:disabled) {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.goal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.goal-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.goal-count {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  min-width: 24px;
+  text-align: center;
+}
+
+/* Own goals reuse .goal-btn/.goal-count's shape and colour — just smaller,
+   since this is a secondary counter next to the main goal count. */
+.own-goal-btn {
+  width: 24px;
+  height: 24px;
+}
+
+.own-goal-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.own-goal-count {
+  font-size: 0.85rem;
+  min-width: 40px;
+}
+
+/* Compose-choice modal — .modal-overlay/.modal-container/.modal-header/
+   .modal-close all come from global-styles.css; only the two option cards
+   are specific to this modal. */
+.compose-choice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.compose-choice-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1rem;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-fast);
+  width: 100%;
+}
+
+.compose-choice-option:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--primary-color);
+}
+
+.compose-choice-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: var(--primary-color);
+  margin-top: 0.15rem;
+}
+
+.compose-choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.compose-choice-text strong {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.compose-choice-text span {
+  color: var(--text-secondary);
+  font-size: 0.825rem;
+  line-height: 1.5;
+}
+
+/* Enhanced Multi-Player Modal */
+.enhanced-multi-player-modal {
+  background-color: var(--bg-primary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-xl);
+  max-width: 900px;
+  width: 95%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+}
+
+.enhanced-modal-header {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)) !important;
+  color: white !important;
+  border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0 !important;
+  border-bottom: none !important;
+}
+
+.enhanced-modal-header h3 {
+  color: white !important;
+}
+
+.enhanced-modal-header .modal-close {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.enhanced-modal-header .modal-close:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
+}
+
+.enhanced-modal-body {
+  flex: 1;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Search Section */
+.search-section {
+  flex-shrink: 0;
+  padding: 1.5rem;
+  background-color: var(--bg-secondary);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.search-section .form-group {
+  margin-bottom: 0;
+}
+
+.search-section label {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+.input-wrapper {
+  position: relative;
+}
+
+.search-loading {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Shown under the search input when a search term matches nobody in this
+   group — replaces the old "create a ghost player" prompt, since that flow
+   no longer exists on the backend at all. */
+.no-matching-players-hint {
+  margin: 1rem 0 0;
+  padding: 0.75rem 1rem;
+  background-color: var(--bg-tertiary);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+/* Two-column layout */
+.players-columns {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.selected-column {
+  border-right: 1px solid var(--border-color);
+}
+
+.column-header {
+  flex-shrink: 0;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+  border-bottom: 1px solid var(--border-color);
+}
+
+.column-header h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.header-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--primary-color);
+}
+
+.count-badge {
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.column-content {
+  flex: 1;
+  padding: 1rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Selected Players List */
+.selected-players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.selected-player-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background-color: var(--bg-secondary);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+}
+
+.selected-player-item:hover {
+  background-color: var(--bg-tertiary);
+  transform: translateX(-2px);
+}
+
+.remove-selected-btn {
+  background: none;
+  border: none;
+  color: var(--danger-color);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 50%;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-selected-btn:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.remove-selected-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Available Players List */
+.available-players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.available-player-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+  width: 100%;
+}
+
+.available-player-item:hover:not(:disabled) {
+  background-color: var(--bg-tertiary);
+  border-color: var(--primary-color);
+  transform: translateX(2px);
+}
+
+.available-player-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.player-status {
+  display: flex;
+  align-items: center;
+}
+
+.status-selected {
+  color: var(--primary-color);
+}
+
+/* Same pill language as .count-badge/.signup-position elsewhere in this
+   file — confirmed reads as the "normal" state (primary colour), waiting
+   stays deliberately muted, same reasoning as .signup-list-waiting. */
+.registration-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background-color: var(--primary-color);
+  color: white;
+  vertical-align: middle;
+}
+
+.registration-badge.waiting {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.status-in-match {
+  color: var(--danger-color);
+}
+
+.status-available {
+  color: var(--text-light);
+}
+
+.player-status svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Enhanced Footer */
+.enhanced-footer {
+  flex-shrink: 0;
+  background-color: var(--bg-secondary);
+  border-top: 2px solid var(--border-color);
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.footer-info {
+  flex: 1;
+}
+
+.selection-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+}
+
+.summary-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--primary-color);
+}
+
+.selection-count {
+  font-weight: 500;
+}
+
+.selection-count.empty {
+  color: var(--text-light);
+}
+
+.footer-buttons {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.enhanced-confirm {
+  min-width: 120px;
+}
+
+/* Error State */
+.error-state {
+  padding: 4rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .match-content {
+    padding: 1rem 0;
+  }
+
+  /* Score overview: card-base/card-large's own padding is sized for
+     desktop — override it directly here rather than fighting it. */
+  .score-overview {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  /* No more "Match" heading taking up half the row (see .match-title-left
+     in the template) — the back button, date and status badge now fit on
+     one row even on a narrow screen, so the wrap the base rule allows for
+     is no longer needed. */
+  .match-title {
+    flex-wrap: nowrap;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+  }
+
+  /* The full "Sunday, August 23, 2026" format (see formatDate()) is long
+     next to the back button and status badge sharing this row on a narrow
+     screen — shrink it rather than truncate or reflow the row. */
+  .match-date {
+    font-size: 0.75rem;
+  }
+
+  /* Both teams already sit on one row at every breakpoint (see .team-score
+     above) — mobile just gets a bit tighter to fit the narrower width. */
+  .teams-score {
+    gap: 0.5rem;
+  }
+
+  .team-score {
+    padding: 0.6rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .team-name {
+    font-size: 0.9rem;
+  }
+
+  .team-info .team-color {
+    width: 20px;
+    height: 20px;
+  }
+
+  .score {
+    font-size: 1.65rem;
+  }
+
+  .vs-circle {
+    width: 32px;
+    height: 32px;
+    font-size: 0.7rem;
+  }
+
+  .team-management {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .management-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+  }
+
+  .tabs-buttons {
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .tab-button {
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  /* Icon-only across the whole row: Save Changes, Delete Match and (once a
+     roster exists) Share teams all collapse to an equal-sized
+     square icon button on a narrow screen — the icon alone is enough to
+     identify each action, same as add-player-icon-btn's own icon-only
+     convention elsewhere on this page. flex: none replaces the old flex: 1
+     (there is no longer a label to need the extra width, and stretching a
+     bare icon across a wide button just leaves empty space either side of
+     it); centered as a group (justify-content: center on the row) rather
+     than left-aligned, now that they no longer stretch to fill it. Both
+     width and height are explicit and identical (3rem — bigger than
+     add-player-icon-btn's own 2.5rem, since these replace a labelled button
+     rather than sitting next to one) so all three are the same square
+     regardless of their own icon's size, instead of only pinning width and
+     letting height float with each icon/padding combination. */
+  .action-buttons {
+    flex-wrap: nowrap;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .action-buttons .btn-base {
+    flex: none;
+    width: 3rem;
+    height: 3rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .action-btn-label {
+    display: none;
+  }
+
+  /* No longer needed to visually separate this from Save Changes now that
+     both are equal-sized icon squares with their own gap — the extra
+     desktop-only margin would just throw the row's centering off here. */
+  .delete-match-btn {
+    margin-left: 0;
+  }
+
+  /* Centers each wrapped line's own content (Close/Reopen + Share on one
+     line, the max-players form on another, Fill teams on its own) instead
+     of the default left alignment — matching .action-buttons' own centered
+     row further down this page. */
+  .signup-actions {
+    justify-content: center;
+  }
+
+  /* Match the compact share button beside the sign-up action. */
+  .registration-toggle-btn {
+    width: auto;
+    height: 3rem;
+  }
+
+  /* Roster row: player name rendered as an <h4> with no font-size of its
+     own (see .player-name in global-styles.css), so it falls back to the
+     browser's default ~1rem heading size. 0.85rem (an earlier pass) read
+     as too small next to the rest of the row — 1rem is the actual target,
+     just without the <h4>'s own oversized default margin (stripped in the
+     base rule above, not this override). */
+  .player-info .player-name {
+    font-size: 1rem;
+  }
+
+  /* Real feedback: once the own-goal counter shipped alongside the goal
+     counter, .player-info's flex:1 1 auto/min-width:0 (base rule) let the
+     two fixed-size counters plus the remove button squeeze the name down
+     to almost nothing at this width — sometimes past legibility entirely.
+     Wrapping the row and forcing the name onto its own full-width line
+     fixes it directly rather than shrinking the counters further, which
+     would only buy a little room back before the same problem returns
+     the next time something is added to this row. */
+  .player-card {
+    flex-wrap: wrap;
+  }
+
+  .player-card .player-info {
+    flex-basis: 100%;
+  }
+
+  .enhanced-multi-player-modal {
+    max-width: 95%;
+    max-height: 95vh;
+  }
+
+  .search-section {
+    padding: 1rem;
+  }
+
+  .column-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .column-content {
+    padding: 0.75rem;
+  }
+
+  .players-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .selected-column {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .enhanced-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .footer-buttons {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .match-content {
+    padding: 0.75rem 0;
+  }
+
+  .tab-button {
+    padding: 0.6rem 0.85rem;
+    font-size: 0.85rem;
+  }
+
+  .team-color-small {
+    width: 12px;
+    height: 12px;
+  }
+}
+</style>

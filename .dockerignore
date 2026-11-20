@@ -1,0 +1,17 @@
+# The backend image builds from the repository root (it needs app/), so
+# everything the Go build doesn't read is dead weight in the build context —
+# frontend/node_modules alone is hundreds of megabytes uploaded to the builder
+# on every CI run.
+.git
+.github
+.claude
+.agents
+reviews
+frontend
+devops/env
+**/node_modules
+app/tmp
+*.md
+.env
+.env.*
+.neon
