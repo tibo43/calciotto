@@ -41,9 +41,8 @@ import { signInWithPasskey, supportsPasskeys } from '@/services/passkeys';
 import { shouldOfferPasskeyLogin } from '@/services/passkeyAccess';
 import { actionErrorMessage } from '@/services/v2Match';
 
-// Design v2 login, shown instead of Login.vue when shouldUseLoginV2() says
-// so (LoginGate.vue). Same calls, passkey condition and redirect as
-// Login.vue; failures go to the shared toast instead of a line on the page.
+// The login page. Failures go to the shared toast instead of a line on the
+// page.
 export default {
   name: 'LoginV2',
   components: { AppToast },

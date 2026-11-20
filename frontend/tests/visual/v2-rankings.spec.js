@@ -1,5 +1,4 @@
-// Rankings with the design-v2 feature on. /rankings still redirects home
-// when the features response doesn't include it, which is what a v1 player hits.
+// The rankings page.
 
 const { test, expect } = require('@playwright/test');
 const { gotoApp, expectEverythingStubbed, expectNoHorizontalOverflow } = require('./fixtures/app');

@@ -69,10 +69,9 @@ async function stubApi(page, overrides = {}) {
   // Profile.vue's own cross-group stats call. Deliberately carries no
   // group_id — GET /players/me/stats is cross-group by design.
   await page.route(`${API}/players/me/stats*`, (route) => json(route, overrides.playerStats ?? data.playerStats));
-  // Features. Profile.vue reads this for its cards; App.vue reads it once
-  // per session for the design-v2 class. None by default, so the v1
-  // screenshots still render the v1 shell: the real API now always lists the
-  // launched ones (design-v2 included), and the v2 specs pass them.
+  // Features. ProfileV2 reads this for its rows (notifications, install,
+  // passkeys); App.vue reads guide_completed once per session, in the
+  // background, for the first-run guide. The design no longer depends on it.
   let guideCompleted = overrides.guideCompleted ?? true;
   await page.route(`${API}/players/me/features`, (route) => json(route, {
     features: overrides.features ?? data.features,
@@ -294,7 +293,7 @@ async function gotoApp(page, path, options = {}) {
   // viewport (the @mobile project) App.vue hides the whole top bar on an
   // authenticated page, so no locator inside it would ever become visible
   // there. The main content renders on every viewport and route.
-  const showsGuide = overrides.guideCompleted === false && overrides.features?.includes('design-v2');
+  const showsGuide = overrides.guideCompleted === false;
   await expect(page.locator(showsGuide ? '.player-guide' : '.main-content')).toBeVisible();
   await expect(page.locator('.loading-spinner')).toHaveCount(0);
 

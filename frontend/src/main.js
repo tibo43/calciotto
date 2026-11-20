@@ -29,7 +29,7 @@ app.use(router);
 // location has no name, so mounting earlier would decide on the wrong route.
 //
 // Until then nothing is rendered, and a route guard can make that wait last
-// (the v2-only routes ask GET /players/me/features first). The body carries
+// (the edit route checks the caller's role first). The body carries
 // the theme meanwhile, so a dark-mode viewer gets the dark background rather
 // than a white page. App.vue owns the theme from mount on, on its own root.
 const darkBeforeMount = prefersDarkTheme();

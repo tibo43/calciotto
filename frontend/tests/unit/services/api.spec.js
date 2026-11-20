@@ -322,14 +322,12 @@ describe('the passkey login hint', () => {
 
   afterEach(() => localStorage.clear());
 
-  it('remembers both flags on logout and starts over for the next sign-in', () => {
+  it('remembers the flag on logout and starts over for the next sign-in', () => {
     api.setToken('first-player');
     const config = featureRequest();
     handleResponse({ config, data: { features: ['design-v2'] } });
     expect(shouldOfferPasskeyLogin()).toBe(false);
     handleResponse({ config, data: { features: ['passkeys'] } });
-    expect(shouldOfferPasskeyLogin()).toBe(false);
-    handleResponse({ config, data: { features: bothFlags } });
     expect(shouldOfferPasskeyLogin()).toBe(true);
     api.clearToken();
     expect(shouldOfferPasskeyLogin()).toBe(true);

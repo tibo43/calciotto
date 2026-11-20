@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { getToken, getMatchDetailsByID } from '@/services/api';
 import { decodeMatchId } from '@/services/shortLink';
 import { loadMyGroups } from '@/services/activeGroup';
-import { loadDesignV2 } from '@/services/designV2';
 
 // The match's own group isn't known ahead of time from a bare match id (it
 // only ever appears alone, in a URL or a `/m/:code` link), and
@@ -37,24 +36,17 @@ export async function findGroupForMatch(matchId, groups) {
   return null;
 }
 
-// MatchDetails.vue (the editing page) is admin-only now: every control on it
-// was already hidden from a non-admin (see MatchDetails.vue's own isAdmin
-// gating), but a plain member could still land on the page itself and see a
-// mostly-blank shell. MatchesPanel.vue — reachable by any member — covers
-// reading a match (including, since this same product change, its full
-// sign-up list and Man of the Match voting), so a non-admin has no remaining
-// reason to be here at all.
+// The editing page (/matches/:id/edit) is admin-only. Every member reads a
+// match on /matches/:id (MatchView.vue), so a non-admin has no reason to be
+// on the edit page.
 //
 // This is a FRONTEND-only gate. GET /matches/:id/details itself stays open to
-// any group member on the backend — MatchesPanel.vue depends on reading it —
-// so this does not (and must not) tighten that route.
+// any group member on the backend (the match page depends on it).
 //
-// Uses findGroupForMatch above (the caller's groups from GET /groups/me, the
-// exact source MatchesAndStandings.vue/MatchDetails.vue already read their
-// own role from — see resolveActiveGroup()) and checks that group's role. Any
-// failure — no owning group found, or a non-404 error propagated from the
-// search — is treated as "cannot verify" one level up, in beforeEnter below —
-// failing closed (redirect) rather than open.
+// Uses findGroupForMatch above (the caller's groups from GET /groups/me) and
+// checks that group's role. Any failure — no owning group found, or a non-404
+// error propagated from the search — is treated as "cannot verify" one level
+// up, in beforeEnter below: failing closed (redirect) rather than open.
 export async function canEditMatch(matchId) {
   const groups = await loadMyGroups();
   const found = await findGroupForMatch(matchId, groups);
@@ -71,24 +63,14 @@ const routes = [
   {
     path: '/rankings',
     name: 'Rankings',
-    component: () => import('@/components/v2/RankingsGate.vue'),
-    // The Rankings link only exists in the v2 shell. Without the flag this
-    // URL keeps today's behaviour: home. The guard asks the server (one
-    // request per session, shared with App.vue); a failed request is v1.
-    async beforeEnter() {
-      return (await loadDesignV2()) ? true : { path: '/' };
-    },
+    component: () => import('@/components/v2/RankingsV2.vue'),
   },
   {
-    // Design v2 only: creating a match (NewMatchV2.vue). Without the flag,
-    // today's home has its own "+" card, so this URL just goes home. The
-    // page itself sends a non-admin home too.
+    // Creating a match (NewMatchV2.vue). The page itself sends a non-admin
+    // home.
     path: '/matches/new',
     name: 'NewMatch',
     component: () => import('@/components/v2/NewMatchV2.vue'),
-    async beforeEnter() {
-      return (await loadDesignV2()) ? true : { path: '/' };
-    },
   },
   {
     path: '/matches/:id',
@@ -99,7 +81,7 @@ const routes = [
   {
     path: '/matches/:id/edit',
     name: 'MatchDetails',
-    component: () => import('@/components/v2/EditMatchGate.vue'),
+    component: () => import('@/components/v2/EditMatchV2.vue'),
     props: true,
     beforeEnter: async (to) => {
       try {
@@ -118,26 +100,11 @@ const routes = [
       return true;
     }
   },
-  // The "tinylink" used for sharing matches — a bare
-  // redirect rather than its own component, since decoding a code and
-  // resolving where it points to is all there is to do. An invalid code
-  // (hand-edited, truncated in transit) falls back home instead of throwing
-  // partway through a navigation.
-  //
-  // This used to redirect straight to `/matches/:id/edit`, but that page is
-  // admin-only now (see canEditMatch above) — a plain member following a
-  // shared link would just bounce straight back to `/`, which defeats the
-  // point of sharing it. Landing on the home page's Matches tab instead is
-  // strictly more correct today than the old destination ever was: the
-  // sign-up list, the confirmed/waiting roster and Man of the Match voting
-  // all live in MatchesPanel.vue now, reachable by admin and member alike, so
-  // there is no reason left to route a recipient anywhere else. The code is
-  // forwarded as-is in `?match=`, not decoded and re-encoded here —
-  // MatchesAndStandings.vue does the actual decoding (via
-  // findGroupForMatch above) once it knows the caller's groups. decodeMatchId
-  // is still called here, once, purely to validate the code the same way the
-  // old redirect did — a malformed one falls back home rather than handing a
-  // garbage `?match=` value down to the page.
+  // The "tinylink" used for sharing matches: a bare redirect to
+  // `/?match=<code>`, which the home page turns into the match page
+  // (MatchView.vue finds the match's own group). decodeMatchId is called here
+  // only to validate the code: a malformed one (hand-edited, truncated in
+  // transit) falls back home instead of throwing partway through a navigation.
   {
     path: '/m/:code',
     redirect: (to) => {
@@ -166,41 +133,27 @@ const routes = [
   {
     path: '/profile',
     name: 'Profile',
-    component: () => import('@/components/Profile.vue')
+    component: () => import('@/components/v2/ProfileV2.vue')
   },
-  // Profile sub-pages exist for the design-v2 shell. Without the flag they
-  // fall back to today's profile, which is the only profile a v1 player has.
   {
     path: '/profile/groups/:id/settings',
     name: 'ProfileGroupSettings',
-    component: () => import('@/components/Profile.vue'),
-    async beforeEnter() {
-      return (await loadDesignV2()) ? true : { path: '/profile' };
-    }
+    component: () => import('@/components/v2/ProfileV2.vue'),
   },
   {
     path: '/profile/groups/:id',
     name: 'ProfileGroup',
-    component: () => import('@/components/Profile.vue'),
-    async beforeEnter() {
-      return (await loadDesignV2()) ? true : { path: '/profile' };
-    }
+    component: () => import('@/components/v2/ProfileV2.vue'),
   },
   {
     path: '/profile/notifications',
     name: 'ProfileNotifications',
-    component: () => import('@/components/Profile.vue'),
-    async beforeEnter() {
-      return (await loadDesignV2()) ? true : { path: '/profile' };
-    }
+    component: () => import('@/components/v2/ProfileV2.vue'),
   },
   {
     path: '/profile/account',
     name: 'ProfileAccount',
-    component: () => import('@/components/Profile.vue'),
-    async beforeEnter() {
-      return (await loadDesignV2()) ? true : { path: '/profile' };
-    }
+    component: () => import('@/components/v2/ProfileV2.vue'),
   },
   // Its own top-level destination, alongside Matches and Profile — not a
   // sub-tab of MatchesAndStandings.vue any more. It owns its own active-group/
@@ -209,12 +162,12 @@ const routes = [
   {
     path: '/predictions',
     name: 'Predictions',
-    component: () => import('@/components/Predictions.vue')
+    component: () => import('@/components/v2/PredictionsV2.vue')
   },
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/components/LoginGate.vue')
+    component: () => import('@/components/v2/LoginV2.vue')
   },
   {
     path: '/signup',

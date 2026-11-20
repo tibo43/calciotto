@@ -95,7 +95,7 @@ export function formatPasskeyDate(value) {
 }
 
 // Design v2 passkey list for the Account page, shown only with the
-// design-v2 and passkeys features (ProfileV2 checks both).
+// passkeys feature (ProfileV2 checks it).
 export default {
   name: 'PasskeysV2',
   components: { AppToast, CollapsibleCardV2 },

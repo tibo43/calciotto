@@ -1,3 +1,12 @@
+/* The design's three faces, self-hosted under public/fonts/v2: Big Shoulders
+   Display (display), Space Mono (labels), DM Sans (body). Declared here
+   rather than injected at runtime, so they start loading with the page;
+   index.html preloads the two every screen uses. */
+@font-face{font-family:"Big Shoulders Display";font-style:normal;font-weight:100 900;font-display:swap;src:url("/fonts/v2/BigShouldersDisplay-normal-800-latin.woff2") format("woff2");}
+@font-face{font-family:"DM Sans";font-style:normal;font-weight:100 900;font-display:swap;src:url("/fonts/v2/DMSans-normal-400-latin.woff2") format("woff2");}
+@font-face{font-family:"Space Mono";font-style:normal;font-weight:400;font-display:swap;src:url("/fonts/v2/SpaceMono-normal-400-latin.woff2") format("woff2");}
+@font-face{font-family:"Space Mono";font-style:normal;font-weight:700;font-display:swap;src:url("/fonts/v2/SpaceMono-normal-700-latin.woff2") format("woff2");}
+
 /* Design v2 tokens, scoped to the .design-v2 class App.vue puts on #app.
    Nothing in this file sets a property on an element yet: the custom
    properties are unused until a surface is restyled, so a player with the
