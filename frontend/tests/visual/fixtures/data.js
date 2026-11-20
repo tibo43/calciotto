@@ -337,6 +337,7 @@ const notificationPreferences = {
   registration_open: true,
   team_assigned: true,
   result_recorded: true,
+  motm_announced: true,
   predictions_open: true,
   predictions_settled: true,
   kickoff_reminder: true,

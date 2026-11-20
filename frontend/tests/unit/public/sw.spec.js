@@ -112,6 +112,29 @@ describe('buildNotification', () => {
       .toBe('You earned 0 points.');
   });
 
+  it('tells a Star of the Match winner they won', () => {
+    expect(buildNotification({ type: 'motm_announced', winner: true, winners: ['Luca'] })).toEqual({
+      title: "You're the Star of the Match!",
+      body: 'See the game.'
+    });
+    expect(buildNotification({ type: 'motm_announced', winner: true, winners: ['Luca', 'Marco'] }).title)
+      .toBe("You're the Star of the Match!");
+  });
+
+  it('tells a voter who the Star of the Match is, every name on a tie', () => {
+    expect(buildNotification({ type: 'motm_announced', winners: ['Luca'] })).toEqual({
+      title: 'Star of the Match: Luca',
+      body: 'See the game.'
+    });
+    expect(buildNotification({ type: 'motm_announced', winners: ['Luca', 'Marco'] }).title)
+      .toBe('Stars of the Match: Luca & Marco');
+    expect(buildNotification({ type: 'motm_announced', winners: ['Luca', 'Marco', 'Sara'] }).title)
+      .toBe('Stars of the Match: Luca, Marco & Sara');
+    expect(buildNotification({ type: 'motm_announced', winners: ['Luca', 'Marco', 'Sara', 'Tom'] }).title)
+      .toBe('Stars of the Match: Luca, Marco, Sara & Tom');
+    expect(buildNotification({ type: 'motm_announced' })).toEqual({ title: 'Star of the Match', body: 'See the game.' });
+  });
+
   it('still shows something for a type it does not know', () => {
     expect(buildNotification({ type: 'something_new' }).title).toBe('Calciotto');
   });
