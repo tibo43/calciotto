@@ -44,6 +44,25 @@ function formatScore(score) {
   return (score || []).map((line) => `${line.team} ${line.goals}`).join(' – ');
 }
 
+// Every word of the motm_announced notification (the Man of the Match vote,
+// shown to players as the "Star of the Match"), in one place so it can be
+// renamed here alone (the settings label is in
+// src/services/notificationLabels.js).
+const MOTM_TEXT = {
+  winnerTitle: "You're the Star of the Match!",
+  voterTitle: 'Star of the Match',
+  voterTitleTie: 'Stars of the Match',
+  body: 'See the game.',
+};
+
+// "Luca", "Luca & Marco", "Luca, Marco & Sara": the winners of the vote,
+// several on a tie.
+function formatNames(names) {
+  const list = (Array.isArray(names) ? names : []).filter(Boolean);
+  if (list.length <= 1) return list[0] || '';
+  return `${list.slice(0, -1).join(', ')} & ${list[list.length - 1]}`;
+}
+
 // The points half of a settled prediction. A gain or a zero is "You earned
 // 2.33 points."; a loss is "You lost 1 point." — the absolute value, no
 // minus. A whole number drops the decimals; anything else keeps two. The
@@ -97,6 +116,17 @@ function buildNotification(data) {
       return {
         title: 'Predictions settled',
         body: score ? `Final score: ${score}. ${points}` : points,
+      };
+    }
+    case 'motm_announced': {
+      if (data.winner) {
+        return { title: MOTM_TEXT.winnerTitle, body: MOTM_TEXT.body };
+      }
+      const names = formatNames(data.winners);
+      const noun = (data.winners || []).filter(Boolean).length > 1 ? MOTM_TEXT.voterTitleTie : MOTM_TEXT.voterTitle;
+      return {
+        title: names ? `${noun}: ${names}` : MOTM_TEXT.voterTitle,
+        body: MOTM_TEXT.body,
       };
     }
     case 'member_joined':

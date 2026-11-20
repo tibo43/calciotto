@@ -53,8 +53,11 @@ type notificationEnv struct {
 
 func newNotificationEnv(t *testing.T) *notificationEnv {
 	t.Helper()
-	db := testutil.OpenDB(t)
-	tx := testutil.BeginTx(t, db)
+	return newNotificationEnvOn(t, testutil.BeginTx(t, testutil.OpenDB(t)))
+}
+
+func newNotificationEnvOn(t *testing.T, tx *gorm.DB) *notificationEnv {
+	t.Helper()
 
 	group, err := services.NewGroupService(tx).CreateGroup("Zzz Notifications "+uuid.NewString(), services.DefaultTeamSpecs)
 	if err != nil {

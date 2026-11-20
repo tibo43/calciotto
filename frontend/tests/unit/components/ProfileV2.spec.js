@@ -169,6 +169,14 @@ describe('ProfileV2.vue notifications switch', () => {
     expect(toggle.attributes('disabled')).toBeDefined();
     expect(wrapper.text()).toContain('Install the app first');
   });
+
+  it('lists Star of the Match right under Final score', async () => {
+    const { wrapper } = await mountProfile({ routeName: 'ProfileNotifications', features: ['push-notifications'] });
+    const text = wrapper.text();
+    expect(text).toContain('Star of the Match');
+    expect(text.indexOf('Final score')).toBeLessThan(text.indexOf('Star of the Match'));
+    expect(text.indexOf('Star of the Match')).toBeLessThan(text.indexOf('Predictions open'));
+  });
 });
 
 describe('ProfileV2.vue invitation and passkeys', () => {
