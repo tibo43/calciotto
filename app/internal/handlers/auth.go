@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -142,7 +143,14 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	if err := h.Service.ForgotPassword(req.Email); err != nil {
+	// The link goes back to the frontend the request came from when it is one
+	// of ours (the same list the session routes accept), so each domain sends
+	// its own players to itself; any other origin gets FRONTEND_BASE_URL.
+	frontendOrigin := c.GetHeader("Origin")
+	if !slices.Contains(h.SessionOrigins, frontendOrigin) {
+		frontendOrigin = ""
+	}
+	if err := h.Service.ForgotPasswordFrom(req.Email, frontendOrigin); err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, services.ErrPasswordResetUnavailable) {
 			status = http.StatusServiceUnavailable
