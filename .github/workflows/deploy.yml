@@ -254,11 +254,25 @@ jobs:
           fi
           echo "KOYEB_SECRETS_WRITTEN=$secrets_written" >>"$GITHUB_ENV"
 
+      - name: Derive the domain settings
+        # Defaults from devops/env/domains.env; a repository variable of the
+        # same name overrides each one (see devops/scripts/domain-env.sh).
+        env:
+          LEGACY_FRONTEND_ORIGIN: ${{ vars.LEGACY_FRONTEND_ORIGIN }}
+          LEGACY_API_ORIGIN: ${{ vars.LEGACY_API_ORIGIN }}
+          NEW_FRONTEND_ORIGIN: ${{ vars.NEW_FRONTEND_ORIGIN }}
+          NEW_API_ORIGIN: ${{ vars.NEW_API_ORIGIN }}
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+          FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
+        run: |
+          set -euo pipefail
+          bash devops/scripts/domain-env.sh | tee -a "$GITHUB_ENV"
+
       - name: Deploy to Koyeb
         env:
           IMAGE: ${{ vars.DOCKERHUB_IMAGE }}:${{ github.sha }}
-          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
-          FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
+          # CORS_ALLOWED_ORIGINS and FRONTEND_BASE_URL come from the step
+          # above, through $GITHUB_ENV.
           BREVO_SENDER_EMAIL: ${{ vars.BREVO_SENDER_EMAIL }}
           BREVO_SENDER_NAME: ${{ vars.BREVO_SENDER_NAME }}
           HAS_BREVO_KEY: ${{ secrets.BREVO_API_KEY != '' }}
@@ -427,9 +441,15 @@ jobs:
 
           vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
-      - name: Inject the API base URL into the build environment
+      - name: Inject the domain settings into the build
         env:
+          LEGACY_FRONTEND_ORIGIN: ${{ vars.LEGACY_FRONTEND_ORIGIN }}
+          LEGACY_API_ORIGIN: ${{ vars.LEGACY_API_ORIGIN }}
+          NEW_FRONTEND_ORIGIN: ${{ vars.NEW_FRONTEND_ORIGIN }}
+          NEW_API_ORIGIN: ${{ vars.NEW_API_ORIGIN }}
           VUE_APP_API_BASE_URL: ${{ vars.VUE_APP_API_BASE_URL }}
+          VUE_APP_API_BASE_URL_BY_HOST: ${{ vars.VUE_APP_API_BASE_URL_BY_HOST }}
+          AUTH_PROXY_TARGET: ${{ vars.AUTH_PROXY_TARGET }}
           # Optional — see api.js's apiTimeoutMs. Normally unset, so the
           # bundle keeps today's hardcoded 10000ms default; only set this
           # (temporarily) to push a deliberate load test past that ceiling
@@ -438,24 +458,34 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "$VUE_APP_API_BASE_URL" ]; then
-            echo "::error::VUE_APP_API_BASE_URL is not set — the bundle would fall back to http://127.0.0.1:8080 and every visitor's browser would call their own machine"
-            exit 1
-          fi
+          # Defaults from devops/env/domains.env; a repository variable of the
+          # same name overrides each one (see devops/scripts/domain-env.sh).
+          # One bundle serves every frontend domain and picks its API host at
+          # run time (src/config/apiBaseUrl.js).
+          set -a
+          eval "$(bash devops/scripts/domain-env.sh)"
+          set +a
+          echo "VUE_APP_API_BASE_URL=$VUE_APP_API_BASE_URL"
+          echo "VUE_APP_API_BASE_URL_BY_HOST=$VUE_APP_API_BASE_URL_BY_HOST"
 
           # `vercel build` runs the framework build with the environment from
           # .vercel/.env.production.local (what `vercel pull` just wrote), not
-          # with this job's arbitrary env vars — so the value is appended there
-          # rather than exported. This keeps GitHub the single source of truth
-          # instead of duplicating the setting in the Vercel dashboard.
+          # with this job's arbitrary env vars — so the values are appended
+          # there rather than exported. This keeps GitHub the single source of
+          # truth instead of duplicating the settings in the Vercel dashboard.
           #
           # vite.config.mjs exposes the existing VUE_APP_ variables to the app.
           mkdir -p .vercel
           printf '\nVUE_APP_API_BASE_URL=%s\n' "$VUE_APP_API_BASE_URL" >> .vercel/.env.production.local
+          printf 'VUE_APP_API_BASE_URL_BY_HOST=%s\n' "$VUE_APP_API_BASE_URL_BY_HOST" >> .vercel/.env.production.local
 
           if [ -n "$VUE_APP_API_TIMEOUT_MS" ]; then
             printf '\nVUE_APP_API_TIMEOUT_MS=%s\n' "$VUE_APP_API_TIMEOUT_MS" >> .vercel/.env.production.local
           fi
+
+          # vercel.json is static: the CSP's connect-src and the /api/auth
+          # proxy target are written from the same settings.
+          node frontend/scripts/vercel-domains.mjs
 
       - name: Build
         run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"

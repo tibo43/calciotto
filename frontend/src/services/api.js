@@ -1,8 +1,13 @@
 import axios from 'axios';
 import { hasPasskeyAccess, rememberPasskeyAccess } from './passkeyAccess';
 import { rememberDesignV2Login } from './loginV2';
+import { resolveApiBaseUrl } from '@/config/apiBaseUrl';
 
-const API_BASE_URL = import.meta.env.VUE_APP_API_BASE_URL || 'http://127.0.0.1:8080';
+const API_BASE_URL = resolveApiBaseUrl(
+  typeof window === 'undefined' ? '' : window.location.hostname,
+  import.meta.env.VUE_APP_API_BASE_URL_BY_HOST,
+  import.meta.env.VUE_APP_API_BASE_URL,
+);
 
 const TOKEN_KEY = 'calciotto-token';
 let sessionGeneration = 0;

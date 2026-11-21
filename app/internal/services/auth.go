@@ -299,7 +299,31 @@ func validPassword(player models.Player, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(player.PasswordHash), []byte(password)) == nil
 }
 
-// ForgotPassword issues and emails a reset link for the registered account.
+// ForgotPassword issues and emails a reset link for the registered account,
+// on FRONTEND_BASE_URL. See ForgotPasswordFrom.
+func (s *AuthService) ForgotPassword(email string) error {
+	return s.ForgotPasswordFrom(email, "")
+}
+
+// ResetLinkBase is the frontend the reset link points at: the origin the
+// request came from when the caller vouches for it (an allowed frontend
+// origin, see AuthHandler.ForgotPassword), so a player who asks on one domain
+// gets a link to that same domain while two frontends run side by side;
+// otherwise FRONTEND_BASE_URL, and the local dev frontend when that is unset.
+func ResetLinkBase(frontendOrigin string) string {
+	base := frontendOrigin
+	if base == "" {
+		base = os.Getenv("FRONTEND_BASE_URL")
+	}
+	if base == "" {
+		base = defaultFrontendBaseURL
+	}
+	return strings.TrimSuffix(base, "/")
+}
+
+// ForgotPasswordFrom issues and emails a reset link for the registered
+// account, on frontendOrigin (already checked against the allowed origins)
+// or, when it is empty, on FRONTEND_BASE_URL.
 //
 // An unknown email returns nil, not an error: answering differently would turn
 // this endpoint into an email-enumeration oracle, the very thing Login avoids
@@ -307,7 +331,7 @@ func validPassword(player models.Player, password string) bool {
 // the unknown-email path still generates a token it throws away, so the two
 // branches cost roughly the same time — a best effort, not a constant-time
 // guarantee.
-func (s *AuthService) ForgotPassword(email string) error {
+func (s *AuthService) ForgotPasswordFrom(email, frontendOrigin string) error {
 	if s.PasswordResetMailer == nil {
 		return ErrPasswordResetUnavailable
 	}
@@ -332,11 +356,7 @@ func (s *AuthService) ForgotPassword(email string) error {
 		return err
 	}
 
-	base := os.Getenv("FRONTEND_BASE_URL")
-	if base == "" {
-		base = defaultFrontendBaseURL
-	}
-	link := fmt.Sprintf("%s/reset-password?token=%s", strings.TrimSuffix(base, "/"), url.QueryEscape(rawToken))
+	link := fmt.Sprintf("%s/reset-password?token=%s", ResetLinkBase(frontendOrigin), url.QueryEscape(rawToken))
 	// Keep the same caller-visible response when delivery to a registered
 	// account fails. Mail transport errors may contain the recipient or link.
 	if err := s.PasswordResetMailer(email, link); err != nil {

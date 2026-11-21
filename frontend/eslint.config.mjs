@@ -16,7 +16,7 @@ export default defineConfig([
     languageOptions: { globals: { ...globals.serviceworker, module: 'readonly' } },
   },
   {
-    files: ['*.config.{js,mjs}', 'scripts/**/*.js', 'loadtest/**/*.js'],
+    files: ['*.config.{js,mjs}', 'scripts/**/*.{js,mjs}', 'loadtest/**/*.js'],
     languageOptions: { globals: globals.node },
   },
   {

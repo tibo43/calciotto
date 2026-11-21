@@ -211,3 +211,62 @@ func TestPasswordResetEndpoints_Integration_TooShortPasswordReturns400(t *testin
 		t.Errorf("error body = %q, want %q", errBody["error"], services.ErrPasswordTooShort.Error())
 	}
 }
+
+// While two frontends run side by side, the reset link goes back to the
+// allowed frontend the request came from; any other origin gets
+// FRONTEND_BASE_URL.
+func TestPasswordResetEndpoints_Integration_LinkFollowsAllowedOrigin(t *testing.T) {
+	db := testutil.OpenDB(t)
+	tx := testutil.BeginTx(t, db)
+	t.Setenv("FRONTEND_BASE_URL", "https://calcio-otto.vercel.app")
+
+	authService := services.NewAuthService(tx, testAuthJWTSecret)
+	// A fresh handler per request: the per-account reset limit allows three.
+	newRouter := func() *gin.Engine {
+		gin.SetMode(gin.TestMode)
+		router := gin.New()
+		authHandler := handlers.NewAuthHandler(authService)
+		authHandler.SessionOrigins = []string{"https://calcio-otto.vercel.app", "https://club.agoran.app"}
+		router.POST("/auth/signup", authHandler.Signup)
+		router.POST("/auth/forgot-password", authHandler.ForgotPassword)
+		return router
+	}
+
+	signupRec := postJSON(t, newRouter(), "/auth/signup", map[string]string{
+		"name":        "Zzz Integration Handler Domain",
+		"email":       "domain-reset@example.com",
+		"password":    "old-pass-domain",
+		"invite_code": newSignupInviteCode(t, tx),
+	})
+	if signupRec.Code != http.StatusOK {
+		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())
+	}
+
+	for _, tt := range []struct{ origin, wantBase string }{
+		{"https://club.agoran.app", "https://club.agoran.app"},
+		{"https://calcio-otto.vercel.app", "https://calcio-otto.vercel.app"},
+		{"https://evil.example", "https://calcio-otto.vercel.app"},
+		{"", "https://calcio-otto.vercel.app"},
+	} {
+		var link string
+		authService.PasswordResetMailer = func(_, delivered string) error {
+			link = delivered
+			return nil
+		}
+		encoded, _ := json.Marshal(map[string]string{"email": "domain-reset@example.com"})
+		req := httptest.NewRequest(http.MethodPost, "/auth/forgot-password", bytes.NewReader(encoded))
+		req.Header.Set("Content-Type", "application/json")
+		if tt.origin != "" {
+			req.Header.Set("Origin", tt.origin)
+		}
+		rec := httptest.NewRecorder()
+		newRouter().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("origin %q: forgot-password returned status %d", tt.origin, rec.Code)
+		}
+		parsed, err := url.Parse(link)
+		if err != nil || parsed.Scheme+"://"+parsed.Host != tt.wantBase || parsed.Path != "/reset-password" {
+			t.Fatalf("origin %q: reset link %q, want it on %s/reset-password", tt.origin, link, tt.wantBase)
+		}
+	}
+}
