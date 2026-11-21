@@ -1,4 +1,6 @@
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { STAR_OF_THE_MATCH } from '@/services/v2Home';
 
 // The notification wording lives in public/sw.js (see its comment); the file
@@ -143,8 +145,10 @@ describe('buildNotification', () => {
 });
 
 describe('retireLegacyWorker', () => {
-  it('names the legacy frontend host', () => {
-    expect(LEGACY_HOST).toBe('calcio-otto.vercel.app');
+  it('names the legacy frontend host from devops/env/domains.env', () => {
+    const domainsEnv = readFileSync(resolve(import.meta.dirname, '../../../../devops/env/domains.env'), 'utf8');
+    const origin = domainsEnv.match(/^LEGACY_FRONTEND_ORIGIN=(.+)$/m)[1].trim();
+    expect(LEGACY_HOST).toBe(new URL(origin).hostname);
   });
 
   it('unsubscribes from push, then unregisters', async () => {
