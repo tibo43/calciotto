@@ -86,10 +86,8 @@ func (s *NotificationService) tickMotm(now time.Time) (int, error) {
 
 // notifyMotm tells the Man of the Match winners (ComputeMotmWinners, ties
 // included) that they won, whether or not they voted, and every other player
-// who voted who won. Nobody else is told, and only players with the
-// design-v2 feature are (the award is shown as the "Star of the Match",
-// which only the v2 screens show; send still applies the push feature and
-// the player's preference on top). A match with no votes is claimed and
+// who voted who won. Nobody else is told (send still applies each player's
+// preference). A match with no votes is claimed and
 // sends nothing. The claim comes after the reads, so a failed read
 // leaves the match for the next tick, and two racing ticks still send once.
 // It reports whether this call sent it.
@@ -106,17 +104,6 @@ func (s *NotificationService) notifyMotm(match models.Match, now time.Time) (boo
 	var voterIDs []uuid.UUID
 	if err := s.DB.Model(&models.MatchVote{}).Where("match_id = ?", match.ID).Pluck("voter_id", &voterIDs).Error; err != nil {
 		return false, err
-	}
-	v2 := map[uuid.UUID]bool{}
-	for _, id := range append(append([]uuid.UUID{}, voterIDs...), winnerIDs...) {
-		if _, seen := v2[id]; seen {
-			continue
-		}
-		has, err := s.playerHasFeature(id, models.FeatureDesignV2)
-		if err != nil {
-			return false, err
-		}
-		v2[id] = has
 	}
 	claimed, err := s.claim(match.ID, "motm_notified_at", now)
 	if err != nil || !claimed {
@@ -149,11 +136,6 @@ func (s *NotificationService) notifyMotm(match models.Match, now time.Time) (boo
 		personal := message
 		personal.Winner = true
 		messages[id] = personal
-	}
-	for id := range messages {
-		if !v2[id] {
-			delete(messages, id)
-		}
 	}
 	s.send(match.GroupID, messages)
 	return true, nil

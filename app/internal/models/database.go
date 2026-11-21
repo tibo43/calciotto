@@ -55,10 +55,10 @@ type Player struct {
 
 // PlayerFeature turns a hidden feature on for one player: one row per
 // (player, feature), the feature being a free-form key the frontend checks
-// for (FeaturePWAInstall below). There is no route to write these on
+// for (FeaturePasskeys below). There is no route to write these on
 // purpose — a feature is enabled by hand, straight in the database:
 //
-//	INSERT INTO player_features (player_id, feature) VALUES ('<player uuid>', 'pwa-install');
+//	INSERT INTO player_features (player_id, feature) VALUES ('<player uuid>', 'passkeys');
 //
 // and disabled with the matching DELETE. That is why the key is the
 // composite (player_id, feature) rather than BaseModel's id: BaseModel's id
@@ -71,21 +71,28 @@ type PlayerFeature struct {
 	Player   Player    `gorm:"foreignKey:PlayerID" json:"-"`
 }
 
-// FeaturePWAInstall shows the "Install Calciotto" card on the Profile page.
+// FeaturePWAInstall shows the "Install Agoran" card on the Profile page.
+// Launched (see LaunchedFeatures).
 const FeaturePWAInstall = "pwa-install"
 
-// FeaturePushNotifications lets a player turn push notifications on (the
-// Profile page's "Notifications" card) and is checked again on every send, so
-// deleting the row stops them at once, even on a device already subscribed.
+// FeaturePushNotifications shows the Profile page's "Notifications" card.
+// Launched (see LaunchedFeatures).
 const FeaturePushNotifications = "push-notifications"
 
 // FeatureDesignV2 switches the signed-in shell onto the redesign. The
 // frontend adds a design-v2 class to the app root when this key comes back
-// from GET /players/me/features. Passkey access also requires this flag.
+// from GET /players/me/features. Launched (see LaunchedFeatures).
 const FeatureDesignV2 = "design-v2"
 
-// FeaturePasskeys enables passkey enrollment and sign-in for Design V2 players.
+// FeaturePasskeys enables passkey enrollment and sign-in. Still hidden: only
+// players with a row get it.
 const FeaturePasskeys = "passkeys"
+
+// LaunchedFeatures started as hidden features and are now on for every
+// player, row or no row. GET /players/me/features still lists them, so the
+// frontend's checks keep working unchanged, and the rows written while they
+// were hidden are simply redundant. To launch another feature, add it here.
+var LaunchedFeatures = []string{FeatureDesignV2, FeaturePWAInstall, FeaturePushNotifications}
 
 // PushSubscription is one device a player receives push notifications on,
 // as the browser's PushManager hands it over: the push service's endpoint

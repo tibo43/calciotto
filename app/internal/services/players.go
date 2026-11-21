@@ -3,6 +3,7 @@ package services
 import (
 	"app/internal/models"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -94,18 +95,19 @@ func (s *PlayerService) UpdateName(playerID uuid.UUID, newName string) error {
 	return s.DB.Model(&models.Player{}).Where("id = ?", playerID).Update("name", newName).Error
 }
 
-// GetFeatures lists the hidden features enabled for a player (see
-// models.PlayerFeature), sorted, and never nil: no row means no feature, which
-// is the normal case, not an error.
+// GetFeatures lists the features enabled for a player: every launched one
+// (models.LaunchedFeatures) plus the hidden ones they have a row for (see
+// models.PlayerFeature), sorted and without duplicates.
 func (s *PlayerService) GetFeatures(playerID uuid.UUID) ([]string, error) {
-	features := []string{}
+	var rows []string
 	if err := s.DB.Model(&models.PlayerFeature{}).
 		Where("player_id = ?", playerID).
-		Order("feature").
-		Pluck("feature", &features).Error; err != nil {
+		Pluck("feature", &rows).Error; err != nil {
 		return nil, err
 	}
-	return features, nil
+	features := append(slices.Clone(models.LaunchedFeatures), rows...)
+	slices.Sort(features)
+	return slices.Compact(features), nil
 }
 
 func (s *PlayerService) GuideCompleted(playerID uuid.UUID) (bool, error) {

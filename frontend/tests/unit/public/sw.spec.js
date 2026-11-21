@@ -1,9 +1,11 @@
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { STAR_OF_THE_MATCH } from '@/services/v2Home';
 
 // The notification wording lives in public/sw.js (see its comment); the file
 // exports it for exactly this test.
-const { buildNotification, MOTM_TEXT } = createRequire(import.meta.url)('../../../public/sw.js');
+const { buildNotification, MOTM_TEXT, LEGACY_HOST, retireLegacyWorker } = createRequire(import.meta.url)('../../../public/sw.js');
 
 const KICKOFF = '2026-09-06T19:00:00Z';
 const kickoffText = new Date(KICKOFF).toLocaleString('en-US', {
@@ -37,20 +39,11 @@ describe('buildNotification', () => {
       .toBe(`Kick-off at ${kickoffTime}.`);
   });
 
-  it('gives the final score and asks for a Man of the Match vote', () => {
+  it('gives the final score and asks for a Star of the Match vote', () => {
     expect(buildNotification({
       type: 'result_recorded',
-      score: [{ team: 'Black', goals: 3 }, { team: 'White', goals: 1 }]
-    })).toEqual({ title: 'Final score: Black 3 – White 1', body: 'Vote for your Man of the Match.' });
-  });
-
-  it('names the vote Star of the Match for a design v2 player', () => {
-    expect(buildNotification({
-      type: 'result_recorded',
-      designV2: true,
       score: [{ team: 'Black', goals: 3 }, { team: 'White', goals: 1 }]
     })).toEqual({ title: 'Final score: Black 3 – White 1', body: 'Vote for your Star of the Match.' });
-    expect(buildNotification({ type: 'result_recorded', designV2: false }).body).toBe('Vote for your Man of the Match.');
   });
 
   it('announces that predictions are open for the match', () => {
@@ -141,12 +134,40 @@ describe('buildNotification', () => {
   });
 
   it('still shows something for a type it does not know', () => {
-    expect(buildNotification({ type: 'something_new' }).title).toBe('Calciotto');
+    expect(buildNotification({ type: 'something_new' }).title).toBe('Agoran');
   });
 
   it('names who joined which group for an admin', () => {
     const notification = buildNotification({ type: 'member_joined', playerName: 'Sam', groupName: 'Thursday Football' });
     expect(notification.title).toBe('Sam joined Thursday Football');
     expect(notification.body).toContain('generate a new invite code');
+  });
+});
+
+describe('retireLegacyWorker', () => {
+  it('names the legacy frontend host from devops/env/domains.env', () => {
+    const domainsEnv = readFileSync(resolve(import.meta.dirname, '../../../../devops/env/domains.env'), 'utf8');
+    const origin = domainsEnv.match(/^LEGACY_FRONTEND_ORIGIN=(.+)$/m)[1].trim();
+    expect(LEGACY_HOST).toBe(new URL(origin).hostname);
+  });
+
+  it('unsubscribes from push, then unregisters', async () => {
+    const calls = [];
+    const subscription = { unsubscribe: vi.fn(async () => { calls.push('unsubscribe'); return true; }) };
+    const registration = {
+      pushManager: { getSubscription: vi.fn(async () => subscription) },
+      unregister: vi.fn(async () => { calls.push('unregister'); return true; }),
+    };
+    await retireLegacyWorker(registration);
+    expect(calls).toEqual(['unsubscribe', 'unregister']);
+  });
+
+  it('still unregisters when there is no push subscription', async () => {
+    const registration = {
+      pushManager: { getSubscription: vi.fn(async () => null) },
+      unregister: vi.fn(async () => true),
+    };
+    await retireLegacyWorker(registration);
+    expect(registration.unregister).toHaveBeenCalledOnce();
   });
 });

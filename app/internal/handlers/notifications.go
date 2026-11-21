@@ -19,7 +19,7 @@ type NotificationHandler struct {
 	PublicKey string
 	// TickSecret authenticates the external scheduler (cron-job.org) calling
 	// Tick every minute: POST
-	// https://calciotto.koyeb.app/internal/notifications/tick with
+	// https://api.agoran.app/internal/notifications/tick with
 	// Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>. The route isn't
 	// registered at all without it.
 	TickSecret string
@@ -36,8 +36,6 @@ func (h *NotificationHandler) GetPublicKey(c *gin.Context) {
 }
 
 // Subscribe records the caller's device (the browser's PushSubscription).
-// 403 without the push-notifications feature: the card that calls this is
-// hidden then, so reaching it means calling the API by hand.
 func (h *NotificationHandler) Subscribe(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
@@ -53,8 +51,6 @@ func (h *NotificationHandler) Subscribe(c *gin.Context) {
 		switch {
 		case errors.Is(err, services.ErrInvalidPushSubscription):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		case errors.Is(err, services.ErrPushFeatureNotEnabled):
-			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -85,7 +81,7 @@ func (h *NotificationHandler) Unsubscribe(c *gin.Context) {
 }
 
 // GetPreferences returns all six notification types for the caller, each
-// true unless they have turned that one off. 403 without the feature.
+// true unless they have turned that one off.
 func (h *NotificationHandler) GetPreferences(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
@@ -130,8 +126,6 @@ func (h *NotificationHandler) UpdatePreferences(c *gin.Context) {
 
 func writePreferenceError(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, services.ErrPushFeatureNotEnabled):
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrUnknownNotificationType):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	default:
@@ -140,7 +134,7 @@ func writePreferenceError(c *gin.Context, err error) {
 }
 
 // Tick sends the time-driven notifications that are due. cron-job.org calls
-// POST https://calciotto.koyeb.app/internal/notifications/tick every
+// POST https://api.agoran.app/internal/notifications/tick every
 // minute with `Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>`, compared
 // in constant time; anything else is a 401 that says nothing more.
 func (h *NotificationHandler) Tick(c *gin.Context) {

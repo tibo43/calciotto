@@ -51,7 +51,7 @@ func NewPasskeyService(auth *AuthService, origins []string) (*PasskeyService, er
 		}
 		timeout := webauthn.TimeoutConfig{Enforce: true, Timeout: passkeyTimeout}
 		rp, err := webauthn.New(&webauthn.Config{
-			RPID: host, RPDisplayName: "Calciotto", RPOrigins: []string{origin},
+			RPID: host, RPDisplayName: "Agoran", RPOrigins: []string{origin},
 			AttestationPreference: protocol.PreferNoAttestation,
 			AuthenticatorSelection: protocol.AuthenticatorSelection{
 				ResidentKey: protocol.ResidentKeyRequirementRequired, RequireResidentKey: new(true),
@@ -79,13 +79,14 @@ func (u passkeyUser) WebAuthnCredentials() []webauthn.Credential { return u.cred
 
 func requirePasskeyFeatures(db *gorm.DB, playerID uuid.UUID) error {
 	var features []string
-	// In a write transaction, keep the flags in place until the write commits.
+	// In a write transaction, keep the flag in place until the write commits.
+	// design-v2 used to be required too; it is launched now.
 	if err := db.Model(&models.PlayerFeature{}).Clauses(clause.Locking{Strength: "SHARE"}).
-		Where("player_id = ? AND feature IN ?", playerID, []string{models.FeatureDesignV2, models.FeaturePasskeys}).
+		Where("player_id = ? AND feature = ?", playerID, models.FeaturePasskeys).
 		Pluck("feature", &features).Error; err != nil {
 		return err
 	}
-	if len(features) != 2 {
+	if len(features) != 1 {
 		return ErrPasskeysDisabled
 	}
 	return nil

@@ -26,7 +26,7 @@ test('first-run guide saves completion before opening the requested page @mobile
   const destination = '/rankings?tab=scorers';
   const { unstubbed } = await gotoApp(page, destination, { ...guideOptions, guideCompleted: false, theme: 'light' });
   const guide = page.locator('.player-guide');
-  await expectStep(guide, 'Welcome to Calciotto', 'light', 'welcome');
+  await expectStep(guide, 'Welcome to Agoran', 'light', 'welcome');
   await expect(page.locator('.main-content')).toHaveCount(0);
   await expect(guide.getByRole('button', { name: 'Close guide' })).toHaveCount(0);
   await page.keyboard.press('Escape');
@@ -58,7 +58,7 @@ test('the profile reopens the guide in the system theme without a saved preferen
   const { unstubbed } = await gotoApp(page, '/profile', { ...guideOptions, theme: null });
   await page.getByRole('button', { name: 'Replay app guide' }).click();
   const guide = page.locator('.player-guide');
-  await expectStep(guide, 'Welcome to Calciotto', 'dark', 'welcome');
+  await expectStep(guide, 'Welcome to Agoran', 'dark', 'welcome');
   await expect(page).toHaveScreenshot('guide-replay-dark.png');
   await reachLastStep(guide, 'dark');
   await guide.getByRole('button', { name: 'Close guide', exact: true }).click();

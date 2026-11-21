@@ -46,6 +46,18 @@ export default {
 </script>
 
 <style scoped>
+/* A 44px close button, flush with the right edge, with the text kept
+   clear of it. */
+.toast-container .toast-message {
+  padding-right: 56px;
+}
+
+.toast-message .toast-close {
+  right: 0;
+  width: 44px;
+  height: 44px;
+}
+
 .app-toast-leave-active {
   animation: toastSlideOut 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
 }

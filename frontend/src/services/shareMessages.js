@@ -2,7 +2,7 @@
 export function buildMatchShareText({ kickoffLabel, matchUrl, groupInviteCode, signupsOpen = true }) {
   const lines = [
     `Match: ${kickoffLabel}`,
-    signupsOpen ? 'Sign-ups are open — Join Calciotto:' : 'View the match in Calciotto:',
+    signupsOpen ? 'Sign-ups are open — Join Agoran:' : 'View the match in Agoran:',
     matchUrl
   ];
   if (groupInviteCode) {
@@ -13,7 +13,7 @@ export function buildMatchShareText({ kickoffLabel, matchUrl, groupInviteCode, s
 
 export function buildGroupInviteShareText({ inviteUrl, groupInviteCode }) {
   return [
-    'Join our Calciotto group:',
+    'Join our Agoran group:',
     inviteUrl,
     `Group code: ${groupInviteCode}`
   ].join('\n');

@@ -216,7 +216,7 @@ describe('PasskeysV2.vue', () => {
     const wrapper = await mountPasskeys();
     expect(wrapper.findAll('.pk-row')).toHaveLength(2);
     expect(wrapper.find('.pk-add').exists()).toBe(false);
-    expect(wrapper.find('.pk-unsupported').text()).toBe('Open Calciotto in a browser that supports passkeys to add one.');
+    expect(wrapper.find('.pk-unsupported').text()).toBe('Open Agoran in a browser that supports passkeys to add one.');
   });
 });
 

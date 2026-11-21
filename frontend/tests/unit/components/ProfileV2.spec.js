@@ -116,7 +116,7 @@ describe('ProfileV2.vue hidden features', () => {
   it('hides Notifications and Install without their features', async () => {
     const { wrapper } = await mountProfile({ installState: 'prompt' });
     expect(wrapper.find('[data-to="/profile/notifications"]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('Install Calciotto');
+    expect(wrapper.text()).not.toContain('Install Agoran');
   });
 
   it('shows both with their features, Install only where the browser offers it', async () => {

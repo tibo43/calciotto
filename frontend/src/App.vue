@@ -1,10 +1,9 @@
 <template>
-  <div id="app" :class="{ 'dark-mode': isDarkMode, 'design-v2': designV2 }">
-    <div v-if="checkingDesignV2" class="app-starting" role="status">Loading Calciotto…</div>
-    <PlayerGuide v-else-if="guideMode" :required="guideMode === 'required'" :saving="savingGuide"
+  <div id="app" class="design-v2" :class="{ 'dark-mode': isDarkMode }">
+    <PlayerGuide v-if="guideMode" :required="guideMode === 'required'" :saving="savingGuide"
       :dark="isDarkMode" :error="guideError" @finish="finishGuide" @dismiss="closeGuide" @skip="skipGuide" />
-    <div v-else class="app-container" :class="{ wrap: designV2, 'is-confirming': designV2 && v2Context.confirming, 'is-picking-csc': designV2 && v2Context.pickingCsc }">
-        <header v-if="designV2" class="topbar">
+    <div v-else class="app-container wrap" :class="{ 'is-confirming': v2Context.confirming, 'is-picking-csc': v2Context.pickingCsc }">
+        <header class="topbar">
           <div class="topbar-left">
             <template v-if="v2Context.pageTitle">
               <router-link class="back" :to="v2Context.backTo || '/profile'" aria-label="Back">
@@ -49,187 +48,23 @@
           <!-- No theme toggle here: in v2 the theme is a setting, on the
                Account page (ProfileV2), not a control on every page. -->
         </header>
-        <!-- Top Navigation -->
-        <!-- On a phone, an authenticated page has no top bar at all: the
-             bottom tab bar navigates, and logout/theme live at the top of
-             the bottom bar, next to the Profile tab. Public pages keep it,
-             since they have no bottom bar and no profile to reach. -->
-        <nav v-if="!designV2" class="top-navbar" :class="{ 'scrolled': isScrolled, 'hidden-on-mobile': isAuthenticatedRoute }">
-          <div class="nav-container">
-            <!-- Logo/Brand -->
-            <div class="nav-brand" @click="goHome">
-              <!-- The app icon (public/icons/, generated from
-                   branding/icon-source.png), so the web page and the
-                   installed app share one mark. Light mode uses the light
-                   source (branding/icon-source-light.png, written to
-                   logo-light.png). Desktop only (see the mobile rule below). -->
-              <img class="brand-logo" :src="isDarkMode ? '/icons/icon-192.png' : '/icons/logo-light.png'"
-                alt="Calciotto">
-            </div>
-
-            <!-- Desktop Menu — hidden on public routes (Login/Signup/...):
-                 these links require a token, so showing them on an
-                 unauthenticated page misrepresents it as the logged-in app
-                 shell rather than a standalone login view. -->
-            <div v-if="isAuthenticatedRoute" class="nav-menu">
-              <router-link
-                to="/"
-                :class="{ 'active': $route.name === 'MatchesAndStandings' }"
-                class="nav-button"
-                aria-label="Matches"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                  <line x1="16" y1="2" x2="16" y2="6"/>
-                  <line x1="8" y1="2" x2="8" y2="6"/>
-                  <line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
-                <span class="nav-button-label">Matches</span>
-              </router-link>
-              <router-link
-                to="/predictions"
-                :class="{ 'active': $route.name === 'Predictions' }"
-                class="nav-button"
-                aria-label="Pronostic"
-              >
-                <!-- Target/bullseye — "getting the call right", not a dice or
-                     chip: this is a free prediction game with no stake or
-                     balance (see matchPredictions.js), so an icon evoking
-                     real-money betting would misrepresent it. -->
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="9"/>
-                  <circle cx="12" cy="12" r="5"/>
-                  <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>
-                </svg>
-                <span class="nav-button-label">Pronostic</span>
-              </router-link>
-              <router-link
-                to="/profile"
-                :class="{ 'active': $route.name === 'Profile' }"
-                class="nav-button"
-                aria-label="Profile"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
-                </svg>
-                <span class="nav-button-label">Profile</span>
-              </router-link>
-            </div>
-
-            <!-- Actions -->
-            <div class="nav-actions">
-              <button
-                v-if="isAuthenticatedRoute"
-                class="icon-nav-button logout-btn"
-                @click="logout"
-                aria-label="Log out"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                  <polyline points="16 17 21 12 16 7"/>
-                  <line x1="21" y1="12" x2="9" y2="12"/>
-                </svg>
-              </button>
-
-              <button
-                class="theme-toggle"
-                @click="toggleTheme"
-                :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'"
-              >
-                <transition name="theme-icon" mode="out-in">
-                  <svg v-if="isDarkMode" key="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="5"/>
-                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-                  </svg>
-                  <svg v-else key="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                  </svg>
-                </transition>
-              </button>
-            </div>
-          </div>
-        </nav>
-
         <!-- Main Content -->
         <main class="main-content" :class="{ 'no-top-bar-on-mobile': isAuthenticatedRoute }">
           <router-view />
         </main>
 
-        <!-- Bottom tab bar — mobile only (see the @media block below;
-             desktop keeps the top nav-menu as its only navigation). Real
-             feedback: a top nav with icon-only, label-less buttons at phone
-             width (see .nav-button-label's own mobile rule above) read as
-             cramped and unfamiliar next to how every native-feeling mobile
-             app places its primary navigation at the thumb, along the
-             bottom edge — so this isn't a duplicate of the top nav, it
-             replaces it as the actual navigation surface on a phone, and
-             the top bar is hidden altogether. Its two actions (theme,
-             logout) appear at the end of this bar, next to the Profile tab,
-             while the Profile page is open: account-level actions where the
-             account lives, out of the way everywhere else. Same three destinations, labels
-             and icons as the top nav-menu, so both bars read as one app. -->
-        <nav v-if="designV2 && isAuthenticatedRoute" class="tabbar" aria-label="Main">
+        <nav v-if="isAuthenticatedRoute" class="tabbar" aria-label="Main">
           <router-link v-for="item in v2NavItems" :key="item.to" :to="item.to" class="nav-ico" :class="{ 'is-on': item.on }"
             :aria-current="item.on ? 'page' : null">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="item.icon" /></svg>
             <span class="nav-ico-label">{{ item.label }}</span>
           </router-link>
         </nav>
-        <nav v-if="isAuthenticatedRoute && !designV2" class="bottom-tab-bar">
-          <router-link to="/" :class="['bottom-tab-button', { active: $route.name === 'MatchesAndStandings' }]"
-            aria-label="Matches">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            <span class="bottom-tab-label">Matches</span>
-          </router-link>
-          <router-link to="/predictions" :class="['bottom-tab-button', { active: $route.name === 'Predictions' }]"
-            aria-label="Pronostic">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="9" />
-              <circle cx="12" cy="12" r="5" />
-              <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
-            </svg>
-            <span class="bottom-tab-label">Pronostic</span>
-          </router-link>
-          <router-link to="/profile" :class="['bottom-tab-button', { active: $route.name === 'Profile' }]"
-            aria-label="Profile">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-            <span class="bottom-tab-label">Profile</span>
-          </router-link>
-          <div v-if="$route.name === 'Profile'" class="bottom-tab-actions">
-            <button class="bottom-tab-action" @click="toggleTheme"
-              :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'">
-              <svg v-if="isDarkMode" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="5" />
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-              </svg>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-              </svg>
-            </button>
-            <button class="bottom-tab-action" @click="logout" aria-label="Log out">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-            </button>
-          </div>
-        </nav>
     </div>
   </div>
 </template>
 
 <script>
-import { computed } from 'vue';
 import PlayerGuide from '@/components/PlayerGuide.vue';
 import GearLink from '@/components/v2/GearLink.vue';
 import { clearToken, completeGuide, getSessionKey, logoutSession } from '@/services/api';
@@ -239,41 +74,29 @@ import { disablePushOnLogout, stopPushIfAppUninstalled } from '@/services/pushNo
 import {
   knownFeatureStatus, loadFeatureStatus, rememberGuideCompletion, resetFeatureStatus
 } from '@/services/featureStatus';
-import { ensureDesignV2Fonts, hasDesignV2, removeDesignV2Fonts } from '@/services/designV2';
-import { shouldUseLoginV2 } from '@/services/loginV2';
 
 // Routes reachable without a token — nothing group-related is shown there.
 const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'];
-
-// How long a session's first features request may hold the app on the
-// loading screen. Past it, today's design paints and the answer switches the
-// app when it lands, so a slow or hung request never leaves a blank page.
-const STARTUP_WAIT_MS = 2000;
 
 export default {
   name: 'App',
   components: { GearLink, PlayerGuide },
   provide() {
     return {
-      designV2On: computed(() => this.designV2),
       v2Context: this.v2Context,
       openGuide: this.openGuide,
     };
   },
   data() {
     return {
-      isScrolled: false,
       isDarkMode: prefersDarkTheme(),
-      designV2: false,
-      checkingDesignV2: false,
-      // Set once the shell has painted for this session: later checks (a
-      // retry after a failed request) run in the background.
-      startupSettled: false,
       guideMode: null,
       savingGuide: false,
       guideError: '',
       v2Context: { label: '', confirming: false, pickingCsc: false, hide: false, pageTitle: '', backTo: '', pageAction: null, groups: [], seasons: [], groupId: '', season: '', onGroup: null, onSeason: null },
-      designV2Request: 0
+      // Bumped on logout, so a guide answer for the previous session is
+      // ignored when it lands.
+      guideRequest: 0
     };
   },
   computed: {
@@ -322,11 +145,11 @@ export default {
       syncThemeColorMeta(isDark);
     },
     '$route.name'() {
-      this.syncDesignV2();
+      this.syncGuide();
     }
   },
   created() {
-    this.syncDesignV2();
+    this.syncGuide();
   },
   mounted() {
     // Android keeps an uninstalled app's notifications going through Chrome;
@@ -335,20 +158,8 @@ export default {
     stopPushIfAppUninstalled();
 
     syncThemeColorMeta(this.isDarkMode);
-
-    // Add scroll listener
-    window.addEventListener('scroll', this.handleScroll);
-  },
-  beforeUnmount() {
-    window.removeEventListener('scroll', this.handleScroll);
   },
   methods: {
-    goHome() {
-      this.$router.push('/');
-    },
-    handleScroll() {
-      this.isScrolled = window.scrollY > 20;
-    },
     toggleTheme() {
       this.isDarkMode = !this.isDarkMode;
       localStorage.setItem('calciotto-theme', this.isDarkMode ? 'dark' : 'light');
@@ -365,62 +176,29 @@ export default {
       // as one would flash the redesign onto login.
       return Boolean(name) && !PUBLIC_ROUTE_NAMES.includes(name);
     },
-    applyDesignV2(enabled) {
-      this.designV2 = enabled;
-      if (enabled) {
-        ensureDesignV2Fonts();
-      } else {
-        removeDesignV2Fonts();
-        this.guideMode = null;
-        this.guideError = '';
-        this.savingGuide = false;
-      }
-    },
-    async syncDesignV2() {
-      const requestId = ++this.designV2Request;
+    // The first-run guide is the one thing the shell still asks the server
+    // (GET /players/me/features, once per session). It never holds the page:
+    // the app paints straight away and the guide opens when the answer says
+    // the player has not done it yet.
+    async syncGuide() {
       if (!this.isAuthenticatedRoute) {
-        this.checkingDesignV2 = false;
-        // Public pages stay v1, except the login page on a browser that
-        // shouldUseLoginV2() picks (LoginGate.vue follows designV2On).
-        const loginV2 = this.$route.name === 'Login' && shouldUseLoginV2();
-        this.applyDesignV2(loginV2);
-        if (loginV2) {
-          this.guideMode = null;
+        if (this.guideMode === 'required') this.guideMode = null;
+        return;
+      }
+      const requestId = this.guideRequest;
+      const sessionKey = getSessionKey();
+      const status = knownFeatureStatus() ?? await loadFeatureStatus();
+      if (requestId !== this.guideRequest || sessionKey !== getSessionKey()) return;
+      if (!this.isAuthenticatedRoute) return;
+      if (status.guideCompleted === false) {
+        if (!this.guideMode) {
+          this.guideMode = 'required';
           this.guideError = '';
           this.savingGuide = false;
         }
-        return;
-      }
-      const sessionKey = getSessionKey();
-      const known = knownFeatureStatus();
-      if (!known && !this.startupSettled) {
-        this.checkingDesignV2 = true;
-        this.guideMode = null;
-        this.guideError = '';
-        this.savingGuide = false;
-        setTimeout(() => {
-          if (requestId === this.designV2Request) this.settleStartup();
-        }, STARTUP_WAIT_MS);
-      }
-      const status = known ?? await loadFeatureStatus();
-      if (requestId !== this.designV2Request) return;
-      if (sessionKey !== getSessionKey()) {
-        this.syncDesignV2();
-        return;
-      }
-      this.settleStartup();
-      const enabled = hasDesignV2(status.features);
-      this.applyDesignV2(enabled);
-      // Wait for an API that can record guide completion during rollout.
-      if (enabled && status.guideCompleted === false) {
-        this.guideMode = 'required';
       } else if (this.guideMode === 'required') {
         this.guideMode = null;
       }
-    },
-    settleStartup() {
-      this.checkingDesignV2 = false;
-      this.startupSettled = true;
     },
     // After a failed save: let the player in for this session only. The
     // server still says the guide is incomplete, so the next session asks
@@ -432,7 +210,7 @@ export default {
       this.guideError = '';
     },
     openGuide() {
-      if (this.designV2 && !this.guideMode) this.guideMode = 'replay';
+      if (!this.guideMode) this.guideMode = 'replay';
     },
     closeGuide() {
       if (this.guideMode === 'replay') this.guideMode = null;
@@ -462,12 +240,10 @@ export default {
     },
     async logout() {
       // Invalidate an in-flight features response before anything awaits, so
-      // it can't repaint this session's answer after logout.
-      this.designV2Request += 1;
-      this.checkingDesignV2 = false;
-      this.startupSettled = false;
+      // it can't open this session's guide after logout.
+      this.guideRequest += 1;
+      this.guideMode = null;
       resetFeatureStatus();
-      this.applyDesignV2(false);
       // Before the token goes: the next account on this device must not get
       // this one's notifications, and the backend needs the token to forget
       // the device.
@@ -493,12 +269,6 @@ export default {
 </script>
 
 <style>
-.app-starting {
-  min-height: 100dvh;
-  display: grid;
-  place-content: center;
-}
-
 /* Import global styles - Add this import in your main.js or main.ts instead */
 /* @import './assets/global-styles.css'; */
 
@@ -521,161 +291,6 @@ export default {
   color: var(--text-primary);
 }
 
-/* Navigation Styles - Component-specific */
-.top-navbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--navbar-height);
-  background-color: rgba(248, 250, 252, 0.95);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border-color);
-  transition: all var(--transition-smooth);
-  z-index: 1000;
-}
-
-.dark-mode .top-navbar {
-  background-color: rgba(15, 23, 42, 0.95);
-}
-
-.top-navbar.scrolled {
-  box-shadow: var(--shadow-md);
-  background-color: rgba(248, 250, 252, 0.98);
-}
-
-.dark-mode .top-navbar.scrolled {
-  background-color: rgba(15, 23, 42, 0.98);
-}
-
-.nav-container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 0 1.5rem;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.nav-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  cursor: pointer;
-  transition: transform var(--transition-fast);
-}
-
-.nav-brand:hover {
-  transform: scale(1.05);
-}
-
-.brand-logo {
-  display: block;
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-}
-
-.nav-menu {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.nav-button {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.25rem;
-  background: none;
-  border: none;
-  border-radius: var(--border-radius);
-  color: var(--text-secondary);
-  font-weight: 500;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  position: relative;
-  text-decoration: none;
-}
-
-.nav-button svg {
-  width: 18px;
-  height: 18px;
-}
-
-.nav-button:hover {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-  transform: translateY(-1px);
-}
-
-.nav-button.active {
-  background-color: var(--primary-color);
-  color: white;
-  box-shadow: var(--shadow-md);
-}
-
-.nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.icon-nav-button {
-  background: none;
-  border: none;
-  padding: 0.5rem;
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all var(--transition-fast);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
-}
-
-.icon-nav-button:hover {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.icon-nav-button.active {
-  background-color: var(--primary-color);
-  color: white;
-  box-shadow: var(--shadow-md);
-}
-
-.icon-nav-button svg {
-  width: 20px;
-  height: 20px;
-}
-
-.theme-toggle {
-  background: none;
-  border: none;
-  padding: 0.5rem;
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all var(--transition-fast);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.theme-toggle:hover {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.theme-toggle svg {
-  width: 20px;
-  height: 20px;
-}
-
 /* Main Content */
 .app-container {
   background-color: var(--bg-secondary);
@@ -684,88 +299,6 @@ export default {
 .main-content {
   margin-top: var(--navbar-height);
   min-height: calc(100vh - var(--navbar-height));
-}
-
-/* Bottom tab bar — hidden by default (desktop keeps the top nav-menu as its
-   only navigation); shown at the same mobile breakpoint the rest of this
-   file already uses, in the @media block below. */
-.bottom-tab-bar {
-  display: none;
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1000;
-  background-color: rgba(248, 250, 252, 0.98);
-  backdrop-filter: blur(12px);
-  border-top: 1px solid var(--border-color);
-  /* The home indicator on a notched phone sits in this inset — padding
-     rather than margin so the bar's own background still fills behind it. */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-.dark-mode .bottom-tab-bar {
-  background-color: rgba(15, 23, 42, 0.98);
-}
-
-.bottom-tab-button {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.2rem;
-  padding: 0.5rem 0.25rem;
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: color var(--transition-fast);
-}
-
-.bottom-tab-button svg {
-  width: 22px;
-  height: 22px;
-}
-
-.bottom-tab-label {
-  font-size: 0.7rem;
-  font-weight: 500;
-}
-
-.bottom-tab-button.active {
-  color: var(--primary-color);
-}
-
-/* Theme and logout, shown only on the Profile page: a compact pair set off
-   from the tabs by a divider, so they don't read as two more destinations. */
-.bottom-tab-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.15rem;
-  padding: 0 0.5rem;
-  border-left: 1px solid var(--border-color);
-  margin: 0.6rem 0;
-}
-
-.bottom-tab-action {
-  background: none;
-  border: none;
-  padding: 0.5rem;
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.bottom-tab-action:hover {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.bottom-tab-action svg {
-  width: 20px;
-  height: 20px;
 }
 
 /* Transitions */
@@ -784,75 +317,11 @@ export default {
   transform: translateY(-20px);
 }
 
-.theme-icon-enter-active,
-.theme-icon-leave-active {
-  transition: all var(--transition-fast);
-}
-
-.theme-icon-enter-from {
-  opacity: 0;
-  transform: rotate(-90deg) scale(0.8);
-}
-
-.theme-icon-leave-to {
-  opacity: 0;
-  transform: rotate(90deg) scale(0.8);
-}
-
-/* Mobile Responsive: everything (brand, Matches/Profile, logout, theme
-   toggle) stays on one row instead of opening a separate dropdown menu —
-   the nav links just drop their text label and become icon-only, matching
-   the existing icon-only actions, rather than being hidden off-screen
-   behind a hamburger toggle. */
 @media (max-width: 768px) {
-  .nav-container {
-    padding: 0 1rem;
-  }
-
-  /* No logo on a phone: the installed app already has it on the home
-     screen, and the bar there only exists on the public pages. */
-  .nav-brand {
-    display: none;
-  }
-
-  /* With the logo gone, the actions are the bar's only item on a public
-     page; space-between would otherwise put them on the left. */
-  .nav-actions {
-    margin-left: auto;
-  }
-
-  .nav-button-label {
-    display: none;
-  }
-
-  .nav-button {
-    padding: 0.5rem;
-  }
-
-  /* The bottom tab bar (below) replaces the top nav-menu as the actual
-     navigation surface on a phone — see its own comment in the template
-     above for why. On an authenticated page the whole top bar goes (see
-     .hidden-on-mobile); on a public one only its links do. */
-  .nav-menu {
-    display: none;
-  }
-
-  .nav-actions {
-    gap: 0.25rem;
-  }
-
-  .top-navbar.hidden-on-mobile {
-    display: none;
-  }
-
   .main-content.no-top-bar-on-mobile {
     margin-top: 0;
     min-height: 100vh;
     padding-top: env(safe-area-inset-top, 0px);
-  }
-
-  .bottom-tab-bar {
-    display: flex;
   }
 
   /* Leaves room for the fixed bottom tab bar so the last bit of page

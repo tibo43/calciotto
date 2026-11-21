@@ -1,6 +1,6 @@
 // A self-hosted "tinylink" for sharing a match — a UUID
 // (`92bbe7a1-fa67-49dc-9058-85837504d0d4`) reads badly in a chat next to
-// "Join Calciotto". Rather than reaching for a public shortener (most block
+// "Join Agoran". Rather than reaching for a public shortener (most block
 // browser JS from reading their response at all — no CORS header — and it
 // would mean an external dependency, and its uptime, for something this
 // simple), the match's own id is losslessly re-encoded as base62: the same

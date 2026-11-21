@@ -1,4 +1,4 @@
-// Calciotto's service worker. Deliberately empty of any caching: it exists so
+// Agoran's service worker. Deliberately empty of any caching: it exists so
 // the app is installable and so it can receive push notifications — not to
 // work offline. A worker that caches the app shell is the classic cause of
 // "the app never updates", and nothing here needs offline use.
@@ -12,7 +12,25 @@ self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
+// The legacy frontend host only redirects to the new domain now, except for
+// this file (scripts/vercel-domains.mjs), so that a worker installed there
+// picks up this version on its next update check (after a push, a click on a
+// notification, or a visit) and retires: it unsubscribes from push and
+// unregisters, so a player who turns notifications on again on the new
+// domain does not get every push twice.
+const LEGACY_HOST = 'calcio-otto.vercel.app';
+
+async function retireLegacyWorker(registration) {
+  const subscription = await registration.pushManager.getSubscription();
+  if (subscription) await subscription.unsubscribe();
+  await registration.unregister();
+}
+
 self.addEventListener('activate', (event) => {
+  if (self.location.hostname === LEGACY_HOST) {
+    event.waitUntil(retireLegacyWorker(self.registration).catch(() => {}));
+    return;
+  }
   event.waitUntil(self.clients.claim());
 });
 
@@ -125,9 +143,7 @@ function buildNotification(data) {
       const score = formatScore(data.score);
       return {
         title: score ? `Final score: ${score}` : 'The result is in',
-        // The design v2 calls the award the Star of the Match; v1 keeps
-        // its name.
-        body: `Vote for your ${data.designV2 ? MOTM_TEXT.name : 'Man of the Match'}.`,
+        body: `Vote for your ${MOTM_TEXT.name}.`,
       };
     }
     case 'predictions_settled':
@@ -152,7 +168,7 @@ function buildNotification(data) {
         body: "Not someone you know? Remove them and generate a new invite code.",
       };
     default:
-      return { title: 'Calciotto', body: prefix ? prefix.slice(0, -2) : 'Something new in your group.' };
+      return { title: 'Agoran', body: prefix ? prefix.slice(0, -2) : 'Something new in your group.' };
   }
 }
 
@@ -174,7 +190,7 @@ self.addEventListener('push', (event) => {
   }));
 });
 
-// Tapping a notification focuses an open Calciotto window and sends it to the
+// Tapping a notification focuses an open Agoran window and sends it to the
 // match, or opens one.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
@@ -199,5 +215,5 @@ self.addEventListener('notificationclick', (event) => {
 
 // Lets the unit tests import the wording without a service worker around.
 if (typeof module === 'object' && module.exports) {
-  module.exports = { buildNotification, MOTM_TEXT };
+  module.exports = { buildNotification, MOTM_TEXT, LEGACY_HOST, retireLegacyWorker };
 }

@@ -182,7 +182,7 @@ async function saveFailureScreenshot(page, index, stepName) {
 }
 
 // A rejected signup/participate call surfaces to the UI only as
-// `err.response?.data?.error` (Signup.vue) — when the request fails at the
+// `err.response?.data?.error` (SignupV2.vue, in its toast) — when the request fails at the
 // network level (a dropped connection, a 502/503 with no JSON body under
 // load, ...) that's undefined and the UI falls back to a generic "...failed.
 // Please try again.", which tells you nothing about what actually happened
@@ -241,7 +241,7 @@ async function runOneUser(browser, index) {
 
     const signupOutcome = await waitForOutcome(page, {
       successCheck: () => urlPathIs(page, '/'),
-      errorSelector: '.error-message',
+      errorSelector: '.toast-message.error',
       timeoutMs: SIGNUP_TIMEOUT_MS,
     });
     if (!signupOutcome.ok) {

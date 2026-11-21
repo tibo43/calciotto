@@ -1,10 +1,10 @@
 const LOGIN_HINT_KEY = 'calciotto-passkey-login';
 
 export function hasPasskeyAccess(features) {
-  return Array.isArray(features) && features.includes('design-v2') && features.includes('passkeys');
+  return Array.isArray(features) && features.includes('passkeys');
 }
 
-// Only a display hint for the signed-out page. The API checks both flags
+// Only a display hint for the signed-out page. The API checks the flag
 // against the account for each passkey sign-in.
 export function shouldOfferPasskeyLogin() {
   return localStorage.getItem(LOGIN_HINT_KEY) === '1';

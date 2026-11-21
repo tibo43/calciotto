@@ -62,12 +62,11 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 
-describe('App.vue design-v2', () => {
+describe('App.vue shell', () => {
   beforeEach(() => {
     resetFeatureStatus();
     localStorage.clear();
     localStorage.setItem('calciotto-theme', 'dark');
-    document.getElementById('design-v2-fonts')?.remove();
     getMyFeatureStatus.mockReset();
     getMyFeatureStatus.mockResolvedValue({ features: [] });
     getSessionKey.mockReset();
@@ -76,102 +75,71 @@ describe('App.vue design-v2', () => {
   });
 
   afterEach(() => {
-    document.getElementById('design-v2-fonts')?.remove();
     vi.restoreAllMocks();
   });
 
-  it('waits for the features response before opening the signed-in app', async () => {
+  it('paints the signed-in app straight away, without waiting for the features request', async () => {
     const features = deferred();
     getMyFeatureStatus.mockReturnValue(features.promise);
 
     const { wrapper } = await mountAt('/');
 
-    expect(wrapper.find('.app-starting').exists()).toBe(true);
-    expect(wrapper.find('.app-container').exists()).toBe(false);
-    expect(wrapper.classes()).not.toContain('design-v2');
-    expect(document.getElementById('design-v2-fonts')).toBeNull();
+    expect(wrapper.find('.app-container').exists()).toBe(true);
+    expect(wrapper.find('.tabbar').exists()).toBe(true);
+    expect(wrapper.find('.bottom-tab-bar').exists()).toBe(false);
+    expect(wrapper.classes()).toContain('design-v2');
     expect(getMyFeatureStatus).toHaveBeenCalledTimes(1);
 
-    features.resolve({ features: ['pwa-install', 'design-v2'] });
+    features.resolve({ features: [] });
     await flushPromises();
-
-    expect(wrapper.find('.bottom-tab-bar').exists()).toBe(false);
-    expect(wrapper.find('.tabbar').exists()).toBe(true);
     expect(wrapper.classes()).toContain('design-v2');
-    expect(document.getElementById('design-v2-fonts').textContent).toContain('Big Shoulders Display');
   });
 
-  it('renders the original design when the redesign is disabled and the guide is incomplete', async () => {
-    getMyFeatureStatus.mockResolvedValue({ features: ['pwa-install'], guideCompleted: false });
-
-    const { wrapper } = await mountAt('/');
-    await flushPromises();
-
-    expect(wrapper.find('.app-container').exists()).toBe(true);
-    expect(wrapper.classes()).not.toContain('design-v2');
-    expect(document.getElementById('design-v2-fonts')).toBeNull();
-  });
-
-  it('stays on today\'s design when the features request fails', async () => {
+  it('stays on the redesign when the features request fails', async () => {
     getMyFeatureStatus.mockRejectedValue(new Error('offline'));
 
     const { wrapper } = await mountAt('/');
     await flushPromises();
 
     expect(wrapper.find('.app-container').exists()).toBe(true);
-    expect(wrapper.classes()).not.toContain('design-v2');
+    expect(wrapper.classes()).toContain('design-v2');
     expect(console.error).toHaveBeenCalled();
   });
 
-  it('asks again in the background on the next navigation after a failure', async () => {
-    getMyFeatureStatus.mockRejectedValueOnce(new Error('offline'));
-    const { wrapper, router } = await mountAt('/');
-    await flushPromises();
-    expect(wrapper.classes()).not.toContain('design-v2');
-
-    const retry = deferred();
-    getMyFeatureStatus.mockReturnValueOnce(retry.promise);
-    await router.push('/profile');
-    await flushPromises();
-    expect(wrapper.find('.app-starting').exists()).toBe(false);
-    expect(wrapper.find('.app-container').exists()).toBe(true);
-    expect(wrapper.classes()).not.toContain('design-v2');
-
-    retry.resolve({ features: ['design-v2'] });
-    await flushPromises();
-    expect(getMyFeatureStatus).toHaveBeenCalledTimes(2);
-    expect(wrapper.classes()).toContain('design-v2');
-  });
-
   it.each(['/login', '/signup', '/forgot-password', '/reset-password'])(
-    'keeps %s on the current design, with no request',
+    'paints %s in the v2 shell, with no menu, no theme toggle and no request',
     async (path) => {
       const { wrapper } = await mountAt(path);
       await flushPromises();
-      expect(wrapper.classes()).not.toContain('design-v2');
+      expect(wrapper.classes()).toContain('design-v2');
+      expect(wrapper.find('.topbar .brand').exists()).toBe(true);
+      expect(wrapper.find('.topbar .ctx-pair').exists()).toBe(false);
+      expect(wrapper.find('.top-navbar').exists()).toBe(false);
+      expect(wrapper.find('.theme-toggle').exists()).toBe(false);
+      expect(wrapper.find('.tabbar').exists()).toBe(false);
       expect(getMyFeatureStatus).not.toHaveBeenCalled();
     }
   );
 
-  it('drops the class on a public page even for a v2 player, without refetching on the way back', async () => {
-    getMyFeatureStatus.mockResolvedValue({ features: ['design-v2'] });
+  it('keeps the class from page to page, without refetching on the way back', async () => {
     const { wrapper, router } = await mountAt('/');
     await flushPromises();
     expect(wrapper.classes()).toContain('design-v2');
 
-    await router.push('/login');
+    await router.push('/signup');
     await flushPromises();
-    expect(wrapper.classes()).not.toContain('design-v2');
+    expect(wrapper.classes()).toContain('design-v2');
+    expect(wrapper.find('.tabbar').exists()).toBe(false);
 
     await router.push('/');
     await flushPromises();
     expect(wrapper.classes()).toContain('design-v2');
+    expect(wrapper.find('.tabbar').exists()).toBe(true);
     expect(getMyFeatureStatus).toHaveBeenCalledTimes(1);
   });
 
   it('fetches features once per session across authenticated routes', async () => {
-    getMyFeatureStatus.mockResolvedValue({ features: ['design-v2'] });
-    const { wrapper, router } = await mountAt('/');
+    const { router } = await mountAt('/');
     await flushPromises();
 
     await router.push('/profile');
@@ -180,44 +148,6 @@ describe('App.vue design-v2', () => {
     await flushPromises();
 
     expect(getMyFeatureStatus).toHaveBeenCalledTimes(1);
-    expect(wrapper.classes()).toContain('design-v2');
-  });
-
-  it('keeps public pages on v1 without the v2 login mark', async () => {
-    const { wrapper } = await mountAt('/login');
-    await flushPromises();
-    expect(wrapper.classes()).not.toContain('design-v2');
-    expect(wrapper.find('.topbar').exists()).toBe(false);
-    expect(getMyFeatureStatus).not.toHaveBeenCalled();
-  });
-
-  it('paints the v2 shell on the login page only, on a browser with the mark', async () => {
-    localStorage.setItem('calciotto-login-v2', '1');
-    const { wrapper, router } = await mountAt('/login');
-    await flushPromises();
-    expect(wrapper.classes()).toContain('design-v2');
-    expect(document.getElementById('design-v2-fonts')).not.toBeNull();
-    expect(wrapper.find('.topbar .brand').exists()).toBe(true);
-    expect(wrapper.find('.topbar .ctx-pair').exists()).toBe(false);
-    expect(wrapper.find('.theme-toggle').exists()).toBe(false);
-    expect(wrapper.find('.tabbar').exists()).toBe(false);
-    expect(getMyFeatureStatus).not.toHaveBeenCalled();
-    for (const page of ['/signup', '/forgot-password', '/reset-password']) {
-      await router.push(page);
-      await flushPromises();
-      expect(wrapper.classes()).not.toContain('design-v2');
-    }
-  });
-
-  it('shows the v2 login after a design-v2 player logs out', async () => {
-    getMyFeatureStatus.mockResolvedValue({ features: ['design-v2'] });
-    const { wrapper } = await mountAt('/');
-    await flushPromises();
-    localStorage.setItem('calciotto-login-v2', '1'); // written by api.js from that answer
-    await wrapper.vm.logout();
-    await flushPromises();
-    expect(wrapper.vm.$route.name).toBe('Login');
-    expect(wrapper.classes()).toContain('design-v2');
   });
 
   it('ignores a features response that resolves after logout', async () => {
@@ -232,35 +162,34 @@ describe('App.vue design-v2', () => {
     expect(clearMyGroupsCache).toHaveBeenCalled();
     expect(disablePushOnLogout).toHaveBeenCalled();
 
-    features.resolve({ features: ['design-v2'] });
+    features.resolve({ features: [], guideCompleted: false });
     await flushPromises();
 
+    // The late answer must not open the previous session's guide.
     expect(wrapper.vm.$route.name).toBe('Login');
-    expect(wrapper.classes()).not.toContain('design-v2');
-    expect(document.getElementById('design-v2-fonts')).toBeNull();
+    expect(wrapper.findComponent(PlayerGuide).exists()).toBe(false);
+    expect(wrapper.find('.tabbar').exists()).toBe(false);
+    expect(wrapper.find('.topbar .ctx-pair').exists()).toBe(false);
   });
 
   it('asks again for the next account after logout', async () => {
-    getMyFeatureStatus.mockResolvedValueOnce({ features: [] });
     const { wrapper, router } = await mountAt('/');
     await flushPromises();
-    expect(wrapper.classes()).not.toContain('design-v2');
 
     await wrapper.vm.logout();
     await flushPromises();
     expect(wrapper.vm.$route.name).toBe('Login');
 
     getSessionKey.mockReturnValue('token-b');
-    getMyFeatureStatus.mockResolvedValueOnce({ features: ['design-v2'] });
+    getMyFeatureStatus.mockResolvedValueOnce({ features: [], guideCompleted: false });
     await router.push('/');
     await flushPromises();
 
     expect(getMyFeatureStatus).toHaveBeenCalledTimes(2);
-    expect(wrapper.classes()).toContain('design-v2');
+    expect(wrapper.findComponent(PlayerGuide).props('required')).toBe(true);
   });
 
-  it('never stores the flag in localStorage', async () => {
-    getMyFeatureStatus.mockResolvedValue({ features: ['design-v2'] });
+  it('stores nothing in localStorage', async () => {
     await mountAt('/');
     await flushPromises();
     expect(Object.keys(localStorage)).toEqual(['calciotto-theme']);
@@ -284,26 +213,21 @@ describe('App.vue startup and player guide', () => {
     vi.restoreAllMocks();
   });
 
-  it('paints today\'s design when the features request is slow, then switches once it answers', async () => {
-    vi.useFakeTimers();
+  it('opens the required guide once a slow features request answers', async () => {
     const features = deferred();
     getMyFeatureStatus.mockReturnValue(features.promise);
 
     const { wrapper } = await mountAt('/');
-    expect(wrapper.find('.app-starting').exists()).toBe(true);
-
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(wrapper.find('.app-starting').exists()).toBe(false);
     expect(wrapper.find('.app-container').exists()).toBe(true);
-    expect(wrapper.classes()).not.toContain('design-v2');
+    expect(guide(wrapper).exists()).toBe(false);
 
-    features.resolve({ features: ['design-v2'], guideCompleted: false });
+    features.resolve({ features: [], guideCompleted: false });
     await flushPromises();
     expect(guide(wrapper).props('required')).toBe(true);
   });
 
   it('keeps the required guide open when saving fails, and closes it once a retry succeeds', async () => {
-    getMyFeatureStatus.mockResolvedValue({ features: ['design-v2'], guideCompleted: false });
+    getMyFeatureStatus.mockResolvedValue({ features: [], guideCompleted: false });
     const { wrapper } = await mountAt('/');
     await flushPromises();
 
@@ -321,7 +245,7 @@ describe('App.vue startup and player guide', () => {
   });
 
   it('lets the player continue for this session after a failed save', async () => {
-    getMyFeatureStatus.mockResolvedValue({ features: ['design-v2'], guideCompleted: false });
+    getMyFeatureStatus.mockResolvedValue({ features: [], guideCompleted: false });
     const { wrapper, router } = await mountAt('/');
     await flushPromises();
     completeGuide.mockRejectedValueOnce(new Error('offline'));

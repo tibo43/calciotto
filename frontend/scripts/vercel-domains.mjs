@@ -1,6 +1,8 @@
-// Writes the API hosts into vercel.json before `vercel build` (deploy.yml):
-// the CSP's connect-src lists every API origin the bundle may call, and the
-// same-origin /api/auth proxy points at AUTH_PROXY_TARGET. vercel.json is
+// Writes the domain settings into vercel.json before `vercel build`
+// (deploy.yml): the CSP's connect-src lists every API origin the bundle may
+// call, the same-origin /api/auth proxy points at AUTH_PROXY_TARGET, and,
+// while LEGACY_FRONTEND_REDIRECT is true, the legacy frontend host redirects
+// every request to the new frontend. vercel.json is
 // static JSON, so this is how the domains stay environment variables
 // (devops/scripts/domain-env.sh derives them from devops/env/domains.env).
 //
@@ -25,8 +27,17 @@ export function apiOriginsFromEnv(env) {
   return [...new Set(origins.filter(Boolean))];
 }
 
-export function applyDomains(config, { apiOrigins, authProxyTarget }) {
-  for (const origin of [...apiOrigins, authProxyTarget]) {
+// The legacy frontend's redirect, or null when it is off. Read from the
+// settings domain-env.sh prints.
+export function legacyRedirectFromEnv(env) {
+  if (env.LEGACY_FRONTEND_REDIRECT !== 'true') return null;
+  return { from: env.LEGACY_FRONTEND_ORIGIN, to: env.NEW_FRONTEND_ORIGIN };
+}
+
+export function applyDomains(config, { apiOrigins, authProxyTarget, legacyRedirect = null }) {
+  const origins = [...apiOrigins, authProxyTarget];
+  if (legacyRedirect) origins.push(legacyRedirect.from, legacyRedirect.to);
+  for (const origin of origins) {
     if (!isOrigin(origin)) throw new Error(`not a bare https origin: ${origin}`);
   }
   if (apiOrigins.length === 0) throw new Error('no API origin');
@@ -42,6 +53,24 @@ export function applyDomains(config, { apiOrigins, authProxyTarget }) {
   const proxy = (next.rewrites || []).find((rewrite) => rewrite.source === AUTH_SOURCE);
   if (csp !== 1 || !proxy) throw new Error('vercel.json: expected one Content-Security-Policy and the /api/auth rewrite');
   proxy.destination = `${authProxyTarget}/auth/:path*`;
+  // The script owns `redirects`: only the legacy host's, or none. Vercel
+  // applies redirects before rewrites and keeps the query string, so a
+  // shared /m/:code, /signup?invite= or /reset-password?token= link lands on
+  // the same page of the new domain. 307, not 308: a permanent redirect is
+  // cached by browsers and could not be taken back. /sw.js is the one path
+  // left out: the service worker installed on the legacy host must still be
+  // able to fetch its update, which unsubscribes from push and unregisters
+  // itself there (public/sw.js), or its players get every push twice once
+  // they turn notifications on again on the new domain.
+  delete next.redirects;
+  if (legacyRedirect) {
+    next.redirects = [{
+      source: '/((?!sw\\.js$).*)',
+      has: [{ type: 'host', value: new URL(legacyRedirect.from).hostname }],
+      destination: `${legacyRedirect.to}/$1`,
+      permanent: false,
+    }];
+  }
   return next;
 }
 
@@ -51,6 +80,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const updated = `${JSON.stringify(applyDomains(JSON.parse(current), {
     apiOrigins: apiOriginsFromEnv(process.env),
     authProxyTarget: process.env.AUTH_PROXY_TARGET,
+    legacyRedirect: legacyRedirectFromEnv(process.env),
   }), null, 2)}\n`;
   if (process.argv.includes('--check')) {
     if (updated !== current) {
@@ -62,4 +92,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   console.log(updated.match(/connect-src [^;]*/)[0]);
   console.log(`/api/auth -> ${process.env.AUTH_PROXY_TARGET}`);
+  const redirect = legacyRedirectFromEnv(process.env);
+  console.log(redirect ? `redirect ${redirect.from} -> ${redirect.to}` : 'no legacy redirect');
 }

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"app/internal/handlers"
-	"app/internal/models"
 	"app/internal/services"
 	"app/internal/testutil"
 
@@ -50,27 +49,17 @@ func TestNotificationRoutes_Integration(t *testing.T) {
 
 	_, token := authenticatedRenamePlayer(t, playerService, authService, "Zzz Integration Push Owner", "push-owner@example.com")
 	bearer := "Bearer " + token
-	playerID, err := authService.ParseToken(token)
-	if err != nil {
-		t.Fatalf("ParseToken: %v", err)
-	}
 	device := map[string]any{"endpoint": "https://fcm.googleapis.com/fixture/device", "keys": map[string]string{"p256dh": "k", "auth": "a"}}
 
 	if rec := sendJSON(router, http.MethodGet, "/push/public-key", bearer, nil); rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte("public-key")) {
 		t.Errorf("GET /push/public-key = %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := sendJSON(router, http.MethodPost, "/players/me/push-subscription", bearer, device); rec.Code != http.StatusForbidden {
-		t.Errorf("subscribe without the feature = %d, want 403", rec.Code)
-	}
-
-	if err := tx.Create(&models.PlayerFeature{PlayerID: playerID, Feature: models.FeaturePushNotifications}).Error; err != nil {
-		t.Fatalf("enable feature: %v", err)
-	}
+	// No player_features row: push is launched, open to every player.
 	if rec := sendJSON(router, http.MethodPost, "/players/me/push-subscription", bearer, map[string]any{"endpoint": "x"}); rec.Code != http.StatusBadRequest {
 		t.Errorf("subscribe without keys = %d, want 400", rec.Code)
 	}
 	if rec := sendJSON(router, http.MethodPost, "/players/me/push-subscription", bearer, device); rec.Code != http.StatusOK {
-		t.Errorf("subscribe with the feature = %d %s, want 200", rec.Code, rec.Body.String())
+		t.Errorf("subscribe = %d %s, want 200", rec.Code, rec.Body.String())
 	}
 	if rec := sendJSON(router, http.MethodDelete, "/players/me/push-subscription", bearer, map[string]string{"endpoint": "https://fcm.googleapis.com/fixture/device"}); rec.Code != http.StatusOK {
 		t.Errorf("unsubscribe = %d, want 200", rec.Code)
@@ -114,23 +103,9 @@ func TestNotificationPreferences_Integration(t *testing.T) {
 
 	_, token := authenticatedRenamePlayer(t, playerService, authService, "Zzz Integration Prefs Owner", "prefs-owner@example.com")
 	bearer := "Bearer " + token
-	playerID, err := authService.ParseToken(token)
-	if err != nil {
-		t.Fatalf("ParseToken: %v", err)
-	}
 
 	if rec := sendJSON(router, http.MethodGet, "/players/me/notification-preferences", "", nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("GET without a token = %d, want 401", rec.Code)
-	}
-	if rec := sendJSON(router, http.MethodGet, "/players/me/notification-preferences", bearer, nil); rec.Code != http.StatusForbidden {
-		t.Errorf("GET without the feature = %d, want 403", rec.Code)
-	}
-	if rec := sendJSON(router, http.MethodPut, "/players/me/notification-preferences", bearer, map[string]any{"preferences": map[string]bool{"kickoff_reminder": false}}); rec.Code != http.StatusForbidden {
-		t.Errorf("PUT without the feature = %d, want 403", rec.Code)
-	}
-
-	if err := tx.Create(&models.PlayerFeature{PlayerID: playerID, Feature: models.FeaturePushNotifications}).Error; err != nil {
-		t.Fatalf("enable feature: %v", err)
 	}
 
 	rec := sendJSON(router, http.MethodGet, "/players/me/notification-preferences", bearer, nil)

@@ -124,25 +124,24 @@ func main() {
 	// Same reasoning as /players/me/stats: this only ever acts on the JWT's
 	// own player id, so no group-scoping middleware is needed.
 	r.PATCH("/players/me", authRequired, playerHandler.UpdateMyName)
-	// Hidden features enabled for the caller (models.PlayerFeature), which
-	// are switched on by hand in the database. Same scoping as above.
+	// Features enabled for the caller: the launched ones plus the hidden
+	// ones switched on by hand in the database (models.PlayerFeature). Same
+	// scoping as above.
 	r.GET("/players/me/features", authRequired, playerHandler.GetMyFeatures)
 	r.PUT("/players/me/guide", authRequired, playerHandler.CompleteGuide)
 	// The caller's own preferred positions (GK/DEF/MID/FWD), shown on the v2
 	// Account page. Same scoping as above: only ever the JWT's own player.
 	r.GET("/players/me/positions", authRequired, playerHandler.GetMyPositions)
 	r.PUT("/players/me/positions", authRequired, playerHandler.UpdateMyPositions)
-	// Push notifications for the caller's own devices (the subscribe route
-	// refuses a player without the push-notifications feature).
+	// Push notifications for the caller's own devices.
 	r.GET("/push/public-key", authRequired, notificationHandler.GetPublicKey)
 	r.POST("/players/me/push-subscription", authRequired, notificationHandler.Subscribe)
 	r.DELETE("/players/me/push-subscription", authRequired, notificationHandler.Unsubscribe)
-	// Which of the six notifications this player wants. Same feature gate as
-	// subscribe: the card that calls these is hidden without it.
+	// Which notifications this player wants.
 	r.GET("/players/me/notification-preferences", authRequired, notificationHandler.GetPreferences)
 	r.PUT("/players/me/notification-preferences", authRequired, notificationHandler.UpdatePreferences)
 	// Called by an external scheduler (cron-job.org) every minute:
-	// POST https://calciotto.koyeb.app/internal/notifications/tick with
+	// POST https://api.agoran.app/internal/notifications/tick with
 	// Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>. Authenticated by
 	// that shared secret, and not registered at all when it isn't configured.
 	if notificationHandler.TickSecret != "" {
