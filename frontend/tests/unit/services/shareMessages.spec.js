@@ -13,7 +13,7 @@ describe('buildMatchShareText', () => {
 
     expect(text).toBe(
       'Match: Sun, Sep 6, 2026, 8:30 PM\n'
-      + 'Sign-ups are open — Join Calciotto:\n'
+      + 'Sign-ups are open — Join Agoran:\n'
       + 'https://calciotto.app/matches/abc-123/edit'
     );
   });
@@ -35,7 +35,7 @@ describe('buildMatchShareText', () => {
       signupsOpen: false
     });
 
-    expect(text).toContain('View the match in Calciotto:');
+    expect(text).toContain('View the match in Agoran:');
     expect(text).not.toContain('Sign-ups are open');
   });
 

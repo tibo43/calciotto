@@ -132,7 +132,7 @@ describe('buildNotification', () => {
   });
 
   it('still shows something for a type it does not know', () => {
-    expect(buildNotification({ type: 'something_new' }).title).toBe('Calciotto');
+    expect(buildNotification({ type: 'something_new' }).title).toBe('Agoran');
   });
 
   it('names who joined which group for an admin', () => {

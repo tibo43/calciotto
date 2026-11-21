@@ -19,7 +19,7 @@ export const PUSH_STATE = {
   // on every platform (an iPhone has no choice anyway: Safari tabs have no
   // push at all), so they behave the same everywhere and arrive as the app.
   NEEDS_INSTALL: 'needs-install',
-  // The user refused, or blocked Calciotto in the phone's settings. Only
+  // The user refused, or blocked Agoran in the phone's settings. Only
   // they can undo it, there; the page cannot ask again.
   DENIED: 'denied',
   OFF: 'off',
@@ -145,7 +145,7 @@ export async function disablePushOnLogout(win = window) {
 // --- The app was uninstalled ------------------------------------------------
 // On Android the subscription belongs to Chrome, not to the installed app, so
 // uninstalling the app doesn't stop the notifications, and no event tells a
-// site it was uninstalled. What Chrome can do is answer "is Calciotto
+// site it was uninstalled. What Chrome can do is answer "is Agoran
 // installed?" (navigator.getInstalledRelatedApps, with the manifest listing
 // the app as its own related application). That only runs when the site is
 // opened, so this catches a player who uninstalls and comes back in a tab;

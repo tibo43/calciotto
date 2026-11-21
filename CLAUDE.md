@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-Calciotto is a small full-stack app for organizing amateur football ("calciotto") matches: creating matches, assigning players to color-named teams, and tracking goals per player. Backend is Go (Gin + GORM + PostgreSQL), frontend is Vue 3 (Vite).
+Agoran is a small full-stack app for organizing amateur football ("calciotto") matches: creating matches, assigning players to color-named teams, and tracking goals per player. Backend is Go (Gin + GORM + PostgreSQL), frontend is Vue 3 (Vite).
+
+**Naming.** The product is called **Agoran** (domain `agoran.app`) everywhere a user sees it: page title, PWA manifest, passkey display name, emails, push notifications, share messages, the guide. The code still says `calciotto` where renaming would break something or buys nothing: the repository, the Go module path, the Docker image, the database, the `calciotto-*` localStorage keys (renaming them would log every player out and drop their theme and active group), and the legacy domains. The word "calciotto" in comments and in the manifest description is the sport (8-a-side football), not the brand. The `BREVO_SENDER_NAME` GitHub variable overrides the mailer's default sender name, so it must say Agoran too.
 
 ## Commands
 

@@ -38,7 +38,7 @@ func newPasswordResetMailer() func(email, link string) error {
 	}
 	senderName := os.Getenv("BREVO_SENDER_NAME")
 	if senderName == "" {
-		senderName = "Calciotto"
+		senderName = "Agoran"
 	}
 
 	client := &http.Client{
@@ -52,9 +52,9 @@ func newPasswordResetMailer() func(email, link string) error {
 		return sendViaBrevo(client, apiKey, brevoSendEmailRequest{
 			Sender:  brevoContact{Name: senderName, Email: senderEmail},
 			To:      []brevoContact{{Email: email}},
-			Subject: "Reset your Calciotto password",
+			Subject: "Reset your Agoran password",
 			HTMLContent: fmt.Sprintf(
-				`<p>Click the link below to reset your Calciotto password:</p><p><a href="%s">%s</a></p><p>This link expires in one hour. If you didn't request this, you can ignore this email.</p>`,
+				`<p>Click the link below to reset your Agoran password:</p><p><a href="%s">%s</a></p><p>This link expires in one hour. If you didn't request this, you can ignore this email.</p>`,
 				escapedLink, escapedLink,
 			),
 		})

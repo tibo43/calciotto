@@ -51,7 +51,7 @@ func NewPasskeyService(auth *AuthService, origins []string) (*PasskeyService, er
 		}
 		timeout := webauthn.TimeoutConfig{Enforce: true, Timeout: passkeyTimeout}
 		rp, err := webauthn.New(&webauthn.Config{
-			RPID: host, RPDisplayName: "Calciotto", RPOrigins: []string{origin},
+			RPID: host, RPDisplayName: "Agoran", RPOrigins: []string{origin},
 			AttestationPreference: protocol.PreferNoAttestation,
 			AuthenticatorSelection: protocol.AuthenticatorSelection{
 				ResidentKey: protocol.ResidentKeyRequirementRequired, RequireResidentKey: new(true),

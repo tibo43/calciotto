@@ -1,4 +1,4 @@
-// Calciotto's service worker. Deliberately empty of any caching: it exists so
+// Agoran's service worker. Deliberately empty of any caching: it exists so
 // the app is installable and so it can receive push notifications — not to
 // work offline. A worker that caches the app shell is the classic cause of
 // "the app never updates", and nothing here needs offline use.
@@ -150,7 +150,7 @@ function buildNotification(data) {
         body: "Not someone you know? Remove them and generate a new invite code.",
       };
     default:
-      return { title: 'Calciotto', body: prefix ? prefix.slice(0, -2) : 'Something new in your group.' };
+      return { title: 'Agoran', body: prefix ? prefix.slice(0, -2) : 'Something new in your group.' };
   }
 }
 
@@ -172,7 +172,7 @@ self.addEventListener('push', (event) => {
   }));
 });
 
-// Tapping a notification focuses an open Calciotto window and sends it to the
+// Tapping a notification focuses an open Agoran window and sends it to the
 // match, or opens one.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();

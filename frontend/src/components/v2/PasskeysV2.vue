@@ -62,7 +62,7 @@
           </span>
           <span>Add a passkey</span>
         </button>
-        <p v-else class="scope pk-unsupported">Open Calciotto in a browser that supports passkeys to add one.</p>
+        <p v-else class="scope pk-unsupported">Open Agoran in a browser that supports passkeys to add one.</p>
       </template>
     </CollapsibleCardV2>
   </section>

@@ -30,7 +30,7 @@ import { STAR_OF_THE_MATCH } from '@/services/v2Home';
 // Shown on design v2 only (App.vue), hence the v2 name of the award.
 const steps = [
   {
-    title: 'Welcome to Calciotto',
+    title: 'Welcome to Agoran',
     description: 'Find your next match and keep up with your group’s teams, scores, and standings.',
     image: 'welcome.jpg',
   },

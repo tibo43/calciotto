@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Calciotto",
-  "short_name": "Calciotto",
+  "name": "Agoran",
+  "short_name": "Agoran",
   "description": "Organise your calciotto matches: sign-ups, teams, scores, standings and predictions.",
   "start_url": "/",
   "scope": "/",

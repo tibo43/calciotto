@@ -71,7 +71,7 @@ type PlayerFeature struct {
 	Player   Player    `gorm:"foreignKey:PlayerID" json:"-"`
 }
 
-// FeaturePWAInstall shows the "Install Calciotto" card on the Profile page.
+// FeaturePWAInstall shows the "Install Agoran" card on the Profile page.
 // Launched (see LaunchedFeatures).
 const FeaturePWAInstall = "pwa-install"
 

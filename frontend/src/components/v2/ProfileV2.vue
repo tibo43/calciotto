@@ -85,7 +85,7 @@
              where the browser can install the app (see pwaInstall.js). -->
         <div v-if="installOffered" class="pref-row">
           <div>
-            <div class="who">Install Calciotto</div>
+            <div class="who">Install Agoran</div>
             <div v-if="installState === 'prompt'" class="note">Open it from your home screen, like any other app</div>
             <div v-else class="note">Tap Share, then Add to Home Screen</div>
           </div>
