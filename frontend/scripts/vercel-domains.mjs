@@ -57,13 +57,17 @@ export function applyDomains(config, { apiOrigins, authProxyTarget, legacyRedire
   // applies redirects before rewrites and keeps the query string, so a
   // shared /m/:code, /signup?invite= or /reset-password?token= link lands on
   // the same page of the new domain. 307, not 308: a permanent redirect is
-  // cached by browsers and could not be taken back.
+  // cached by browsers and could not be taken back. /sw.js is the one path
+  // left out: the service worker installed on the legacy host must still be
+  // able to fetch its update, which unsubscribes from push and unregisters
+  // itself there (public/sw.js), or its players get every push twice once
+  // they turn notifications on again on the new domain.
   delete next.redirects;
   if (legacyRedirect) {
     next.redirects = [{
-      source: '/:path*',
+      source: '/((?!sw\\.js$).*)',
       has: [{ type: 'host', value: new URL(legacyRedirect.from).hostname }],
-      destination: `${legacyRedirect.to}/:path*`,
+      destination: `${legacyRedirect.to}/$1`,
       permanent: false,
     }];
   }

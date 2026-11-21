@@ -34,14 +34,14 @@
   ],
   "redirects": [
     {
-      "source": "/:path*",
+      "source": "/((?!sw\\.js$).*)",
       "has": [
         {
           "type": "host",
           "value": "calcio-otto.vercel.app"
         }
       ],
-      "destination": "https://club.agoran.app/:path*",
+      "destination": "https://club.agoran.app/$1",
       "permanent": false
     }
   ]

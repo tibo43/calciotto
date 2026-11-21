@@ -3,7 +3,7 @@ import { STAR_OF_THE_MATCH } from '@/services/v2Home';
 
 // The notification wording lives in public/sw.js (see its comment); the file
 // exports it for exactly this test.
-const { buildNotification, MOTM_TEXT } = createRequire(import.meta.url)('../../../public/sw.js');
+const { buildNotification, MOTM_TEXT, LEGACY_HOST, retireLegacyWorker } = createRequire(import.meta.url)('../../../public/sw.js');
 
 const KICKOFF = '2026-09-06T19:00:00Z';
 const kickoffText = new Date(KICKOFF).toLocaleString('en-US', {
@@ -139,5 +139,31 @@ describe('buildNotification', () => {
     const notification = buildNotification({ type: 'member_joined', playerName: 'Sam', groupName: 'Thursday Football' });
     expect(notification.title).toBe('Sam joined Thursday Football');
     expect(notification.body).toContain('generate a new invite code');
+  });
+});
+
+describe('retireLegacyWorker', () => {
+  it('names the legacy frontend host', () => {
+    expect(LEGACY_HOST).toBe('calcio-otto.vercel.app');
+  });
+
+  it('unsubscribes from push, then unregisters', async () => {
+    const calls = [];
+    const subscription = { unsubscribe: vi.fn(async () => { calls.push('unsubscribe'); return true; }) };
+    const registration = {
+      pushManager: { getSubscription: vi.fn(async () => subscription) },
+      unregister: vi.fn(async () => { calls.push('unregister'); return true; }),
+    };
+    await retireLegacyWorker(registration);
+    expect(calls).toEqual(['unsubscribe', 'unregister']);
+  });
+
+  it('still unregisters when there is no push subscription', async () => {
+    const registration = {
+      pushManager: { getSubscription: vi.fn(async () => null) },
+      unregister: vi.fn(async () => true),
+    };
+    await retireLegacyWorker(registration);
+    expect(registration.unregister).toHaveBeenCalledOnce();
   });
 });

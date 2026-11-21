@@ -52,9 +52,9 @@ describe('domain settings', () => {
     expect(csp(expected)).toContain("connect-src 'self' https://api.agoran.app;");
     expect(proxy(expected)).toBe('https://api.agoran.app/auth/:path*');
     expect(redirects(expected)).toEqual([{
-      source: '/:path*',
+      source: '/((?!sw\\.js$).*)',
       has: [{ type: 'host', value: 'calcio-otto.vercel.app' }],
-      destination: 'https://club.agoran.app/:path*',
+      destination: 'https://club.agoran.app/$1',
       permanent: false,
     }]);
   });
