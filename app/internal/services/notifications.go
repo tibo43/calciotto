@@ -47,7 +47,7 @@ import (
 // (registration_open, kickoff_reminder, and the two prediction ones, which
 // wait a delay after an event) need a clock, and the backend's
 // free Koyeb instance sleeps when idle, so an in-process timer would not
-// fire: cron-job.org calls POST https://calciotto.koyeb.app/internal/notifications/tick
+// fire: cron-job.org calls POST https://api.agoran.app/internal/notifications/tick
 // every minute with Authorization: Bearer <NOTIFICATIONS_TICK_SECRET>,
 // which runs Tick. Each match records when each of the time-driven ones went
 // out, so however many ticks see it, it is sent once, and a tick that runs

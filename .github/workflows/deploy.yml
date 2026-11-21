@@ -113,7 +113,7 @@ jobs:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           # Repository-level secret. deploy.yml copies it to Koyeb on each
           # deploy. cron-job.org calls
-          # POST https://calciotto.koyeb.app/internal/notifications/tick
+          # POST https://api.agoran.app/internal/notifications/tick
           # every five minutes with Authorization: Bearer <this value>, so
           # the GitHub secret must match the one configured in cron-job.org.
           NOTIFICATIONS_TICK_SECRET: ${{ secrets.NOTIFICATIONS_TICK_SECRET }}
@@ -262,6 +262,7 @@ jobs:
           LEGACY_API_ORIGIN: ${{ vars.LEGACY_API_ORIGIN }}
           NEW_FRONTEND_ORIGIN: ${{ vars.NEW_FRONTEND_ORIGIN }}
           NEW_API_ORIGIN: ${{ vars.NEW_API_ORIGIN }}
+          LEGACY_FRONTEND_REDIRECT: ${{ vars.LEGACY_FRONTEND_REDIRECT }}
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
           FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
         run: |
@@ -449,6 +450,7 @@ jobs:
           LEGACY_API_ORIGIN: ${{ vars.LEGACY_API_ORIGIN }}
           NEW_FRONTEND_ORIGIN: ${{ vars.NEW_FRONTEND_ORIGIN }}
           NEW_API_ORIGIN: ${{ vars.NEW_API_ORIGIN }}
+          LEGACY_FRONTEND_REDIRECT: ${{ vars.LEGACY_FRONTEND_REDIRECT }}
           VUE_APP_API_BASE_URL: ${{ vars.VUE_APP_API_BASE_URL }}
           VUE_APP_API_BASE_URL_BY_HOST: ${{ vars.VUE_APP_API_BASE_URL_BY_HOST }}
           AUTH_PROXY_TARGET: ${{ vars.AUTH_PROXY_TARGET }}
@@ -485,8 +487,9 @@ jobs:
             printf '\nVUE_APP_API_TIMEOUT_MS=%s\n' "$VUE_APP_API_TIMEOUT_MS" >> .vercel/.env.production.local
           fi
 
-          # vercel.json is static: the CSP's connect-src and the /api/auth
-          # proxy target are written from the same settings.
+          # vercel.json is static: the CSP's connect-src, the /api/auth proxy
+          # target and the legacy domain's redirect are written from the same
+          # settings.
           node frontend/scripts/vercel-domains.mjs
 
       - name: Build
