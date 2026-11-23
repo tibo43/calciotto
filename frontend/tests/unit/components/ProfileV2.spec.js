@@ -68,7 +68,7 @@ async function mountProfile({
     global: {
       provide: { v2Context: context },
       mocks: { $route: { name: routeName, params: { id: GROUP_ID }, fullPath: '/profile' }, $router: router },
-      stubs: { 'router-link': { template: '<a :data-to="to"><slot /></a>', props: ['to'] }, TeamColourPicker: true }
+      stubs: { 'router-link': { template: '<a :data-to="to"><slot /></a>', props: ['to'] } }
     }
   });
   await flushPromises();

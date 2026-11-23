@@ -74,10 +74,10 @@ func TestRosterFullyComposed(t *testing.T) {
 		teams []models.TeamWithPlayers
 		want  bool
 	}{
-		{"both composed", []models.TeamWithPlayers{newTeam(uuid.New(), "black", 0, alice), newTeam(uuid.New(), "white", 0, bob)}, true},
-		{"only one team composed", []models.TeamWithPlayers{newTeam(uuid.New(), "black", 0, alice), newTeam(uuid.New(), "white", 0)}, false},
-		{"neither composed", []models.TeamWithPlayers{newTeam(uuid.New(), "black", 0), newTeam(uuid.New(), "white", 0)}, false},
-		{"not exactly two teams", []models.TeamWithPlayers{newTeam(uuid.New(), "black", 0, alice)}, false},
+		{"both composed", []models.TeamWithPlayers{newTeam(uuid.New(), 0, alice), newTeam(uuid.New(), 0, bob)}, true},
+		{"only one team composed", []models.TeamWithPlayers{newTeam(uuid.New(), 0, alice), newTeam(uuid.New(), 0)}, false},
+		{"neither composed", []models.TeamWithPlayers{newTeam(uuid.New(), 0), newTeam(uuid.New(), 0)}, false},
+		{"not exactly two teams", []models.TeamWithPlayers{newTeam(uuid.New(), 0, alice)}, false},
 	}
 
 	for _, tc := range tests {
@@ -144,9 +144,9 @@ func TestTeamAverageRating(t *testing.T) {
 		team models.TeamWithPlayers
 		want float64
 	}{
-		{"averages known players", newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0), newPlayer(bob, "bob", 0)), 1500},
-		{"unknown player falls back to the starting rating", newTeam(uuid.New(), "black", 0, newPlayer(uuid.New(), "carol", 0)), EloStartingRating},
-		{"empty team falls back to the starting rating", newTeam(uuid.New(), "black", 0), EloStartingRating},
+		{"averages known players", newTeam(uuid.New(), 0, newPlayer(alice, "alice", 0), newPlayer(bob, "bob", 0)), 1500},
+		{"unknown player falls back to the starting rating", newTeam(uuid.New(), 0, newPlayer(uuid.New(), "carol", 0)), EloStartingRating},
+		{"empty team falls back to the starting rating", newTeam(uuid.New(), 0), EloStartingRating},
 	}
 
 	for _, tc := range tests {

@@ -91,8 +91,8 @@ func (e *updateTeamEnv) newGroupWithAdmin(t *testing.T, name string, adminID uui
 	return group.ID, []uuid.UUID{teams[0].ID, teams[1].ID}
 }
 
-func (e *updateTeamEnv) patchTeam(groupID, teamID uuid.UUID, token, name, colour string) *httptest.ResponseRecorder {
-	raw, _ := json.Marshal(map[string]string{"name": name, "colour": colour})
+func (e *updateTeamEnv) patchTeam(groupID, teamID uuid.UUID, token, name string) *httptest.ResponseRecorder {
+	raw, _ := json.Marshal(map[string]string{"name": name})
 	req := httptest.NewRequest(http.MethodPatch,
 		"/groups/"+groupID.String()+"/teams/"+teamID.String(),
 		bytes.NewReader(raw))
@@ -106,7 +106,7 @@ func (e *updateTeamEnv) patchTeam(groupID, teamID uuid.UUID, token, name, colour
 }
 
 // TestUpdateTeam_Integration_AdminSuccess covers the happy path: an admin of
-// the team's own group renames it and changes its colour, verified both via
+// the team's own group renames it, verified both via
 // the response body and a follow-up GetTeamsByGroupID (not just the status
 // code).
 func TestUpdateTeam_Integration_AdminSuccess(t *testing.T) {
@@ -117,7 +117,7 @@ func TestUpdateTeam_Integration_AdminSuccess(t *testing.T) {
 	adminID, adminToken := env.authenticatedPlayer(t, "Zzz Team HTTP Admin", "team-http-admin@example.com")
 	groupID, teamIDs := env.newGroupWithAdmin(t, "Zzz Team HTTP Group", adminID)
 
-	rec := env.patchTeam(groupID, teamIDs[0], adminToken, "Les Rouges", "red")
+	rec := env.patchTeam(groupID, teamIDs[0], adminToken, "Les Rouges")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PATCH team returned status %d, want 200, body: %s", rec.Code, rec.Body.String())
 	}
@@ -126,8 +126,8 @@ func TestUpdateTeam_Integration_AdminSuccess(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
 		t.Fatalf("failed to decode updated team: %v", err)
 	}
-	if updated.Name != "Les Rouges" || updated.Colour != "red" {
-		t.Errorf("response team = %+v, want Name=%q Colour=%q", updated, "Les Rouges", "red")
+	if updated.Name != "Les Rouges" {
+		t.Errorf("response team = %+v, want Name=%q", updated, "Les Rouges")
 	}
 
 	teams, err := env.teams.GetTeamsByGroupID(groupID)
@@ -138,8 +138,8 @@ func TestUpdateTeam_Integration_AdminSuccess(t *testing.T) {
 	for _, team := range teams {
 		if team.ID == teamIDs[0] {
 			found = true
-			if team.Name != "Les Rouges" || team.Colour != "red" {
-				t.Errorf("stored team = %+v, want Name=%q Colour=%q", team, "Les Rouges", "red")
+			if team.Name != "Les Rouges" {
+				t.Errorf("stored team = %+v, want Name=%q", team, "Les Rouges")
 			}
 		}
 	}
@@ -158,7 +158,7 @@ func TestUpdateTeam_Integration_NoToken(t *testing.T) {
 	adminID, _ := env.authenticatedPlayer(t, "Zzz Team HTTP NoToken Admin", "team-http-notoken-admin@example.com")
 	groupID, teamIDs := env.newGroupWithAdmin(t, "Zzz Team HTTP NoToken Group", adminID)
 
-	rec := env.patchTeam(groupID, teamIDs[0], "", "New Name", "red")
+	rec := env.patchTeam(groupID, teamIDs[0], "", "New Name")
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("no-token request returned status %d, want 401, body: %s", rec.Code, rec.Body.String())
 	}
@@ -180,7 +180,7 @@ func TestUpdateTeam_Integration_NonAdminForbidden(t *testing.T) {
 		t.Fatalf("failed to add member: %v", err)
 	}
 
-	rec := env.patchTeam(groupID, teamIDs[0], memberToken, "New Name", "red")
+	rec := env.patchTeam(groupID, teamIDs[0], memberToken, "New Name")
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("non-admin PATCH returned status %d, want 403, body: %s", rec.Code, rec.Body.String())
 	}
@@ -198,7 +198,7 @@ func TestUpdateTeam_Integration_NonAdminForbidden(t *testing.T) {
 
 // TestUpdateTeam_Integration_CrossGroupTeamNotFound is the important
 // security case: an admin of *some* group (group A) must not be able to
-// rename/recolour a team belonging to a different group (group B) just by
+// rename a team belonging to a different group (group B) just by
 // knowing or guessing its UUID. RequireGroupAdminByPathParam only proves the
 // caller administers the :id in the path — it says nothing about whether
 // :teamId actually belongs to that group — so this has to be enforced by
@@ -215,7 +215,7 @@ func TestUpdateTeam_Integration_CrossGroupTeamNotFound(t *testing.T) {
 	_, teamBIDs := env.newGroupWithAdmin(t, "Zzz Team HTTP CrossGroup Group B", adminBID)
 
 	// Admin of group A, targeting a team that belongs to group B via the URL.
-	rec := env.patchTeam(groupAID, teamBIDs[0], adminAToken, "Hijacked", "purple")
+	rec := env.patchTeam(groupAID, teamBIDs[0], adminAToken, "Hijacked")
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("cross-group PATCH returned status %d, want 404, body: %s", rec.Code, rec.Body.String())
 	}
@@ -224,14 +224,14 @@ func TestUpdateTeam_Integration_CrossGroupTeamNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTeamByID(teamB) returned error: %v", err)
 	}
-	if teamB.Name == "Hijacked" || teamB.Colour == "purple" {
+	if teamB.Name == "Hijacked" {
 		t.Errorf("cross-group PATCH mutated group B's team: %+v", teamB)
 	}
 }
 
-// TestUpdateTeam_Integration_RequiresNameAndColour covers the validation
-// sentinels surfacing as 400s through the handler.
-func TestUpdateTeam_Integration_RequiresNameAndColour(t *testing.T) {
+// TestUpdateTeam_Integration_RequiresName covers the validation sentinel
+// surfacing as a 400 through the handler.
+func TestUpdateTeam_Integration_RequiresName(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 	env := newUpdateTeamEnv(t, tx)
@@ -239,10 +239,7 @@ func TestUpdateTeam_Integration_RequiresNameAndColour(t *testing.T) {
 	adminID, adminToken := env.authenticatedPlayer(t, "Zzz Team HTTP Validation Admin", "team-http-validation-admin@example.com")
 	groupID, teamIDs := env.newGroupWithAdmin(t, "Zzz Team HTTP Validation Group", adminID)
 
-	if rec := env.patchTeam(groupID, teamIDs[0], adminToken, "", "red"); rec.Code != http.StatusBadRequest {
+	if rec := env.patchTeam(groupID, teamIDs[0], adminToken, ""); rec.Code != http.StatusBadRequest {
 		t.Errorf("empty name returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
-	}
-	if rec := env.patchTeam(groupID, teamIDs[0], adminToken, "New Name", ""); rec.Code != http.StatusBadRequest {
-		t.Errorf("empty colour returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
 	}
 }

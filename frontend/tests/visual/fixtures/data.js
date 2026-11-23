@@ -27,12 +27,10 @@ const CURRENT_PLAYER_ID = '33333333-3333-4333-8333-333333333333';
 const TEAM_RED = {
   ID: 'aaaaaaaa-0000-4000-8000-000000000001',
   Name: 'Les Rouges',
-  Colour: 'red',
 };
 const TEAM_BLUE = {
   ID: 'aaaaaaaa-0000-4000-8000-000000000002',
   Name: 'Les Bleus',
-  Colour: 'blue',
 };
 
 const player = (n, name, goals) => ({
@@ -322,8 +320,8 @@ const predictionStandings = [
 ];
 
 const teams = [
-  { id: 'aaaaaaaa-0000-4000-8000-000000000002', name: 'Les Bleus', colour: 'blue' },
-  { id: 'aaaaaaaa-0000-4000-8000-000000000001', name: 'Les Rouges', colour: 'red' },
+  { id: 'aaaaaaaa-0000-4000-8000-000000000002', name: 'Les Bleus' },
+  { id: 'aaaaaaaa-0000-4000-8000-000000000001', name: 'Les Rouges' },
 ];
 
 const inviteCode = 'ABC23XYZ';

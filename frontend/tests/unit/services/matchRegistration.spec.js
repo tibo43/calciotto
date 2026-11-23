@@ -254,8 +254,8 @@ describe('fillTeamsFromRegistrations', () => {
 
 describe('teamsAreComposed', () => {
   const teams = (playersA, playersB) => [
-    { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: playersA },
-    { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: playersB }
+    { ID: 'team-a', Name: 'Black', Score: 0, Players: playersA },
+    { ID: 'team-b', Name: 'White', Score: 0, Players: playersB }
   ];
 
   it('is false when both teams are empty — a scheduled match\'s normal state', () => {
@@ -287,8 +287,8 @@ describe('teamsAreComposed', () => {
 
 describe('isPlayerOnRoster', () => {
   const teams = (playersA, playersB) => [
-    { ID: 'team-a', Name: 'Black', Colour: 'black', Score: 0, Players: playersA },
-    { ID: 'team-b', Name: 'White', Colour: 'white', Score: 0, Players: playersB }
+    { ID: 'team-a', Name: 'Black', Score: 0, Players: playersA },
+    { ID: 'team-b', Name: 'White', Score: 0, Players: playersB }
   ];
 
   it('is true for a player on team A', () => {

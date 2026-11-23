@@ -771,9 +771,6 @@ export default {
       this.teams = (Array.isArray(teams) ? teams : []).map((team) => ({
         id: team.id || team.ID,
         name: team.name || team.Name,
-        // Team colours aren't shown in v2. The stored value is sent back
-        // unchanged on save (the API requires one), for players still on v1.
-        colour: team.colour || team.Colour,
       }));
       this.applyInvitation(code);
       this.members = Array.isArray(members) ? members : [];
@@ -788,7 +785,7 @@ export default {
     async saveTeam(team) {
       this.teamNote = '';
       try {
-        await updateTeam(this.groupId, team.id, team.name.trim(), team.colour);
+        await updateTeam(this.groupId, team.id, team.name.trim());
         this.teamNote = 'Saved.';
       } catch {
         this.teamNote = 'Could not save the team.';
