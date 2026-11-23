@@ -140,11 +140,11 @@ func (h *PlayerHandler) UpdateMyPositions(c *gin.Context) {
 }
 
 // GetMatchPositions lists the preferred positions of the match's group
-// members, for the admin composing or reading its teams. Positions are only
-// ever shown to group admins, so this is a route of its own behind
-// RequireGroupAdminByMatchPathParam rather than a field on the sign-up list or
-// the match details, which every member reads: a member gets 403 here, a
-// non-member 404, and the shared payloads stay exactly as they were.
+// members, shown to every member in the line-ups and used by the admin
+// composing the teams. A route of its own behind
+// RequireGroupMembershipByMatchPathParam (a non-member gets 404) rather than a
+// field on the sign-up list or the match details, so the shared payloads stay
+// exactly as they were.
 func (h *PlayerHandler) GetMatchPositions(c *gin.Context) {
 	groupID, ok := authorizedGroupIDFromContext(c)
 	if !ok {

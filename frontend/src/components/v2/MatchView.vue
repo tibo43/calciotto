@@ -296,9 +296,9 @@ export default {
     this.load();
   },
   methods: {
-    // "DEF · MID" for an admin, '' for a member or a player with no position.
+    // "DEF · MID", or '' for a player with no position.
     tagOf(player) {
-      if (!this.isAdmin || !player) return '';
+      if (!player) return '';
       return positionsTag(this.positionsById[player.ID]);
     },
     heroDateLabel,
@@ -393,11 +393,9 @@ export default {
           ? await getMatchPredictions(this.id).catch(() => null)
           : null;
         this.isAdmin = group.role === 'admin';
-        // Preferred positions are for the group's admins only: the route
-        // refuses a member, and a member's page never asks for them.
-        this.positionsById = this.isAdmin
-          ? positionsMap(await getMatchPositions(this.id).catch(() => []))
-          : {};
+        // Every member of the group sees the preferred positions; a failed
+        // request just shows no tag.
+        this.positionsById = positionsMap(await getMatchPositions(this.id).catch(() => []));
         this.v2Context.groupId = group.id;
         await this.publishChrome(groups).catch(() => {});
       } catch (error) {

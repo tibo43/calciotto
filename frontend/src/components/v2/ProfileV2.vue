@@ -156,7 +156,7 @@
             <span v-if="positions.includes(position)" class="tick" aria-hidden="true">✓</span>{{ position }}
           </button>
         </div>
-        <p class="scope pos-help">Pick one or more. Only your group admins see them, to balance teams.</p>
+        <p class="scope pos-help">Pick one or more. Your groups see them, and admins use them to balance teams.</p>
         <p v-if="positionsLoadFailed" class="scope">Couldn't load your positions. Reload the page to try again.</p>
       </section>
       <section class="sec">

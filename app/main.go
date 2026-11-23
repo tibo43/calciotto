@@ -249,11 +249,12 @@ func main() {
 	// the cap is typically what an admin does right after closing sign-ups, in
 	// order to compose the teams.
 	r.PATCH("/matches/:id/registrations/max-players", authRequired, requireGroupAdminByMatchID, matchRegistrationHandler.SetMaxPlayers)
-	// Preferred positions of the match's group members, for composing the
-	// teams. Admin-only: positions are never shown to a plain member, so they
-	// are not on the sign-up list or the match details (which every member
-	// reads) but behind the match-scoped admin gate (member 403, non-member 404).
-	r.GET("/matches/:id/positions", authRequired, requireGroupAdminByMatchID, playerHandler.GetMatchPositions)
+	// Preferred positions of the match's group members, shown next to each
+	// name in the line-ups and used to compose the teams. Any member of the
+	// match's group reads them (a non-member gets 404); a route of its own
+	// rather than a field on the sign-up list or the match details, so those
+	// shared payloads stay as they were.
+	r.GET("/matches/:id/positions", authRequired, requireGroupMemberByMatchID, playerHandler.GetMatchPositions)
 
 	// Man of the Match voting. Same match-scoped middleware pair as the
 	// sign-up routes above, and every route is open to any member — there is

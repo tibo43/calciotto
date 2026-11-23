@@ -31,7 +31,6 @@ func newPositionsEnv(t *testing.T, tx *gorm.DB) *registrationEnv {
 	authRequired := handlers.AuthMiddleware(env.auth)
 	requireGroupMember := handlers.RequireGroupMembership(membershipService)
 	requireGroupMemberByMatchID := handlers.RequireGroupMembershipByMatchPathParam(env.matches, membershipService, "id")
-	requireGroupAdminByMatchID := handlers.RequireGroupAdminByMatchPathParam(env.matches, membershipService, "id")
 	playerHandler := handlers.NewPlayerHandler(env.players)
 	matchHandler := handlers.NewMatchHandler(env.matches, membershipService)
 	registrationHandler := handlers.NewMatchRegistrationHandler(env.registrations)
@@ -40,7 +39,7 @@ func newPositionsEnv(t *testing.T, tx *gorm.DB) *registrationEnv {
 	router := gin.New()
 	router.GET("/players/me/positions", authRequired, playerHandler.GetMyPositions)
 	router.PUT("/players/me/positions", authRequired, playerHandler.UpdateMyPositions)
-	router.GET("/matches/:id/positions", authRequired, requireGroupAdminByMatchID, playerHandler.GetMatchPositions)
+	router.GET("/matches/:id/positions", authRequired, requireGroupMemberByMatchID, playerHandler.GetMatchPositions)
 	router.POST("/matches/:id/registrations", authRequired, requireGroupMemberByMatchID, registrationHandler.Register)
 	router.GET("/matches/:id/registrations", authRequired, requireGroupMemberByMatchID, registrationHandler.ListRegistrations)
 	router.GET("/matches/:id/details", authRequired, requireGroupMember, matchHandler.GetMatchDetailsByID)
@@ -144,10 +143,10 @@ func TestMyPositions_Integration_Validation(t *testing.T) {
 }
 
 // GET /matches/:id/positions is the only way to read someone else's
-// positions: an admin of the match's group gets them, a plain member 403, a
-// player outside the group 404. The sign-up list and the match details, read
-// by every member, admin included, never carry them.
-func TestMatchPositions_Integration_AdminOnly(t *testing.T) {
+// positions: any member of the match's group gets them, admin or not, a player
+// outside the group 404. The sign-up list and the match details never carry
+// them.
+func TestMatchPositions_Integration_GroupMembersOnly(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 	env := newPositionsEnv(t, tx)
@@ -163,28 +162,27 @@ func TestMatchPositions_Integration_AdminOnly(t *testing.T) {
 	}
 
 	path := "/matches/" + matchID.String() + "/positions"
-	rec := env.do(http.MethodGet, path, group.adminToken, nil)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("admin GET positions returned %d: %s", rec.Code, rec.Body.String())
-	}
-	var entries []models.PlayerPositionsEntry
-	if err := json.Unmarshal(rec.Body.Bytes(), &entries); err != nil {
-		t.Fatal(err)
-	}
-	// Only group members with at least one position: the admin has none and
-	// the other group's member is not listed.
-	if len(entries) != 1 || entries[0].PlayerID != group.memberID ||
-		!reflect.DeepEqual([]string(entries[0].PreferredPositions), []string{"GK", "MID"}) {
-		t.Errorf("admin GET positions = %+v, want only the member with [GK MID]", entries)
+	for _, caller := range []struct{ name, token string }{{"admin", group.adminToken}, {"member", group.memberToken}} {
+		rec := env.do(http.MethodGet, path, caller.token, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s GET positions returned %d: %s", caller.name, rec.Code, rec.Body.String())
+		}
+		var entries []models.PlayerPositionsEntry
+		if err := json.Unmarshal(rec.Body.Bytes(), &entries); err != nil {
+			t.Fatal(err)
+		}
+		// Only group members with at least one position: the admin has none
+		// and the other group's member is not listed.
+		if len(entries) != 1 || entries[0].PlayerID != group.memberID ||
+			!reflect.DeepEqual([]string(entries[0].PreferredPositions), []string{"GK", "MID"}) {
+			t.Errorf("%s GET positions = %+v, want only the member with [GK MID]", caller.name, entries)
+		}
 	}
 
-	if rec := env.do(http.MethodGet, path, group.memberToken, nil); rec.Code != http.StatusForbidden {
-		t.Errorf("member GET positions returned %d, want 403: %s", rec.Code, rec.Body.String())
-	} else if strings.Contains(rec.Body.String(), "MID") {
-		t.Errorf("member 403 body leaks positions: %s", rec.Body.String())
-	}
 	if rec := env.do(http.MethodGet, path, outsider.adminToken, nil); rec.Code != http.StatusNotFound {
 		t.Errorf("outsider admin GET positions returned %d, want 404", rec.Code)
+	} else if strings.Contains(rec.Body.String(), "MID") {
+		t.Errorf("outsider 404 body leaks positions: %s", rec.Body.String())
 	}
 
 	// The shared payloads stay position-free, whoever asks.

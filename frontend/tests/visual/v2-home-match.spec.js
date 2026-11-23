@@ -79,7 +79,7 @@ test.describe('design v2 home and match', () => {
     expectEverythingStubbed(unstubbed);
   });
 
-  // Group admins only: each player's preferred positions after the name.
+  // Each player's preferred positions after the name, for every member.
   const matchPositions = [
     [1, ['FWD']], [2, ['GK']], [3, ['DEF', 'MID']], [4, ['GK', 'DEF']],
     [5, ['MID', 'FWD']], [6, ['FWD']], [7, ['DEF']],
@@ -101,14 +101,11 @@ test.describe('design v2 home and match', () => {
     expectEverythingStubbed(unstubbed);
   });
 
-  test('played match, no positions for a member', async ({ page }) => {
-    const asked = [];
-    page.on('request', (request) => { if (request.url().endsWith('/positions')) asked.push(request.url()); });
+  test('played match, positions for a member too', async ({ page }) => {
     const groups = data.groups.map((group) => ({ ...group, role: 'member' }));
     const { unstubbed } = await gotoApp(page, `/matches/${PLAYED}`, { ...V2, groups, matchPositions });
     await expect(page.getByText('Star of the Match vote closed', { exact: true })).toBeVisible();
-    await expect(page.locator('.pos-tag')).toHaveCount(0);
-    expect(asked).toEqual([]);
+    await expect(page.locator('.pos-tag')).toHaveCount(7);
     expectEverythingStubbed(unstubbed);
   });
 

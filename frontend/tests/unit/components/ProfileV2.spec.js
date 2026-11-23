@@ -269,7 +269,7 @@ describe('ProfileV2.vue preferred positions (Account)', () => {
     expect(state(wrapper)).toEqual(['GK:false', '✓DEF:true', '✓MID:true', 'FWD:false']);
     expect(buttons(wrapper)[1].classes()).toContain('is-on');
     expect(buttons(wrapper)[1].find('.tick').attributes('aria-hidden')).toBe('true');
-    expect(section.text()).toContain('Pick one or more. Only your group admins see them, to balance teams.');
+    expect(section.text()).toContain('Pick one or more. Your groups see them, and admins use them to balance teams.');
     // Under the name, before the email.
     const headings = wrapper.findAll('.sec-head h2').map((h) => h.text());
     expect(headings.indexOf('Positions')).toBe(headings.indexOf('Identity') + 1);
