@@ -186,7 +186,7 @@ async function stubApi(page, overrides = {}) {
   // Preferred positions (design v2). The player's own, read and replaced on
   // the Account page: a PUT answers with what it was sent, normalized the way
   // the server does, unless `myPositionsError` asks for a refusal. And the
-  // admin-only list for a match (`matchPositions`, [{ PlayerID,
+  // group's list for a match (`matchPositions`, [{ PlayerID,
   // PreferredPositions }]), empty by default so that no existing page shows a
   // tag.
   let myPositions = overrides.myPositions ?? [];

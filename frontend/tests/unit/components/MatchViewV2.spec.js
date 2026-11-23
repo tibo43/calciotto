@@ -307,11 +307,11 @@ describe('MatchView.vue preferred positions', () => {
     expect(tags).toEqual(['DEF · MID', 'GK']);
   });
 
-  it('never asks for positions, nor shows any, for a plain member', async () => {
+  it('shows the positions to a plain member too', async () => {
     const { wrapper } = await mountView(playedMatch(), { role: 'member', positions });
-    expect(getMatchPositions).not.toHaveBeenCalled();
-    expect(wrapper.find('.pos-tag').exists()).toBe(false);
-    expect(wrapper.find('.nm-line').exists()).toBe(false);
+    expect(getMatchPositions).toHaveBeenCalledWith('match');
+    const tags = wrapper.findAll('.lineup .pos-tag').map((tag) => tag.text());
+    expect(tags).toEqual(['DEF · MID', 'GK']);
   });
 
   it('still renders the match for an admin when the positions request fails', async () => {
