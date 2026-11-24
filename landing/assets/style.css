@@ -99,19 +99,6 @@ ol,ul{padding:0;list-style:none}
 .step h3{font:800 28px/1 var(--font-display);text-transform:uppercase;letter-spacing:.02em;margin-bottom:8px}
 .step p{color:var(--muted);font-size:15px}
 
-/* Install */
-.install{display:grid;gap:16px}
-.os{border:1px solid var(--rule);background:var(--surface);padding:24px}
-.os-head{display:flex;align-items:center;gap:12px;margin-bottom:18px}
-.os-head svg{width:24px;height:24px;flex:none}
-.os h3{font:800 28px/1 var(--font-display);text-transform:uppercase;letter-spacing:.02em}
-.os ol{display:grid;gap:14px}
-.os li{display:grid;grid-template-columns:28px 1fr;gap:12px;font-size:15px}
-.os li .k{font:400 12px/1.9 var(--font-label);color:var(--muted)}
-.os .tip{margin-top:18px;padding-top:16px;border-top:1px solid var(--rule);font-size:14px;color:var(--muted)}
-kbd{font:400 13px var(--font-label);border:1px solid var(--outline);padding:1px 6px;white-space:nowrap}
-.inline-ico{display:inline-block;width:16px;height:16px;vertical-align:-3px}
-
 /* Footer */
 .footer{padding:48px 0 40px}
 .footer .container{display:grid;gap:28px}
@@ -125,7 +112,6 @@ kbd{font:400 13px var(--font-label);border:1px solid var(--outline);padding:1px 
   .cta .btn{width:auto}
   .features{grid-template-columns:1fr 1fr;border-top:0;gap:0 32px}
   .feature{border-top:1px solid var(--rule);border-bottom:0;padding:28px 0 32px}
-  .install{grid-template-columns:1fr 1fr}
 }
 @media (min-width:900px){
   :root{--gutter:32px}
