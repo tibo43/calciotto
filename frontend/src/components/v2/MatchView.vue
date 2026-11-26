@@ -30,7 +30,12 @@
         <template v-else>
           <div class="hero-spots">
             <div class="num big">{{ places }}</div>
-            <div class="cap">places<br>left<br>{{ confirmed.length }} / {{ cap }} signed up</div>
+            <!-- Same three lines as on the home page. -->
+            <div class="cap">
+              <span class="cap-line">places left</span>
+              <span class="cap-line">{{ confirmed.length }} / {{ cap }} signed up</span>
+              <span v-if="full" class="cap-line">{{ waiting.length }} in waiting list</span>
+            </div>
           </div>
           <div class="bar" aria-hidden="true"><i :style="{ '--pct': barPct }"></i></div>
         </template>
