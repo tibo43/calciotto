@@ -37,11 +37,17 @@ func (bm *BaseModel) BeforeCreate(tx *gorm.DB) error {
 // bump changes anything.
 type Player struct {
 	BaseModel
-	Name             string        `gorm:"type:string" json:"name"`
-	Email            *string       `gorm:"type:string;uniqueIndex" json:"-"`
-	PasswordHash     string        `gorm:"type:string" json:"-"`
-	TokenVersion     int           `gorm:"not null;default:0" json:"-"`
-	GuideCompletedAt *time.Time    `json:"-"`
+	Name             string     `gorm:"type:string" json:"name"`
+	Email            *string    `gorm:"type:string;uniqueIndex" json:"-"`
+	PasswordHash     string     `gorm:"type:string" json:"-"`
+	TokenVersion     int        `gorm:"not null;default:0" json:"-"`
+	GuideCompletedAt *time.Time `json:"-"`
+	// LastSeenAt is the last time the player used the app: refreshed by
+	// AuthMiddleware on an authenticated request, at most once every
+	// services.LastSeenThrottle (see AuthService.TouchLastSeen). NULL for a
+	// player not seen since the column was added. Not exposed by any route
+	// yet — read it in SQL.
+	LastSeenAt       *time.Time    `gorm:"type:timestamptz" json:"-"`
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:PlayerID"`
 
 	// PreferredPositions (GK/DEF/MID/FWD, any number, canonical order) is

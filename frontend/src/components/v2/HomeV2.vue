@@ -49,7 +49,14 @@
         <template v-else>
           <div class="hero-spots">
             <div class="num big">{{ places }}</div>
-            <div class="cap">places<br>left<br>{{ confirmedCount }} / {{ cap }} signed up</div>
+            <!-- "Places left" on one line, then the confirmed sign-ups against
+                 the places, then, once full, the waiting list's size — so
+                 17 sign-ups for 16 places read 16 / 16 and 1 waiting. -->
+            <div class="cap">
+              <span class="cap-line">places left</span>
+              <span class="cap-line">{{ confirmedCount }} / {{ cap }} signed up</span>
+              <span v-if="full" class="cap-line">{{ waitingCount }} in waiting list</span>
+            </div>
           </div>
           <div class="bar" aria-hidden="true"><i :style="{ '--pct': barPct }"></i></div>
         </template>
@@ -230,6 +237,13 @@ export default {
     },
     cap() {
       return Number(this.next && this.next.MaxPlayers) || 0;
+    },
+    // Every sign-up, the waiting list included: only used to size it.
+    signedUpCount() {
+      return this.registrations.length || Number(this.next && this.next.RegistrationCount) || 0;
+    },
+    waitingCount() {
+      return this.cap ? Math.max(0, this.signedUpCount - this.cap) : 0;
     },
     places() {
       return placesLeft(this.next, this.confirmedCount);

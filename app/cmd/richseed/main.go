@@ -306,11 +306,10 @@ func generateRecentComposedMatch(
 	matchPlayerService *services.MatchPlayerService,
 	voteService *services.MatchVoteService,
 ) {
-	// Comfortably inside the 2-calendar-day Man of the Match voting window
-	// (VotingWindowError closes it the day after the match, at midnight) —
-	// -2 days sits right on the boundary and can already read as closed
-	// depending on the time of day the script runs.
-	recentKickoff := time.Now().AddDate(0, 0, -1)
+	// Comfortably inside the Man of the Match voting window, which closes 24
+	// hours after kick-off (services.MotmVotingDeadline) — a full day back
+	// would already be closed.
+	recentKickoff := time.Now().Add(-3 * time.Hour)
 	recentMatchID, composed := createComposedScheduledMatch(matchService, matchPlayerService, group.ID, teams, roster, recentKickoff, true)
 	// Man of the Match voting now requires the voter to actually be on this
 	// match's roster (see CLAUDE.md's "Man of the Match voting" section) —

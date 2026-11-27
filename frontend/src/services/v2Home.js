@@ -1,6 +1,6 @@
 import { parseCalendarDay } from './datetime';
 import { deriveRegistrationState, REGISTRATION_NOT_OPEN_YET, REGISTRATION_OPEN } from './matchRegistration';
-import { isMotmVotingOpen } from './motmVoting';
+import { isMotmVotingOpen, motmVotingDeadlineMs } from './motmVoting';
 
 // What the design v2 calls the Man of the Match award, everywhere it shows
 // it (the code keeps the motm names, and v1 keeps "Man of the Match" and
@@ -140,13 +140,20 @@ export function placesLeft(match, confirmedCount) {
   return Math.max(0, cap - confirmedCount);
 }
 
-// Last calendar day a vote can still be cast: the match date plus one,
-// closing at midnight as that day ends.
+// When the vote closes, as read in « vote open until … ». A scheduled match
+// closes 24 hours after kick-off, at a clock time in the viewer's zone
+// (« 27 Nov 19:45 »); one without a kick-off is open through the day after
+// its Date (« 4 Sep midnight »). See motmVotingDeadlineMs.
 export function voteDeadlineLabel(match) {
-  const day = parseCalendarDay(match && match.Date);
-  if (!day) return '';
-  const last = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
-  return `${last.getDate()} ${MONTHS[last.getMonth()]}`;
+  const deadline = motmVotingDeadlineMs(match);
+  if (Number.isNaN(deadline)) return '';
+  if (hasKickoff(match.ScheduledAt)) {
+    const at = new Date(deadline);
+    const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+    return `${at.getDate()} ${MONTHS[at.getMonth()]} ${time}`;
+  }
+  const last = new Date(deadline - 1);
+  return `${last.getDate()} ${MONTHS[last.getMonth()]} midnight`;
 }
 
 export function motmWinners(votes) {
@@ -177,7 +184,7 @@ export function matchVoteCopy(match, votes, nowMs) {
   if (isMotmVotingOpen(match, nowMs)) {
     const until = voteDeadlineLabel(match);
     return until
-      ? `${STAR_OF_THE_MATCH} vote open until ${until} midnight · tap a player to change`
+      ? `${STAR_OF_THE_MATCH} vote open until ${until} · tap a player to change`
       : `${STAR_OF_THE_MATCH} vote open · tap a player to change`;
   }
   const winners = motmWinners(votes);

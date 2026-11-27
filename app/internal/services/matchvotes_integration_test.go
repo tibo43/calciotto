@@ -375,13 +375,11 @@ func TestVote_Integration_WindowStillOpenTheDayAfter(t *testing.T) {
 	}
 }
 
-// TestVote_Integration_ScheduledMatchWindowUsesDateNotKickoff: a scheduled
-// match's window is measured from Date alone — a match kicking off just now
-// but whose Date was independently backdated (decoupling the two, which
-// CreateMatch itself never does — Date is normally derived from ScheduledAt
-// at creation) still has its voting window closed, proving the precise
-// kick-off instant plays no part in it any more.
-func TestVote_Integration_ScheduledMatchWindowUsesDateNotKickoff(t *testing.T) {
+// TestVote_Integration_ScheduledMatchWindowUsesKickoff: a scheduled match's
+// window is measured from its kick-off alone. A backdated Date (decoupled
+// from ScheduledAt, which CreateMatch itself never does) leaves it open, and
+// a kick-off more than 24 hours ago closes it.
+func TestVote_Integration_ScheduledMatchWindowUsesKickoff(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
@@ -426,15 +424,23 @@ func TestVote_Integration_ScheduledMatchWindowUsesDateNotKickoff(t *testing.T) {
 		t.Fatalf("failed to compose roster: %v", err)
 	}
 
-	// Backdate Date well past the window, leaving ScheduledAt (an hour ago)
-	// untouched — if kick-off still mattered, this vote would succeed.
+	// Backdate Date well past the Date-based window, leaving ScheduledAt (an
+	// hour ago) untouched: the kick-off keeps the vote open.
 	if err := tx.Model(&models.Match{}).Where("id = ?", matchID).
 		Update("date", time.Now().AddDate(0, 0, -5)).Error; err != nil {
 		t.Fatalf("failed to backdate the match's Date: %v", err)
 	}
+	if err := voteService.Vote(matchID, alice, bob); err != nil {
+		t.Errorf("Vote an hour after kick-off returned %v, want nil (Date must not close the window)", err)
+	}
 
+	// A kick-off 25 hours ago is past the 24-hour window.
+	if err := tx.Model(&models.Match{}).Where("id = ?", matchID).
+		Update("scheduled_at", time.Now().Add(-25*time.Hour)).Error; err != nil {
+		t.Fatalf("failed to backdate the kick-off: %v", err)
+	}
 	if err := voteService.Vote(matchID, alice, bob); !errors.Is(err, services.ErrVotingClosed) {
-		t.Errorf("Vote with a backdated Date returned %v, want services.ErrVotingClosed (kick-off must not keep the window open)", err)
+		t.Errorf("Vote 25 hours after kick-off returned %v, want services.ErrVotingClosed", err)
 	}
 }
 

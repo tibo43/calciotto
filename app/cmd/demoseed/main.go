@@ -95,7 +95,12 @@ var groupSpecs = []groupSpec{
 
 // The schedule, in days relative to today.
 var (
-	playedOffsets       = []int{-36, -29, -22, -15, -8, -1}
+	playedOffsets = []int{-36, -29, -22, -15, -8}
+	// The last played match kicked off this long ago, not at the group's
+	// usual time a day back: the Man of the Match vote closes 24 hours after
+	// kick-off (services.MotmVotingDeadline), so a fixed-time match from
+	// yesterday could already be closed depending on when this runs.
+	lastPlayedAgo       = 20 * time.Hour
 	composedOffset      = 3
 	closedOffset        = 5
 	openOffset          = 7
@@ -231,6 +236,7 @@ func buildGroupHistory(e *env, g *group) {
 	for _, offset := range playedOffsets {
 		createScheduledPlayed(e, g, e.kickoff(g, offset))
 	}
+	createScheduledPlayed(e, g, e.now.Add(-lastPlayedAgo).Truncate(15*time.Minute).In(e.loc))
 	createAwaitingResult(e, g, e.now.Add(-2*time.Hour))
 	createComposedUpcoming(e, g, e.kickoff(g, composedOffset))
 	createClosedUncomposed(e, g, e.kickoff(g, closedOffset))
@@ -296,9 +302,9 @@ func createScheduledPlayed(e *env, g *group, kickoff time.Time) {
 		log.Fatalf("failed to record the result: %v", err)
 	}
 
-	// Yesterday's match is still inside the Man of the Match window, so its
-	// votes go through the service — and thibaut's is left for him to cast.
-	votingOpen := kickoff.After(e.now.AddDate(0, 0, -2))
+	// The most recent match is still inside the Man of the Match window, so
+	// its votes go through the service — and thibaut's is left for him to cast.
+	votingOpen := e.now.Before(services.MotmVotingDeadline(models.DateOf(kickoff), &kickoff))
 	for _, voter := range pickPlayers(roster, len(roster)*2/3) {
 		candidate := pickOther(roster, voter)
 		switch {
