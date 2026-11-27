@@ -100,6 +100,12 @@ describe('Star of the Match copy', () => {
 
   it('gives the deadline, a tie, and a no-vote close on the match page', () => {
     expect(matchVoteCopy(openMatch, tally, NOW)).toBe('Star of the Match vote open until 4 Sep midnight · tap a player to change');
+    // A scheduled match closes 24 hours after kick-off, shown in the viewer's zone.
+    const kickoff = '2026-09-03T19:45:00+02:00';
+    const deadline = new Date(Date.parse(kickoff) + 24 * 60 * 60 * 1000);
+    const time = `${String(deadline.getHours()).padStart(2, '0')}:${String(deadline.getMinutes()).padStart(2, '0')}`;
+    expect(matchVoteCopy({ ...openMatch, ScheduledAt: kickoff }, tally, NOW))
+      .toBe(`Star of the Match vote open until ${deadline.getDate()} Sep ${time} · tap a player to change`);
     expect(matchVoteCopy(closedMatch, tie, NOW)).toBe('Star of the Match vote closed · tie, both receive the award');
     expect(matchVoteCopy(closedMatch, { Tally: [] }, NOW)).toBe('Star of the Match vote closed · no votes, no winner');
   });

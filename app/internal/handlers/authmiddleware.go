@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"app/internal/services"
 
@@ -26,6 +28,12 @@ func AuthMiddleware(authService *services.AuthService) gin.HandlerFunc {
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 			return
+		}
+
+		// Last activity is bookkeeping: a failed write must not fail the
+		// request it rides on.
+		if err := authService.TouchLastSeen(playerID, time.Now()); err != nil {
+			log.Printf("[last seen] failed to record activity for player %s: %v", playerID, err)
 		}
 
 		c.Set("player_id", playerID)

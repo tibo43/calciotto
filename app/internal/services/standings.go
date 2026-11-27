@@ -403,10 +403,10 @@ func IsMatchCounted(match models.MatchWithDetails, now time.Time) bool {
 }
 
 // IsMotmVoteClosed reports whether a match's Man of the Match vote is over
-// at instant now: the same deadline VotingWindowError enforces, midnight
-// two days after the match day.
+// at instant now: the same deadline VotingWindowError enforces
+// (MotmVotingDeadline).
 func IsMotmVoteClosed(match models.MatchWithDetails, now time.Time) bool {
-	return !now.Before(time.Time(match.Date).AddDate(0, 0, 2))
+	return !now.Before(MotmVotingDeadline(match.Date, match.ScheduledAt))
 }
 
 // FilterCountedMatches keeps only the matches IsMatchCounted reports true for

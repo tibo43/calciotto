@@ -83,10 +83,10 @@ func TestComputeMotmWinners_AllTiedMeansEveryoneWins(t *testing.T) {
 	}
 }
 
-// TestVotingWindowError pins the Date-based rule: a match played on Date D
-// accepts votes through the end of D+1, closing at the stroke of D+2 —
-// identical for a scheduled or an unscheduled match, since neither
-// ScheduledAt nor CreatedAt play any part in it any more.
+// TestVotingWindowError pins both rules. A scheduled match closes 24 hours
+// after its kick-off, the kick-off + 24h instant itself closed. A match
+// without a kick-off accepts votes through the end of Date+1, closing at the
+// stroke of Date+2.
 func TestVotingWindowError(t *testing.T) {
 	playedOn := models.Date(time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC))
 	kickoff := time.Date(2026, 9, 3, 18, 0, 0, 0, time.UTC)
@@ -122,11 +122,23 @@ func TestVotingWindowError(t *testing.T) {
 			want:  ErrVotingClosed,
 		},
 		{
-			// ScheduledAt/kick-off no longer plays any part in the window —
-			// only Date does, scheduled or not.
-			name:  "a scheduled match's kick-off time is irrelevant to the window",
+			name:  "scheduled: open one second before kick-off + 24h",
 			match: models.Match{Date: playedOn, ScheduledAt: &kickoff},
-			now:   time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC),
+			now:   kickoff.Add(24*time.Hour - time.Second),
+			want:  nil,
+		},
+		{
+			name:  "scheduled: closed at kick-off + 24h",
+			match: models.Match{Date: playedOn, ScheduledAt: &kickoff},
+			now:   kickoff.Add(24 * time.Hour),
+			want:  ErrVotingClosed,
+		},
+		{
+			// Before midnight of Date+2, where a match without a kick-off
+			// would still be open: the kick-off is what counts.
+			name:  "scheduled: closed the next evening even though Date+1 isn't over",
+			match: models.Match{Date: playedOn, ScheduledAt: &kickoff},
+			now:   time.Date(2026, 9, 4, 20, 0, 0, 0, time.UTC),
 			want:  ErrVotingClosed,
 		},
 	}

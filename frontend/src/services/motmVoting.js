@@ -1,33 +1,36 @@
 // The Man of the Match voting window, mirrored from the Go side
-// (MatchVoteService.VotingWindowError, app/internal/services/matchVotes.go).
+// (services.MotmVotingDeadline / VotingWindowError,
+// app/internal/services/matchVotes.go).
 //
-// A vote can be cast, changed, or removed through the end of the calendar
-// day *after* the match was played — a match on Date D stays votable through
-// D+1, closing at the stroke of D+2. This is deliberately Date-based, not
-// tied to ScheduledAt/kick-off or CreatedAt at all: an earlier version
-// anchored differently for a scheduled match (kick-off) than an unscheduled
-// one (CreatedAt), which fed into a status badge that ended up looking
-// inconsistent from one match to the next — see MatchesPanel.vue's
-// matchStatus, which uses this exact same Date-based rule for the same
-// reason. The backend stays the authority and re-checks this on every call;
-// this module is what lets a star be greyed out with an explanatory tooltip
-// *before* a 409, the same reasoning MatchRegistrationService/
-// deriveRegistrationState already follow for the sign-up window.
+// A scheduled match (one with a kick-off, ScheduledAt) closes 24 hours after
+// kick-off: a Thursday 19:45 kick-off closes on Friday at 19:45. A match
+// created without a kick-off (recorded after the fact) keeps the older
+// Date-based rule: open through the day after its Date, closing at the stroke
+// of Date+2. The backend stays the authority and re-checks this on every
+// call; this module is what lets a star be greyed out *before* a 409.
 //
 // Reading the tally (GET /matches/:id/votes) is never gated on this — only
 // casting, changing, or removing a vote is.
 
 import { parseCalendarDay } from './datetime';
 
-// The instant voting closes, in epoch milliseconds: local midnight two days
-// after the match's own Date. NaN when Date is missing or unparseable —
-// which should not happen in practice (every match carries one), but is
-// handled explicitly rather than silently coercing into a wrong instant.
-// Constructed from the parsed date's own year/month/day (not by adding
-// 48 hours in milliseconds) so a DST transition in between doesn't shift the
-// deadline by an hour — JS normalizes the day-overflow using the local
-// calendar, not fixed-width time arithmetic.
+export const MOTM_VOTING_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// A Match.Date alone (YYYY-MM-DD) is a calendar day, not a kick-off.
+const kickoffMs = (match) => {
+  const value = match && match.ScheduledAt;
+  if (!value || /^\d{4}-\d{2}-\d{2}$/.test(String(value))) return NaN;
+  return Date.parse(value);
+};
+
+// The instant voting closes, in epoch milliseconds: kick-off + 24h for a
+// scheduled match, else local midnight two days after the match's own Date.
+// NaN when neither can be read. The Date-based deadline is constructed from
+// the parsed date's own year/month/day (not by adding 48 hours) so a DST
+// transition in between doesn't shift it by an hour.
 export const motmVotingDeadlineMs = (match) => {
+  const kickoff = kickoffMs(match);
+  if (!Number.isNaN(kickoff)) return kickoff + MOTM_VOTING_WINDOW_MS;
   const date = match && parseCalendarDay(match.Date);
   if (!date) return NaN;
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 2).getTime();

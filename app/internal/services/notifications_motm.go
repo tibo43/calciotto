@@ -14,8 +14,9 @@ import (
 )
 
 // MotmAnnounceLocation and MotmAnnounceHour place the Man of the Match
-// announcement: 09:00 in Rome on the day the vote closes, so it does not
-// arrive at midnight, when the vote actually closes (VotingWindowError).
+// announcement of a match without a kick-off: 09:00 in Rome on the day its
+// vote closes, rather than at midnight when it actually closes. A scheduled
+// match is announced right at its close (see MotmAnnounceAt).
 const (
 	MotmAnnounceLocation = "Europe/Rome"
 	MotmAnnounceHour     = 9
@@ -38,12 +39,17 @@ func mustLoadLocation(name string) *time.Location {
 	return loc
 }
 
-// MotmAnnounceAt is when the tick announces match's Man of the Match: 09:00
-// Europe/Rome (summer or winter time alike) on the calendar day the vote
-// closes, which is D+2 for a match played on D (VotingWindowError closes it
-// at 00:00 UTC that day, so 09:00 in Rome is always after the close).
+// MotmAnnounceAt is when the tick announces match's Man of the Match. A
+// scheduled match is announced as soon as its vote closes, 24 hours after
+// kick-off (MotmVotingDeadline): a Thursday 19:45 kick-off is announced on
+// Friday at 19:45. A match without a kick-off closes at 00:00 UTC on D+2, so
+// it is announced later that morning instead, at 09:00 Europe/Rome (summer or
+// winter time alike), rather than in the middle of the night.
 func MotmAnnounceAt(match models.Match) time.Time {
-	deadline := time.Time(match.Date).AddDate(0, 0, 2)
+	deadline := MotmVotingDeadline(match.Date, match.ScheduledAt)
+	if match.ScheduledAt != nil {
+		return deadline
+	}
 	return time.Date(deadline.Year(), deadline.Month(), deadline.Day(), MotmAnnounceHour, 0, 0, 0, motmLocation)
 }
 
@@ -55,8 +61,9 @@ func motmAnnounceDue(match models.Match, now time.Time) bool {
 }
 
 // tickMotm announces the Man of the Match of every match due at now (see
-// motmAnnounceDue). Candidates are narrowed in SQL by date, two to three
-// days back in Rome, then checked exactly.
+// motmAnnounceDue). Candidates are narrowed in SQL by date, one to four
+// days back in Rome (a scheduled match is due the day after it was played,
+// one without a kick-off two days after), then checked exactly.
 func (s *NotificationService) tickMotm(now time.Time) (int, error) {
 	today := now.In(motmLocation)
 	from := time.Date(today.Year(), today.Month(), today.Day()-4, 0, 0, 0, 0, time.UTC)

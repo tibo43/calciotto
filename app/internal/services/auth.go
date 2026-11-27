@@ -122,6 +122,10 @@ type AuthService struct {
 	// Notifier hears about every player who joined a group by signing up
 	// with its invite code. Nil unless main.go wires one in.
 	Notifier MemberJoinedNotifier
+
+	// lastSeen remembers when this process last wrote each player's
+	// LastSeenAt, so TouchLastSeen skips the database between two writes.
+	lastSeen lastSeenCache
 }
 
 // MemberJoinedNotifier is told, after the signup has committed, that a new
@@ -643,6 +647,7 @@ func (s *AuthService) DeleteAccount(playerID uuid.UUID, password string) error {
 				"password_hash":      "",
 				"token_version":      gorm.Expr("token_version + 1"),
 				"guide_completed_at": nil,
+				"last_seen_at":       nil,
 			}).Error
 	})
 }
