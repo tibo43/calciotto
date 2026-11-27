@@ -203,7 +203,7 @@ describe('RankingsV2.vue Agoranking tab', () => {
 
   it('only breaks its own tab when the Agoranking fails to load', async () => {
     const failing = await mountAgoranking({ agorankingError: new Error('boom') });
-    expect(failing.find('.state h1').text()).toBe("Couldn't load the Agoranking.");
+    expect(failing.find('.state h1').text()).toBe("Couldn't load the Agoranking");
     failing.unmount();
 
     const points = mountRankings({ seasons: ['2026-2027'], points: [{ PlayerID: 'p1', Name: 'a', Played: 1, Points: 3, IsMember: true }], agorankingError: new Error('boom') });

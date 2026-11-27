@@ -25,7 +25,7 @@
       <button class="btn" type="button" @click="load">Try again</button>
     </section>
     <section v-else-if="tab === 'agoranking' && agorankingFailed" class="state">
-      <h1>Couldn't load the Agoranking.</h1>
+      <h1>Couldn't load the Agoranking</h1>
       <button class="btn" type="button" @click="load">Try again</button>
     </section>
     <section v-else-if="isEmptyGroup" class="state">
