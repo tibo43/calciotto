@@ -39,6 +39,29 @@ func TestMotmAnnounceAt(t *testing.T) {
 	}
 }
 
+// A scheduled match is announced the moment its vote closes, 24 hours after
+// kick-off, whatever the time of day.
+func TestMotmAnnounceAt_Scheduled(t *testing.T) {
+	rome, err := time.LoadLocation("Europe/Rome")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kickoff := range []time.Time{
+		time.Date(2026, time.November, 26, 19, 45, 0, 0, rome),
+		time.Date(2026, time.November, 26, 8, 0, 0, 0, rome),
+		time.Date(2026, time.March, 28, 21, 0, 0, 0, rome), // across the switch to summer time
+	} {
+		match := models.Match{Date: models.DateOf(kickoff), ScheduledAt: &kickoff}
+		got := services.MotmAnnounceAt(match)
+		if want := kickoff.Add(24 * time.Hour); !got.Equal(want) {
+			t.Errorf("kick-off %s: MotmAnnounceAt = %s, want %s", kickoff, got, want)
+		}
+		if services.VotingWindowError(match, got) == nil {
+			t.Errorf("kick-off %s: the vote is still open at the announcement", kickoff)
+		}
+	}
+}
+
 // motmEnv is a played match with five subscribed members on its roster,
 // whose votes are written directly so the match can be dated in the past.
 type motmEnv struct {

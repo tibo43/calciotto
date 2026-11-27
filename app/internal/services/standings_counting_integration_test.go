@@ -200,6 +200,7 @@ func TestStandings_Integration_MotmNeedsARecordedResult(t *testing.T) {
 	}
 	set(matchID, "result_recorded_at", nil)
 	set(matchID, "date", time.Now().AddDate(0, 0, -3))
+	set(matchID, "scheduled_at", time.Now().AddDate(0, 0, -3))
 	if ranking, profile := f.bobAwards(t); ranking != 0 || profile != 0 {
 		t.Errorf("no recorded result: ranking %d, profile %d awards; want none", ranking, profile)
 	}

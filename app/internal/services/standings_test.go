@@ -687,25 +687,30 @@ func TestIsMatchCounted(t *testing.T) {
 	}
 }
 
-// TestIsMotmVoteClosed uses VotingWindowError's own deadline: midnight two
-// days after the match day.
+// TestIsMotmVoteClosed uses VotingWindowError's own deadline
+// (MotmVotingDeadline): midnight two days after the match day without a
+// kick-off, kick-off + 24h with one.
 func TestIsMotmVoteClosed(t *testing.T) {
 	day := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
-	match := models.MatchWithDetails{Date: models.Date(day)}
+	kickoff := day.Add(19*time.Hour + 45*time.Minute)
 	for _, tt := range []struct {
-		name string
-		now  time.Time
-		want bool
+		name        string
+		scheduledAt *time.Time
+		now         time.Time
+		want        bool
 	}{
-		{"the day after", day.AddDate(0, 0, 1).Add(12 * time.Hour), false},
-		{"one second before the deadline", day.AddDate(0, 0, 2).Add(-time.Second), false},
-		{"at the deadline", day.AddDate(0, 0, 2), true},
+		{"the day after", nil, day.AddDate(0, 0, 1).Add(12 * time.Hour), false},
+		{"one second before the deadline", nil, day.AddDate(0, 0, 2).Add(-time.Second), false},
+		{"at the deadline", nil, day.AddDate(0, 0, 2), true},
+		{"scheduled, one second before kick-off + 24h", &kickoff, kickoff.Add(24*time.Hour - time.Second), false},
+		{"scheduled, at kick-off + 24h", &kickoff, kickoff.Add(24 * time.Hour), true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			match := models.MatchWithDetails{Date: models.Date(day), ScheduledAt: tt.scheduledAt}
 			if got := IsMotmVoteClosed(match, tt.now); got != tt.want {
 				t.Errorf("IsMotmVoteClosed() = %v, want %v", got, tt.want)
 			}
-			if gotErr := VotingWindowError(models.Match{Date: models.Date(day)}, tt.now) != nil; gotErr != tt.want {
+			if gotErr := VotingWindowError(models.Match{Date: models.Date(day), ScheduledAt: tt.scheduledAt}, tt.now) != nil; gotErr != tt.want {
 				t.Errorf("VotingWindowError closed = %v, IsMotmVoteClosed = %v: the two deadlines disagree", gotErr, tt.want)
 			}
 		})
@@ -764,8 +769,8 @@ func TestFilterMotmCountedMatches(t *testing.T) {
 	if got := FilterMotmCountedMatches(all, recordedAt.Add(time.Hour)); len(got) != 0 {
 		t.Errorf("vote open on match night: got %d matches, want none", len(got))
 	}
-	if got := FilterMotmCountedMatches(all, day.AddDate(0, 0, 2).Add(-time.Second)); len(got) != 0 {
-		t.Errorf("vote still open the day after: got %d matches, want none", len(got))
+	if got := FilterMotmCountedMatches(all, kickoff.Add(24*time.Hour-time.Second)); len(got) != 0 {
+		t.Errorf("vote still open the next evening: got %d matches, want none", len(got))
 	}
 	got := ids(FilterMotmCountedMatches(all, day.AddDate(0, 0, 2)))
 	if !got[recorded.ID] || !got[unscheduled.ID] || got[pending.ID] || len(got) != 2 {

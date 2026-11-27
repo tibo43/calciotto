@@ -29,9 +29,10 @@ import (
 //   - kickoff_reminder: kick-off is at most KickoffReminderLead away (the
 //     roster once composed, otherwise the confirmed sign-ups).
 //   - motm_announced: the Man of the Match vote has closed, announced at
-//     MotmAnnounceAt (09:00 in Rome on the closing day): the winners, ties
-//     included, and every other player who voted (once per match, sent by
-//     the tick; see notifications_motm.go).
+//     MotmAnnounceAt (at the close for a scheduled match, else 09:00 in
+//     Rome on the closing day): the winners, ties included, and every other
+//     player who voted (once per match, sent by the tick; see
+//     notifications_motm.go).
 //   - result_recorded: an admin saved the score for the first time, so the
 //     result is in and Man of the Match voting is open (the roster, who are
 //     the only ones allowed to vote).

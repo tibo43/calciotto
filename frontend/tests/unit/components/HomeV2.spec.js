@@ -12,6 +12,7 @@ vi.mock('@/services/api', () => ({
 }));
 
 const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
 const dayAgo = (n) => new Date(Date.now() - n * DAY).toISOString().slice(0, 10);
 const played = (id, daysAgo) => ({
   ID: id, Date: dayAgo(daysAgo),
@@ -175,8 +176,9 @@ describe('HomeV2.vue with a match scheduled', () => {
   });
 
   it('marks that match row « Star of the Match vote open » in grey, in place of its kick-off time, while its vote is open', async () => {
+    // Kicked off 20 hours ago: inside the 24-hour vote window.
     const yesterday = {
-      ...played('y', 1), ScheduledAt: new Date(Date.now() - DAY).toISOString(),
+      ...played('y', 1), ScheduledAt: new Date(Date.now() - 20 * HOUR).toISOString(),
       ResultRecordedAt: new Date(Date.now() - DAY).toISOString(),
     };
     const before = { ...played('before', 8), ScheduledAt: new Date(Date.now() - 8 * DAY).toISOString() };
