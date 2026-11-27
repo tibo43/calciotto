@@ -38,17 +38,12 @@ func TestCreateGroup_Integration_CreatesDefaultTeams(t *testing.T) {
 	if len(teams) != 2 {
 		t.Fatalf("expected exactly 2 teams for a new group, got %d: %+v", len(teams), teams)
 	}
-	colours := map[string]bool{}
 	names := map[string]bool{}
 	for _, team := range teams {
 		if team.GroupID != group.ID {
 			t.Errorf("team %+v has GroupID %s, want %s", team, team.GroupID, group.ID)
 		}
-		colours[team.Colour] = true
 		names[team.Name] = true
-	}
-	if !colours["black"] || !colours["white"] {
-		t.Errorf("expected teams with colours black and white, got %+v", teams)
 	}
 	if !names["Black"] || !names["White"] {
 		t.Errorf("expected teams named Black and White, got %+v", teams)
@@ -56,8 +51,8 @@ func TestCreateGroup_Integration_CreatesDefaultTeams(t *testing.T) {
 }
 
 // TestCreateGroup_Integration_CustomTeamSpecs pins that the caller's own
-// team names/colours are what get persisted — not some default — now that
-// CreateGroup takes them explicitly instead of hardcoding black/white.
+// team names are what get persisted — not some default — and in the order
+// given, which is the order a match then lists the two teams in.
 func TestCreateGroup_Integration_CustomTeamSpecs(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -66,8 +61,8 @@ func TestCreateGroup_Integration_CustomTeamSpecs(t *testing.T) {
 	teamService := services.NewTeamService(tx)
 
 	specs := [2]services.TeamSpec{
-		{Name: "Les Rouges", Colour: "red"},
-		{Name: "Les Bleus", Colour: "blue"},
+		{Name: "Les Rouges"},
+		{Name: "Les Bleus"},
 	}
 	group, err := groupService.CreateGroup("Zzz Integration Custom Teams Group", specs)
 	if err != nil {
@@ -81,22 +76,18 @@ func TestCreateGroup_Integration_CustomTeamSpecs(t *testing.T) {
 	if len(teams) != 2 {
 		t.Fatalf("expected exactly 2 teams, got %d: %+v", len(teams), teams)
 	}
-	got := map[string]string{}
-	for _, team := range teams {
-		got[team.Name] = team.Colour
-	}
-	for _, spec := range specs {
-		if got[spec.Name] != spec.Colour {
-			t.Errorf("team %q has colour %q, want %q (teams: %+v)", spec.Name, got[spec.Name], spec.Colour, teams)
+	for i, spec := range specs {
+		if teams[i].Name != spec.Name || teams[i].Position != i {
+			t.Errorf("teams[%d] = %q at position %d, want %q at %d (teams: %+v)", i, teams[i].Name, teams[i].Position, spec.Name, i, teams)
 		}
 	}
 }
 
-// TestCreateGroup_Integration_RequiresTeamNameAndColour covers both
-// validation sentinels CreateGroup added alongside explicit TeamSpecs: an
-// empty (or whitespace-only) name or colour on either team must reject the
-// whole creation, and must not leave a half-created group behind.
-func TestCreateGroup_Integration_RequiresTeamNameAndColour(t *testing.T) {
+// TestCreateGroup_Integration_RequiresTeamName covers the validation sentinel
+// CreateGroup added alongside explicit TeamSpecs: an empty (or
+// whitespace-only) name on either team must reject the whole creation, and
+// must not leave a half-created group behind.
+func TestCreateGroup_Integration_RequiresTeamName(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
@@ -110,18 +101,18 @@ func TestCreateGroup_Integration_RequiresTeamNameAndColour(t *testing.T) {
 		{
 			name: "missing first team name",
 			teams: [2]services.TeamSpec{
-				{Name: "  ", Colour: "red"},
-				{Name: "White", Colour: "white"},
+				{Name: "  "},
+				{Name: "White"},
 			},
 			wantErr: services.ErrTeamNameRequired,
 		},
 		{
-			name: "missing second team colour",
+			name: "missing second team name",
 			teams: [2]services.TeamSpec{
-				{Name: "Black", Colour: "black"},
-				{Name: "White", Colour: ""},
+				{Name: "Black"},
+				{Name: ""},
 			},
-			wantErr: services.ErrTeamColourRequired,
+			wantErr: services.ErrTeamNameRequired,
 		},
 	}
 

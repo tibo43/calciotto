@@ -23,7 +23,6 @@ type PlayerCustom struct {
 type TeamWithPlayers struct {
 	ID      uuid.UUID      `json:"ID"`
 	Name    string         `json:"Name"`
-	Colour  string         `json:"Colour"`
 	Score   int            `json:"Score"`
 	Players []PlayerCustom `json:"Players"`
 }
@@ -103,7 +102,6 @@ type RowsMatchDetails struct {
 	MatchResultRecordedAt      *time.Time
 	TeamID                     uuid.UUID
 	TeamName                   string
-	TeamColour                 string
 	Score                      int
 	PlayerID                   uuid.UUID
 	PlayerName                 string

@@ -130,15 +130,15 @@ func (e *bootstrapEnv) do(method, path, token string, body any) *httptest.Respon
 }
 
 // createGroupBody builds a POST /groups request body with the given group
-// name and two throwaway team specs (name/colour don't matter to any of
+// name and two throwaway team specs (names don't matter to any of
 // these tests, only that exactly 2 are present) — CreateGroup now requires
 // both on every group, mirroring services.DefaultTeamSpecs.
 func createGroupBody(name string) map[string]any {
 	return map[string]any{
 		"name": name,
 		"teams": []map[string]string{
-			{"name": "Black", "colour": "black"},
-			{"name": "White", "colour": "white"},
+			{"name": "Black"},
+			{"name": "White"},
 		},
 	}
 }

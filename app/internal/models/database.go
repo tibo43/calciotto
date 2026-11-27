@@ -193,15 +193,20 @@ type Group struct {
 var InviteNeverExpires = time.Date(9999, time.December, 31, 0, 0, 0, 0, time.UTC)
 
 // Team représente une équipe. Chaque groupe a exactement deux équipes,
-// créées à la création du groupe à partir des deux noms/couleurs fournis par
-// l'admin qui le crée — voir GroupService.CreateGroup. Name est le nom
-// affiché (ex: "Les Rouges"), distinct de Colour qui reste la couleur du
-// maillot/swatch utilisée par le frontend.
+// créées à la création du groupe à partir des deux noms fournis par l'admin
+// qui le crée — voir GroupService.CreateGroup. Name est le nom affiché
+// (ex: "Les Rouges").
+//
+// Position (0 ou 1) est l'ordre des deux équipes d'un groupe : celui dans
+// lequel un match les liste, la première à gauche. Une équipe n'a plus de
+// couleur ; la colonne colour a été remplacée par celle-ci, remplie dans
+// l'ordre des couleurs qu'elle remplace (voir
+// database.ReplaceTeamColourWithPosition).
 type Team struct {
 	BaseModel
 	GroupID          uuid.UUID     `gorm:"type:uuid;index" json:"group_id"`
 	Name             string        `gorm:"type:string" json:"name"`
-	Colour           string        `gorm:"type:string" json:"colour"`
+	Position         int           `gorm:"not null;default:0" json:"-"`
 	TeamCompositions []MatchPlayer `gorm:"foreignKey:TeamID"`
 }
 
@@ -406,7 +411,7 @@ type MatchPlayer struct {
 //
 // Role distingue les administrateurs du groupe (RoleAdmin) des simples
 // membres (RoleMember) — c'est une simple string plutôt qu'un type enum Go
-// dédié, comme Team.Colour ci-dessus : le repo n'a pas de convention pour les
+// dédié : le repo n'a pas de convention pour les
 // enums et deux valeurs constantes suffisent ici.
 //
 // Un groupe peut avoir *plusieurs* administrateurs : le créateur en est le

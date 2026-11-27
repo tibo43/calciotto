@@ -79,14 +79,14 @@ var groupSpecs = []groupSpec{
 	},
 	{
 		name:    "Les Copains du Mardi",
-		teams:   [2]services.TeamSpec{{Name: "Les Rouges", Colour: "red"}, {Name: "Les Bleus", Colour: "blue"}},
+		teams:   [2]services.TeamSpec{{Name: "Les Rouges"}, {Name: "Les Bleus"}},
 		admin:   "matthias",
 		members: []string{"thibaut", "damien", "pierre", "jacopo", "ryan", "marcos", "lucas", "enzo", "nathan", "hugo"},
 		kickoff: [2]int{19, 0},
 	},
 	{
 		name:    "Foot du Vendredi",
-		teams:   [2]services.TeamSpec{{Name: "Panthers", Colour: "black"}, {Name: "Tigers", Colour: "orange"}},
+		teams:   [2]services.TeamSpec{{Name: "Panthers"}, {Name: "Tigers"}},
 		admin:   "vincent",
 		members: []string{"thibaut", "manfredi", "anthony", "mattheo", "connor", "enzo", "nathan", "hugo", "lucas"},
 		kickoff: [2]int{21, 0},

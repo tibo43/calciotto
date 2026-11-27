@@ -15,27 +15,25 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// TeamSpec is one team's name/colour, as supplied by the admin creating a
-// group — see CreateGroup, which takes exactly two of these (a group always
-// has exactly two teams).
+// TeamSpec is one team's name, as supplied by the admin creating a group —
+// see CreateGroup, which takes exactly two of these (a group always has
+// exactly two teams), in the order the teams are then shown.
 type TeamSpec struct {
-	Name   string
-	Colour string
+	Name string
 }
 
-// DefaultTeamSpecs are the black/white team specs cmd/seed uses to preserve
-// the pre-TeamSpec look of every seeded group, and that most tests reach for
-// when the actual team name/colour don't matter to the scenario under test.
+// DefaultTeamSpecs are the team specs cmd/seed uses, and that most tests
+// reach for when the actual team names don't matter to the scenario under
+// test.
 var DefaultTeamSpecs = [2]TeamSpec{
-	{Name: "Black", Colour: "black"},
-	{Name: "White", Colour: "white"},
+	{Name: "Black"},
+	{Name: "White"},
 }
 
 var (
 	ErrInviteCodeNotFound       = errors.New("no group matches this invite code")
 	ErrAlreadyMember            = errors.New("player is already a member of this group")
 	ErrTeamNameRequired         = errors.New("team name must not be empty")
-	ErrTeamColourRequired       = errors.New("team colour must not be empty")
 	ErrGroupDescriptionTooLong  = errors.New("description must be at most 1000 characters")
 	ErrGroupWebsiteLabelTooLong = errors.New("link label must be at most 100 characters")
 	ErrInvalidGroupWebsite      = errors.New("enter a valid HTTP or HTTPS address up to 2048 characters")
@@ -79,12 +77,9 @@ func (s *GroupService) CreateGroup(name string, teams [2]TeamSpec) (*models.Grou
 	err = s.DB.Transaction(func(tx *gorm.DB) error {
 		trimmed := make([]TeamSpec, len(teams))
 		for i, spec := range teams {
-			trimmed[i] = TeamSpec{Name: strings.TrimSpace(spec.Name), Colour: strings.TrimSpace(spec.Colour)}
+			trimmed[i] = TeamSpec{Name: strings.TrimSpace(spec.Name)}
 			if trimmed[i].Name == "" {
 				return ErrTeamNameRequired
-			}
-			if trimmed[i].Colour == "" {
-				return ErrTeamColourRequired
 			}
 		}
 
@@ -92,8 +87,8 @@ func (s *GroupService) CreateGroup(name string, teams [2]TeamSpec) (*models.Grou
 			return result.Error
 		}
 		teamService := NewTeamService(tx)
-		for _, spec := range trimmed {
-			team := &models.Team{GroupID: group.ID, Name: spec.Name, Colour: spec.Colour}
+		for position, spec := range trimmed {
+			team := &models.Team{GroupID: group.ID, Name: spec.Name, Position: position}
 			if err := teamService.CreateTeam(team); err != nil {
 				return err
 			}

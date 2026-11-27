@@ -30,8 +30,8 @@ func eloMatch(date time.Time, createdAt time.Time, teamA []models.PlayerCustom, 
 		Date:      models.Date(date),
 		CreatedAt: createdAt,
 		Teams: []models.TeamWithPlayers{
-			{ID: uuid.New(), Colour: "black", Score: scoreA, Players: teamA},
-			{ID: uuid.New(), Colour: "white", Score: scoreB, Players: teamB},
+			{ID: uuid.New(), Score: scoreA, Players: teamA},
+			{ID: uuid.New(), Score: scoreB, Players: teamB},
 		},
 	}
 }
@@ -239,8 +239,8 @@ func TestComputeEloStandings_SkipsUnplayedMatch(t *testing.T) {
 		ID:   uuid.New(),
 		Date: models.Date(day),
 		Teams: []models.TeamWithPlayers{
-			{ID: uuid.New(), Colour: "black", Players: []models.PlayerCustom{}},
-			{ID: uuid.New(), Colour: "white", Players: []models.PlayerCustom{}},
+			{ID: uuid.New(), Players: []models.PlayerCustom{}},
+			{ID: uuid.New(), Players: []models.PlayerCustom{}},
 		},
 	}
 	played := eloMatch(day, day,

@@ -162,6 +162,10 @@ func applySchema(db *gorm.DB) error {
 	if err := AddMotmNotifiedAt(db); err != nil {
 		return err
 	}
+	// Before AutoMigrate too: it reads teams.colour to fill teams.position.
+	if err := ReplaceTeamColourWithPosition(db); err != nil {
+		return err
+	}
 	if err := db.AutoMigrate(&models.Group{}, &models.Player{}, &models.Team{}, &models.Match{}, &models.MatchPlayer{}, &models.MatchRegistration{}, &models.MatchVote{}, &models.MatchPrediction{}, &models.GroupMembership{}, &models.PasswordResetToken{}, &models.AuthSession{}, &models.Passkey{}, &models.PasskeyChallenge{}, &models.PlayerFeature{}, &models.PushSubscription{}, &models.NotificationPreference{}); err != nil {
 		return err
 	}

@@ -793,7 +793,7 @@ export const getMyGroups = async () => {
 
 // The caller becomes the new group's first member, server-side. teams must
 // be exactly the group's two team specs, e.g.
-// [{ name: 'Les Rouges', colour: 'red' }, { name: 'Les Bleus', colour: 'blue' }]
+// [{ name: 'Les Rouges' }, { name: 'Les Bleus' }], in the order they are shown
 // — the backend rejects anything but exactly 2.
 export const createGroup = async (name, teams) => {
   try {
@@ -938,11 +938,10 @@ export const getTeamsByGroup = async (groupId) => {
   }
 };
 
-// Admin-only: renames a team and/or changes its colour. The backend replaces
-// both fields wholesale (no partial patch), so both must always be sent.
-export const updateTeam = async (groupId, teamId, name, colour) => {
+// Admin-only: renames a team.
+export const updateTeam = async (groupId, teamId, name) => {
   try {
-    const response = await api.patch(`/groups/${groupId}/teams/${teamId}`, { name, colour });
+    const response = await api.patch(`/groups/${groupId}/teams/${teamId}`, { name });
     if (response.status !== 200) {
       throw new Error('Failed to update team');
     }

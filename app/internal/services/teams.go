@@ -48,14 +48,14 @@ func (s *TeamService) GetTeamByID(id uuid.UUID) (*models.Team, error) {
 // exactly the 2 default teams created alongside the group).
 func (s *TeamService) GetTeamsByGroupID(groupID uuid.UUID) ([]models.Team, error) {
 	var teams []models.Team
-	result := s.DB.Where("group_id = ?", groupID).Find(&teams)
+	result := s.DB.Where("group_id = ?", groupID).Order("position, id").Find(&teams)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 	return teams, nil
 }
 
-// UpdateTeam renames a team and/or changes its colour. The lookup is scoped
+// UpdateTeam renames a team. The lookup is scoped
 // to both teamID and groupID in the same query — exactly the same pattern
 // MatchService.GetMatchDetailsByID uses for matches — so a team belonging to
 // a different group reads as gorm.ErrRecordNotFound rather than being
@@ -65,14 +65,10 @@ func (s *TeamService) GetTeamsByGroupID(groupID uuid.UUID) ([]models.Team, error
 //
 // It returns the updated team so the handler can hand the caller a fresh
 // copy without a follow-up fetch.
-func (s *TeamService) UpdateTeam(teamID, groupID uuid.UUID, name, colour string) (*models.Team, error) {
+func (s *TeamService) UpdateTeam(teamID, groupID uuid.UUID, name string) (*models.Team, error) {
 	name = strings.TrimSpace(name)
-	colour = strings.TrimSpace(colour)
 	if name == "" {
 		return nil, ErrTeamNameRequired
-	}
-	if colour == "" {
-		return nil, ErrTeamColourRequired
 	}
 
 	var team models.Team
@@ -81,7 +77,6 @@ func (s *TeamService) UpdateTeam(teamID, groupID uuid.UUID, name, colour string)
 	}
 
 	team.Name = name
-	team.Colour = colour
 	if err := s.DB.Save(&team).Error; err != nil {
 		return nil, err
 	}
