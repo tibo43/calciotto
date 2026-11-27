@@ -299,7 +299,7 @@ func (s *MatchService) readMatchesDetails(groupID uuid.UUID, selection *gorm.DB)
                matches.registrations_closed_at as match_registrations_closed_at,
                matches.max_players as match_max_players,
                matches.result_recorded_at as match_result_recorded_at,
-               teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
+               teams.id as team_id, teams.name as team_name,
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored,
 			   match_players.own_goals as own_goals
@@ -377,7 +377,6 @@ func (s *MatchService) readMatchesDetails(groupID uuid.UUID, selection *gorm.DB)
 			newTeam := models.TeamWithPlayers{
 				ID:      rowMatches.TeamID,
 				Name:    rowMatches.TeamName,
-				Colour:  rowMatches.TeamColour,
 				Score:   0,
 				Players: []models.PlayerCustom{},
 			}
@@ -417,10 +416,10 @@ func (s *MatchService) readMatchesDetails(groupID uuid.UUID, selection *gorm.DB)
 			}
 		}
 
-		// Filter out teams with missing ID or Colour
+		// Filter out the all-NULL team of a match with no roster yet
 		var validTeams []models.TeamWithPlayers
 		for _, team := range match.Teams {
-			if team.ID != uuid.Nil && team.Colour != "" && len(team.Players) > 0 {
+			if team.ID != uuid.Nil && len(team.Players) > 0 {
 				for _, player := range team.Players {
 					// Update the team's score based on the number of goals scored by players
 					team.Score += player.GoalsScored
@@ -445,7 +444,6 @@ func (s *MatchService) readMatchesDetails(groupID uuid.UUID, selection *gorm.DB)
 				validTeams = append(validTeams, models.TeamWithPlayers{
 					ID:      allTeam.ID,
 					Name:    allTeam.Name,
-					Colour:  allTeam.Colour,
 					Score:   0,
 					Players: []models.PlayerCustom{},
 				})
@@ -466,11 +464,9 @@ func (s *MatchService) readMatchesDetails(groupID uuid.UUID, selection *gorm.DB)
 		}
 		return matches[j].Date.Before(matches[i].Date)
 	})
-	// Sort matched teams same colour in first position
+	// Each match lists the group's two teams in their stored order.
 	for _, match := range matches {
-		sort.Slice(match.Teams, func(i, j int) bool {
-			return match.Teams[i].Colour < match.Teams[j].Colour
-		})
+		sortTeamsByPosition(match.Teams, allTeams)
 	}
 
 	// sort players in each team by their goal number in descending order
@@ -500,7 +496,7 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
                matches.registrations_closed_at as match_registrations_closed_at,
                matches.max_players as match_max_players,
                matches.result_recorded_at as match_result_recorded_at,
-               teams.id as team_id, teams.name as team_name, teams.colour as team_colour,
+               teams.id as team_id, teams.name as team_name,
                players.id as player_id, players.name as player_name,
 			   match_players.goals_scored as goals_scored,
 			   match_players.own_goals as own_goals
@@ -566,7 +562,6 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 			newTeam := models.TeamWithPlayers{
 				ID:      rowMatch.TeamID,
 				Name:    rowMatch.TeamName,
-				Colour:  rowMatch.TeamColour,
 				Score:   0,
 				Players: []models.PlayerCustom{},
 			}
@@ -620,19 +615,14 @@ func (s *MatchService) GetMatchDetailsByID(id uuid.UUID, groupID uuid.UUID) (*mo
 			match.Teams = append(match.Teams, models.TeamWithPlayers{
 				ID:      allTeam.ID,
 				Name:    allTeam.Name,
-				Colour:  allTeam.Colour,
 				Score:   0,
 				Players: []models.PlayerCustom{},
 			})
 		}
 	}
 
-	// Triez les équipes par couleur (ordre alphabétique)
-	if len(match.Teams) > 0 {
-		sort.Slice(match.Teams, func(i, j int) bool {
-			return match.Teams[i].Colour < match.Teams[j].Colour
-		})
-	}
+	// The group's two teams in their stored order.
+	sortTeamsByPosition(match.Teams, allTeams)
 
 	// Triez les joueurs dans chaque équipe par leur nombre de buts en ordre décroissant
 	for i := range match.Teams {
@@ -931,4 +921,20 @@ func validateRosterAdditions(tx *gorm.DB, groupID uuid.UUID, existing map[uuid.U
 		return ErrPlayerNotInGroup
 	}
 	return nil
+}
+
+// sortTeamsByPosition orders a match's teams by models.Team.Position (the
+// first one is shown on the left), then by id so the order stays total.
+// groupTeams is the group's teams, which carry the position.
+func sortTeamsByPosition(teams []models.TeamWithPlayers, groupTeams []models.Team) {
+	position := make(map[uuid.UUID]int, len(groupTeams))
+	for _, team := range groupTeams {
+		position[team.ID] = team.Position
+	}
+	sort.SliceStable(teams, func(i, j int) bool {
+		if position[teams[i].ID] != position[teams[j].ID] {
+			return position[teams[i].ID] < position[teams[j].ID]
+		}
+		return teams[i].ID.String() < teams[j].ID.String()
+	})
 }

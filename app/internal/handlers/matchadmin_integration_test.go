@@ -205,7 +205,6 @@ func TestUpdateMatch_Integration_AdminOnly(t *testing.T) {
 		GroupID: groupID,
 		Teams: []models.TeamWithPlayers{{
 			ID:      teams[0].ID,
-			Colour:  teams[0].Colour,
 			Players: []models.PlayerCustom{{ID: scorerID, Name: "Zzz Match Update Scorer", GoalsScored: 3}},
 		}},
 	}

@@ -52,22 +52,22 @@ var extraGroups = []newGroupSpec{
 	{
 		Name: "Les Copains du Mardi",
 		Teams: [2]services.TeamSpec{
-			{Name: "Les Rouges", Colour: "red"},
-			{Name: "Les Bleus", Colour: "blue"},
+			{Name: "Les Rouges"},
+			{Name: "Les Bleus"},
 		},
 	},
 	{
 		Name: "Foot du Vendredi",
 		Teams: [2]services.TeamSpec{
-			{Name: "Panthers", Colour: "black"},
-			{Name: "Tigers", Colour: "orange"},
+			{Name: "Panthers"},
+			{Name: "Tigers"},
 		},
 	},
 	{
 		Name: "Ligue Amateur Sud",
 		Teams: [2]services.TeamSpec{
-			{Name: "FC Nord", Colour: "green"},
-			{Name: "FC Sud", Colour: "yellow"},
+			{Name: "FC Nord"},
+			{Name: "FC Sud"},
 		},
 	},
 }

@@ -71,8 +71,8 @@ func main() {
 	matchService := services.NewMatchService(db)
 
 	group, err := groupService.CreateGroup(*groupName, [2]services.TeamSpec{
-		{Name: "Red", Colour: "red"},
-		{Name: "Blue", Colour: "blue"},
+		{Name: "Red"},
+		{Name: "Blue"},
 	})
 	if err != nil {
 		log.Fatalf("failed to create group: %v", err)

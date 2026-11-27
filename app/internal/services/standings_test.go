@@ -13,8 +13,8 @@ func newPlayer(id uuid.UUID, name string, goals int) models.PlayerCustom {
 	return models.PlayerCustom{ID: id, Name: name, GoalsScored: goals}
 }
 
-func newTeam(id uuid.UUID, colour string, score int, players ...models.PlayerCustom) models.TeamWithPlayers {
-	return models.TeamWithPlayers{ID: id, Colour: colour, Score: score, Players: players}
+func newTeam(id uuid.UUID, score int, players ...models.PlayerCustom) models.TeamWithPlayers {
+	return models.TeamWithPlayers{ID: id, Score: score, Players: players}
 }
 
 func newMatch(teams ...models.TeamWithPlayers) models.MatchWithDetails {
@@ -33,8 +33,8 @@ func TestComputePointsStandings_WinLoss(t *testing.T) {
 	alice, bob := uuid.New(), uuid.New()
 
 	match := newMatch(
-		newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
-		newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+		newTeam(uuid.New(), 2, newPlayer(alice, "alice", 2)),
+		newTeam(uuid.New(), 1, newPlayer(bob, "bob", 1)),
 	)
 
 	got := pointsRowsByID(ComputePointsStandings([]models.MatchWithDetails{match}))
@@ -51,8 +51,8 @@ func TestComputePointsStandings_Draw(t *testing.T) {
 	alice, bob := uuid.New(), uuid.New()
 
 	match := newMatch(
-		newTeam(uuid.New(), "black", 1, newPlayer(alice, "alice", 1)),
-		newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+		newTeam(uuid.New(), 1, newPlayer(alice, "alice", 1)),
+		newTeam(uuid.New(), 1, newPlayer(bob, "bob", 1)),
 	)
 
 	got := pointsRowsByID(ComputePointsStandings([]models.MatchWithDetails{match}))
@@ -70,8 +70,8 @@ func TestComputePointsStandings_SkipsMatchWithAnEmptyTeam(t *testing.T) {
 	// White has no players yet: the match isn't "played" — it shouldn't count
 	// as a win for black, nor a 0-0 draw for anyone.
 	match := newMatch(
-		newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0)),
-		newTeam(uuid.New(), "white", 0),
+		newTeam(uuid.New(), 0, newPlayer(alice, "alice", 0)),
+		newTeam(uuid.New(), 0),
 	)
 
 	rows := ComputePointsStandings([]models.MatchWithDetails{match})
@@ -83,7 +83,7 @@ func TestComputePointsStandings_SkipsMatchWithAnEmptyTeam(t *testing.T) {
 func TestComputePointsStandings_SkipsMatchWithoutExactlyTwoTeams(t *testing.T) {
 	alice := uuid.New()
 
-	match := newMatch(newTeam(uuid.New(), "black", 1, newPlayer(alice, "alice", 1)))
+	match := newMatch(newTeam(uuid.New(), 1, newPlayer(alice, "alice", 1)))
 
 	rows := ComputePointsStandings([]models.MatchWithDetails{match})
 	if len(rows) != 0 {
@@ -95,12 +95,12 @@ func TestComputePointsStandings_AccumulatesAcrossMatches(t *testing.T) {
 	alice, bob := uuid.New(), uuid.New()
 
 	match1 := newMatch(
-		newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
-		newTeam(uuid.New(), "white", 0, newPlayer(bob, "bob", 0)),
+		newTeam(uuid.New(), 2, newPlayer(alice, "alice", 2)),
+		newTeam(uuid.New(), 0, newPlayer(bob, "bob", 0)),
 	)
 	match2 := newMatch(
-		newTeam(uuid.New(), "black", 1, newPlayer(alice, "alice", 1)),
-		newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+		newTeam(uuid.New(), 1, newPlayer(alice, "alice", 1)),
+		newTeam(uuid.New(), 1, newPlayer(bob, "bob", 1)),
 	)
 
 	got := pointsRowsByID(ComputePointsStandings([]models.MatchWithDetails{match1, match2}))
@@ -119,12 +119,12 @@ func TestComputePointsStandings_SortOrder(t *testing.T) {
 	alice, bob, carol := uuid.New(), uuid.New(), uuid.New()
 
 	match1 := newMatch(
-		newTeam(uuid.New(), "black", 3, newPlayer(alice, "alice", 3)),
-		newTeam(uuid.New(), "white", 0, newPlayer(carol, "carol", 0)),
+		newTeam(uuid.New(), 3, newPlayer(alice, "alice", 3)),
+		newTeam(uuid.New(), 0, newPlayer(carol, "carol", 0)),
 	)
 	match2 := newMatch(
-		newTeam(uuid.New(), "black", 1, newPlayer(bob, "bob", 1)),
-		newTeam(uuid.New(), "white", 0, newPlayer(carol, "carol", 0)),
+		newTeam(uuid.New(), 1, newPlayer(bob, "bob", 1)),
+		newTeam(uuid.New(), 0, newPlayer(carol, "carol", 0)),
 	)
 
 	rows := ComputePointsStandings([]models.MatchWithDetails{match1, match2})
@@ -140,12 +140,12 @@ func TestComputeScorers_SumsGoalsAcrossMatches(t *testing.T) {
 	alice, bob := uuid.New(), uuid.New()
 
 	match1 := newMatch(
-		newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
-		newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+		newTeam(uuid.New(), 2, newPlayer(alice, "alice", 2)),
+		newTeam(uuid.New(), 1, newPlayer(bob, "bob", 1)),
 	)
 	match2 := newMatch(
-		newTeam(uuid.New(), "black", 1, newPlayer(alice, "alice", 1)),
-		newTeam(uuid.New(), "white", 3, newPlayer(bob, "bob", 3)),
+		newTeam(uuid.New(), 1, newPlayer(alice, "alice", 1)),
+		newTeam(uuid.New(), 3, newPlayer(bob, "bob", 3)),
 	)
 
 	rows := ComputeScorers([]models.MatchWithDetails{match1, match2})
@@ -164,8 +164,8 @@ func TestComputeScorers_TieBrokenByName(t *testing.T) {
 	alice, zack := uuid.New(), uuid.New()
 
 	match := newMatch(
-		newTeam(uuid.New(), "black", 1, newPlayer(zack, "zack", 1)),
-		newTeam(uuid.New(), "white", 1, newPlayer(alice, "alice", 1)),
+		newTeam(uuid.New(), 1, newPlayer(zack, "zack", 1)),
+		newTeam(uuid.New(), 1, newPlayer(alice, "alice", 1)),
 	)
 
 	rows := ComputeScorers([]models.MatchWithDetails{match})
@@ -187,8 +187,8 @@ func TestComputePointsStandings_OwnGoalsDoNotCountAsPersonalGoals(t *testing.T) 
 	// Alice concedes an own goal (credited to white's Score, hence white
 	// shows 1-0 here) but scores nothing herself.
 	match := newMatch(
-		newTeam(uuid.New(), "black", 0, models.PlayerCustom{ID: alice, Name: "alice", GoalsScored: 0, OwnGoals: 1}),
-		newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 0)),
+		newTeam(uuid.New(), 0, models.PlayerCustom{ID: alice, Name: "alice", GoalsScored: 0, OwnGoals: 1}),
+		newTeam(uuid.New(), 1, newPlayer(bob, "bob", 0)),
 	)
 
 	got := pointsRowsByID(ComputePointsStandings([]models.MatchWithDetails{match}))
@@ -205,12 +205,12 @@ func TestComputePointsStandings_OwnGoalsAccumulateAcrossMatches(t *testing.T) {
 	alice := uuid.New()
 
 	match1 := newMatch(
-		newTeam(uuid.New(), "black", 0, models.PlayerCustom{ID: alice, Name: "alice", GoalsScored: 1, OwnGoals: 1}),
-		newTeam(uuid.New(), "white", 1, newPlayer(uuid.New(), "bob", 0)),
+		newTeam(uuid.New(), 0, models.PlayerCustom{ID: alice, Name: "alice", GoalsScored: 1, OwnGoals: 1}),
+		newTeam(uuid.New(), 1, newPlayer(uuid.New(), "bob", 0)),
 	)
 	match2 := newMatch(
-		newTeam(uuid.New(), "black", 2, models.PlayerCustom{ID: alice, Name: "alice", GoalsScored: 2, OwnGoals: 2}),
-		newTeam(uuid.New(), "white", 0, newPlayer(uuid.New(), "carol", 0)),
+		newTeam(uuid.New(), 2, models.PlayerCustom{ID: alice, Name: "alice", GoalsScored: 2, OwnGoals: 2}),
+		newTeam(uuid.New(), 0, newPlayer(uuid.New(), "carol", 0)),
 	)
 
 	got := pointsRowsByID(ComputePointsStandings([]models.MatchWithDetails{match1, match2}))
@@ -224,8 +224,8 @@ func TestComputeScorers_OwnGoalsExcludedFromPersonalTally(t *testing.T) {
 	alice, bob := uuid.New(), uuid.New()
 
 	match := newMatch(
-		newTeam(uuid.New(), "black", 0, models.PlayerCustom{ID: alice, Name: "alice", GoalsScored: 0, OwnGoals: 1}),
-		newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 0)),
+		newTeam(uuid.New(), 0, models.PlayerCustom{ID: alice, Name: "alice", GoalsScored: 0, OwnGoals: 1}),
+		newTeam(uuid.New(), 1, newPlayer(bob, "bob", 0)),
 	)
 
 	rows := ComputeScorers([]models.MatchWithDetails{match})
@@ -261,7 +261,7 @@ func motmRowsByID(rows []models.MotmStandingRow) map[uuid.UUID]models.MotmStandi
 // who was in the tally but not the eventual winner earns nothing that match.
 func TestComputeMotmStandings_CountsOneAwardPerMatch(t *testing.T) {
 	alice, bob := uuid.New(), uuid.New()
-	match := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0), newPlayer(bob, "bob", 0)))
+	match := newMatch(newTeam(uuid.New(), 0, newPlayer(alice, "alice", 0), newPlayer(bob, "bob", 0)))
 
 	votes := map[uuid.UUID][]models.MatchVoteTally{
 		match.ID: {candidate(alice, "alice", 3), candidate(bob, "bob", 1)},
@@ -281,7 +281,7 @@ func TestComputeMotmStandings_CountsOneAwardPerMatch(t *testing.T) {
 // tie-inclusive rule.
 func TestComputeMotmStandings_TieAwardsEveryone(t *testing.T) {
 	alice, bob := uuid.New(), uuid.New()
-	match := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0), newPlayer(bob, "bob", 0)))
+	match := newMatch(newTeam(uuid.New(), 0, newPlayer(alice, "alice", 0), newPlayer(bob, "bob", 0)))
 
 	votes := map[uuid.UUID][]models.MatchVoteTally{
 		match.ID: {candidate(alice, "alice", 2), candidate(bob, "bob", 2)},
@@ -300,8 +300,8 @@ func TestComputeMotmStandings_TieAwardsEveryone(t *testing.T) {
 // award counts as 2, not a new row each time.
 func TestComputeMotmStandings_AccumulatesAcrossMatches(t *testing.T) {
 	alice := uuid.New()
-	match1 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0)))
-	match2 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0)))
+	match1 := newMatch(newTeam(uuid.New(), 0, newPlayer(alice, "alice", 0)))
+	match2 := newMatch(newTeam(uuid.New(), 0, newPlayer(alice, "alice", 0)))
 
 	votes := map[uuid.UUID][]models.MatchVoteTally{
 		match1.ID: {candidate(alice, "alice", 1)},
@@ -318,7 +318,7 @@ func TestComputeMotmStandings_AccumulatesAcrossMatches(t *testing.T) {
 // from the votesByMatch map (nobody voted) must not blow up or fabricate a
 // row.
 func TestComputeMotmStandings_MatchWithNoVotesContributesNothing(t *testing.T) {
-	match := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(uuid.New(), "alice", 0)))
+	match := newMatch(newTeam(uuid.New(), 0, newPlayer(uuid.New(), "alice", 0)))
 
 	rows := ComputeMotmStandings([]models.MatchWithDetails{match}, map[uuid.UUID][]models.MatchVoteTally{})
 	if len(rows) != 0 {
@@ -331,9 +331,9 @@ func TestComputeMotmStandings_MatchWithNoVotesContributesNothing(t *testing.T) {
 // convention.
 func TestComputeMotmStandings_SortOrder(t *testing.T) {
 	alice, bob, carol := uuid.New(), uuid.New(), uuid.New()
-	match1 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(alice, "alice", 0)))
-	match2 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(bob, "bob", 0)))
-	match3 := newMatch(newTeam(uuid.New(), "black", 0, newPlayer(carol, "carol", 0)))
+	match1 := newMatch(newTeam(uuid.New(), 0, newPlayer(alice, "alice", 0)))
+	match2 := newMatch(newTeam(uuid.New(), 0, newPlayer(bob, "bob", 0)))
+	match3 := newMatch(newTeam(uuid.New(), 0, newPlayer(carol, "carol", 0)))
 
 	votes := map[uuid.UUID][]models.MatchVoteTally{
 		match1.ID: {candidate(alice, "alice", 1)},
@@ -395,16 +395,16 @@ func TestFilterCompletedMatches_ExcludesAComposedButUpcomingMatch(t *testing.T) 
 		ID:   uuid.New(),
 		Date: models.Date(now), // today — not completed until tomorrow
 		Teams: []models.TeamWithPlayers{
-			newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
-			newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+			newTeam(uuid.New(), 2, newPlayer(alice, "alice", 2)),
+			newTeam(uuid.New(), 1, newPlayer(bob, "bob", 1)),
 		},
 	}
 	played := models.MatchWithDetails{
 		ID:   uuid.New(),
 		Date: models.Date(now.AddDate(0, 0, -2)),
 		Teams: []models.TeamWithPlayers{
-			newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
-			newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+			newTeam(uuid.New(), 2, newPlayer(alice, "alice", 2)),
+			newTeam(uuid.New(), 1, newPlayer(bob, "bob", 1)),
 		},
 	}
 
@@ -447,8 +447,8 @@ func TestComputePredictionStandings_CorrectPredictionNetsOddsMinusOne(t *testing
 		ID:   uuid.New(),
 		Date: models.Date(time.Now()),
 		Teams: []models.TeamWithPlayers{
-			{ID: teamAID, Colour: "black", Score: 2, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "scorer"}}},
-			{ID: teamBID, Colour: "white", Score: 0, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "other"}}},
+			{ID: teamAID, Score: 2, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "scorer"}}},
+			{ID: teamBID, Score: 0, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "other"}}},
 		},
 	}
 	predictions := map[uuid.UUID][]models.MatchPredictionEntry{
@@ -477,8 +477,8 @@ func TestComputePredictionStandings_WrongPredictionNetsMinusOne(t *testing.T) {
 		ID:   uuid.New(),
 		Date: models.Date(time.Now()),
 		Teams: []models.TeamWithPlayers{
-			{ID: teamAID, Colour: "black", Score: 2, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "scorer"}}},
-			{ID: teamBID, Colour: "white", Score: 0, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "other"}}},
+			{ID: teamAID, Score: 2, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "scorer"}}},
+			{ID: teamBID, Score: 0, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "other"}}},
 		},
 	}
 	// alice backs team B, but team A wins.
@@ -504,8 +504,8 @@ func TestComputePredictionStandings_CorrectDrawPrediction(t *testing.T) {
 		ID:   uuid.New(),
 		Date: models.Date(time.Now()),
 		Teams: []models.TeamWithPlayers{
-			{ID: teamAID, Colour: "black", Score: 1, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "a"}}},
-			{ID: teamBID, Colour: "white", Score: 1, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "b"}}},
+			{ID: teamAID, Score: 1, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "a"}}},
+			{ID: teamBID, Score: 1, Players: []models.PlayerCustom{{ID: uuid.New(), Name: "b"}}},
 		},
 	}
 	predictions := map[uuid.UUID][]models.MatchPredictionEntry{
@@ -727,8 +727,8 @@ func TestFilterCountedMatches_CountsARecordedScoreAtOnce(t *testing.T) {
 	recordedAt := now.Add(-10 * time.Minute)
 	teams := func() []models.TeamWithPlayers {
 		return []models.TeamWithPlayers{
-			newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
-			newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+			newTeam(uuid.New(), 2, newPlayer(alice, "alice", 2)),
+			newTeam(uuid.New(), 1, newPlayer(bob, "bob", 1)),
 		}
 	}
 	recorded := models.MatchWithDetails{ID: uuid.New(), Date: models.Date(kickoff), ScheduledAt: &kickoff, ResultRecordedAt: &recordedAt, Teams: teams()}

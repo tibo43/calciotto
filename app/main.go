@@ -179,7 +179,7 @@ func main() {
 	r.POST("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.ChangeInvitation)
 	r.DELETE("/groups/:id/invite-code", authRequired, requireGroupAdminByPathID, groupHandler.ChangeInvitation)
 	r.GET("/groups/:id/teams", authRequired, requireGroupMemberByPathID, teamHandler.GetTeamsByGroup)
-	// Admin-only "rename/recolour a team" — same admin gate as the member-role
+	// Admin-only "rename a team" — same admin gate as the member-role
 	// and invite routes above; TeamService.UpdateTeam additionally scopes the
 	// lookup to :id so :teamId can't reach into another group.
 	r.PATCH("/groups/:id/teams/:teamId", authRequired, requireGroupAdminByPathID, teamHandler.UpdateTeam)

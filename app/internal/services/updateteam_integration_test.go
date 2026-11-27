@@ -12,7 +12,7 @@ import (
 )
 
 // TestUpdateTeam_Integration_Success covers the happy path: an admin renames
-// a team and changes its colour, and both changes are persisted.
+// a team, and the new name is persisted.
 func TestUpdateTeam_Integration_Success(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -29,20 +29,20 @@ func TestUpdateTeam_Integration_Success(t *testing.T) {
 		t.Fatalf("failed to load group teams: err=%v teams=%+v", err, teams)
 	}
 
-	updated, err := teamService.UpdateTeam(teams[0].ID, group.ID, "Les Rouges", "red")
+	updated, err := teamService.UpdateTeam(teams[0].ID, group.ID, "Les Rouges")
 	if err != nil {
 		t.Fatalf("UpdateTeam returned error: %v", err)
 	}
-	if updated.Name != "Les Rouges" || updated.Colour != "red" {
-		t.Errorf("UpdateTeam returned %+v, want Name=%q Colour=%q", updated, "Les Rouges", "red")
+	if updated.Name != "Les Rouges" {
+		t.Errorf("UpdateTeam returned %+v, want Name=%q", updated, "Les Rouges")
 	}
 
 	reloaded, err := teamService.GetTeamByID(teams[0].ID)
 	if err != nil {
 		t.Fatalf("GetTeamByID returned error: %v", err)
 	}
-	if reloaded.Name != "Les Rouges" || reloaded.Colour != "red" {
-		t.Errorf("reloaded team = %+v, want Name=%q Colour=%q", reloaded, "Les Rouges", "red")
+	if reloaded.Name != "Les Rouges" {
+		t.Errorf("reloaded team = %+v, want Name=%q", reloaded, "Les Rouges")
 	}
 }
 
@@ -50,7 +50,7 @@ func TestUpdateTeam_Integration_Success(t *testing.T) {
 // behaviour: a team that exists but belongs to a *different* group than the
 // one passed in must behave as gorm.ErrRecordNotFound, not be silently
 // updatable. Without this, an admin of group A who merely guesses or learns
-// group B's team UUID could rename/recolour it.
+// group B's team UUID could rename it.
 func TestUpdateTeam_Integration_CrossGroupNotFound(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
@@ -72,7 +72,7 @@ func TestUpdateTeam_Integration_CrossGroupNotFound(t *testing.T) {
 		t.Fatalf("failed to load group A teams: err=%v teams=%+v", err, teamsA)
 	}
 
-	if _, err := teamService.UpdateTeam(teamsA[0].ID, groupB.ID, "Stolen Name", "purple"); !errors.Is(err, gorm.ErrRecordNotFound) {
+	if _, err := teamService.UpdateTeam(teamsA[0].ID, groupB.ID, "Stolen Name"); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Errorf("UpdateTeam(teamA, groupB) error = %v, want gorm.ErrRecordNotFound", err)
 	}
 
@@ -81,14 +81,14 @@ func TestUpdateTeam_Integration_CrossGroupNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTeamByID returned error: %v", err)
 	}
-	if reloaded.Name == "Stolen Name" || reloaded.Colour == "purple" {
+	if reloaded.Name == "Stolen Name" {
 		t.Errorf("cross-group UpdateTeam mutated the team: %+v", reloaded)
 	}
 }
 
-// TestUpdateTeam_Integration_RequiresNameAndColour covers both validation
-// sentinels, matching the style of PlayerService's ErrEmptyPlayerName.
-func TestUpdateTeam_Integration_RequiresNameAndColour(t *testing.T) {
+// TestUpdateTeam_Integration_RequiresName covers the validation sentinel,
+// matching the style of PlayerService's ErrEmptyPlayerName.
+func TestUpdateTeam_Integration_RequiresName(t *testing.T) {
 	db := testutil.OpenDB(t)
 	tx := testutil.BeginTx(t, db)
 
@@ -104,19 +104,16 @@ func TestUpdateTeam_Integration_RequiresNameAndColour(t *testing.T) {
 		t.Fatalf("failed to load group teams: err=%v teams=%+v", err, teams)
 	}
 
-	if _, err := teamService.UpdateTeam(teams[0].ID, group.ID, "   ", "red"); !errors.Is(err, services.ErrTeamNameRequired) {
+	if _, err := teamService.UpdateTeam(teams[0].ID, group.ID, "   "); !errors.Is(err, services.ErrTeamNameRequired) {
 		t.Errorf("empty name error = %v, want ErrTeamNameRequired", err)
 	}
-	if _, err := teamService.UpdateTeam(teams[0].ID, group.ID, "Les Rouges", "  "); !errors.Is(err, services.ErrTeamColourRequired) {
-		t.Errorf("empty colour error = %v, want ErrTeamColourRequired", err)
-	}
 
-	// Neither rejected call should have changed anything.
+	// The rejected call should not have changed anything.
 	reloaded, err := teamService.GetTeamByID(teams[0].ID)
 	if err != nil {
 		t.Fatalf("GetTeamByID returned error: %v", err)
 	}
-	if reloaded.Name == "Les Rouges" {
+	if reloaded.Name != "Black" {
 		t.Errorf("validation failure still mutated the team: %+v", reloaded)
 	}
 }
@@ -135,7 +132,7 @@ func TestUpdateTeam_Integration_UnknownTeamNotFound(t *testing.T) {
 		t.Fatalf("failed to create group: %v", err)
 	}
 
-	if _, err := teamService.UpdateTeam(uuid.New(), group.ID, "Name", "colour"); !errors.Is(err, gorm.ErrRecordNotFound) {
+	if _, err := teamService.UpdateTeam(uuid.New(), group.ID, "Name"); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Errorf("unknown team id error = %v, want gorm.ErrRecordNotFound", err)
 	}
 }

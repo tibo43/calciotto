@@ -34,7 +34,7 @@ func (h *TeamHandler) GetTeamsByGroup(c *gin.Context) {
 	c.JSON(http.StatusOK, teams)
 }
 
-// UpdateTeam renames a team and/or changes its colour. The route
+// UpdateTeam renames a team. The route
 // (PATCH /groups/:id/teams/:teamId) sits behind RequireGroupAdminByPathParam,
 // so the caller is already confirmed to be an admin of :id by the time this
 // runs — but that says nothing about whether :teamId actually belongs to
@@ -42,9 +42,8 @@ func (h *TeamHandler) GetTeamsByGroup(c *gin.Context) {
 // this handler maps a resulting gorm.ErrRecordNotFound to 404 rather than
 // treating admin-of-:id as license to touch any team by guessable UUID.
 //
-// The body is a full replacement (name + colour), not a partial patch, the
-// same convention PATCH /groups/:id/members/:playerId/role uses for its
-// role field.
+// The body carries the new name; a "colour" key an older client still sends
+// is ignored, since a team no longer has one.
 func (h *TeamHandler) UpdateTeam(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -59,18 +58,17 @@ func (h *TeamHandler) UpdateTeam(c *gin.Context) {
 	}
 
 	var body struct {
-		Name   string `json:"name"`
-		Colour string `json:"colour"`
+		Name string `json:"name"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	team, err := h.Service.UpdateTeam(teamID, groupID, body.Name, body.Colour)
+	team, err := h.Service.UpdateTeam(teamID, groupID, body.Name)
 	if err != nil {
 		switch {
-		case errors.Is(err, services.ErrTeamNameRequired), errors.Is(err, services.ErrTeamColourRequired):
+		case errors.Is(err, services.ErrTeamNameRequired):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		case errors.Is(err, gorm.ErrRecordNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "team not found in this group"})

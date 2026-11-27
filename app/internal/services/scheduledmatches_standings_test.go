@@ -23,8 +23,8 @@ func upcomingMatchDetails(date models.Date, kickoff time.Time) models.MatchWithD
 		MaxPlayers:          &maxPlayers,
 		RegistrationCount:   &count,
 		Teams: []models.TeamWithPlayers{
-			{ID: uuid.New(), Colour: "black", Players: []models.PlayerCustom{}},
-			{ID: uuid.New(), Colour: "white", Players: []models.PlayerCustom{}},
+			{ID: uuid.New(), Players: []models.PlayerCustom{}},
+			{ID: uuid.New(), Players: []models.PlayerCustom{}},
 		},
 	}
 }
@@ -39,8 +39,8 @@ func upcomingMatchDetails(date models.Date, kickoff time.Time) models.MatchWithD
 func TestComputePointsStandings_IgnoresScheduledMatchWithNoAssignments(t *testing.T) {
 	alice, bob := uuid.New(), uuid.New()
 	played := newMatch(
-		newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
-		newTeam(uuid.New(), "white", 1, newPlayer(bob, "bob", 1)),
+		newTeam(uuid.New(), 2, newPlayer(alice, "alice", 2)),
+		newTeam(uuid.New(), 1, newPlayer(bob, "bob", 1)),
 	)
 	upcoming := upcomingMatchDetails(
 		models.Date(time.Date(2025, time.October, 12, 0, 0, 0, 0, time.UTC)),
@@ -65,8 +65,8 @@ func TestComputePointsStandings_IgnoresScheduledMatchWithNoAssignments(t *testin
 func TestComputeScorers_IgnoresScheduledMatchWithNoAssignments(t *testing.T) {
 	alice := uuid.New()
 	played := newMatch(
-		newTeam(uuid.New(), "black", 2, newPlayer(alice, "alice", 2)),
-		newTeam(uuid.New(), "white", 0),
+		newTeam(uuid.New(), 2, newPlayer(alice, "alice", 2)),
+		newTeam(uuid.New(), 0),
 	)
 	upcoming := upcomingMatchDetails(
 		models.Date(time.Date(2025, time.October, 12, 0, 0, 0, 0, time.UTC)),
@@ -88,8 +88,8 @@ func TestComputeScorers_IgnoresScheduledMatchWithNoAssignments(t *testing.T) {
 // doc comment first.
 func TestComputeSeasons_IncludesFutureScheduledSeason(t *testing.T) {
 	playedLastSeason := newMatch(
-		newTeam(uuid.New(), "black", 1, newPlayer(uuid.New(), "alice", 1)),
-		newTeam(uuid.New(), "white", 0, newPlayer(uuid.New(), "bob", 0)),
+		newTeam(uuid.New(), 1, newPlayer(uuid.New(), "alice", 1)),
+		newTeam(uuid.New(), 0, newPlayer(uuid.New(), "bob", 0)),
 	)
 	playedLastSeason.Date = models.Date(time.Date(2025, time.May, 4, 0, 0, 0, 0, time.UTC)) // 2024-2025
 
