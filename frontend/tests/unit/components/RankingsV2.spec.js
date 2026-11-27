@@ -61,6 +61,7 @@ describe('RankingsV2.vue empty group', () => {
     await flushPromises();
     expect(wrapper.find('.subnav').exists()).toBe(true);
     expect(wrapper.find('h1').text()).toBe('No standings yet');
+    expect(wrapper.find('.state p').text()).toBe('Players appear here once a match has been played this season.');
     expect(wrapper.text()).not.toContain('No matches played yet');
     wrapper.unmount();
   });
@@ -195,9 +196,10 @@ describe('RankingsV2.vue Agoranking tab', () => {
     wrapper.unmount();
   });
 
-  it('shows the usual empty title when the season has no ranking', async () => {
-    const wrapper = await mountAgoranking({ agoranking: null });
-    expect(wrapper.find('h1').text()).toBe('No standings yet');
+  it('shows its own empty state when the season has no ranking', async () => {
+    const wrapper = await mountAgoranking({ agoranking: { Matches: 0, N: 0, GroupAverage: 0, Ranked: [], Unranked: [] } });
+    expect(wrapper.find('h1').text()).toBe('No ranking yet');
+    expect(wrapper.find('.state p').text()).toBe('Players appear here once a match has been played this season.');
     wrapper.unmount();
   });
 

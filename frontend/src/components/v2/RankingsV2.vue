@@ -35,6 +35,7 @@
     </section>
     <section v-else-if="rows.length === 0" class="state">
       <h1>{{ emptyTitle }}</h1>
+      <p v-if="emptyText">{{ emptyText }}</p>
     </section>
 
     <section v-else-if="tab === 'agoranking'" class="agr">
@@ -271,7 +272,13 @@ export default {
     emptyTitle() {
       if (this.tab === 'scorers') return 'No goals yet';
       if (this.tab === 'motm') return `No ${STARS.toLowerCase()} yet`;
+      if (this.tab === 'agoranking') return 'No ranking yet';
       return 'No standings yet';
+    },
+    // Points, scorers and the Agoranking fill up from played matches; stars
+    // need votes too, so their tab keeps the bare title.
+    emptyText() {
+      return this.tab === 'motm' ? '' : 'Players appear here once a match has been played this season.';
     },
   },
   watch: {
