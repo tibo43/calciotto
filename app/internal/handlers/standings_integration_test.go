@@ -30,6 +30,7 @@ func newStandingsTestRouter(tx *gorm.DB, authService *services.AuthService, memb
 	router.GET("/standings/points", authRequired, requireGroupMember, standingsHandler.GetPointsStandings)
 	router.GET("/standings/scorers", authRequired, requireGroupMember, standingsHandler.GetScorers)
 	router.GET("/standings/seasons", authRequired, requireGroupMember, standingsHandler.GetSeasons)
+	router.GET("/standings/agoranking", authRequired, requireGroupMember, standingsHandler.GetAgoranking)
 
 	return router
 }
@@ -156,6 +157,20 @@ func TestStandingsSeasons_Integration(t *testing.T) {
 	}
 	if aliceScorerNew := scorerRowByPlayerID(scorersNew, aliceID); aliceScorerNew == nil || aliceScorerNew.Goals != 0 {
 		t.Errorf("alice's %s scorer row = %+v, want 0 goals", seasonNew, aliceScorerNew)
+	}
+
+	// The Agoranking follows the season too: one match, so N = 1, average
+	// 1.5, bob (the winner) first and alice second, nobody left unranked.
+	var agoranking models.Agoranking
+	get(t, "/standings/agoranking?group_id="+group.ID.String()+"&season="+seasonNew, &agoranking)
+	if agoranking.Matches != 1 || agoranking.N != 1 || agoranking.GroupAverage != 1.5 {
+		t.Errorf("%s agoranking = %+v, want 1 match / N 1 / average 1.5", seasonNew, agoranking)
+	}
+	if len(agoranking.Ranked) != 2 || agoranking.Ranked[0].PlayerID != bobID || agoranking.Ranked[1].PlayerID != aliceID || len(agoranking.Unranked) != 0 {
+		t.Fatalf("%s agoranking rows = %+v / %+v, want bob then alice, none unranked", seasonNew, agoranking.Ranked, agoranking.Unranked)
+	}
+	if r := agoranking.Ranked[0]; r.Rating != 2.25 || !r.IsMember || r.Points != 3 || r.Won != 1 {
+		t.Errorf("bob's %s agoranking row = %+v, want rating (3 + 1.5) / 2 = 2.25 as a member", seasonNew, r)
 	}
 }
 

@@ -83,4 +83,64 @@ test.describe('design v2 rankings', () => {
     await expectNoHorizontalOverflow(page);
     expectEverythingStubbed(unstubbed);
   });
+  test('agoranking', async ({ page }) => {
+    const { unstubbed } = await openRankings(page, '/rankings?tab=agoranking');
+    await expect(page.locator('table.agr-table').first()).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Rating' })).toBeVisible();
+    await expect(page.locator('table.agr-table').first().locator('tr.is-me .agr-you')).toHaveText('YOU');
+    await expect(page.locator('#agr-how-body')).toBeHidden();
+    await expect(page.locator('#agr-unranked-body')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Not ranked yet · 2' })).toBeVisible();
+    await expect(page).toHaveScreenshot('v2-rankings-agoranking.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('agoranking, dark', async ({ page }) => {
+    const { unstubbed } = await openRankings(page, '/rankings?tab=agoranking', { theme: 'dark' });
+    await expect(page.locator('.design-v2.dark-mode')).toBeVisible();
+    await expect(page.locator('table.agr-table').first()).toBeVisible();
+    await expect(page).toHaveScreenshot('v2-rankings-agoranking-dark.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('agoranking, open', async ({ page }) => {
+    const { unstubbed } = await openRankings(page, '/rankings?tab=agoranking');
+    await page.getByRole('button', { name: "How it's calculated" }).click();
+    await page.getByRole('button', { name: 'Not ranked yet · 2' }).click();
+    await expect(page.locator('.agr-formula')).toHaveText('rating = (points + N × group avg) ÷ (matches + N)');
+    await expect(page.locator('table.agr-unranked-table tr')).toHaveCount(2);
+    await expect(page).toHaveScreenshot('v2-rankings-agoranking-open.png', { fullPage: true });
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('agoranking @mobile', async ({ page }) => {
+    const { unstubbed } = await openRankings(page, '/rankings?tab=agoranking');
+    await expect(page.locator('table.agr-table').first()).toBeHidden();
+    await expect(page.getByText('9 M · 4W 1D 4L · 13 pts')).toBeVisible();
+    // Present, though the fixed tab bar sits over it in a full-page capture.
+    await expect(page.getByRole('button', { name: 'Not ranked yet · 2' })).toBeVisible();
+    const tops = await page.locator('.subnav a').evaluateAll((els) => new Set(els.map((el) => Math.round(el.getBoundingClientRect().top))).size);
+    expect(tops).toBe(1);
+    await expect(page).toHaveScreenshot('v2-rankings-agoranking-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('agoranking, dark @mobile', async ({ page }) => {
+    const { unstubbed } = await openRankings(page, '/rankings?tab=agoranking', { theme: 'dark' });
+    await expect(page.locator('.pcard.agr-card').first()).toBeVisible();
+    await expect(page).toHaveScreenshot('v2-rankings-agoranking-dark-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
+
+  test('agoranking, open @mobile', async ({ page }) => {
+    const { unstubbed } = await openRankings(page, '/rankings?tab=agoranking');
+    await page.getByRole('button', { name: "How it's calculated" }).click();
+    await page.getByRole('button', { name: 'Not ranked yet · 2' }).click();
+    await expect(page.getByText('0W 1D 0L · 1 pt')).toBeVisible();
+    await expect(page).toHaveScreenshot('v2-rankings-agoranking-open-mobile.png', { fullPage: true });
+    await expectNoHorizontalOverflow(page);
+    expectEverythingStubbed(unstubbed);
+  });
 });

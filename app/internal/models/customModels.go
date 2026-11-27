@@ -329,6 +329,36 @@ type ScorerRow struct {
 	IsMember bool `json:"IsMember"`
 }
 
+// AgorankingRow is one player's row in the Agoranking: points per match,
+// pulled towards the group's average by N "average" matches (see
+// services.ComputeAgoranking). Rating is sent unrounded; the frontend shows
+// it with two decimals, and the order already breaks ties on the full value.
+type AgorankingRow struct {
+	PlayerID uuid.UUID `json:"PlayerID"`
+	Name     string    `json:"Name"`
+	Played   int       `json:"Played"`
+	Won      int       `json:"Won"`
+	Drawn    int       `json:"Drawn"`
+	Lost     int       `json:"Lost"`
+	Points   int       `json:"Points"`
+	Rating   float64   `json:"Rating"`
+	IsMember bool      `json:"IsMember"`
+}
+
+// Agoranking is GET /standings/agoranking's response. Matches is the number
+// of matches the group played in the season, N = ceil(Matches / 3) is both
+// the weight of the group average and the minimum to be ranked, and
+// GroupAverage is the season's points per match per player. Ranked holds the
+// players with at least N matches, best first; Unranked the others, by
+// matches played then points per match.
+type Agoranking struct {
+	Matches      int             `json:"Matches"`
+	N            int             `json:"N"`
+	GroupAverage float64         `json:"GroupAverage"`
+	Ranked       []AgorankingRow `json:"Ranked"`
+	Unranked     []AgorankingRow `json:"Unranked"`
+}
+
 // PlayerGroupStanding is one player's standings row inside a single group,
 // tagged with the group it belongs to. The cross-group player profile needs
 // the same shape as PointsStandingRow repeated once per group, so it embeds

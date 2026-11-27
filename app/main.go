@@ -284,6 +284,7 @@ func main() {
 	r.GET("/standings/scorers", authRequired, requireGroupMember, standingsHandler.GetScorers)
 	r.GET("/standings/motm", authRequired, requireGroupMember, standingsHandler.GetMotmStandings)
 	r.GET("/standings/predictions", authRequired, requireGroupMember, standingsHandler.GetPredictionStandings)
+	r.GET("/standings/agoranking", authRequired, requireGroupMember, standingsHandler.GetAgoranking)
 	r.GET("/standings/seasons", authRequired, requireGroupMember, standingsHandler.GetSeasons)
 
 	// Auth entry points are unauthenticated by necessity (a caller signing up,

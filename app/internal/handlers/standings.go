@@ -90,6 +90,22 @@ func (h *StandingsHandler) GetPredictionStandings(c *gin.Context) {
 	c.JSON(http.StatusOK, rows)
 }
 
+// GetAgoranking returns the resolved group's Agoranking (points per match,
+// weighted by matches played), following the same shape as the handlers
+// above.
+func (h *StandingsHandler) GetAgoranking(c *gin.Context) {
+	groupID, ok := resolveGroupID(c, h.MembershipService)
+	if !ok {
+		return
+	}
+	result, err := h.Service.GetAgoranking(groupID, c.Query("season"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 // GetPlayerProfile returns the authenticated caller's own stats across every
 // group they belong to. The player is read from the JWT, never from the URL:
 // which groups a player belongs to is itself privileged information, so a

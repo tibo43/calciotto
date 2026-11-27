@@ -175,6 +175,27 @@ const motmStandings = [
   { PlayerID: 'e6', Name: 'Davide Fontana', Awards: 1, IsMember: false },
 ];
 
+// GET /standings/agoranking — models.Agoranking, the same players as
+// pointsStandings above (with the same IsMember: false row). Ratings are
+// (points + N × average) ÷ (matches + N) with N = 3 and an average of 1.42.
+const agoranking = {
+  Matches: 9,
+  N: 3,
+  GroupAverage: 1.42,
+  Ranked: [
+    { PlayerID: 'e1', Name: 'Andrea Conti', Played: 9, Won: 6, Drawn: 2, Lost: 1, Points: 20, Rating: 2.0217, IsMember: true },
+    { PlayerID: 'e2', Name: 'Marco Rossi', Played: 9, Won: 5, Drawn: 2, Lost: 2, Points: 17, Rating: 1.7717, IsMember: true },
+    { PlayerID: 'e3', Name: 'Matteo Ricci', Played: 8, Won: 4, Drawn: 3, Lost: 1, Points: 15, Rating: 1.7509, IsMember: true },
+    { PlayerID: CURRENT_PLAYER_ID, Name: 'Thibaut Fabre', Played: 9, Won: 4, Drawn: 1, Lost: 4, Points: 13, Rating: 1.4383, IsMember: true },
+    { PlayerID: 'e5', Name: 'Luca Bianchi', Played: 7, Won: 3, Drawn: 1, Lost: 3, Points: 10, Rating: 1.426, IsMember: true },
+    { PlayerID: 'e6', Name: 'Davide Fontana', Played: 6, Won: 2, Drawn: 1, Lost: 3, Points: 7, Rating: 1.2511, IsMember: false },
+  ],
+  Unranked: [
+    { PlayerID: 'e7', Name: 'Paolo Ferrari', Played: 2, Won: 2, Drawn: 0, Lost: 0, Points: 6, Rating: 2.088, IsMember: true },
+    { PlayerID: 'e8', Name: 'Nicola Sanna', Played: 1, Won: 0, Drawn: 1, Lost: 0, Points: 1, Rating: 1.315, IsMember: true },
+  ],
+};
+
 // GET /matches/:id/votes — models.MatchVoteSummary. A single default tally
 // reused regardless of which match is selected, the same "only GET is
 // exercised" simplification `registrations` above already makes: PlayerID
@@ -359,6 +380,7 @@ module.exports = {
   pointsStandings,
   topScorers,
   motmStandings,
+  agoranking,
   motmVotes,
   predictionMatches,
   predictionSummaries,
