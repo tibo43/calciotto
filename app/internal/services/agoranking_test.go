@@ -13,8 +13,8 @@ import (
 // agorankingMatch builds a match between two sides; scoreA/scoreB decide the result.
 func agorankingMatch(scoreA, scoreB int, sideA, sideB []models.PlayerCustom) models.MatchWithDetails {
 	return newMatch(
-		newTeam(uuid.New(), "black", scoreA, sideA...),
-		newTeam(uuid.New(), "white", scoreB, sideB...),
+		newTeam(uuid.New(), scoreA, sideA...),
+		newTeam(uuid.New(), scoreB, sideB...),
 	)
 }
 
