@@ -250,6 +250,19 @@ describe('getMotmStandings', () => {
   });
 });
 
+describe('getAgoranking', () => {
+  beforeEach(() => {
+    mockInstance.get.mockReset();
+    mockInstance.get.mockResolvedValue({ status: 200, data: { Ranked: [], Unranked: [] } });
+  });
+
+  it('queries /standings/agoranking with season and group_id', async () => {
+    await api.getAgoranking('2026-2027', 'group-uuid');
+
+    expect(mockInstance.get).toHaveBeenCalledWith('/standings/agoranking?season=2026-2027&group_id=group-uuid');
+  });
+});
+
 // Same rule again: the group comes from the match in the path, so neither
 // prediction call on a match carries a group_id.
 describe('the prediction calls', () => {

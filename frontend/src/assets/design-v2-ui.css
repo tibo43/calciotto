@@ -361,3 +361,64 @@
 .design-v2 .pos-tag{flex:none;font-family:var(--v2-font-label);font-size:10px;letter-spacing:0.06em;color:var(--v2-text-muted);white-space:nowrap;}
 .design-v2 .p-row.has-tag{grid-template-columns:28px minmax(0,1fr) auto;}
 .design-v2 .pos-summary{font-family:var(--v2-font-label);font-size:10px;letter-spacing:0.06em;color:var(--v2-text-muted);margin:-2px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* Agoranking tab (RankingsV2.vue): title, lead sentence, two folds ruled
+   top and bottom ("How it's calculated" and "Not ranked yet"), closed by
+   default, and a six-column table / mobile cards. */
+.design-v2 .agr{--agr-me:rgba(232,116,59,0.10);}
+.design-v2:not(.dark-mode) .agr{--agr-me:rgba(232,116,59,0.12);}
+.design-v2 .agr-title{font-family:var(--v2-font-display);font-weight:800;font-size:34px;line-height:1;text-transform:uppercase;letter-spacing:0.01em;margin:4px 0 10px;}
+.design-v2 .agr-lead{max-width:56ch;margin:0;line-height:1.45;}
+.design-v2 .agr-lead b,.design-v2 .agr-fold-body b{font-weight:600;}
+.design-v2 .agr-fold{border-top:1px solid var(--v2-rule);border-bottom:1px solid var(--v2-rule);}
+.design-v2 .agr-how{margin-top:14px;}
+.design-v2 .agr-unranked{margin-top:28px;}
+.design-v2 .agr-fold-head{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:44px;padding:0;background:transparent;border:0;border-radius:0;color:var(--v2-text);font-family:var(--v2-font-label);font-weight:700;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;text-align:left;cursor:pointer;}
+.design-v2 .agr-unranked .agr-fold-head{min-height:60px;}
+.design-v2 .agr-fold-head::after{content:"+";flex:none;font-family:var(--v2-font-label);font-weight:400;font-size:20px;line-height:1;color:var(--v2-accent);}
+.design-v2 .agr-fold.is-open>.agr-fold-head::after{content:"–";}
+.design-v2 .agr-how .agr-fold-body{padding:2px 0 16px;}
+.design-v2 .agr-how .agr-fold-body p{margin:0 0 10px;line-height:1.45;}
+.design-v2 .agr-formula{font-family:var(--v2-font-label);font-size:13px;line-height:1.6;background:var(--v2-surface);border-radius:8px;padding:12px 14px;margin:4px 0 12px;overflow-wrap:anywhere;}
+.design-v2 .agr-formula b{color:var(--v2-accent);font-weight:700;}
+/* Darker orange in light mode: the accent itself is 2.6:1 on the light
+   background, below WCAG AA for text this small. */
+.design-v2:not(.dark-mode) .agr-formula b{color:#a3461a;}
+.design-v2 .agr-how .agr-fold-body .agr-note{margin:0;color:var(--v2-text-muted);font-size:14px;}
+.design-v2 .agr .table-wrap{margin-top:18px;}
+.design-v2 .agr-unranked .table-wrap{margin-top:0;}
+.design-v2 table.agr-table{table-layout:fixed;}
+.design-v2 table.agr-table th:nth-child(1),.design-v2 table.agr-table td:nth-child(1){width:40px;text-align:center;padding-left:0;padding-right:0;}
+.design-v2 table.agr-table th:nth-child(3),.design-v2 table.agr-table td:nth-child(3){width:56px;}
+.design-v2 table.agr-table th:nth-child(4),.design-v2 table.agr-table td:nth-child(4){width:90px;}
+.design-v2 table.agr-table th:nth-child(5),.design-v2 table.agr-table td:nth-child(5){width:56px;}
+.design-v2 table.agr-table th:nth-child(6),.design-v2 table.agr-table td:nth-child(6){width:120px;}
+.design-v2 table.agr-table td{padding-top:0;padding-bottom:0;height:46px;font-variant-numeric:tabular-nums;}
+.design-v2 table.agr-table td.n{font-family:var(--v2-font-label);font-size:12.5px;color:var(--v2-text-muted);}
+.design-v2 table.agr-table td.pts{font-size:24px;}
+.design-v2 table.agr-table tr.is-me td{background:var(--agr-me);}
+.design-v2 table.agr-table tr.is-me td:first-child{box-shadow:none;}
+.design-v2 table.agr-table tr.is-me td.rk{padding-left:0;}
+.design-v2 table.agr-table tr.is-me td.pl{font-weight:600;}
+.design-v2 .agr-you{font-family:var(--v2-font-label);font-weight:700;font-size:10px;letter-spacing:0.08em;color:var(--v2-accent);margin-left:6px;}
+.design-v2:not(.dark-mode) .agr-you{color:#a3461a;}
+.design-v2 table.agr-unranked-table td{height:40px;color:var(--v2-text-muted);}
+.design-v2 table.agr-unranked-table td.rk{font-family:var(--v2-font-label);font-weight:400;font-size:12px;}
+.design-v2 table.agr-unranked-table tr:last-child td{border-bottom:0;}
+.design-v2 .agr .cards{margin-top:14px;}
+.design-v2 .agr-unranked .cards{margin-top:0;}
+.design-v2 .pcard.agr-card{grid-template-columns:36px 1fr auto;padding:12px 0;}
+.design-v2 .pcard.agr-card .rk{font-size:26px;}
+.design-v2 .pcard.agr-card .pts{font-size:30px;}
+.design-v2 .pcard.agr-card.is-me{box-shadow:none;background:var(--agr-me);margin:0 -20px;padding:12px 20px;}
+.design-v2 .pcard.agr-card.is-me .rk{padding-left:0;}
+.design-v2 .pcard.agr-card.is-me .nm{font-weight:600;}
+.design-v2 .agr-ucard{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 0;min-height:44px;border-bottom:1px solid var(--v2-rule);}
+.design-v2 .agr-ucard:last-child{border-bottom:0;}
+.design-v2 .agr-ucard>div:first-child{min-width:0;}
+.design-v2 .agr-ucard .nm{color:var(--v2-text-muted);font-size:15px;overflow-wrap:anywhere;}
+.design-v2 .agr-ucard .st,.design-v2 .agr-ucard .m{font-family:var(--v2-font-label);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--v2-text-muted);}
+.design-v2 .agr-ucard .st{margin-top:2px;}
+.design-v2 .agr-ucard .m{white-space:nowrap;letter-spacing:0.04em;font-size:11px;}
+/* Four Rankings tabs on one line at 360 px. */
+@media(max-width:699px){.design-v2 .subnav.rank-tabs{column-gap:20px;}}

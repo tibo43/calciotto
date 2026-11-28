@@ -137,6 +137,7 @@ async function stubApi(page, overrides = {}) {
   await page.route(`${API}/standings/points*`, (route) => json(route, overrides.pointsStandings ?? data.pointsStandings));
   await page.route(`${API}/standings/scorers*`, (route) => json(route, overrides.topScorers ?? data.topScorers));
   await page.route(`${API}/standings/motm*`, (route) => json(route, overrides.motmStandings ?? data.motmStandings));
+  await page.route(`${API}/standings/agoranking*`, (route) => json(route, overrides.agoranking ?? data.agoranking));
   await page.route(`${API}/standings/predictions*`, (route) => json(route, overrides.predictionStandings ?? []));
   await page.route(`${API}/matches/details*`, (route) => json(route, overrides.matches ?? data.matches));
   await page.route(`${API}/matches/*/predictions`, (route) => {

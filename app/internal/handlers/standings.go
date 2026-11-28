@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	"app/internal/models"
 	"app/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -88,6 +89,37 @@ func (h *StandingsHandler) GetPredictionStandings(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, rows)
+}
+
+// GetAgoranking returns the resolved group's Agoranking (points per match,
+// weighted by matches played), following the same shape as the handlers
+// above. It is a hidden feature: a caller without it gets a 403, like a
+// passkey route without the passkeys feature.
+func (h *StandingsHandler) GetAgoranking(c *gin.Context) {
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	enabled, err := h.Service.PlayerService.HasFeature(playerID, models.FeatureAgoranking)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !enabled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "the Agoranking is not enabled for this account"})
+		return
+	}
+	groupID, ok := resolveGroupID(c, h.MembershipService)
+	if !ok {
+		return
+	}
+	result, err := h.Service.GetAgoranking(groupID, c.Query("season"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 // GetPlayerProfile returns the authenticated caller's own stats across every

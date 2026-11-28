@@ -644,6 +644,19 @@ export const getMotmStandings = async (season, groupId) => {
   }
 };
 
+export const getAgoranking = async (season, groupId) => {
+  try {
+    const response = await api.get(`/standings/agoranking${query({ season, group_id: groupId })}`);
+    if (response.status !== 200) {
+      throw new Error('Failed to fetch the Agoranking');
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching the Agoranking:', error);
+    throw error;
+  }
+};
+
 export const getSeasons = async (groupId) => {
   try {
     const response = await api.get(`/standings/seasons${query({ group_id: groupId })}`);
