@@ -23,15 +23,12 @@
         </button>
       </template>
     </div>
-    <AppToast ref="toast" />
   </div>
 </template>
 
 <script>
-import AppToast from '@/components/AppToast.vue';
 import { LOCALES } from '@/locales';
 import { availableLocales, detectLocale, followPhone, localeState, setLocale, SOURCE_PHONE } from '@/services/locale';
-import { onLocaleSaveError } from '@/services/playerLocale';
 
 let nextId = 0;
 
@@ -43,11 +40,11 @@ let nextId = 0;
 // in its own language and carries its own lang attribute. The saving is not
 // done here: the locale service announces the change and
 // services/playerLocale.js sends it. When that fails, the service puts the
-// previous language back (the checkmark and the texts follow it) and this
-// shows the error toast, in that previous language. A saved pick shows none.
+// previous language back (the checkmark and the texts follow it) and the app
+// shell's LocaleSaveErrorToast says so, in that previous language. A saved
+// pick shows none.
 export default {
   name: 'LanguageSelectorV2',
-  components: { AppToast },
   data() {
     nextId += 1;
     return { open: false, labelId: `lang-toggle-${nextId}`, listId: `lang-list-${nextId}`, refs: [] };
@@ -67,14 +64,6 @@ export default {
     current() {
       return this.entries.find((entry) => entry.code === localeState.locale) || this.entries[0];
     },
-  },
-  mounted() {
-    this.stopSaveErrors = onLocaleSaveError(() => {
-      this.$refs.toast?.show(this.$t('language.saveError'), 'error');
-    });
-  },
-  beforeUnmount() {
-    if (this.stopSaveErrors) this.stopSaveErrors();
   },
   methods: {
     toggle() {

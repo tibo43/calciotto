@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"html"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -78,20 +79,15 @@ func EmailLocale(saved *string, acceptLanguage string) string {
 // LocaleFromAcceptLanguage returns the supported language the header prefers
 // ("fr-CA,fr;q=0.9,en;q=0.8" -> "fr"), or "" when none is spoken. Regional
 // tags reduce to their language; q-values order the choices (ties keep the
-// header's order), q=0 means "not acceptable".
+// header's order), q=0 means "not acceptable". Parameter names are matched
+// case-insensitively (RFC 9110) wherever they sit among the tag's parameters;
+// an entry whose q is not a number between 0 and 1 is skipped.
 func LocaleFromAcceptLanguage(header string) string {
 	best, bestQ := "", 0.0
 	for _, part := range strings.Split(header, ",") {
-		tag, params, _ := strings.Cut(strings.TrimSpace(part), ";")
-		q := 1.0
-		if params != "" {
-			if value, ok := strings.CutPrefix(strings.TrimSpace(params), "q="); ok {
-				parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
-				if err != nil {
-					continue
-				}
-				q = parsed
-			}
+		tag, q, ok := parseAcceptLanguageEntry(part)
+		if !ok {
+			continue
 		}
 		language, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(tag)), "-")
 		language, _, _ = strings.Cut(language, "_")
@@ -100,4 +96,24 @@ func LocaleFromAcceptLanguage(header string) string {
 		}
 	}
 	return best
+}
+
+// parseAcceptLanguageEntry splits one entry of an Accept-Language header into
+// its tag and q-value (1 when absent). ok is false when the q-value is not a
+// finite number in [0, 1].
+func parseAcceptLanguageEntry(entry string) (tag string, q float64, ok bool) {
+	fields := strings.Split(entry, ";")
+	q = 1.0
+	for _, param := range fields[1:] {
+		name, value, _ := strings.Cut(param, "=")
+		if !strings.EqualFold(strings.TrimSpace(name), "q") {
+			continue
+		}
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err != nil || math.IsNaN(parsed) || parsed < 0 || parsed > 1 {
+			return "", 0, false
+		}
+		q = parsed
+	}
+	return fields[0], q, true
 }

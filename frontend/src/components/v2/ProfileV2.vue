@@ -111,7 +111,7 @@
           </div>
           <button class="switch" :class="{ 'is-on': pushOn }" type="button" role="switch" :disabled="!canTogglePush" :aria-checked="pushOn.toString()" :aria-label="$t('profile.notifications.device')" @click="togglePush"><span class="track"></span></button>
         </div>
-        <p v-if="pushError" class="scope">{{ pushError }}</p>
+        <p v-if="pushError" class="scope">{{ showText(pushError) }}</p>
       </section>
       <section class="sec">
         <div class="sec-head"><h2>{{ $t('profile.notifications.types') }}</h2></div>
@@ -144,7 +144,7 @@
           <input id="account-name" v-model="nameInput" type="text" autocomplete="name">
         </div>
         <p><button class="btn" type="button" :disabled="savingName || !nameInput.trim()" @click="saveName">{{ savingName ? $t('common.saving') : $t('profile.identity.save') }}</button></p>
-        <p v-if="nameError" class="scope">{{ nameError }}</p>
+        <p v-if="nameError" class="scope">{{ showText(nameError) }}</p>
       </section>
       <!-- Preferred positions: each tap saves the whole set at once (toast),
            and a refused save puts the buttons back as they were. -->
@@ -173,7 +173,7 @@
         <p class="scope">{{ $t('profile.password.note') }}</p>
         <p v-if="hasPasskeys" class="scope">{{ $t('profile.password.passkeysNote') }}</p>
         <p><button class="btn btn-ghost" type="button" :disabled="sendingReset || !email" @click="sendReset">{{ sendingReset ? $t('common.sending') : $t('profile.password.send') }}</button></p>
-        <p v-if="resetNote" class="scope">{{ resetNote }}</p>
+        <p v-if="resetNote" class="scope">{{ showText(resetNote) }}</p>
       </section>
       <PasskeysV2 v-if="hasPasskeys" @confirming="onChildConfirming" />
       <section class="danger">
@@ -189,7 +189,7 @@
               <label class="label" for="delete-password-pop">{{ $t('profile.delete.password') }}</label>
               <input id="delete-password-pop" v-model="deletePassword" type="password" autocomplete="current-password">
             </div>
-            <p v-if="deleteError" class="scope">{{ deleteError }}</p>
+            <p v-if="deleteError" class="scope">{{ showText(deleteError) }}</p>
             <div class="confirm-actions actions">
               <button class="btn btn-ghost" type="button" @click="closeDelete">{{ $t('common.cancel') }}</button>
               <button class="btn btn-danger" type="button" @click="confirmDelete">{{ $t('profile.delete.title') }}</button>
@@ -205,7 +205,7 @@
           <label class="label" for="delete-password">{{ $t('profile.delete.password') }}</label>
           <input id="delete-password" v-model="deletePassword" type="password" autocomplete="current-password">
         </div>
-        <p v-if="deleteError" class="scope">{{ deleteError }}</p>
+        <p v-if="deleteError" class="scope">{{ showText(deleteError) }}</p>
         <div class="confirm-actions">
           <button class="btn btn-danger" type="button" @click="confirmDelete">{{ $t('profile.delete.title') }}</button>
           <button class="btn btn-ghost" type="button" @click="closeDelete">{{ $t('common.cancel') }}</button>
@@ -222,7 +222,7 @@
           <input v-model="team.name" type="text" :aria-label="$t('profile.teams.nameAria', { name: team.name })">
           <button class="btn" type="button" @click="saveTeam(team)">{{ $t('common.save') }}</button>
         </div>
-        <p v-if="teamNote" class="scope">{{ teamNote }}</p>
+        <p v-if="teamNote" class="scope">{{ showText(teamNote) }}</p>
       </section>
       <InvitationV2 :group-id="groupId" :code="inviteCode" :share-text="inviteShareText"
         @updated="applyInvitation" @confirming="onChildConfirming" />
@@ -259,7 +259,7 @@
             </div>
           </div>
         </div>
-        <p v-if="roleError" class="scope">{{ roleError }}</p>
+        <p v-if="roleError" class="scope">{{ showText(roleError) }}</p>
       </section>
       <div v-if="removing" class="confirm-scrim" @click="removing = ''"></div>
       <div v-if="removing" class="confirm-sheet" role="dialog">
@@ -306,6 +306,7 @@ import GearLink from './GearLink.vue';
 import LanguageSelectorV2 from './LanguageSelectorV2.vue';
 import { MOTM_ANNOUNCED_KEY } from '@/services/notificationLabels';
 import { formatDecimal } from '@/services/intl';
+import { messageKey, showText } from '@/i18n';
 
 const PREFERENCE_GROUPS = [
   { id: 'match', items: [
@@ -496,6 +497,10 @@ export default {
     },
   },
   watch: {
+    // The page title follows a language switch.
+    '$i18n.locale'() {
+      this.syncChrome();
+    },
     '$route.fullPath'() {
       this.syncChrome();
       if (this.page === 'settings') this.loadSettings();
@@ -531,6 +536,7 @@ export default {
     this.v2Context.confirming = false;
   },
   methods: {
+    showText,
     onChildConfirming(open) {
       this.childConfirming = open;
       this.syncConfirming();
@@ -669,7 +675,7 @@ export default {
         this.pushState = this.pushOn ? await disablePush() : await enablePush();
       } catch (error) {
         console.error(error);
-        this.pushError = apiErrorMessage(error, error.message || this.$t('profile.notifications.error'));
+        this.pushError = apiErrorMessage(error, error.message || messageKey('profile.notifications.error'));
       }
     },
     async loadPositions() {
@@ -723,7 +729,7 @@ export default {
         await updateMyName(this.nameInput.trim());
         await this.load();
       } catch (error) {
-        this.nameError = apiErrorMessage(error, this.$t('profile.identity.error'));
+        this.nameError = apiErrorMessage(error, messageKey('profile.identity.error'));
       } finally {
         this.savingName = false;
       }
@@ -738,7 +744,7 @@ export default {
         const { message } = await forgotPassword(this.email);
         this.resetNote = message;
       } catch (error) {
-        this.resetNote = apiErrorMessage(error, this.$t('profile.password.error'));
+        this.resetNote = apiErrorMessage(error, messageKey('profile.password.error'));
       } finally {
         this.sendingReset = false;
       }
@@ -758,7 +764,7 @@ export default {
         clearToken();
         window.location.href = '/login?accountDeleted=success';
       } catch (error) {
-        this.deleteError = apiErrorMessage(error, this.$t('profile.delete.error'));
+        this.deleteError = apiErrorMessage(error, messageKey('profile.delete.error'));
       }
     },
     async loadSettings() {
@@ -792,9 +798,9 @@ export default {
       this.teamNote = '';
       try {
         await updateTeam(this.groupId, team.id, team.name.trim());
-        this.teamNote = this.$t('common.saved');
+        this.teamNote = messageKey('common.saved');
       } catch {
-        this.teamNote = this.$t('profile.teams.error');
+        this.teamNote = messageKey('profile.teams.error');
       }
     },
     askDemote(member) {
@@ -817,7 +823,7 @@ export default {
         await this.loadSettings();
       } catch (error) {
         this.removing = '';
-        this.roleError = apiErrorMessage(error, this.$t('profile.members.removeError'));
+        this.roleError = apiErrorMessage(error, messageKey('profile.members.removeError'));
       }
     },
     async confirmDemote(member) {
@@ -827,7 +833,7 @@ export default {
         this.demoting = '';
         await this.loadSettings();
       } catch (error) {
-        this.roleError = apiErrorMessage(error, this.$t('profile.members.roleError'));
+        this.roleError = apiErrorMessage(error, messageKey('profile.members.roleError'));
       }
     },
     async promote(member) {
@@ -836,7 +842,7 @@ export default {
         await updateMemberRole(this.groupId, member.id, 'admin');
         await this.loadSettings();
       } catch (error) {
-        this.roleError = apiErrorMessage(error, this.$t('profile.members.roleError'));
+        this.roleError = apiErrorMessage(error, messageKey('profile.members.roleError'));
       }
     },
   },

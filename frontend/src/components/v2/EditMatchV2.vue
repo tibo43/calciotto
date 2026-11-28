@@ -61,7 +61,7 @@
           </div>
           <p v-if="!waiting.length" class="note">{{ $t('edit.signups.noWaiting') }}</p>
         </section>
-        <p v-if="message" class="note">{{ message }}</p>
+        <p v-if="message" class="note">{{ showText(message) }}</p>
         <div class="sticky-cta">
           <button class="btn btn-ghost btn-danger" type="button" @click="confirmDelete">{{ $t('edit.delete') }}</button>
           <button class="btn" type="button" :disabled="saving" @click="saveDraft">{{ $t('edit.save') }}</button>
@@ -133,7 +133,7 @@
             <p v-if="!addable.length" class="note">{{ $t('edit.teams.everyoneHere') }}</p>
           </div>
         </section>
-        <p v-if="message" class="note">{{ message }}</p>
+        <p v-if="message" class="note">{{ showText(message) }}</p>
         <div class="sticky-cta">
           <p v-if="!bothSides" class="cta-msg">{{ $t('edit.teams.needBoth') }}</p>
           <button class="btn" :class="{ 'is-off': !bothSides }" type="button" :disabled="!bothSides || saving" @click="saveDraft">{{ $t('edit.teams.confirm') }}</button>
@@ -206,7 +206,7 @@
             </button>
             <button class="btn btn-ghost" type="button" @click="pickingFor = null">{{ $t('common.cancel') }}</button>
           </div>
-          <p v-if="message" class="note">{{ message }}</p>
+          <p v-if="message" class="note">{{ showText(message) }}</p>
           <div class="sticky-cta">
             <button class="btn" type="button" :disabled="saving" @click="saveDraft">{{ $t('edit.score.saveChanges') }}</button>
           </div>
@@ -226,6 +226,7 @@ import {
 import { setActiveGroupId } from '@/services/activeGroup';
 import { findMatchInMyGroups, actionErrorMessage } from '@/services/v2Match';
 import AppToast from '@/components/AppToast.vue';
+import { messageKey, showText } from '@/i18n';
 import {
   deriveRegistrationState, REGISTRATION_OPEN, REGISTRATION_CLOSED_BY_ADMIN, REGISTRATION_CLOSED_AT_KICKOFF,
 } from '@/services/matchRegistration';
@@ -486,6 +487,7 @@ export default {
     this.v2Context.confirming = false;
   },
   methods: {
+    showText,
     teamScoreLine,
     positionSummary,
     tagOf(player) {
@@ -641,7 +643,7 @@ export default {
         this.positionsById,
       );
       if (!addedCount) {
-        this.message = this.$t('edit.toast.allOnTeam');
+        this.message = messageKey('edit.toast.allOnTeam');
         return;
       }
       this.teamPlayers = rosters.map((roster) => roster.map((player) => {

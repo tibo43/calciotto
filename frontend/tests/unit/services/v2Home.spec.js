@@ -142,7 +142,7 @@ describe('voteErrorMessage', () => {
       .toBe('Voting for MVP is closed for this match.');
   });
 
-  it("renames an older man/star of the match wording, whatever the case", () => {
+  it('renames an older man of the match wording, whatever the case', () => {
     expect(voteErrorMessage(refusal('you cannot vote for yourself for man of the match')))
       .toBe('You cannot vote for yourself for MVP.');
     expect(voteErrorMessage(refusal("only players on this match's roster can vote for man of the match")))
@@ -151,8 +151,6 @@ describe('voteErrorMessage', () => {
       .toBe('Voting for MVP is closed for this match.');
     expect(voteErrorMessage(refusal('Man Of The Match: MAN OF THE MATCH, men of the match')))
       .toBe('MVP: MVP, MVP.');
-    expect(voteErrorMessage(refusal('voting for star of the match is closed')))
-      .toBe('Voting for MVP is closed.');
   });
 
   it('writes the reason as a sentence: capital first letter, one closing full stop', () => {

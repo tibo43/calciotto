@@ -12,10 +12,13 @@
 //    a chosen language included. The choice follows the account, not the
 //    device, and the selector does not exist on those pages.
 import { getMyLocale, updateMyLocale, getSessionKey } from './api';
-import { getLocale, getLocaleSource, initLocale, onLocaleChange, SOURCE_EXPLICIT, SOURCE_PHONE } from './locale';
+import {
+  detectLocale, getLocale, getLocaleSource, initLocale, matchLocale, onLocaleChange, SOURCE_EXPLICIT, SOURCE_PHONE,
+} from './locale';
 
 let loaded = null; // { key, promise }: one read per session
 let changes = 0; // how many times the player chose since start-up
+let savesDone = 0; // how many saves succeeded since start-up
 
 // The language the server holds (as the locale service reports it: language
 // and source): what a failed save goes back to. Updated by every read, every
@@ -29,9 +32,10 @@ const restore = ({ locale, source }) => initLocale({ saved: source === SOURCE_EX
 
 const failureListeners = new Set();
 
-// Told whenever a save failed and the language was put back, so the page can
-// say so (the Account selector shows a toast). The listener runs after the
-// language is restored: its text comes out in the previous language.
+// Told whenever a save failed and the language was put back, so the app can
+// say so (LocaleSaveErrorToast, mounted by the app shell, shows a toast on
+// whatever page the player is). The listener runs after the language is
+// restored: its text comes out in the previous language.
 export const onLocaleSaveError = (listener) => {
   failureListeners.add(listener);
   return () => failureListeners.delete(listener);
@@ -45,11 +49,26 @@ export function syncSavedLocale() {
   if (!key) return Promise.resolve();
   if (loaded && loaded.key === key) return loaded.promise;
   const seen = changes;
+  const seenSaves = savesDone;
   const entry = { key, promise: null };
   entry.promise = getMyLocale()
     .then((saved) => {
-      // Someone chose a language meanwhile (or the session ended): that wins.
-      if (seen !== changes || key !== getSessionKey()) return;
+      // The read was cancelled (a public page reset the language, or another
+      // read replaced it) or the session ended: the answer means nothing now.
+      if (loaded !== entry || key !== getSessionKey()) return;
+      if (seen !== changes) {
+        // The player chose meanwhile: that wins on screen. But until their
+        // save succeeds, what the server holds is this answer, and a failed
+        // save must go back to it (not to the phone's language). A save that
+        // already succeeded is newer than this answer: keep it.
+        if (seenSaves === savesDone) {
+          const locale = saved ? matchLocale(saved) : null;
+          confirmed = locale
+            ? { locale, source: SOURCE_EXPLICIT }
+            : { locale: detectLocale(), source: SOURCE_PHONE };
+        }
+        return;
+      }
       initLocale({ saved });
       remember();
     })
@@ -80,21 +99,30 @@ let saving = Promise.resolve();
 // failure of an older save is dropped, because the newer pick has its own save
 // queued behind it and decides what the server ends up with. A success is
 // silent.
+//
+// A pick belongs to the session it was made in: if that session ended before
+// its turn came (logout, then another account in the same tab), it is
+// dropped, since the token sent would be the next account's.
 export function startLocaleSync() {
   remember();
   return onLocaleChange(({ source, locale }) => {
     changes += 1;
-    if (!getSessionKey()) return;
+    const key = getSessionKey();
+    if (!key) return;
     const ticket = changes;
     const pick = { locale, source };
-    saving = saving
-      .then(() => updateMyLocale(source === SOURCE_PHONE ? null : locale))
-      .then(() => { confirmed = pick; })
-      .catch((error) => {
+    saving = saving.then(async () => {
+      if (getSessionKey() !== key) return;
+      try {
+        await updateMyLocale(source === SOURCE_PHONE ? null : locale);
+        savesDone += 1;
+        if (getSessionKey() === key) confirmed = pick;
+      } catch (error) {
         console.warn('Could not save the language:', error);
-        if (ticket !== changes) return;
+        if (ticket !== changes || getSessionKey() !== key) return;
         restore(confirmed);
         failureListeners.forEach((listener) => listener(error));
-      });
+      }
+    });
   });
 }
