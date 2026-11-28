@@ -4,7 +4,8 @@
     "agoranking": "Agoranking"
   },
   "language": {
-    "label": "Language"
+    "label": "Language",
+    "saveError": "Couldn't save your language. Try again."
   },
   "unit": {
     "points": "{n} pt | {n} pts"

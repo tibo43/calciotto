@@ -173,25 +173,134 @@ describe('player locale sync', () => {
     expect(order).toEqual(['start fr', 'end fr', 'start it']);
   });
 
-  it('does not save without a session, and survives a failed save', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('does not save without a session', async () => {
     const { locale, sync } = await load();
     locale.initLocale();
     sync.startLocaleSync();
-
     api.getSessionKey.mockReturnValue(null);
     locale.setLocale('fr');
     await flush();
     expect(api.updateMyLocale).not.toHaveBeenCalled();
+    expect(locale.getLocale()).toBe('fr');
+  });
 
-    api.getSessionKey.mockReturnValue('session-1');
-    api.updateMyLocale.mockRejectedValueOnce(new Error('503'));
-    locale.setLocale('it');
-    await flush();
-    locale.setLocale('es');
-    await flush();
-    expect(api.updateMyLocale).toHaveBeenLastCalledWith('es');
-    expect(locale.getLocale()).toBe('es');
+  describe('when a save fails', () => {
+    beforeEach(() => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    it('puts the previous language back, then says so, and saves nothing more', async () => {
+      const { locale, sync } = await load();
+      locale.initLocale();
+      sync.startLocaleSync();
+      const seen = [];
+      sync.onLocaleSaveError(() => seen.push({ locale: locale.getLocale(), lang: document.documentElement.getAttribute('lang') }));
+      api.updateMyLocale.mockRejectedValueOnce(new Error('503'));
+
+      locale.setLocale('es');
+      expect(locale.getLocale()).toBe('es');
+      await flush();
+
+      // Back to the phone's German, interface and <html lang> both, before the listener ran.
+      expect(locale.getLocale()).toBe('de');
+      expect(locale.getLocaleSource()).toBe(locale.SOURCE_PHONE);
+      expect(seen).toEqual([{ locale: 'de', lang: 'de' }]);
+      expect(api.updateMyLocale).toHaveBeenCalledTimes(1);
+    });
+
+    it('goes back to the language the server holds, a restored one included', async () => {
+      const { locale, sync } = await load();
+      locale.initLocale();
+      sync.startLocaleSync();
+      api.getMyLocale.mockResolvedValue('fr');
+      await sync.syncSavedLocale();
+      const listener = vi.fn();
+      sync.onLocaleSaveError(listener);
+      api.updateMyLocale.mockRejectedValueOnce(new Error('offline'));
+
+      locale.setLocale('it');
+      await flush();
+
+      expect(locale.getLocale()).toBe('fr');
+      expect(locale.getLocaleSource()).toBe(locale.SOURCE_EXPLICIT);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('goes back to the last pick that was saved', async () => {
+      const { locale, sync } = await load();
+      locale.initLocale();
+      sync.startLocaleSync();
+      const listener = vi.fn();
+      sync.onLocaleSaveError(listener);
+      api.updateMyLocale.mockResolvedValueOnce('fr').mockRejectedValueOnce(new Error('500'));
+
+      locale.setLocale('fr');
+      await flush();
+      expect(listener).not.toHaveBeenCalled();
+      locale.setLocale('it');
+      await flush();
+
+      expect(locale.getLocale()).toBe('fr');
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets a failure of an old save leave a newer pick alone', async () => {
+      const { locale, sync } = await load();
+      locale.initLocale();
+      sync.startLocaleSync();
+      const listener = vi.fn();
+      sync.onLocaleSaveError(listener);
+      let failFirst;
+      api.updateMyLocale
+        .mockImplementationOnce(() => new Promise((resolve, reject) => { failFirst = reject; }))
+        .mockResolvedValueOnce('it');
+
+      locale.setLocale('fr');
+      locale.setLocale('it');
+      await flush();
+      failFirst(new Error('timeout'));
+      await flush();
+
+      expect(locale.getLocale()).toBe('it');
+      expect(listener).not.toHaveBeenCalled();
+      expect(api.updateMyLocale.mock.calls.map(([value]) => value)).toEqual(['fr', 'it']);
+
+      // The newer pick is the one the server now holds: a later failure goes back to it.
+      api.updateMyLocale.mockRejectedValueOnce(new Error('500'));
+      locale.setLocale('es');
+      await flush();
+      expect(locale.getLocale()).toBe('it');
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('answers a newer pick that fails too once, with the language the server holds', async () => {
+      const { locale, sync } = await load();
+      locale.initLocale();
+      sync.startLocaleSync();
+      const listener = vi.fn();
+      sync.onLocaleSaveError(listener);
+      api.updateMyLocale.mockRejectedValue(new Error('500'));
+
+      locale.setLocale('fr');
+      locale.setLocale('it');
+      await flush();
+
+      expect(locale.getLocale()).toBe('de');
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('stays silent when a save succeeds', async () => {
+      const { locale, sync } = await load();
+      locale.initLocale();
+      sync.startLocaleSync();
+      const listener = vi.fn();
+      sync.onLocaleSaveError(listener);
+      locale.setLocale('fr');
+      locale.followPhone();
+      await flush();
+      expect(listener).not.toHaveBeenCalled();
+      expect(api.updateMyLocale.mock.calls.map(([value]) => value)).toEqual(['fr', null]);
+    });
   });
 
   it('goes back to the browser\'s language when the session ends, saving nothing', async () => {

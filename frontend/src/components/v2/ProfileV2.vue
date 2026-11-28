@@ -135,6 +135,7 @@
           </div>
           <button class="switch" :class="{ 'is-on': dark }" type="button" role="switch" :aria-checked="dark.toString()" :aria-label="$t('profile.appearance.dark')" @click="toggleTheme"><span class="track"></span></button>
         </div>
+        <LanguageSelectorV2 />
       </section>
       <section class="sec">
         <div class="sec-head"><h2>{{ $t('profile.identity.title') }}</h2></div>
@@ -301,6 +302,7 @@ import { buildGroupInviteShareText } from '@/services/shareMessages';
 import InvitationV2 from './InvitationV2.vue';
 import GroupDetailsForm from './GroupDetailsForm.vue';
 import GearLink from './GearLink.vue';
+import LanguageSelectorV2 from './LanguageSelectorV2.vue';
 import { MOTM_ANNOUNCED_KEY } from '@/services/notificationLabels';
 import { formatDecimal } from '@/services/intl';
 
@@ -337,7 +339,7 @@ function playerIdFromToken() {
 
 export default {
   name: 'ProfileV2',
-  components: { AppToast, GearLink, GroupDetailsForm, InvitationV2, PasskeysV2 },
+  components: { AppToast, GearLink, GroupDetailsForm, InvitationV2, LanguageSelectorV2, PasskeysV2 },
   inject: {
     v2Context: { default: () => ({}) },
     openGuide: { default: () => {} },

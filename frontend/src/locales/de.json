@@ -4,7 +4,8 @@
     "agoranking": "Agoranking"
   },
   "language": {
-    "label": "Sprache"
+    "label": "Sprache",
+    "saveError": "Sprache konnte nicht gespeichert werden. Versuch es noch mal."
   },
   "unit": {
     "points": "{n} Pkt. | {n} Pkt."
