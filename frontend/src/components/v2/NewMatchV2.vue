@@ -57,6 +57,7 @@
 
 <script>
 import { createMatch } from '@/services/api';
+import { apiErrorMessage } from '@/services/apiError';
 import { resolveActiveGroup } from '@/services/activeGroup';
 import { buildNewMatch, localDateTimeValue, DEFAULT_MAX_PLAYERS } from '@/services/v2NewMatch';
 
@@ -134,7 +135,7 @@ export default {
         this.$router.push({ name: 'MatchView', params: { id } });
       } catch (error) {
         console.error('Error creating match:', error);
-        this.formError = error?.response?.data?.error || this.$t('newMatch.createError');
+        this.formError = apiErrorMessage(error, this.$t('newMatch.createError'));
       } finally {
         this.creating = false;
       }

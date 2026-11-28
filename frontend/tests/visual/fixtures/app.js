@@ -186,7 +186,8 @@ async function stubApi(page, overrides = {}) {
 
   // Preferred positions (design v2). The player's own, read and replaced on
   // the Account page: a PUT answers with what it was sent, normalized the way
-  // the server does, unless `myPositionsError` asks for a refusal. And the
+  // the server does, unless `myPositionsError` asks for a refusal (the message, or the whole
+  // error body `{ error, code }`). And the
   // group's list for a match (`matchPositions`, [{ PlayerID,
   // PreferredPositions }]), empty by default so that no existing page shows a
   // tag.
@@ -195,7 +196,7 @@ async function stubApi(page, overrides = {}) {
     const method = route.request().method();
     if (method === 'PUT') {
       if (overrides.myPositionsError) {
-        return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: overrides.myPositionsError }) });
+        return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify(typeof overrides.myPositionsError === 'string' ? { error: overrides.myPositionsError } : overrides.myPositionsError) });
       }
       const body = JSON.parse(route.request().postData() || '{}');
       const picked = new Set(body.PreferredPositions || []);

@@ -1,4 +1,5 @@
 import { t } from '@/i18n';
+import { apiErrorMessage } from '@/services/apiError';
 import { resolveActiveGroup } from '@/services/activeGroup';
 import { findGroupForMatch } from '@/router/index';
 
@@ -22,8 +23,8 @@ export async function findMatchInMyGroups(matchId) {
 }
 
 // The backend's own reason when it gives one (a 409 says exactly why: list
-// closed, voting over…), the caller's fallback otherwise — the same rule as
-// today's Matches tab.
+// closed, voting over…), in the player's language when it carries a code, the
+// caller's fallback otherwise — the same rule as today's Matches tab.
 export function actionErrorMessage(error, fallback) {
-  return error?.response?.data?.error || fallback;
+  return apiErrorMessage(error, fallback);
 }

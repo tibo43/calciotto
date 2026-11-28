@@ -27,6 +27,7 @@
 
 <script>
 import { updateGroupDetails } from '@/services/api';
+import { apiErrorMessage } from '@/services/apiError';
 
 function detailsOf(group) {
   return {
@@ -54,7 +55,7 @@ export default {
         this.$emit('saved', group);
         this.feedback = { message: this.$t('group.details.saved') };
       } catch (error) {
-        this.feedback = { error: true, message: error.response?.data?.error || this.$t('group.details.saveError') };
+        this.feedback = { error: true, message: apiErrorMessage(error, this.$t('group.details.saveError')) };
       } finally {
         this.saving = false;
       }
