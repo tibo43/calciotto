@@ -1,6 +1,6 @@
 import { mount, flushPromises } from '@vue/test-utils';
 import EditMatchV2 from '@/components/v2/EditMatchV2.vue';
-import { getMatchRegistrations, getMatchPositions } from '@/services/api';
+import { getMatchRegistrations, getMatchPositions, setMatchMaxPlayers } from '@/services/api';
 import { findMatchInMyGroups } from '@/services/v2Match';
 
 vi.mock('@/services/api', () => ({
@@ -102,5 +102,67 @@ describe('EditMatchV2.vue preferred positions', () => {
     await wrapper.find('.compose-toolbar .btn').trigger('click');
     expect(teamCols(wrapper).map((col) => col.findAll('.p-row').length)).toEqual([3, 3]);
     teamCols(wrapper).forEach((col) => expect(col.find('.pos-summary').text()).toBe('GK 0 · DEF 0 · MID 0 · FWD 0'));
+  });
+});
+
+describe('EditMatchV2.vue counts', () => {
+  const registered = (confirmed, waiting) => [
+    ...Array.from({ length: confirmed }, (_, i) => ({ PlayerID: `c${i}`, Name: `Player ${i}`, Position: i + 1, IsWaiting: false })),
+    ...Array.from({ length: waiting }, (_, i) => ({ PlayerID: `w${i}`, Name: `Waiter ${i}`, Position: confirmed + i + 1, IsWaiting: true })),
+  ];
+
+  async function mountSignups(confirmed, waiting, maxPlayers) {
+    const match = { ...closedMatch(), MaxPlayers: maxPlayers };
+    const group = { id: 'g', role: 'admin' };
+    findMatchInMyGroups.mockResolvedValue({ group, details: match, groups: [group] });
+    getMatchRegistrations.mockResolvedValue(registered(confirmed, waiting));
+    getMatchPositions.mockResolvedValue([]);
+    const wrapper = mount(EditMatchV2, {
+      props: { id: MATCH_ID },
+      global: {
+        provide: { v2Context: { groups: [], seasons: [] } },
+        directives: { fitTwoLines: {} },
+        mocks: { $route: { query: {} }, $router: { replace: vi.fn(), push: vi.fn() } },
+        stubs: { 'router-link': { template: '<a><slot /></a>' }, ShareButton: true },
+      },
+    });
+    await flushPromises();
+    return wrapper;
+  }
+
+  it.each([
+    [1, 0, 1, '1 confirmed / 1 place', 'Not composed yet. 1 confirmed player is in the reserve.'],
+    [0, 0, 8, '0 confirmed / 8 places', 'Not composed yet. 0 confirmed players are in the reserve.'],
+    [2, 1, 2, '2 confirmed / 2 places', 'Not composed yet. 2 confirmed players are in the reserve, 1 waiting (Waiter 0).'],
+  ])('with %s confirmed, %s waiting and %s places, says « %s »', async (confirmed, waiting, places, line, note) => {
+    const wrapper = await mountSignups(confirmed, waiting, places);
+    expect(wrapper.text()).toContain(line);
+    expect(wrapper.find('.note').text()).toContain(note);
+  });
+});
+
+describe('EditMatchV2.vue places toast', () => {
+  it('says the places were updated, without repeating the number', async () => {
+    const match = { ...closedMatch(), RegistrationsClosedAt: undefined, MaxPlayers: 6 };
+    const group = { id: 'g', role: 'admin' };
+    findMatchInMyGroups.mockResolvedValue({ group, details: match, groups: [group] });
+    getMatchRegistrations.mockResolvedValue([]);
+    getMatchPositions.mockResolvedValue([]);
+    setMatchMaxPlayers.mockResolvedValue([]);
+    const wrapper = mount(EditMatchV2, {
+      props: { id: MATCH_ID },
+      global: {
+        provide: { v2Context: { groups: [], seasons: [] } },
+        directives: { fitTwoLines: {} },
+        mocks: { $route: { query: {} }, $router: { replace: vi.fn(), push: vi.fn() } },
+        stubs: { 'router-link': { template: '<a><slot /></a>' }, ShareButton: true },
+      },
+    });
+    await flushPromises();
+    await wrapper.find('#confirmed-places').setValue('8');
+    await wrapper.findAll('.places-row button').at(0).trigger('click');
+    await flushPromises();
+    expect(setMatchMaxPlayers).toHaveBeenCalledWith(MATCH_ID, 8);
+    expect(wrapper.find('.toast-message span').text()).toBe('Places updated.');
   });
 });

@@ -248,3 +248,16 @@ describe('HomeV2.vue match button', () => {
     expect(kids.at(1).classes()).toContain('hero-manage');
   });
 });
+
+describe('HomeV2.vue places left', () => {
+  const open = (max) => ({
+    ...played('next', -3), Teams: [], ScheduledAt: new Date(Date.now() + 3 * DAY).toISOString(),
+    RegistrationOpensAt: new Date(Date.now() - DAY).toISOString(), MaxPlayers: max,
+  });
+
+  it.each([[1, 'place left'], [2, 'places left'], [16, 'places left']])('with %s place(s) free reads « %s »', async (max, label) => {
+    const wrapper = await mountHome([open(max)]);
+    expect(wrapper.find('.hero-spots .num').text()).toBe(String(max));
+    expect(wrapper.find('.hero-spots .cap-line').text()).toBe(label);
+  });
+});
