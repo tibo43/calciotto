@@ -327,3 +327,11 @@ describe('MatchView.vue preferred positions', () => {
     expect(wrapper.find('.pos-tag').exists()).toBe(false);
   });
 });
+
+describe('MatchView.vue places left', () => {
+  it.each([[1, 'place left'], [2, 'places left']])('with %s place(s) free reads « %s »', async (max, label) => {
+    const { wrapper } = await mountView({ ...upcomingMatch(), MaxPlayers: max });
+    expect(wrapper.find('.hero-spots .num').text()).toBe(String(max));
+    expect(wrapper.find('.hero-spots .cap-line').text()).toBe(label);
+  });
+});
