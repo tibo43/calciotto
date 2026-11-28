@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"time"
 
 	"app/internal/models"
@@ -155,6 +156,10 @@ type PushMessage struct {
 	// several on a tie.
 	Winner  bool     `json:"winner,omitempty"`
 	Winners []string `json:"winners,omitempty"`
+	// Locale is the language the recipient chose in the app (players.locale),
+	// set by send, never by a trigger. Absent when they follow their phone:
+	// the service worker then reads the phone's own languages.
+	Locale string `json:"locale,omitempty"`
 }
 
 // PushScore is one team's line of a recorded result.
@@ -314,8 +319,10 @@ func (s *NotificationService) send(groupID uuid.UUID, messages map[uuid.UUID]Pus
 		log.Printf("[push] could not load subscriptions: %v", err)
 		return
 	}
+	locales := s.chosenLocales(playerIDs)
 	for _, sub := range subs {
 		message := messages[sub.PlayerID]
+		message.Locale = locales[sub.PlayerID]
 		if optedOut[sub.PlayerID][message.Type] {
 			log.Printf("[push] %s skipped for player %s subscription %s: turned off", message.Type, sub.PlayerID, sub.ID)
 			continue
@@ -340,6 +347,24 @@ func (s *NotificationService) send(groupID uuid.UUID, messages map[uuid.UUID]Pus
 		}
 		log.Printf("[push] %s sent to player %s subscription %s: HTTP %d", message.Type, sub.PlayerID, sub.ID, status)
 	}
+}
+
+// chosenLocales is the language each player chose in the app. A player who
+// follows their phone (no saved language) is absent. A failed lookup is not an
+// error worth dropping the push for: the worker then uses the phone's language.
+func (s *NotificationService) chosenLocales(playerIDs []uuid.UUID) map[uuid.UUID]string {
+	out := make(map[uuid.UUID]string)
+	var players []models.Player
+	if err := s.DB.Select("id", "locale").Where("id IN ? AND locale IS NOT NULL", playerIDs).Find(&players).Error; err != nil {
+		log.Printf("[push] could not load languages: %v", err)
+		return out
+	}
+	for _, player := range players {
+		if player.Locale != nil && slices.Contains(models.SupportedLocales, *player.Locale) {
+			out[player.ID] = *player.Locale
+		}
+	}
+	return out
 }
 
 // optedOut is the set of types each player has turned off. A player with no

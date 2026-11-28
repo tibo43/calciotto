@@ -2,10 +2,11 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MVP } from '@/services/v2Home';
+import { LOCALES } from '@/locales';
 
 // The notification wording lives in public/sw.js (see its comment); the file
 // exports it for exactly this test.
-const { buildNotification, MOTM_TEXT, LEGACY_HOST, retireLegacyWorker } = createRequire(import.meta.url)('../../../public/sw.js');
+const { buildNotification, resolveLanguage, matchLanguage, LANGUAGES, TEXT, MOTM_TEXT, LEGACY_HOST, retireLegacyWorker } = createRequire(import.meta.url)('../../../public/sw.js');
 
 const KICKOFF = '2026-09-06T19:00:00Z';
 const kickoffText = new Date(KICKOFF).toLocaleString('en-US', {
@@ -141,6 +142,118 @@ describe('buildNotification', () => {
     const notification = buildNotification({ type: 'member_joined', playerName: 'Sam', groupName: 'Thursday Football' });
     expect(notification.title).toBe('Sam joined Thursday Football');
     expect(notification.body).toContain('generate a new invite code');
+  });
+});
+
+describe('push wording in each language', () => {
+  const KICK = '2026-09-06T19:00:00Z';
+  const when = (tag) => new Date(KICK).toLocaleString(tag, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const clock = (tag) => new Date(KICK).toLocaleTimeString(tag, { hour: 'numeric', minute: '2-digit' });
+  const SCORE = [{ team: 'Bianco', goals: 5 }, { team: 'Nero', goals: 3 }];
+
+  it('speaks exactly the languages of the app', () => {
+    expect([...LANGUAGES].sort()).toEqual(LOCALES.map((locale) => locale.code).sort());
+  });
+
+  it('has the same wording keys and placeholders in every language', () => {
+    const shape = (node) => (typeof node === 'string'
+      ? [...node.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',')
+      : Object.fromEntries(Object.entries(node).map(([key, value]) => [key, shape(value)])));
+    for (const language of LANGUAGES) {
+      expect(Object.keys(TEXT[language]).sort(), language).toEqual(Object.keys(TEXT.en).sort());
+      // Wording differs, the slots must not.
+      expect(shape(TEXT[language]), language).toEqual(shape(TEXT.en));
+    }
+  });
+
+  it('never translates the award name', () => {
+    for (const language of LANGUAGES) {
+      const { motm, resultRecorded } = TEXT[language];
+      expect(motm.winnerTitle, language).toContain(MVP);
+      expect(motm.voterTitle, language).toContain(MVP);
+      expect(resultRecorded.body, language).toContain(MVP);
+    }
+  });
+
+  it('writes German push texts with the kick-off in German', () => {
+    expect(buildNotification({ type: 'registration_open', groupName: 'Calciotto', kickoffAt: KICK }, 'de')).toEqual({
+      title: 'Die Anmeldung ist offen',
+      body: `Calciotto: Spiel am ${when('de-DE')}. Sichere dir deinen Platz.`
+    });
+    expect(buildNotification({ type: 'kickoff_reminder', kickoffAt: KICK, teamName: 'Weiß' }, 'de').body)
+      .toBe(`Anpfiff um ${clock('de-DE')}, du bist bei Weiß.`);
+    expect(buildNotification({ type: 'result_recorded', score: SCORE }, 'de'))
+      .toEqual({ title: 'Endergebnis: Bianco 5 – Nero 3', body: 'Stimme für deinen MVP ab.' });
+  });
+
+  it('writes French push texts with the usual spacing before « : » and « ! »', () => {
+    expect(buildNotification({ type: 'predictions_open', groupName: 'Calciotto', kickoffAt: KICK }, 'fr')).toEqual({
+      title: 'Les pronos sont ouverts',
+      body: `Calciotto\u00a0: match le ${when('fr-FR')}. Fais ton prono.`
+    });
+    expect(buildNotification({ type: 'motm_announced', winner: true }, 'fr').title).toBe('Tu es le MVP\u00a0!');
+  });
+
+  it('uses each language’s own wording and plural for settled predictions', () => {
+    const settled = (points, language) => buildNotification({ type: 'predictions_settled', score: SCORE, points }, language);
+    expect(settled(1.33, 'fr')).toEqual({ title: 'Résultats des pronos', body: 'Bianco a gagné\u00a0! Tu as gagné 1,33\u00a0point.' });
+    expect(settled(-1, 'de').body).toBe('Bianco hat gewonnen! Du hast 1\u00a0Punkt verloren.');
+    expect(settled(2.5, 'it')).toEqual({ title: 'Esiti dei pronostici', body: 'Ha vinto Bianco! Hai guadagnato 2,50\u00a0punti.' });
+    expect(settled(0, 'es').body).toBe('¡Ganó Bianco! Has ganado 0\u00a0puntos.');
+    expect(buildNotification({ type: 'predictions_settled', score: [{ team: 'A', goals: 2 }, { team: 'B', goals: 2 }], points: 1 }, 'it').body)
+      .toBe('Pareggio! Hai guadagnato 1\u00a0punto.');
+  });
+
+  it('keeps English as the default when no language is given', () => {
+    expect(buildNotification({ type: 'motm_announced', winner: true }).title).toBe("You're the MVP!");
+    expect(buildNotification({ type: 'motm_announced', winner: true }, 'xx').title).toBe("You're the MVP!");
+  });
+
+  it('names who joined with and without a group, in each language', () => {
+    expect(buildNotification({ type: 'member_joined', playerName: 'Sam', groupName: 'Calciotto' }, 'it').title).toBe('Sam è entrato in Calciotto');
+    expect(buildNotification({ type: 'member_joined', playerName: 'Sam' }, 'it').title).toBe('Sam è entrato nel tuo gruppo');
+    expect(buildNotification({ type: 'member_joined' }, 'de').title).toBe('Jemand ist deiner Gruppe beigetreten');
+    expect(buildNotification({ type: 'member_joined', playerName: 'Sam' }, 'es').title).toBe('Sam se ha unido a tu grupo');
+  });
+
+  it('lists the MVP winners the same way in each language', () => {
+    expect(buildNotification({ type: 'motm_announced', winners: ['Luca', 'Marco', 'Sara'] }, 'de').title).toBe('MVP: Luca, Marco & Sara');
+  });
+
+  it('gives every language a complete text for every type, even an unknown one', () => {
+    for (const language of LANGUAGES) {
+      for (const type of ['registration_open', 'team_assigned', 'predictions_open', 'kickoff_reminder', 'result_recorded', 'predictions_settled', 'motm_announced', 'member_joined', 'other']) {
+        const { title, body } = buildNotification({ type, groupName: 'G', teamName: 'T', playerName: 'P', kickoffAt: KICK, score: SCORE, points: 1, winners: ['W'] }, language);
+        expect(title, `${language} ${type}`).toBeTruthy();
+        expect(body, `${language} ${type}`).toBeTruthy();
+        expect(`${title} ${body}`, `${language} ${type}`).not.toMatch(/\{|undefined|NaN/);
+      }
+    }
+  });
+});
+
+describe('resolveLanguage', () => {
+  it('prefers the language the player chose in the app', () => {
+    expect(resolveLanguage('de', ['fr-FR', 'en-US'])).toBe('de');
+  });
+
+  it("follows the phone's first supported language when the player chose none", () => {
+    expect(resolveLanguage(undefined, ['pt-BR', 'it-IT', 'en'])).toBe('it');
+    expect(resolveLanguage(null, ['fr-CA'])).toBe('fr');
+    expect(resolveLanguage('', ['ES'])).toBe('es');
+  });
+
+  it('falls back to English', () => {
+    expect(resolveLanguage(undefined, ['pt-BR', 'ja'])).toBe('en');
+    expect(resolveLanguage('xx', [])).toBe('en');
+    expect(resolveLanguage(undefined, undefined)).toBe('en');
+  });
+
+  it('reads language tags loosely', () => {
+    expect(matchLanguage('de_AT')).toBe('de');
+    expect(matchLanguage('de-AT')).toBe('de');
+    expect(matchLanguage('deutsch')).toBeNull();
+    expect(matchLanguage(null)).toBeNull();
   });
 });
 

@@ -1445,3 +1445,37 @@ func TestAddPredictionsSettledNotifiedAt_Integration(t *testing.T) {
 		t.Fatalf("a later start backfilled predictions_settled_notified_at to %v", got)
 	}
 }
+
+// The push carries the language the player chose in the app, and nothing for a
+// player who follows their phone: the service worker then reads the phone's.
+func TestNotifications_Integration_PushCarriesTheChosenLanguage(t *testing.T) {
+	env := newNotificationEnv(t)
+	now := time.Now()
+	german, germanEndpoint := env.member(t, "German", true)
+	_, phoneEndpoint := env.member(t, "Phone", true)
+	unsupported, unsupportedEndpoint := env.member(t, "Unsupported", true)
+	if _, err := services.NewPlayerService(env.tx).UpdateLocale(german, ptr("de")); err != nil {
+		t.Fatalf("UpdateLocale: %v", err)
+	}
+	// A value outside the supported languages (a column edited by hand) is not forwarded.
+	if err := env.tx.Model(&models.Player{}).Where("id = ?", unsupported).
+		UpdateColumn("locale", "xx").Error; err != nil {
+		t.Fatalf("set unsupported locale: %v", err)
+	}
+
+	env.scheduledMatch(t, now.Add(72*time.Hour), now.Add(-10*time.Minute), 10)
+	if _, err := env.notifications.Tick(now); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if got := env.sender.sent[germanEndpoint]; len(got) != 1 || got[0].Locale != "de" {
+		t.Errorf("German player got %+v, want one push with locale de", got)
+	}
+	if got := env.sender.sent[phoneEndpoint]; len(got) != 1 || got[0].Locale != "" {
+		t.Errorf("player following the phone got %+v, want a push without a locale", got)
+	}
+	if got := env.sender.sent[unsupportedEndpoint]; len(got) != 1 || got[0].Locale != "" {
+		t.Errorf("player with an unknown language got %+v, want a push without a locale", got)
+	}
+}
+
+func ptr(s string) *string { return &s }
