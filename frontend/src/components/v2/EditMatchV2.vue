@@ -16,7 +16,7 @@
       <h1 class="display h-kick">{{ heading }}</h1>
       <p class="reg-status">
         <template v-if="!isScheduled">{{ $t('edit.noSignupList') }}</template>
-        <template v-else><i18n-t keypath="edit.regStatus" scope="global"><template #state><strong>{{ registrationWord }}</strong></template><template #detail><template v-if="step === 'score' && bothSides">{{ $t('edit.teamsMade') }}</template><i18n-t v-else keypath="edit.regCounts" scope="global"><template #counts><strong>{{ $t('edit.confirmedPlaces', { confirmed: confirmed.length, cap }) }}</strong></template><template #waiting>{{ waitingLabel }}</template></i18n-t></template></i18n-t></template>
+        <template v-else><i18n-t keypath="edit.regStatus" scope="global"><template #state><strong>{{ registrationWord }}</strong></template><template #detail><template v-if="step === 'score' && bothSides">{{ $t('edit.teamsMade') }}</template><i18n-t v-else keypath="edit.regCounts" scope="global"><template #counts><strong>{{ confirmedPlacesLabel }}</strong></template><template #waiting>{{ waitingLabel }}</template></i18n-t></template></i18n-t></template>
       </p>
 
       <div class="match-sharing">
@@ -348,11 +348,18 @@ export default {
     waitingLabel() {
       return this.$t('edit.waiting', this.waiting.length);
     },
+    // « 11 confirmed / 12 places »: each count agrees with its own noun.
+    confirmedPlacesLabel() {
+      return this.$t('edit.confirmedPlaces', {
+        confirmed: this.$t('edit.confirmedCount', this.confirmed.length),
+        cap: this.$t('edit.placesCount', this.cap),
+      });
+    },
     signupNote() {
       if (this.bothSides) return this.$t('edit.signups.teamsMadeNote');
       const names = this.waiting.map((entry) => entry.Name).join(', ');
       const bench = names ? this.$t('edit.signups.bench', { n: this.waiting.length, names }) : '';
-      return this.$t('edit.signups.notComposed', { confirmed: this.confirmed.length, bench });
+      return this.$t('edit.signups.notComposed', { confirmed: this.confirmed.length, bench }, { plural: this.confirmed.length });
     },
     // Where the match stands, from what the server has saved (not this
     // page's draft): sign-ups closed, then teams saved, then the score.
@@ -621,7 +628,7 @@ export default {
         const entries = await setMatchMaxPlayers(this.match.ID, requested);
         this.registrations = Array.isArray(entries) ? entries : this.registrations;
         this.match = { ...this.match, MaxPlayers: requested };
-        this.$refs.toast.show(this.$t('edit.toast.placesSet', { n: requested }), 'success');
+        this.$refs.toast.show(this.$t('edit.toast.placesSet'), 'success');
       } catch (error) {
         console.error('Error updating the places:', error);
         this.$refs.toast.show(actionErrorMessage(error, this.$t('edit.toast.placesError')), 'error');

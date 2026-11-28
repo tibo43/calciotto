@@ -53,7 +53,7 @@
                  the places, then, once full, the waiting list's size — so
                  17 sign-ups for 16 places read 16 / 16 and 1 waiting. -->
             <div class="cap">
-              <span class="cap-line">{{ $t('home.placesLeft') }}</span>
+              <span class="cap-line">{{ $t('home.placesLeft', places) }}</span>
               <span class="cap-line">{{ $t('home.signedUpCount', { confirmed: confirmedCount, cap }) }}</span>
               <span v-if="full" class="cap-line">{{ $t('home.waitingCount', { n: waitingCount }) }}</span>
             </div>

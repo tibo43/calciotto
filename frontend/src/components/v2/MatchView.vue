@@ -32,7 +32,7 @@
             <div class="num big">{{ places }}</div>
             <!-- Same three lines as on the home page. -->
             <div class="cap">
-              <span class="cap-line">{{ $t('home.placesLeft') }}</span>
+              <span class="cap-line">{{ $t('home.placesLeft', places) }}</span>
               <span class="cap-line">{{ $t('home.signedUpCount', { confirmed: confirmed.length, cap }) }}</span>
               <span v-if="full" class="cap-line">{{ $t('home.waitingCount', { n: waiting.length }) }}</span>
             </div>
