@@ -155,7 +155,7 @@ const TEXT = {
     registrationOpen: { title: 'Die Anmeldung ist offen', body: '{prefix}Spiel am {kickoff}. Sichere dir deinen Platz.' },
     teamAssigned: { title: 'Du spielst für {team}', body: '{prefix}Spiel am {kickoff}.' },
     predictionsOpen: { title: 'Die Tipprunde ist offen', body: '{prefix}Spiel am {kickoff}. Gib deinen Tipp ab.' },
-    kickoffReminder: { title: 'Das Spiel beginnt gleich', body: 'Anpfiff um {time}.', bodyTeam: 'Anpfiff um {time}, du bist bei {team}.' },
+    kickoffReminder: { title: 'Das Spiel beginnt gleich', body: 'Anstoß um {time}.', bodyTeam: 'Anstoß um {time}, du bist bei {team}.' },
     resultRecorded: { title: 'Endergebnis: {score}', titleNoScore: 'Das Ergebnis steht fest', body: 'Stimme für deinen ' + MVP_NAME + ' ab.' },
     predictionsSettled: {
       title: 'Tipps ausgewertet',
@@ -179,7 +179,7 @@ const TEXT = {
     registrationOpen: { title: 'Las inscripciones están abiertas', body: '{prefix}partido el {kickoff}. Asegura tu plaza.' },
     teamAssigned: { title: 'Juegas con {team}', body: '{prefix}partido el {kickoff}.' },
     predictionsOpen: { title: 'Los pronósticos están abiertos', body: '{prefix}partido el {kickoff}. Haz tu pronóstico.' },
-    kickoffReminder: { title: 'El partido empieza pronto', body: 'Saque inicial a las {time}.', bodyTeam: 'Saque inicial a las {time}, vas con {team}.' },
+    kickoffReminder: { title: 'El partido empieza pronto', body: 'Inicio a las {time}.', bodyTeam: 'Inicio a las {time}, vas con {team}.' },
     resultRecorded: { title: 'Resultado final: {score}', titleNoScore: 'Ya hay resultado', body: 'Vota a tu ' + MVP_NAME + '.' },
     predictionsSettled: {
       title: 'Pronósticos resueltos',

@@ -181,7 +181,7 @@ describe('push wording in each language', () => {
       body: `Calciotto: Spiel am ${when('de-DE')}. Sichere dir deinen Platz.`
     });
     expect(buildNotification({ type: 'kickoff_reminder', kickoffAt: KICK, teamName: 'Weiß' }, 'de').body)
-      .toBe(`Anpfiff um ${clock('de-DE')}, du bist bei Weiß.`);
+      .toBe(`Anstoß um ${clock('de-DE')}, du bist bei Weiß.`);
     expect(buildNotification({ type: 'result_recorded', score: SCORE }, 'de'))
       .toEqual({ title: 'Endergebnis: Bianco 5 – Nero 3', body: 'Stimme für deinen MVP ab.' });
   });
