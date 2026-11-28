@@ -197,3 +197,27 @@ test.describe('auth pages', () => {
     expectEverythingStubbed(unstubbed);
   });
 });
+
+// The public pages follow the browser's language: a refused sign up reads in
+// German, from the error's code.
+test.describe('auth pages on a german phone', () => {
+  test.use({ locale: 'de', viewport: { width: 360, height: 800 } });
+
+  for (const theme of ['light', 'dark']) {
+    test(`a refused sign up, ${theme} @mobile`, async ({ page }) => {
+      const { unstubbed } = await openPage(page, `/signup?invite=${INVITE}`, {
+        dark: theme === 'dark',
+        width: 360,
+        stubs: { '/auth/signup': { status: 400, body: { error: 'no group matches this invite code', code: 'invite_code_not_found' } } },
+      });
+      await fillSignup(page);
+      await page.locator('form button[type="submit"]').click();
+      const toast = await expectToast(page, 'Zu diesem Einladungscode gibt es keine Gruppe.');
+      await expect(toast).not.toContainText('invite code');
+      await settle(page);
+      await expect(page).toHaveScreenshot(`signup-error-de-${theme}-360.png`, { fullPage: true });
+      await expectNoHorizontalOverflow(page);
+      expectEverythingStubbed(unstubbed);
+    });
+  }
+});

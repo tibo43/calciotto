@@ -1,3 +1,5 @@
+import { afterEach } from 'vitest';
+import { i18n } from '@/i18n';
 import { asSentence, authErrorMessage, expiredResetLink, resetErrorMessage } from '@/services/v2Auth';
 
 vi.mock('@/router/index', () => ({ findGroupForMatch: vi.fn() }));
@@ -26,5 +28,25 @@ describe('v2Auth', () => {
     expect(expiredResetLink()).toBe('This link has expired. Request a new one.');
     expect(resetErrorMessage(rejected('password is required'))).toBe('Password is required.');
     expect(resetErrorMessage(undefined)).toBe('Could not reset the password. Please try again.');
+  });
+});
+
+describe('v2Auth errors in the active language', () => {
+  const coded = (error, code) => ({ response: { data: { error, code } } });
+  afterEach(() => { i18n.global.locale.value = 'en'; });
+
+  it('writes a coded refusal in the language, as a sentence', () => {
+    i18n.global.locale.value = 'de';
+    expect(authErrorMessage(coded('no group matches this invite code', 'invite_code_not_found'), 'x')).toBe('Zu diesem Einladungscode gibt es keine Gruppe.');
+    expect(authErrorMessage(coded('invalid email or password', 'invalid_credentials'), 'x')).toBe('E-Mail-Adresse oder Passwort ist falsch.');
+  });
+
+  it('keeps the English sentence in English', () => {
+    expect(authErrorMessage(coded('no group matches this invite code', 'invite_code_not_found'), 'x')).toBe('No group matches this invite code.');
+  });
+
+  it('recognises the expired reset link by its code, in any language', () => {
+    i18n.global.locale.value = 'fr';
+    expect(resetErrorMessage(coded('invalid or expired reset token', 'invalid_reset_token'))).toBe(expiredResetLink());
   });
 });
