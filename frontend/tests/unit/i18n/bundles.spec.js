@@ -101,3 +101,78 @@ describe('plural rules per language', () => {
     expect(i18n.global.t('rankings.empty.motm', {}, { locale: 'de' })).toBe('Noch kein MVP');
   });
 });
+
+// Every message that puts a count next to a noun, at 0, 1, 2 and 1.5: the
+// singular form where the language's own rule says so (French: 0 and 1, and
+// anything under 2), the plural form everywhere else.
+describe('count messages agree with their number in every language', () => {
+  const SINGULAR = { fr: [0, 1, 1.5], it: [1], de: [1], es: [1] };
+  const PLURAL = { fr: [2], it: [0, 1.5, 2], de: [0, 1.5, 2], es: [0, 1.5, 2] };
+  // [key, { language: [singular, plural] }]; « # » stands for the count.
+  const FORMS = {
+    'home.placesLeft': { fr: ['place restante', 'places restantes'], it: ['posto libero', 'posti liberi'], de: ['Platz frei', 'Plätze frei'], es: ['plaza libre', 'plazas libres'] },
+    'edit.confirmedCount': { fr: ['# confirmé', '# confirmés'], it: ['# confermato', '# confermati'], de: ['# bestätigt', '# bestätigt'], es: ['# confirmado', '# confirmados'] },
+    'edit.placesCount': { fr: ['# place', '# places'], it: ['# posto', '# posti'], de: ['# Platz', '# Plätze'], es: ['# plaza', '# plazas'] },
+    'profile.groupMatches': { fr: ['# J', '# J'], it: ['# G', '# G'], de: ['# Sp.', '# Sp.'], es: ['# PJ', '# PJ'] },
+    'profile.groupPoints': { fr: ['# Pt', '# Pts'], it: ['# Pt', '# Pt'], de: ['# Pkt.', '# Pkt.'], es: ['# Pt', '# Pts'] },
+    'profile.groupsCombined': { fr: ['# groupe cumulé', '# groupes cumulés'], it: ['# gruppo insieme', '# gruppi insieme'], de: ['# Gruppe zusammen', '# Gruppen zusammen'], es: ['# grupo en total', '# grupos en total'] },
+  };
+  const shown = (key, n, code) => {
+    const text = tn(key, n, code);
+    return key === 'home.placesLeft' ? text.replace(/^[\d.]+ /, '') : text;
+  };
+
+  describe.each(LANGUAGES)('in %s', (code) => {
+    it.each(Object.entries(FORMS))('%s', (key, byLanguage) => {
+      const [one, other] = byLanguage[code];
+      const expected = (form, n) => (key === 'home.placesLeft' ? form : form.replace('#', String(n).replace('.', ',')));
+      SINGULAR[code].forEach((n) => expect(shown(key, n, code)).toBe(expected(one, n)));
+      PLURAL[code].forEach((n) => expect(shown(key, n, code)).toBe(expected(other, n)));
+    });
+  });
+
+  it('agrees the reserve note and the two-count lines with their own counts', () => {
+    const named = (key, params, n, code) => plain(i18n.global.t(key, params, { locale: code, plural: n }));
+    for (const code of LANGUAGES) {
+      [0, 1, 2].forEach((n) => {
+        const note = named('edit.signups.notComposed', { confirmed: n, bench: '' }, n, code);
+        expect(note).toContain(String(n));
+        expect(note).not.toContain('|');
+      });
+      const line = named('edit.confirmedPlaces', { confirmed: tn('edit.confirmedCount', 1, code), cap: tn('edit.placesCount', 1, code) }, 1, code);
+      expect(line).toBe(`${tn('edit.confirmedCount', 1, code)} / ${tn('edit.placesCount', 1, code)}`);
+      const meta = named('profile.groupMeta', { matches: tn('profile.groupMatches', 1, code), points: tn('profile.groupPoints', 1, code) }, 1, code);
+      expect(meta).toBe(`${tn('profile.groupMatches', 1, code)} · ${tn('profile.groupPoints', 1, code)}`);
+    }
+    expect(tn('edit.confirmedCount', 1, 'fr')).toBe('1 confirmé');
+    expect(`${tn('profile.groupMatches', 1, 'de')} · ${tn('profile.groupPoints', 2, 'de')}`).toBe('1 Sp. · 2 Pkt.');
+    expect(`${tn('profile.groupMatches', 0, 'fr')} · ${tn('profile.groupPoints', 0, 'fr')}`).toBe('0 J · 0 Pt');
+  });
+});
+
+describe('numbers in count messages follow the language', () => {
+  it('writes 1.5 with a comma in French, German, Italian and Spanish, a dot in English', () => {
+    expect(tn('unit.points', 1.5, 'fr')).toBe('1,5 pt');
+    expect(tn('unit.points', 1.5, 'de')).toBe('1,5 Pkt.');
+    expect(tn('unit.points', 1.5, 'it')).toBe('1,5 pt');
+    expect(tn('unit.points', 1.5, 'es')).toBe('1,5 pts');
+    expect(tn('unit.points', 1.5, 'en')).toBe('1.5 pts');
+    expect(tn('profile.groupPoints', 1.5, 'fr')).toBe('1,5 Pt');
+    expect(tn('profile.groupPoints', 2.5, 'fr')).toBe('2,5 Pts');
+    expect(tn('profile.groupPoints', 1.5, 'de')).toBe('1,5 Pkt.');
+  });
+
+  it('groups thousands the way each language does', () => {
+    expect(tn('rankings.matches', 1234, 'de')).toBe('1.234 Spiele');
+    expect(tn('rankings.matches', 1234, 'en')).toBe('1,234 matches');
+    // French groups with a narrow no-break space (U+202F).
+    expect(plain(i18n.global.t('rankings.matches', { n: 1234 }, { locale: 'fr', plural: 1234 })).replace(/\u202f/g, ' ')).toBe('1 234 matchs');
+  });
+});
+
+describe('the places toast', () => {
+  it('says the places were updated, without a number, in every language', () => {
+    const toast = ['en', 'fr', 'de', 'it', 'es'].map((locale) => i18n.global.t('edit.toast.placesSet', {}, { locale }));
+    expect(toast).toEqual(['Places updated.', 'Places mises à jour.', 'Plätze aktualisiert.', 'Posti aggiornati.', 'Plazas actualizadas.']);
+  });
+});
