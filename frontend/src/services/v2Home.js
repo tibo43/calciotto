@@ -14,14 +14,14 @@ export const MVP_OF_THE_MATCH = 'MVP of the Match';
 export const MVP = 'MVP';
 export const VOTE_OPEN_LINE = `${MVP} vote open`;
 
-const OLD_AWARD_NAME = /\bm[ae]n[\s_-]+of[\s_-]+the[\s_-]+match\b|\bstars?\s+of\s+the\s+match\b/gi;
+const OLD_AWARD_NAME = /\bm[ae]n[\s_-]+of[\s_-]+the[\s_-]+match\b/gi;
 const OLD_AWARD_LEFT = /\bmotm\b|\bm[ae]n[\s_-]+of[\s_-]+the[\s_-]+match\b/i;
 const VOTE_ERROR_FALLBACK = `Error updating your ${MVP} vote.`;
 
 // The toast text after a failed vote. The backend's own reason is kept; an
-// older "man of the match" / "star of the match" wording is rewritten to
-// MVP. A reason that would still show the award the old way (MOTM…), or no
-// reason at all, gives way to the generic message. The reason is shown as a
+// older "man of the match" wording is rewritten to MVP. A reason that would
+// still show the award the old way (MOTM…), or no reason at all, gives way to
+// the generic message. The reason is shown as a
 // sentence: a capital first letter, full stop at the end.
 export function voteErrorMessage(error) {
   const reason = error?.response?.data?.error;
