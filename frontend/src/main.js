@@ -1,6 +1,8 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router';
+import { i18n } from './i18n';
+import { initLocale } from './services/locale';
 import { getInstallTracker } from './services/pwaInstall';
 import { prefersDarkTheme } from './services/theme';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -24,6 +26,10 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 
 const app = createApp(App);
 app.use(router);
+app.use(i18n);
+// The phone's language for now; a saved choice will be passed here once the
+// player's setting is loaded (see services/locale.js).
+initLocale();
 // Mount only once the initial route has matched. App.vue decides in created()
 // whether this is a public page or a signed-in one, and the router's start
 // location has no name, so mounting earlier would decide on the wrong route.

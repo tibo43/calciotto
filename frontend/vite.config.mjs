@@ -13,6 +13,14 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [vue()],
+    // vue-i18n's bundler build reads these globals. Set explicitly: the
+    // legacy (Options API) layer is not used and stays out of the bundle, and
+    // the build no longer warns about unset flags.
+    define: {
+      __VUE_I18N_FULL_INSTALL__: true,
+      __VUE_I18N_LEGACY_API__: false,
+      __INTLIFY_PROD_DEVTOOLS__: false,
+    },
     // GitHub Actions and Docker Compose already publish these client variables.
     envPrefix: 'VUE_APP_',
     resolve: {

@@ -1,0 +1,12 @@
+{
+  "language": {
+    "label": "Language"
+  },
+  "award": {
+    "mvp": "MVP",
+    "mvpOfTheMatch": "MVP of the Match"
+  },
+  "unit": {
+    "points": "{n} pt | {n} pts"
+  }
+}
