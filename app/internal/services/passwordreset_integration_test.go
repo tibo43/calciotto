@@ -22,7 +22,7 @@ func requestResetToken(t *testing.T, authService *services.AuthService, email st
 	t.Helper()
 
 	var link string
-	authService.PasswordResetMailer = func(_, deliveredLink string) error {
+	authService.PasswordResetMailer = func(_, deliveredLink, _ string) error {
 		link = deliveredLink
 		return nil
 	}
@@ -86,7 +86,7 @@ func TestForgotPassword_Integration_UnknownEmailStaysSilent(t *testing.T) {
 	tx := testutil.BeginTx(t, db)
 
 	authService := services.NewAuthService(tx, testJWTSecret)
-	authService.PasswordResetMailer = func(_, _ string) error {
+	authService.PasswordResetMailer = func(_, _, _ string) error {
 		t.Fatal("the test mailer was called for an unknown email")
 		return nil
 	}
@@ -101,7 +101,7 @@ func TestForgotPassword_Integration_MailerFailureKeepsLinkOutOfLogs(t *testing.T
 	newClaimedPlayer(t, tx, "Zzz Reset Delivery Failure", email, "old-pass")
 
 	authService := services.NewAuthService(tx, testJWTSecret)
-	authService.PasswordResetMailer = func(recipient, link string) error {
+	authService.PasswordResetMailer = func(recipient, link, _ string) error {
 		return errors.New(recipient + " " + link)
 	}
 	logs := captureLogs(t, func() {
@@ -329,5 +329,39 @@ func TestResetPassword_Integration_PasswordPolicy(t *testing.T) {
 	}
 	if _, err := authService.Login("reset-short@example.com", "8chars!!"); err != nil {
 		t.Errorf("login with the new 8-character password returned error: %v", err)
+	}
+}
+
+func TestForgotPassword_Integration_EmailInThePlayersLanguage(t *testing.T) {
+	tx := testutil.BeginTx(t, testutil.OpenDB(t))
+	const email = "reset-language@example.com"
+	player := newClaimedPlayer(t, tx, "Zzz Reset Language", email, "old-pass")
+	authService := services.NewAuthService(tx, testJWTSecret)
+
+	var locale string
+	authService.PasswordResetMailer = func(_, _, got string) error {
+		locale = got
+		return nil
+	}
+	ask := func(acceptLanguage string) string {
+		locale = ""
+		if err := authService.ForgotPasswordFrom(email, "", acceptLanguage); err != nil {
+			t.Fatalf("ForgotPasswordFrom returned error: %v", err)
+		}
+		return locale
+	}
+
+	if got := ask(""); got != "en" {
+		t.Errorf("no language anywhere: %q, want en", got)
+	}
+	if got := ask("fr-FR,fr;q=0.9"); got != "fr" {
+		t.Errorf("browser language: %q, want fr", got)
+	}
+	german := "de"
+	if _, err := services.NewPlayerService(tx).UpdateLocale(player, &german); err != nil {
+		t.Fatalf("save language: %v", err)
+	}
+	if got := ask("fr-FR,fr;q=0.9"); got != "de" {
+		t.Errorf("saved language beats the browser's: %q, want de", got)
 	}
 }

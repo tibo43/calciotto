@@ -150,7 +150,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	if !slices.Contains(h.SessionOrigins, frontendOrigin) {
 		frontendOrigin = ""
 	}
-	if err := h.Service.ForgotPasswordFrom(req.Email, frontendOrigin); err != nil {
+	if err := h.Service.ForgotPasswordFrom(req.Email, frontendOrigin, c.GetHeader("Accept-Language")); err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, services.ErrPasswordResetUnavailable) {
 			status = http.StatusServiceUnavailable

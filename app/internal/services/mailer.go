@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"html"
 	"net/http"
 	"os"
 	"strings"
@@ -30,7 +29,7 @@ type brevoSendEmailRequest struct {
 	HTMLContent string         `json:"htmlContent"`
 }
 
-func newPasswordResetMailer() func(email, link string) error {
+func newPasswordResetMailer() func(email, link, locale string) error {
 	apiKey := strings.TrimSpace(os.Getenv("BREVO_API_KEY"))
 	senderEmail := strings.TrimSpace(os.Getenv("BREVO_SENDER_EMAIL"))
 	if apiKey == "" || senderEmail == "" {
@@ -47,16 +46,13 @@ func newPasswordResetMailer() func(email, link string) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	return func(email, link string) error {
-		escapedLink := html.EscapeString(link)
+	return func(email, link, locale string) error {
+		subject, htmlContent := PasswordResetEmail(locale, link)
 		return sendViaBrevo(client, apiKey, brevoSendEmailRequest{
-			Sender:  brevoContact{Name: senderName, Email: senderEmail},
-			To:      []brevoContact{{Email: email}},
-			Subject: "Reset your Agoran password",
-			HTMLContent: fmt.Sprintf(
-				`<p>Click the link below to reset your Agoran password:</p><p><a href="%s">%s</a></p><p>This link expires in one hour. If you didn't request this, you can ignore this email.</p>`,
-				escapedLink, escapedLink,
-			),
+			Sender:      brevoContact{Name: senderName, Email: senderEmail},
+			To:          []brevoContact{{Email: email}},
+			Subject:     subject,
+			HTMLContent: htmlContent,
 		})
 	}
 }

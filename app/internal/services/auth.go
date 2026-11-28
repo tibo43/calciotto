@@ -118,7 +118,7 @@ type AuthService struct {
 	secret []byte
 	// PasswordResetMailer delivers the reset link to its intended recipient.
 	// Nil means recovery is unavailable for every account.
-	PasswordResetMailer func(email, link string) error
+	PasswordResetMailer func(email, link, locale string) error
 	// Notifier hears about every player who joined a group by signing up
 	// with its invite code. Nil unless main.go wires one in.
 	Notifier MemberJoinedNotifier
@@ -306,7 +306,7 @@ func validPassword(player models.Player, password string) bool {
 // ForgotPassword issues and emails a reset link for the registered account,
 // on FRONTEND_BASE_URL. See ForgotPasswordFrom.
 func (s *AuthService) ForgotPassword(email string) error {
-	return s.ForgotPasswordFrom(email, "")
+	return s.ForgotPasswordFrom(email, "", "")
 }
 
 // ResetLinkBase is the frontend the reset link points at: the origin the
@@ -327,7 +327,9 @@ func ResetLinkBase(frontendOrigin string) string {
 
 // ForgotPasswordFrom issues and emails a reset link for the registered
 // account, on frontendOrigin (already checked against the allowed origins)
-// or, when it is empty, on FRONTEND_BASE_URL.
+// or, when it is empty, on FRONTEND_BASE_URL. The email is written in the
+// language the player saved, else the request's Accept-Language (see
+// EmailLocale).
 //
 // An unknown email returns nil, not an error: answering differently would turn
 // this endpoint into an email-enumeration oracle, the very thing Login avoids
@@ -335,7 +337,7 @@ func ResetLinkBase(frontendOrigin string) string {
 // the unknown-email path still generates a token it throws away, so the two
 // branches cost roughly the same time — a best effort, not a constant-time
 // guarantee.
-func (s *AuthService) ForgotPasswordFrom(email, frontendOrigin string) error {
+func (s *AuthService) ForgotPasswordFrom(email, frontendOrigin, acceptLanguage string) error {
 	if s.PasswordResetMailer == nil {
 		return ErrPasswordResetUnavailable
 	}
@@ -363,7 +365,7 @@ func (s *AuthService) ForgotPasswordFrom(email, frontendOrigin string) error {
 	link := fmt.Sprintf("%s/reset-password?token=%s", ResetLinkBase(frontendOrigin), url.QueryEscape(rawToken))
 	// Keep the same caller-visible response when delivery to a registered
 	// account fails. Mail transport errors may contain the recipient or link.
-	if err := s.PasswordResetMailer(email, link); err != nil {
+	if err := s.PasswordResetMailer(email, link, EmailLocale(player.Locale, acceptLanguage)); err != nil {
 		log.Print("[password reset] email delivery failed")
 	}
 	return nil
