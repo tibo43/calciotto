@@ -11,7 +11,7 @@
         <div class="skel pk-skel"></div>
       </div>
       <div v-else-if="!loaded" class="pk-block">
-        <p class="scope" role="alert">{{ loadError }}</p>
+        <p class="scope" role="alert">{{ $t('passkeys.loadError') }}</p>
         <button class="btn btn-ghost" type="button" @click="loadKeys">{{ $t('common.tryAgain') }}</button>
       </div>
       <template v-else>
@@ -111,7 +111,7 @@ export default {
       keys: [],
       name: '',
       password: '',
-      loadError: '',
+      loadError: false,
     };
   },
   computed: {
@@ -150,14 +150,14 @@ export default {
     async loadKeys() {
       if (this.loading) return;
       this.loading = true;
-      this.loadError = '';
+      this.loadError = false;
       try {
         const keys = await getMyPasskeys();
         this.keys = Array.isArray(keys) ? keys : [];
         this.loaded = true;
       } catch {
         // Stays in the card (summary and Try again), not in a toast.
-        this.loadError = this.$t('passkeys.loadError');
+        this.loadError = true;
       } finally {
         this.loading = false;
       }

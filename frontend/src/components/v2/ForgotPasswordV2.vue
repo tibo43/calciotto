@@ -2,7 +2,7 @@
   <main class="page is-auth auth-v2 has-toast-room forgot-password-v2">
     <h1 class="auth-title">{{ $t('auth.forgot.title') }}</h1>
     <p class="auth-lead">{{ $t('auth.forgot.lead') }}</p>
-    <p v-if="notice" class="auth-notice" role="status">{{ notice }}</p>
+    <p v-if="notice" class="auth-notice" role="status">{{ showText(notice) }}</p>
 
     <form @submit.prevent="submit">
       <div class="field">
@@ -22,6 +22,7 @@
 <script>
 import AppToast from '@/components/AppToast.vue';
 import { forgotPassword } from '@/services/api';
+import { messageKey, showText } from '@/i18n';
 import { asSentence, authErrorMessage } from '@/services/v2Auth';
 
 // The reset request page. The backend's answer becomes a grey line above the
@@ -44,6 +45,7 @@ export default {
     },
   },
   methods: {
+    showText,
     async submit() {
       if (this.isSubmitting) return;
       this.$refs.toast?.dismiss();
@@ -54,7 +56,7 @@ export default {
         const { message } = await forgotPassword(this.email);
         // The fallback is the backend's answer, the same for a registered
         // and an unregistered email.
-        this.notice = asSentence(message) || this.$t('auth.forgot.requested');
+        this.notice = asSentence(message) || messageKey('auth.forgot.requested');
       } catch (error) {
         this.notice = '';
         this.$refs.toast?.show(authErrorMessage(error, this.$t('auth.forgot.failed')), 'error');

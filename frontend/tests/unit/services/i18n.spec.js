@@ -43,3 +43,42 @@ describe('vue-i18n instance', () => {
     expect(Object.keys(messages)).toEqual(['en']);
   });
 });
+
+describe('t, the plural form from a named count', () => {
+  it('picks the plural form from a numeric {n}', () => {
+    expect(i18n.global.t('match.goals', { n: 3 })).toBe('3 goals');
+    expect(i18n.global.t('match.goals', { n: 1 })).toBe('1 goal');
+  });
+
+  it('picks the plural form from a numeric {count}', () => {
+    i18n.global.mergeLocaleMessage('en', { pluralTest: { items: '{count} item | {count} items' } });
+    expect(i18n.global.t('pluralTest.items', { count: 1 })).toBe('1 item');
+    expect(i18n.global.t('pluralTest.items', { count: 4 })).toBe('4 items');
+  });
+
+  it('treats a decimal {n} as plural and formats it per language', () => {
+    expect(i18n.global.t('match.goals', { n: 1.5 })).toBe('1.5 goals');
+  });
+});
+
+describe('messageKey and showText', () => {
+  it('translates a stored key when shown, in the language active then', async () => {
+    const { messageKey, showText } = await import('@/i18n');
+    const stored = messageKey('language.label');
+    i18n.global.mergeLocaleMessage('fr', { language: { label: 'Langue' } });
+    expect(showText(stored)).toBe('Language');
+    i18n.global.locale.value = 'fr';
+    try {
+      expect(showText(stored)).toBe('Langue');
+    } finally {
+      i18n.global.locale.value = 'en';
+    }
+  });
+
+  it('shows server text unchanged, and nothing for an empty value', async () => {
+    const { showText } = await import('@/i18n');
+    expect(showText('name already used')).toBe('name already used');
+    expect(showText('')).toBe('');
+    expect(showText(null)).toBe('');
+  });
+});

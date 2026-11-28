@@ -1,7 +1,7 @@
 <template>
   <div id="app" class="design-v2" :class="{ 'dark-mode': isDarkMode }">
     <PlayerGuide v-if="guideMode" :required="guideMode === 'required'" :saving="savingGuide"
-      :dark="isDarkMode" :error="guideError" @finish="finishGuide" @dismiss="closeGuide" @skip="skipGuide" />
+      :dark="isDarkMode" :error="showText(guideError)" @finish="finishGuide" @dismiss="closeGuide" @skip="skipGuide" />
     <div v-else class="app-container wrap" :class="{ 'is-confirming': v2Context.confirming, 'is-picking-csc': v2Context.pickingCsc }">
         <header class="topbar">
           <div class="topbar-left">
@@ -66,6 +66,7 @@
 
 <script>
 import PlayerGuide from '@/components/PlayerGuide.vue';
+import { messageKey, showText } from '@/i18n';
 import GearLink from '@/components/v2/GearLink.vue';
 import { clearToken, completeGuide, getSessionKey, logoutSession } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
@@ -160,6 +161,7 @@ export default {
     syncThemeColorMeta(this.isDarkMode);
   },
   methods: {
+    showText,
     toggleTheme() {
       this.isDarkMode = !this.isDarkMode;
       localStorage.setItem('calciotto-theme', this.isDarkMode ? 'dark' : 'light');
@@ -232,7 +234,7 @@ export default {
         }
       } catch {
         if (sessionKey === getSessionKey() && this.guideMode === 'required') {
-          this.guideError = this.$t('guide.saveError');
+          this.guideError = messageKey('guide.saveError');
         }
       } finally {
         if (sessionKey === getSessionKey()) this.savingGuide = false;
