@@ -196,8 +196,10 @@ describe('push wording in each language', () => {
 
   it('uses each language’s own wording and plural for settled predictions', () => {
     const settled = (points, language) => buildNotification({ type: 'predictions_settled', score: SCORE, points }, language);
-    expect(settled(1.33, 'fr')).toEqual({ title: 'Résultats des pronos', body: 'Bianco a gagné\u00a0! Tu as gagné 1,33\u00a0point.' });
+    expect(settled(1.33, 'fr')).toEqual({ title: 'Résultats des pronos', body: 'Bianco a gagné\u00a0! Tu marques 1,33\u00a0point.' });
     expect(settled(-1, 'de').body).toBe('Bianco hat gewonnen! Du hast 1\u00a0Punkt verloren.');
+    expect(settled(1.33, 'de').body).toBe('Bianco hat gewonnen! Du bekommst 1,33\u00a0Punkte.');
+    expect(settled(1, 'de').body).toBe('Bianco hat gewonnen! Du bekommst 1\u00a0Punkt.');
     expect(settled(2.5, 'it')).toEqual({ title: 'Esiti dei pronostici', body: 'Ha vinto Bianco! Hai guadagnato 2,50\u00a0punti.' });
     expect(settled(0, 'es').body).toBe('¡Ganó Bianco! Has ganado 0\u00a0puntos.');
     expect(buildNotification({ type: 'predictions_settled', score: [{ team: 'A', goals: 2 }, { team: 'B', goals: 2 }], points: 1 }, 'it').body)
