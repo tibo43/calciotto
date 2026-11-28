@@ -6,7 +6,7 @@ import { LOCALES } from '@/locales';
 
 // The notification wording lives in public/sw.js (see its comment); the file
 // exports it for exactly this test.
-const { buildNotification, resolveLanguage, matchLanguage, LANGUAGES, TEXT, MOTM_TEXT, LEGACY_HOST, retireLegacyWorker } = createRequire(import.meta.url)('../../../public/sw.js');
+const { buildNotification, resolveLanguage, navigatorLanguages, matchLanguage, LANGUAGES, TEXT, MOTM_TEXT, LEGACY_HOST, retireLegacyWorker } = createRequire(import.meta.url)('../../../public/sw.js');
 
 const KICKOFF = '2026-09-06T19:00:00Z';
 const kickoffText = new Date(KICKOFF).toLocaleString('en-US', {
@@ -256,6 +256,41 @@ describe('resolveLanguage', () => {
     expect(matchLanguage('de-AT')).toBe('de');
     expect(matchLanguage('deutsch')).toBeNull();
     expect(matchLanguage(null)).toBeNull();
+  });
+});
+
+describe('navigatorLanguages', () => {
+  it("lists the phone's languages, falling back on navigator.language when the list is empty", () => {
+    expect(navigatorLanguages({ languages: ['it-IT', 'en'], language: 'fr' })).toEqual(['it-IT', 'en']);
+    expect(navigatorLanguages({ languages: [], language: 'fr-FR' })).toEqual(['fr-FR']);
+    expect(navigatorLanguages({ language: 'de' })).toEqual(['de']);
+    expect(navigatorLanguages({ languages: [] })).toEqual([]);
+    expect(navigatorLanguages(undefined)).toEqual([]);
+    expect(resolveLanguage(undefined, navigatorLanguages({ languages: [], language: 'es-ES' }))).toBe('es');
+  });
+});
+
+describe('robustness of the push text', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('still words a settled prediction when Intl is missing', () => {
+    vi.stubGlobal('Intl', {});
+    const SCORE = [{ team: 'Bianco', goals: 5 }, { team: 'Nero', goals: 3 }];
+    expect(buildNotification({ type: 'predictions_settled', score: SCORE, points: 1.33 }, 'fr').body)
+      .toBe('Bianco a gagné\u00a0! Tu marques 1.33\u00a0points.');
+    expect(buildNotification({ type: 'predictions_settled', score: SCORE, points: -1 }).body)
+      .toBe('Bianco won! You lost 1 point.');
+    expect(buildNotification({ type: 'predictions_settled', points: 2 }).body)
+      .toBe('You earned 2 points.');
+  });
+
+  it('never prints "undefined" for a value the payload lacks', () => {
+    const { title, body } = buildNotification({ type: 'team_assigned', kickoffAt: KICKOFF });
+    expect(title).toBe("You're playing for ");
+    expect(`${title} ${body}`).not.toMatch(/undefined|null/);
+    expect(buildNotification({ type: 'motm_announced', winners: [null, undefined] }).title).toBe('MVP');
   });
 });
 

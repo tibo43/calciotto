@@ -202,7 +202,8 @@ const TEXT = {
 };
 
 function fill(template, values) {
-  return template.replace(/\{(\w+)\}/g, (_, key) => (key in values ? values[key] : ''));
+  // A missing value (undefined, null) prints nothing rather than "undefined".
+  return template.replace(/\{(\w+)\}/g, (_, key) => (values[key] == null ? '' : String(values[key])));
 }
 
 // Intl's own text for the language, in the phone's time zone.
@@ -260,9 +261,22 @@ function formatPointsSentence(points, language, text) {
   const finite = Number.isFinite(value) ? value : 0;
   const rounded = Math.abs(finite).toFixed(2);
   const amount = rounded.endsWith('.00') ? rounded.slice(0, -3) : rounded;
-  const decimal = new Intl.NumberFormat(INTL_TAG[language]).formatToParts(1.5).find((part) => part.type === 'decimal');
-  const shown = amount.replace('.', decimal ? decimal.value : '.');
-  const category = new Intl.PluralRules(INTL_TAG[language]).select(Number(amount)) === 'one' ? 'one' : 'other';
+  // Intl may be missing or partial in a worker: fall back to "." and the
+  // English plural rather than throw and lose the push.
+  let separator = '.';
+  try {
+    const decimal = new Intl.NumberFormat(INTL_TAG[language]).formatToParts(1.5).find((part) => part.type === 'decimal');
+    if (decimal) separator = decimal.value;
+  } catch {
+    separator = '.';
+  }
+  const shown = amount.replace('.', separator);
+  let category;
+  try {
+    category = new Intl.PluralRules(INTL_TAG[language]).select(Number(amount)) === 'one' ? 'one' : 'other';
+  } catch {
+    category = Number(amount) === 1 ? 'one' : 'other';
+  }
   return fill((finite < 0 ? text.lost : text.earned)[category], { n: shown });
 }
 
@@ -334,6 +348,15 @@ function buildNotification(data, language = DEFAULT_LANGUAGE) {
   }
 }
 
+// The phone's languages in order of preference, like browserLanguages() in
+// src/services/locale.js: navigator.languages when it lists any, else
+// navigator.language.
+function navigatorLanguages(nav) {
+  if (!nav) return [];
+  if (Array.isArray(nav.languages) && nav.languages.length) return nav.languages;
+  return nav.language ? [nav.language] : [];
+}
+
 self.addEventListener('push', (event) => {
   let data;
   try {
@@ -341,7 +364,7 @@ self.addEventListener('push', (event) => {
   } catch {
     data = {};
   }
-  const language = resolveLanguage(data.locale, self.navigator && (self.navigator.languages || [self.navigator.language]));
+  const language = resolveLanguage(data.locale, navigatorLanguages(self.navigator));
   const { title, body } = buildNotification(data, language);
   event.waitUntil(self.registration.showNotification(title, {
     body,
@@ -378,5 +401,5 @@ self.addEventListener('notificationclick', (event) => {
 
 // Lets the unit tests import the wording without a service worker around.
 if (typeof module === 'object' && module.exports) {
-  module.exports = { buildNotification, resolveLanguage, matchLanguage, LANGUAGES, TEXT, MOTM_TEXT, LEGACY_HOST, retireLegacyWorker };
+  module.exports = { buildNotification, resolveLanguage, navigatorLanguages, matchLanguage, LANGUAGES, TEXT, MOTM_TEXT, LEGACY_HOST, retireLegacyWorker };
 }
