@@ -10,7 +10,7 @@
       <router-link to="/rankings?tab=motm" :class="{ 'is-on': tab === 'motm' }">
         {{ stars }}
       </router-link>
-      <router-link to="/rankings?tab=agoranking" :class="{ 'is-on': tab === 'agoranking' }">
+      <router-link v-if="agorankingEnabled" to="/rankings?tab=agoranking" :class="{ 'is-on': tab === 'agoranking' }">
         Agoranking
       </router-link>
     </nav>
@@ -213,7 +213,8 @@
 
 <script>
 import { getPointsStandings, getScorers, getMotmStandings, getAgoranking, getSeasons, getToken } from '@/services/api';
-import { formatRating, rankedLine, recordLine, normalizeAgoranking, emptyAgoranking } from '@/services/agoranking';
+import { formatRating, rankedLine, recordLine, normalizeAgoranking, emptyAgoranking, AGORANKING_FEATURE } from '@/services/agoranking';
+import { knownFeatureStatus, loadFeatureStatus } from '@/services/featureStatus';
 import { STARS } from '@/services/v2Home';
 import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
 
@@ -248,6 +249,8 @@ export default {
       motm: [],
       agoranking: emptyAgoranking(),
       agorankingFailed: false,
+      // Hidden feature: the tab and its request only exist with it.
+      agorankingEnabled: false,
       howOpen: false,
       unrankedOpen: false,
       playerId: '',
@@ -261,7 +264,8 @@ export default {
     },
     tab() {
       const value = this.$route.query.tab;
-      return ['scorers', 'motm', 'agoranking'].includes(value) ? value : 'points';
+      if (value === 'agoranking') return this.agorankingEnabled ? value : 'points';
+      return value === 'scorers' || value === 'motm' ? value : 'points';
     },
     rows() {
       if (this.tab === 'scorers') return this.scorers;
@@ -325,7 +329,12 @@ export default {
       this.loading = true;
       this.failed = false;
       try {
-        const { groups, activeGroupId } = await resolveActiveGroup();
+        const [{ groups, activeGroupId }, featureStatus] = await Promise.all([
+          resolveActiveGroup(),
+          Promise.resolve(knownFeatureStatus() ?? loadFeatureStatus()).catch(() => null),
+        ]);
+        const features = Array.isArray(featureStatus?.features) ? featureStatus.features : [];
+        this.agorankingEnabled = features.includes(AGORANKING_FEATURE);
         this.groupId = activeGroupId || '';
         const seasons = this.groupId ? await getSeasons(this.groupId).catch(() => []) : [];
         const seasonList = Array.isArray(seasons) ? seasons : [];
@@ -366,7 +375,7 @@ export default {
           getPointsStandings(season, this.groupId),
           getScorers(season, this.groupId),
           getMotmStandings(season, this.groupId),
-          getAgoranking(season, this.groupId).catch(() => null),
+          this.agorankingEnabled ? getAgoranking(season, this.groupId).catch(() => null) : emptyAgoranking(),
         ]);
         this.points = Array.isArray(points) ? points : [];
         this.scorers = Array.isArray(scorers) ? scorers : [];

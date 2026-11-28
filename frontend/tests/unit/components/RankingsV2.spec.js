@@ -2,6 +2,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import RankingsV2 from '@/components/v2/RankingsV2.vue';
 import { getPointsStandings, getScorers, getMotmStandings, getAgoranking, getSeasons, getToken } from '@/services/api';
 import { resolveActiveGroup } from '@/services/activeGroup';
+import { loadFeatureStatus } from '@/services/featureStatus';
 
 vi.mock('@/services/api', () => ({
   getPointsStandings: vi.fn(),
@@ -12,12 +13,18 @@ vi.mock('@/services/api', () => ({
   getToken: vi.fn(() => '')
 }));
 
+vi.mock('@/services/featureStatus', () => ({
+  knownFeatureStatus: vi.fn(() => null),
+  loadFeatureStatus: vi.fn()
+}));
+
 vi.mock('@/services/activeGroup', () => ({
   resolveActiveGroup: vi.fn(),
   setActiveGroupId: vi.fn()
 }));
 
-function mountRankings({ seasons = [], points = [], agoranking = null, agorankingError = null, route = { query: {} } } = {}) {
+function mountRankings({ seasons = [], points = [], agoranking = null, agorankingError = null, features = [], route = { query: {} } } = {}) {
+  loadFeatureStatus.mockResolvedValue({ features });
   resolveActiveGroup.mockResolvedValue({
     groups: [{ id: 'test-group', name: 'Test', role: 'admin' }],
     activeGroupId: 'test-group'
@@ -75,7 +82,7 @@ describe('RankingsV2.vue Star of the Match tab', () => {
   it('names the motm tab Stars, and its empty title No stars yet', async () => {
     const wrapper = mountRankings({ seasons: ['2026-2027'], route: { query: { tab: 'motm' } } });
     await flushPromises();
-    expect(wrapper.findAll('.subnav a').map((tab) => tab.text())).toEqual(['Points', 'Scorers', 'Stars', 'Agoranking']);
+    expect(wrapper.findAll('.subnav a').map((tab) => tab.text())).toEqual(['Points', 'Scorers', 'Stars']);
     expect(wrapper.find('h1').text()).toBe('No stars yet');
     wrapper.unmount();
   });
@@ -110,10 +117,28 @@ describe('RankingsV2.vue Agoranking tab', () => {
   });
 
   async function mountAgoranking(options = {}) {
-    const wrapper = mountRankings({ seasons: ['2026-2027'], agoranking: AGORANKING, route: { query: { tab: 'agoranking' } }, ...options });
+    const wrapper = mountRankings({ seasons: ['2026-2027'], agoranking: AGORANKING, features: ['agoranking'], route: { query: { tab: 'agoranking' } }, ...options });
     await flushPromises();
     return wrapper;
   }
+
+  it('stays hidden without the agoranking feature: no tab, no request, points instead', async () => {
+    getAgoranking.mockClear();
+    const points = [{ PlayerID: 'p1', Name: 'a', Played: 1, Points: 3, IsMember: true }];
+    const wrapper = mountRankings({ seasons: ['2026-2027'], points, route: { query: { tab: 'agoranking' } } });
+    await flushPromises();
+    expect(wrapper.find('.subnav').text()).not.toContain('Agoranking');
+    expect(getAgoranking).not.toHaveBeenCalled();
+    expect(wrapper.find('.agr').exists()).toBe(false);
+    expect(wrapper.find('table.stand').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('shows the tab with the agoranking feature', async () => {
+    const wrapper = await mountAgoranking();
+    expect(wrapper.find('.subnav').text()).toContain('Agoranking');
+    wrapper.unmount();
+  });
 
   it('asks the backend for the selected season', async () => {
     const wrapper = await mountAgoranking();
@@ -208,7 +233,7 @@ describe('RankingsV2.vue Agoranking tab', () => {
     expect(failing.find('.state h1').text()).toBe("Couldn't load the Agoranking");
     failing.unmount();
 
-    const points = mountRankings({ seasons: ['2026-2027'], points: [{ PlayerID: 'p1', Name: 'a', Played: 1, Points: 3, IsMember: true }], agorankingError: new Error('boom') });
+    const points = mountRankings({ seasons: ['2026-2027'], points: [{ PlayerID: 'p1', Name: 'a', Played: 1, Points: 3, IsMember: true }], agorankingError: new Error('boom'), features: ['agoranking'] });
     await flushPromises();
     expect(points.find('table.stand').exists()).toBe(true);
     expect(points.text()).not.toContain("Couldn't load");

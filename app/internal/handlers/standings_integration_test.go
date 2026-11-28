@@ -159,10 +159,23 @@ func TestStandingsSeasons_Integration(t *testing.T) {
 		t.Errorf("alice's %s scorer row = %+v, want 0 goals", seasonNew, aliceScorerNew)
 	}
 
+	// The Agoranking is a hidden feature: refused until alice has the row.
+	agorankingPath := "/standings/agoranking?group_id=" + group.ID.String() + "&season=" + seasonNew
+	req := httptest.NewRequest(http.MethodGet, agorankingPath, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("GET %s without the feature returned status %d, want 403, body: %s", agorankingPath, rec.Code, rec.Body.String())
+	}
+	if err := tx.Create(&models.PlayerFeature{PlayerID: aliceID, Feature: models.FeatureAgoranking}).Error; err != nil {
+		t.Fatalf("failed to enable the Agoranking for alice: %v", err)
+	}
+
 	// The Agoranking follows the season too: one match, so N = 1, average
 	// 1.5, bob (the winner) first and alice second, nobody left unranked.
 	var agoranking models.Agoranking
-	get(t, "/standings/agoranking?group_id="+group.ID.String()+"&season="+seasonNew, &agoranking)
+	get(t, agorankingPath, &agoranking)
 	if agoranking.Matches != 1 || agoranking.N != 1 || agoranking.GroupAverage != 1.5 {
 		t.Errorf("%s agoranking = %+v, want 1 match / N 1 / average 1.5", seasonNew, agoranking)
 	}

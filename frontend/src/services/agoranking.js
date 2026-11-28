@@ -2,6 +2,9 @@
 // is computed by the backend (GET /standings/agoranking): rows arrive already
 // sorted, with the unrounded rating.
 
+// Hidden feature (GET /players/me/features), matching models.FeatureAgoranking.
+export const AGORANKING_FEATURE = 'agoranking';
+
 export function formatRating(rating) {
   const value = Number(rating);
   return Number.isFinite(value) ? value.toFixed(2) : '–';

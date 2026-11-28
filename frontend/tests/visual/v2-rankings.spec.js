@@ -3,7 +3,8 @@
 const { test, expect } = require('@playwright/test');
 const { gotoApp, expectEverythingStubbed, expectNoHorizontalOverflow } = require('./fixtures/app');
 
-const V2 = { features: ['design-v2'] };
+// agoranking is a hidden feature: on here, so every baseline shows its tab.
+const V2 = { features: ['design-v2', 'agoranking'] };
 
 async function openRankings(page, path, options = {}) {
   return gotoApp(page, path, { ...V2, ...options });

@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	"app/internal/models"
 	"app/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -92,8 +93,23 @@ func (h *StandingsHandler) GetPredictionStandings(c *gin.Context) {
 
 // GetAgoranking returns the resolved group's Agoranking (points per match,
 // weighted by matches played), following the same shape as the handlers
-// above.
+// above. It is a hidden feature: a caller without it gets a 403, like a
+// passkey route without the passkeys feature.
 func (h *StandingsHandler) GetAgoranking(c *gin.Context) {
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	enabled, err := h.Service.PlayerService.HasFeature(playerID, models.FeatureAgoranking)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !enabled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "the Agoranking is not enabled for this account"})
+		return
+	}
 	groupID, ok := resolveGroupID(c, h.MembershipService)
 	if !ok {
 		return

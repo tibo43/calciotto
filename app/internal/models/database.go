@@ -95,6 +95,10 @@ const FeatureDesignV2 = "design-v2"
 // players with a row get it.
 const FeaturePasskeys = "passkeys"
 
+// FeatureAgoranking shows the Agoranking tab in Rankings and opens
+// GET /standings/agoranking. Still hidden: only players with a row see it.
+const FeatureAgoranking = "agoranking"
+
 // LaunchedFeatures started as hidden features and are now on for every
 // player, row or no row. GET /players/me/features still lists them, so the
 // frontend's checks keep working unchanged, and the rows written while they

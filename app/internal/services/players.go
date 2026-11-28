@@ -110,6 +110,16 @@ func (s *PlayerService) GetFeatures(playerID uuid.UUID) ([]string, error) {
 	return slices.Compact(features), nil
 }
 
+// HasFeature reports whether a feature is enabled for a player, launched or
+// through their own row, by the same rule as GetFeatures.
+func (s *PlayerService) HasFeature(playerID uuid.UUID, feature string) (bool, error) {
+	features, err := s.GetFeatures(playerID)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(features, feature), nil
+}
+
 func (s *PlayerService) GuideCompleted(playerID uuid.UUID) (bool, error) {
 	var player models.Player
 	err := s.DB.Select("guide_completed_at").Take(&player, "id = ?", playerID).Error
