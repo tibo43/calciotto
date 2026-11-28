@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -158,4 +159,65 @@ func (h *PlayerHandler) GetMatchPositions(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, entries)
+}
+
+// localeBody is the body of PUT /players/me/locale and the response of both
+// /players/me/locale routes. "locale" is a pointer inside a presence check
+// below: null (or "") is how a player goes back to following the phone, but a
+// body without the key (a typo, or `{}`) is refused instead of silently
+// resetting the choice.
+type localeBody struct {
+	Locale *string `json:"locale"`
+}
+
+// GetMyLocale returns the language the caller chose, null when they follow
+// the phone.
+func (h *PlayerHandler) GetMyLocale(c *gin.Context) {
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+	locale, err := h.Service.GetLocale(playerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not load your language"})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, localeBody{Locale: locale})
+}
+
+// UpdateMyLocale saves the caller's language, or null to follow the phone. A
+// dedicated route, like positions: the Account page saves it on its own, at
+// each pick, independently of the name field.
+func (h *PlayerHandler) UpdateMyLocale(c *gin.Context) {
+	playerID, ok := playerIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		return
+	}
+	var raw map[string]json.RawMessage
+	if err := c.ShouldBindJSON(&raw); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "locale must be a language code or null"})
+		return
+	}
+	if _, present := raw["locale"]; !present {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "locale is required (a language code, or null to follow the phone)"})
+		return
+	}
+	var req localeBody
+	if err := json.Unmarshal(raw["locale"], &req.Locale); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "locale must be a language code or null"})
+		return
+	}
+	locale, err := h.Service.UpdateLocale(playerID, req.Locale)
+	if err != nil {
+		if errors.Is(err, services.ErrUnsupportedLocale) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save your language"})
+		return
+	}
+	c.JSON(http.StatusOK, localeBody{Locale: locale})
 }

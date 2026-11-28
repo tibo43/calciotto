@@ -723,6 +723,19 @@ export const updateMyPositions = async (positions) => {
   return Array.isArray(response.data?.PreferredPositions) ? response.data.PreferredPositions : [];
 };
 
+// The player's own language (design v2 Account selector): a language code, or
+// null for "follow the phone". A refused PUT rejects with the server's reason
+// in error.response.data.error, as everywhere else.
+export const getMyLocale = async () => {
+  const response = await api.get('/players/me/locale');
+  return typeof response.data?.locale === 'string' ? response.data.locale : null;
+};
+
+export const updateMyLocale = async (locale) => {
+  const response = await api.put('/players/me/locale', { locale });
+  return typeof response.data?.locale === 'string' ? response.data.locale : null;
+};
+
 // Every position set in the match's group, as [{ PlayerID, PreferredPositions }].
 // Admin-only on the server (a member gets 403): only call it for an admin.
 export const getMatchPositions = async (matchId) => {

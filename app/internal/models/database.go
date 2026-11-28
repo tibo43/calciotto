@@ -42,6 +42,13 @@ type Player struct {
 	PasswordHash     string     `gorm:"type:string" json:"-"`
 	TokenVersion     int        `gorm:"not null;default:0" json:"-"`
 	GuideCompletedAt *time.Time `json:"-"`
+	// Locale is the language the player chose for the app: one of
+	// SupportedLocales, or NULL for "follow the phone" (the default, and what
+	// every existing player has). Nullable with no default, so AutoMigrate adds
+	// the column to the existing table without touching a single row. Read and
+	// changed through GET/PUT /players/me/locale only; never in a JSON payload
+	// of another route.
+	Locale *string `gorm:"type:text" json:"-"`
 	// LastSeenAt is the last time the player used the app: refreshed by
 	// AuthMiddleware on an authenticated request, at most once every
 	// services.LastSeenThrottle (see AuthService.TouchLastSeen). NULL for a
@@ -59,6 +66,11 @@ type Player struct {
 	// single row's data — every existing player simply has no position.
 	PreferredPositions PreferredPositions `gorm:"type:text[];not null;default:'{}'" json:"-"`
 }
+
+// SupportedLocales are the languages a player can save as Player.Locale: the
+// ones the frontend ships a bundle for (frontend/src/locales). A language is
+// added here when its bundle lands.
+var SupportedLocales = []string{"en", "fr", "it", "de", "es"}
 
 // PlayerFeature turns a hidden feature on for one player: one row per
 // (player, feature), the feature being a free-form key the frontend checks

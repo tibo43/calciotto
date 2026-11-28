@@ -70,6 +70,7 @@ import GearLink from '@/components/v2/GearLink.vue';
 import { clearToken, completeGuide, getSessionKey, logoutSession } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta, prefersDarkTheme } from '@/services/theme';
+import { resetSavedLocale, syncSavedLocale } from '@/services/playerLocale';
 import { disablePushOnLogout, stopPushIfAppUninstalled } from '@/services/pushNotifications';
 import {
   knownFeatureStatus, loadFeatureStatus, rememberGuideCompletion, resetFeatureStatus
@@ -146,10 +147,12 @@ export default {
     },
     '$route.name'() {
       this.syncGuide();
+      this.syncLocale();
     }
   },
   created() {
     this.syncGuide();
+    this.syncLocale();
   },
   mounted() {
     // Android keeps an uninstalled app's notifications going through Chrome;
@@ -238,6 +241,13 @@ export default {
         if (sessionKey === getSessionKey()) this.savingGuide = false;
       }
     },
+    // The player's saved language on a signed-in page (a no-op after the
+    // first read of the session, or when main.js already did it); the
+    // browser's language on a public one, whatever was chosen before.
+    syncLocale() {
+      if (this.isAuthenticatedRoute) syncSavedLocale();
+      else resetSavedLocale();
+    },
     async logout() {
       // Invalidate an in-flight features response before anything awaits, so
       // it can't open this session's guide after logout.
@@ -254,6 +264,7 @@ export default {
         console.warn('Could not revoke the server session.');
       }
       clearToken();
+      resetSavedLocale();
       // The next account to log in on this browser must not inherit this
       // one's group — the stale-id fallback would catch it, but only after a
       // request scoped to a group they may not belong to.
