@@ -6,19 +6,19 @@
         <header class="topbar">
           <div class="topbar-left">
             <template v-if="v2Context.pageTitle">
-              <router-link class="back" :to="v2Context.backTo || '/profile'" aria-label="Back">
+              <router-link class="back" :to="v2Context.backTo || '/profile'" :aria-label="$t('common.back')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 5l-7 7 7 7"/></svg>
               </router-link>
               <h1 class="page-title">{{ v2Context.pageTitle }}</h1>
             </template>
             <template v-else>
-            <router-link class="brand" to="/" aria-label="Home">
+            <router-link class="brand" to="/" :aria-label="$t('nav.home')">
               <img class="brand-mark brand-mark-dark" src="/icons/v2/header-symbole-sombre.png" width="40" height="40" alt="">
               <img class="brand-mark brand-mark-light" src="/icons/v2/header-symbole-clair.png" width="40" height="40" alt="">
             </router-link>
-            <div v-if="isAuthenticatedRoute && !v2Context.hide" class="ctx-pair" aria-label="Choose the group and the season">
+            <div v-if="isAuthenticatedRoute && !v2Context.hide" class="ctx-pair" :aria-label="$t('context.label')">
               <label class="ctx">
-                <span class="sr-only">Group</span>
+                <span class="sr-only">{{ $t('context.group') }}</span>
                 <span class="ctx-name" aria-hidden="true">{{ v2GroupLabel }}</span>
                 <select :value="v2Context.groupId" @change="onV2Group">
                   <option v-for="group in v2Context.groups" :key="group.id" :value="group.id">{{ group.name }}</option>
@@ -26,7 +26,7 @@
                 <svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4l4 4 4-4"/></svg>
               </label>
               <label class="ctx" :class="{ 'is-disabled': !v2HasSeasons }">
-                <span class="sr-only">Season</span>
+                <span class="sr-only">{{ $t('context.season') }}</span>
                 <span class="ctx-name" aria-hidden="true">{{ v2SeasonLabel }}</span>
                 <select :value="v2Context.season" :disabled="!v2HasSeasons" @change="onV2Season">
                   <option v-for="season in v2Context.seasons" :key="season" :value="season">{{ season }}</option>
@@ -38,7 +38,7 @@
           </div>
           <GearLink v-if="v2Context.pageTitle && v2Context.pageAction" class="btn btn-ghost hero-manage page-action"
             :to="v2Context.pageAction.to" :label="v2Context.pageAction.label" />
-          <nav v-if="isAuthenticatedRoute && !v2Context.pageTitle" class="dnav" aria-label="Main">
+          <nav v-if="isAuthenticatedRoute && !v2Context.pageTitle" class="dnav" :aria-label="$t('nav.main')">
             <router-link v-for="item in v2NavItems" :key="item.to" :to="item.to" class="nav-text" :class="{ 'is-on': item.on }"
               :aria-current="item.on ? 'page' : null">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="item.icon" /></svg>
@@ -53,7 +53,7 @@
           <router-view />
         </main>
 
-        <nav v-if="isAuthenticatedRoute" class="tabbar" aria-label="Main">
+        <nav v-if="isAuthenticatedRoute" class="tabbar" :aria-label="$t('nav.main')">
           <router-link v-for="item in v2NavItems" :key="item.to" :to="item.to" class="nav-ico" :class="{ 'is-on': item.on }"
             :aria-current="item.on ? 'page' : null">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="item.icon" /></svg>
@@ -124,7 +124,7 @@ export default {
     // matches yet, so the header does not jump. The visible label is
     // "No season yet" and the select is disabled.
     v2SeasonLabel() {
-      return this.v2HasSeasons ? (this.v2Context.season || '') : 'No season yet';
+      return this.v2HasSeasons ? (this.v2Context.season || '') : this.$t('context.noSeason');
     },
     isV2Profile() {
       return String(this.$route.path || '').startsWith('/profile');
@@ -133,10 +133,10 @@ export default {
     // the phone tab bar. The visible label is the accessible name.
     v2NavItems() {
       return [
-        { to: '/', label: 'Matches', on: this.isV2Home, icon: 'M3 9a9 3 0 1 0 18 0 9 3 0 1 0-18 0zM3 9v6a9 3 0 0 0 18 0V9M7 9a5 1.4 0 1 0 10 0 5 1.4 0 1 0-10 0zM7.5 17.6v-3M12 18v-3M16.5 17.6v-3' },
-        { to: '/rankings', label: 'Rankings', on: this.$route.name === 'Rankings', icon: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3' },
-        { to: '/predictions', label: 'Predictions', on: this.$route.name === 'Predictions', icon: 'M11 12a1 1 0 1 0 2 0 1 1 0 1 0-2 0M12 7a5 5 0 1 0 5 5M13 3.055a9 9 0 1 0 7.941 7.945M15 6v3h3l3-3h-3V3zM15 9l-3 3' },
-        { to: '/profile', label: 'Profile', on: this.isV2Profile, icon: 'M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 21a8 8 0 0 1 16 0' },
+        { to: '/', label: this.$t('nav.matches'), on: this.isV2Home, icon: 'M3 9a9 3 0 1 0 18 0 9 3 0 1 0-18 0zM3 9v6a9 3 0 0 0 18 0V9M7 9a5 1.4 0 1 0 10 0 5 1.4 0 1 0-10 0zM7.5 17.6v-3M12 18v-3M16.5 17.6v-3' },
+        { to: '/rankings', label: this.$t('nav.rankings'), on: this.$route.name === 'Rankings', icon: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3' },
+        { to: '/predictions', label: this.$t('nav.predictions'), on: this.$route.name === 'Predictions', icon: 'M11 12a1 1 0 1 0 2 0 1 1 0 1 0-2 0M12 7a5 5 0 1 0 5 5M13 3.055a9 9 0 1 0 7.941 7.945M15 6v3h3l3-3h-3V3zM15 9l-3 3' },
+        { to: '/profile', label: this.$t('nav.profile'), on: this.isV2Profile, icon: 'M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 21a8 8 0 0 1 16 0' },
       ];
     }
   },
@@ -232,7 +232,7 @@ export default {
         }
       } catch {
         if (sessionKey === getSessionKey() && this.guideMode === 'required') {
-          this.guideError = 'Could not save your progress. Try again.';
+          this.guideError = this.$t('guide.saveError');
         }
       } finally {
         if (sessionKey === getSessionKey()) this.savingGuide = false;

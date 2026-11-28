@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import { toLocalRFC3339, dateTimeLocalToRFC3339 } from '@/services/datetime';
 
 // The design v2 "New match" page (NewMatchV2.vue). Only scheduled matches
@@ -22,24 +23,24 @@ export function localDateTimeValue(date = new Date()) {
 // UTC offset (datetime.js): the backend files the match under the kick-off's
 // calendar day in that offset.
 export function buildNewMatch({ day, time, opensAt, maxPlayers, registerCreator }, now = new Date()) {
-  if (!day) return { field: 'day', error: 'Pick the match day.' };
-  if (!time) return { field: 'time', error: 'Set a kick-off time.' };
-  if (!opensAt) return { field: 'opensAt', error: 'Set when sign-ups open.' };
+  if (!day) return { field: 'day', error: t('newMatch.errors.day') };
+  if (!time) return { field: 'time', error: t('newMatch.errors.time') };
+  if (!opensAt) return { field: 'opensAt', error: t('newMatch.errors.opensAt') };
 
   const places = Number(maxPlayers);
   if (!Number.isInteger(places) || places < 1) {
-    return { field: 'maxPlayers', error: 'Places must be a whole number, at least 1.' };
+    return { field: 'maxPlayers', error: t('newMatch.errors.places') };
   }
 
   const scheduledAt = toLocalRFC3339(day, time);
-  if (!scheduledAt) return { field: 'time', error: 'Check the day and kick-off time.' };
+  if (!scheduledAt) return { field: 'time', error: t('newMatch.errors.checkKickoff') };
   if (Date.parse(scheduledAt) <= now.getTime()) {
-    return { field: 'time', error: 'Kick-off must be in the future.' };
+    return { field: 'time', error: t('newMatch.errors.kickoffPast') };
   }
   const registrationOpensAt = dateTimeLocalToRFC3339(opensAt);
-  if (!registrationOpensAt) return { field: 'opensAt', error: 'Check when sign-ups open.' };
+  if (!registrationOpensAt) return { field: 'opensAt', error: t('newMatch.errors.checkOpensAt') };
   if (Date.parse(registrationOpensAt) >= Date.parse(scheduledAt)) {
-    return { field: 'opensAt', error: 'Sign-ups must open before kick-off.' };
+    return { field: 'opensAt', error: t('newMatch.errors.opensAfterKickoff') };
   }
 
   const scheduling = { scheduledAt, registrationOpensAt, maxPlayers: places };

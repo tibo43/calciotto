@@ -1,3 +1,5 @@
+import { formatDate } from '@/services/intl';
+
 // Local-offset RFC3339 formatting for the scheduling fields of POST /matches.
 //
 // The backend derives a scheduled match's calendar day (and therefore its
@@ -75,6 +77,9 @@ export const dateTimeLocalToRFC3339 = (value) => {
 // date path in the app rather than a hand-rolled `toLocaleString` call in each
 // component that happens to need one.
 //
+// The language is the active one (intl.js: en-US in English, so the examples
+// below hold there).
+//
 // Rendering is deliberately in the *browser's* zone (no `timeZone` option), not
 // in the zone the timestamp was created in: a kick-off is a single instant, and
 // a player travelling or living elsewhere wants to know when it happens for
@@ -96,7 +101,7 @@ const toDate = (value) => {
 export const formatDateTimeForDisplay = (value) => {
   const date = toDate(value);
   if (!date) return '';
-  return date.toLocaleString('en-US', {
+  return formatDate(date, {
     weekday: 'short',
     year: 'numeric',
     month: 'short',
@@ -111,7 +116,7 @@ export const formatDateTimeForDisplay = (value) => {
 export const formatDateTimeShort = (value) => {
   const date = toDate(value);
   if (!date) return '';
-  return date.toLocaleString('en-US', {
+  return formatDate(date, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -166,7 +171,7 @@ export const parseCalendarDay = (value) => {
 const formatCalendarDayWith = (value, options) => {
   const date = parseCalendarDay(value);
   if (!date) return typeof value === 'string' ? value : '';
-  return date.toLocaleDateString('en-US', options);
+  return formatDate(date, options);
 };
 
 // "Sun, Sep 6, 2026" — the default: weekday first, since a calciotto is a

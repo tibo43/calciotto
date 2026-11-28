@@ -1,21 +1,21 @@
 <template>
   <section class="sec passkeys-v2">
-    <div class="sec-head"><h2>Passkeys</h2></div>
-    <CollapsibleCardV2 title="Passkeys" :summary="summary" @toggle="onToggle">
+    <div class="sec-head"><h2>{{ $t('passkeys.title') }}</h2></div>
+    <CollapsibleCardV2 :title="$t('passkeys.title')" :summary="summary" @toggle="onToggle">
       <template #icon>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
           stroke-linejoin="round"><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M17 6l3 3M14 9l2 2" /></svg>
       </template>
-      <div v-if="loading" class="pk-loading" role="status" aria-label="Loading passkeys">
+      <div v-if="loading" class="pk-loading" role="status" :aria-label="$t('passkeys.loadingAria')">
         <div class="skel pk-skel"></div>
         <div class="skel pk-skel"></div>
       </div>
       <div v-else-if="!loaded" class="pk-block">
         <p class="scope" role="alert">{{ loadError }}</p>
-        <button class="btn btn-ghost" type="button" @click="loadKeys">Try again</button>
+        <button class="btn btn-ghost" type="button" @click="loadKeys">{{ $t('common.tryAgain') }}</button>
       </div>
       <template v-else>
-        <p v-if="keys.length === 0" class="scope pk-empty">Sign in with Face ID, your fingerprint or your screen lock.</p>
+        <p v-if="keys.length === 0" class="scope pk-empty">{{ $t('passkeys.empty') }}</p>
         <ul v-else class="pk-list">
           <li v-for="key in keys" :key="key.id" class="pk-row">
             <div class="pk-id">
@@ -23,17 +23,17 @@
               <p class="label pk-meta">{{ usage(key) }}</p>
             </div>
             <div class="withdraw-wrap pk-remove">
-              <button class="pk-trash" type="button" :aria-label="'Remove ' + key.name"
+              <button class="pk-trash" type="button" :aria-label="$t('passkeys.removeAria', { name: key.name })"
                 :aria-expanded="(removing === key.id).toString()" :disabled="busy" @click="askRemove(key.id)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
                   stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
               </button>
               <div v-if="removing === key.id" class="confirm-pop" role="dialog" aria-labelledby="passkey-remove-title">
-                <h3 id="passkey-remove-title">Remove this passkey?</h3>
-                <p class="ref">You won't be able to sign in with it anymore.</p>
+                <h3 id="passkey-remove-title">{{ $t('passkeys.removeTitle') }}</h3>
+                <p class="ref">{{ $t('passkeys.removeNote') }}</p>
                 <div class="confirm-actions actions">
-                  <button class="btn btn-ghost" type="button" @click="removing = ''">Cancel</button>
-                  <button class="btn btn-danger" type="button" :disabled="busy" @click="remove(key.id)">Remove</button>
+                  <button class="btn btn-ghost" type="button" @click="removing = ''">{{ $t('common.cancel') }}</button>
+                  <button class="btn btn-danger" type="button" :disabled="busy" @click="remove(key.id)">{{ $t('common.remove') }}</button>
                 </div>
               </div>
             </div>
@@ -41,18 +41,18 @@
         </ul>
         <form v-if="adding" class="pk-form" @submit.prevent="create">
           <div class="field">
-            <label class="label" for="passkey-name">Name (optional)</label>
-            <input id="passkey-name" v-model="name" type="text" maxlength="60" placeholder="My phone" :disabled="busy">
+            <label class="label" for="passkey-name">{{ $t('passkeys.nameLabel') }}</label>
+            <input id="passkey-name" v-model="name" type="text" maxlength="60" :placeholder="$t('passkeys.namePlaceholder')" :disabled="busy">
           </div>
           <div class="field">
-            <label class="label" for="passkey-password">Current password</label>
+            <label class="label" for="passkey-password">{{ $t('passkeys.password') }}</label>
             <input id="passkey-password" v-model="password" type="password" autocomplete="current-password"
               required :disabled="busy">
           </div>
           <div class="pk-form-actions">
-            <button class="btn btn-ghost" type="button" :disabled="busy" @click="closeForm">Cancel</button>
+            <button class="btn btn-ghost" type="button" :disabled="busy" @click="closeForm">{{ $t('common.cancel') }}</button>
             <button class="btn btn-ghost" type="submit" :disabled="busy || !password">
-              {{ busy ? 'Waiting for your device…' : 'Create passkey' }}
+              {{ busy ? $t('passkeys.waiting') : $t('passkeys.create') }}
             </button>
           </div>
         </form>
@@ -60,19 +60,19 @@
           <span class="pk-add-chip" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
           </span>
-          <span>Add a passkey</span>
+          <span>{{ $t('passkeys.add') }}</span>
         </button>
-        <p v-else class="scope pk-unsupported">Open Agoran in a browser that supports passkeys to add one.</p>
+        <p v-else class="scope pk-unsupported">{{ $t('passkeys.unsupported') }}</p>
       </template>
     </CollapsibleCardV2>
   </section>
   <div v-if="removing" class="confirm-scrim" @click="removing = ''"></div>
   <div v-if="removing" class="confirm-sheet" role="dialog" aria-labelledby="passkey-remove-sheet-title">
-    <h3 id="passkey-remove-sheet-title">Remove this passkey?</h3>
-    <p class="ref">You won't be able to sign in with it anymore.</p>
+    <h3 id="passkey-remove-sheet-title">{{ $t('passkeys.removeTitle') }}</h3>
+    <p class="ref">{{ $t('passkeys.removeNote') }}</p>
     <div class="confirm-actions">
-      <button class="btn btn-danger" type="button" :disabled="busy" @click="remove(removing)">Remove</button>
-      <button class="btn btn-ghost" type="button" @click="removing = ''">Cancel</button>
+      <button class="btn btn-danger" type="button" :disabled="busy" @click="remove(removing)">{{ $t('common.remove') }}</button>
+      <button class="btn btn-ghost" type="button" @click="removing = ''">{{ $t('common.cancel') }}</button>
     </div>
   </div>
   <AppToast ref="toast" />
@@ -83,15 +83,15 @@ import AppToast from '@/components/AppToast.vue';
 import { getMyPasskeys, removeMyPasskey } from '@/services/api';
 import { addPasskey, supportsPasskeys } from '@/services/passkeys';
 import { actionErrorMessage } from '@/services/v2Match';
+import { t } from '@/i18n';
+import { monthName } from '@/services/intl';
 import CollapsibleCardV2 from './CollapsibleCardV2.vue';
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // "18 Nov 2026" in the browser's own time zone (the label style uppercases it).
 export function formatPasskeyDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+  return t('date.dayMonthYear', { day: date.getDate(), month: monthName(date), year: date.getFullYear() });
 }
 
 // Design v2 passkey list for the Account page, shown only with the
@@ -116,10 +116,10 @@ export default {
   },
   computed: {
     summary() {
-      if (this.loading) return 'Loading…';
-      if (!this.loaded) return this.loadError ? "Couldn't load" : '';
-      if (this.keys.length === 0) return 'None yet';
-      return this.keys.length === 1 ? '1 device' : `${this.keys.length} devices`;
+      if (this.loading) return this.$t('common.loading');
+      if (!this.loaded) return this.loadError ? this.$t('common.couldntLoad') : '';
+      if (this.keys.length === 0) return this.$t('passkeys.noneYet');
+      return this.$t('passkeys.devices', this.keys.length);
     },
   },
   watch: {
@@ -137,8 +137,8 @@ export default {
     // One date: the last use, or when it was added if never used.
     usage(key) {
       return key.last_used_at
-        ? `Last used ${formatPasskeyDate(key.last_used_at)}`
-        : `Added ${formatPasskeyDate(key.created_at)}`;
+        ? this.$t('passkeys.lastUsed', { date: formatPasskeyDate(key.last_used_at) })
+        : this.$t('passkeys.added', { date: formatPasskeyDate(key.created_at) });
     },
     onToggle(open) {
       if (open && !this.loaded && !this.loading) this.loadKeys();
@@ -157,7 +157,7 @@ export default {
         this.loaded = true;
       } catch {
         // Stays in the card (summary and Try again), not in a toast.
-        this.loadError = 'Could not load your passkeys.';
+        this.loadError = this.$t('passkeys.loadError');
       } finally {
         this.loading = false;
       }
@@ -182,10 +182,10 @@ export default {
         const key = await addPasskey(this.name, password);
         this.keys.unshift(key);
         this.closeForm();
-        this.$refs.toast?.show('Passkey added.', 'success');
+        this.$refs.toast?.show(this.$t('passkeys.addedToast'), 'success');
       } catch (error) {
         // Also when the device prompt is cancelled (no server message then).
-        this.$refs.toast?.show(actionErrorMessage(error, 'Could not add the passkey.'), 'error');
+        this.$refs.toast?.show(actionErrorMessage(error, this.$t('passkeys.addError')), 'error');
       } finally {
         this.busy = false;
       }
@@ -196,9 +196,9 @@ export default {
       try {
         await removeMyPasskey(id);
         this.keys = this.keys.filter((key) => key.id !== id);
-        this.$refs.toast?.show('Passkey removed.', 'success');
+        this.$refs.toast?.show(this.$t('passkeys.removedToast'), 'success');
       } catch (error) {
-        this.$refs.toast?.show(actionErrorMessage(error, 'Could not remove the passkey.'), 'error');
+        this.$refs.toast?.show(actionErrorMessage(error, this.$t('passkeys.removeError')), 'error');
       } finally {
         this.busy = false;
         this.removing = '';

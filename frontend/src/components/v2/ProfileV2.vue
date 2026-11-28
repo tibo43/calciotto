@@ -5,27 +5,27 @@
       <div class="skel lg"></div>
     </section>
     <section v-else-if="failed" class="state">
-      <p class="label">Error</p>
-      <h1>Couldn't load your profile</h1>
-      <p>Check your connection, then try again.</p>
-      <button class="btn" type="button" @click="load">Try again</button>
+      <p class="label">{{ $t('common.error') }}</p>
+      <h1>{{ $t('profile.loadError') }}</h1>
+      <p>{{ $t('common.checkConnection') }}</p>
+      <button class="btn" type="button" @click="load">{{ $t('common.tryAgain') }}</button>
     </section>
 
     <template v-else-if="page === 'home' || page === 'group'">
       <section v-if="page === 'home'" class="ident">
         <div class="avatar" aria-hidden="true">{{ initials }}</div>
         <div class="ident-name">
-          <p class="label">Account</p>
+          <p class="label">{{ $t('profile.account') }}</p>
           <h1>{{ displayName(record.Name) }}</h1>
         </div>
-        <GearLink class="group-gear ident-gear" to="/profile/account" label="Manage account" />
+        <GearLink class="group-gear ident-gear" to="/profile/account" :label="$t('profile.manageAccount')" />
       </section>
       <section v-if="page === 'group' && (currentGroup?.description || currentGroup?.website_url)" class="sec">
-        <div class="sec-head"><h2>About this group</h2></div>
+        <div class="sec-head"><h2>{{ $t('profile.aboutGroup') }}</h2></div>
         <p v-if="currentGroup.description" class="group-description">{{ currentGroup.description }}</p>
         <a v-if="currentGroup.website_url" class="group-website" :href="currentGroup.website_url"
           target="_blank" rel="noopener noreferrer">
-          <span>{{ currentGroup.website_label || 'Open group link' }}</span>
+          <span>{{ currentGroup.website_label || $t('profile.openGroupLink') }}</span>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor"
             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 12l8-8M6 4h6v6" />
@@ -33,11 +33,11 @@
         </a>
       </section>
       <section class="sec">
-        <div class="sec-head"><h2>Record</h2></div>
+        <div class="sec-head"><h2>{{ $t('profile.record') }}</h2></div>
         <div class="season-field">
-          <label class="sr-only" for="profile-season">Season</label>
-          <select id="profile-season" aria-label="Season" :value="season" @change="onSeason">
-            <option value="">All seasons</option>
+          <label class="sr-only" for="profile-season">{{ $t('context.season') }}</label>
+          <select id="profile-season" :aria-label="$t('context.season')" :value="season" @change="onSeason">
+            <option value="">{{ $t('profile.allSeasons') }}</option>
             <option v-for="item in seasonOptions" :key="item" :value="item">{{ item }}</option>
           </select>
         </div>
@@ -50,34 +50,34 @@
         </div>
       </section>
       <section v-if="page === 'home'" class="sec">
-        <div class="sec-head"><h2>Groups</h2></div>
-        <p v-if="rows.length === 0" class="scope">No group yet. Ask an admin to invite you.</p>
+        <div class="sec-head"><h2>{{ $t('profile.groups') }}</h2></div>
+        <p v-if="rows.length === 0" class="scope">{{ $t('profile.noGroup') }}</p>
         <div v-for="row in rows" :key="row.GroupID" class="group-row">
           <button class="fav-star" :class="{ 'is-off': !isFavorite(row) }" type="button"
-            :aria-label="isFavorite(row) ? 'Favourite group' : 'Set as favourite'"
+            :aria-label="isFavorite(row) ? $t('profile.favouriteGroup') : $t('profile.setFavourite')"
             @click="favourite(row)">
             <svg v-if="isFavorite(row)" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           </button>
           <router-link class="grow" :to="`/profile/groups/${row.GroupID}`">
             <h3>{{ row.GroupName }}
-              <span v-if="isFavorite(row)" class="tag tag-acc">Favourite</span>
-              <span class="tag">{{ roleOf(row) === 'admin' ? 'Admin' : 'Member' }}</span>
+              <span v-if="isFavorite(row)" class="tag tag-acc">{{ $t('profile.favourite') }}</span>
+              <span class="tag">{{ roleOf(row) === 'admin' ? $t('common.admin') : $t('common.member') }}</span>
             </h3>
-            <p class="meta">{{ row.Played }} matches · {{ row.Points }} pts</p>
+            <p class="meta">{{ $t('profile.groupMeta', { matches: row.Played, points: row.Points }) }}</p>
           </router-link>
-          <GearLink v-if="roleOf(row) === 'admin'" class="group-gear" :to="`/profile/groups/${row.GroupID}/settings`" label="Group settings" />
+          <GearLink v-if="roleOf(row) === 'admin'" class="group-gear" :to="`/profile/groups/${row.GroupID}/settings`" :label="$t('profile.groupSettings')" />
           <router-link class="chev-link" :to="`/profile/groups/${row.GroupID}`" aria-hidden="true" tabindex="-1">
             <svg class="chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 2l4 4-4 4"/></svg>
           </router-link>
         </div>
       </section>
       <section v-if="page === 'home'" class="sec">
-        <div class="sec-head"><h2>Settings</h2></div>
+        <div class="sec-head"><h2>{{ $t('profile.settings.title') }}</h2></div>
         <router-link v-if="hasPush" class="pref-row" to="/profile/notifications">
           <div>
-            <div class="who">Notifications</div>
-            <div class="note">{{ pushOn ? 'On on this device' : 'Off on this device' }}</div>
+            <div class="who">{{ $t('profile.settings.notifications') }}</div>
+            <div class="note">{{ pushOn ? $t('profile.settings.pushOn') : $t('profile.settings.pushOff') }}</div>
           </div>
           <span class="switch" :class="{ 'is-on': pushOn }" aria-hidden="true"><span class="track"></span></span>
         </router-link>
@@ -85,20 +85,20 @@
              where the browser can install the app (see pwaInstall.js). -->
         <div v-if="installOffered" class="pref-row">
           <div>
-            <div class="who">Install Agoran</div>
-            <div v-if="installState === 'prompt'" class="note">Open it from your home screen, like any other app</div>
-            <div v-else class="note">Tap Share, then Add to Home Screen</div>
+            <div class="who">{{ $t('profile.settings.install') }}</div>
+            <div v-if="installState === 'prompt'" class="note">{{ $t('profile.settings.installPrompt') }}</div>
+            <div v-else class="note">{{ $t('profile.settings.installIos') }}</div>
           </div>
-          <button v-if="installState === 'prompt'" class="btn btn-ghost" type="button" @click="install">Install</button>
+          <button v-if="installState === 'prompt'" class="btn btn-ghost" type="button" @click="install">{{ $t('profile.settings.installButton') }}</button>
         </div>
         <button class="pref-row guide-action" type="button" @click="openGuide">
-          <span class="who">Replay app guide</span>
+          <span class="who">{{ $t('profile.settings.replayGuide') }}</span>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"
             stroke-width="1.6" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg>
         </button>
       </section>
       <div v-if="page === 'home'" class="logout-row">
-        <button class="btn btn-ghost btn-block" type="button" @click="logout">Log out</button>
+        <button class="btn btn-ghost btn-block" type="button" @click="logout">{{ $t('profile.logout') }}</button>
       </div>
     </template>
 
@@ -106,15 +106,15 @@
       <section class="sec">
         <div class="pref-row">
           <div>
-            <div class="who">Notifications on this device</div>
+            <div class="who">{{ $t('profile.notifications.device') }}</div>
             <div class="note">{{ pushNote }}</div>
           </div>
-          <button class="switch" :class="{ 'is-on': pushOn }" type="button" role="switch" :disabled="!canTogglePush" :aria-checked="pushOn.toString()" aria-label="Notifications on this device" @click="togglePush"><span class="track"></span></button>
+          <button class="switch" :class="{ 'is-on': pushOn }" type="button" role="switch" :disabled="!canTogglePush" :aria-checked="pushOn.toString()" :aria-label="$t('profile.notifications.device')" @click="togglePush"><span class="track"></span></button>
         </div>
         <p v-if="pushError" class="scope">{{ pushError }}</p>
       </section>
       <section class="sec">
-        <div class="sec-head"><h2>Types</h2></div>
+        <div class="sec-head"><h2>{{ $t('profile.notifications.types') }}</h2></div>
         <section v-for="group in preferenceGroups" :key="group.label" class="pref-group" :class="{ 'is-locked': !pushOn }">
           <p class="label">{{ group.label }}</p>
           <div v-for="item in group.items" :key="item.key" class="pref-row">
@@ -127,87 +127,87 @@
 
     <template v-else-if="page === 'account'">
       <section class="sec">
-        <div class="sec-head"><h2>Appearance</h2></div>
+        <div class="sec-head"><h2>{{ $t('profile.appearance.title') }}</h2></div>
         <div class="pref-row">
           <div>
-            <div class="who">Dark mode</div>
-            <div class="note">Applies across the site, on this device</div>
+            <div class="who">{{ $t('profile.appearance.dark') }}</div>
+            <div class="note">{{ $t('profile.appearance.darkNote') }}</div>
           </div>
-          <button class="switch" :class="{ 'is-on': dark }" type="button" role="switch" :aria-checked="dark.toString()" aria-label="Dark mode" @click="toggleTheme"><span class="track"></span></button>
+          <button class="switch" :class="{ 'is-on': dark }" type="button" role="switch" :aria-checked="dark.toString()" :aria-label="$t('profile.appearance.dark')" @click="toggleTheme"><span class="track"></span></button>
         </div>
       </section>
       <section class="sec">
-        <div class="sec-head"><h2>Identity</h2></div>
+        <div class="sec-head"><h2>{{ $t('profile.identity.title') }}</h2></div>
         <div class="field">
-          <label class="label" for="account-name">Name</label>
+          <label class="label" for="account-name">{{ $t('profile.identity.name') }}</label>
           <input id="account-name" v-model="nameInput" type="text" autocomplete="name">
         </div>
-        <p><button class="btn" type="button" :disabled="savingName || !nameInput.trim()" @click="saveName">{{ savingName ? 'Saving…' : 'Save name' }}</button></p>
+        <p><button class="btn" type="button" :disabled="savingName || !nameInput.trim()" @click="saveName">{{ savingName ? $t('common.saving') : $t('profile.identity.save') }}</button></p>
         <p v-if="nameError" class="scope">{{ nameError }}</p>
       </section>
       <!-- Preferred positions: each tap saves the whole set at once (toast),
            and a refused save puts the buttons back as they were. -->
       <section class="sec account-positions">
-        <div class="sec-head"><h2>Positions</h2></div>
-        <p class="label">Where you like to play</p>
-        <div class="pos-picks" role="group" aria-label="Where you like to play">
+        <div class="sec-head"><h2>{{ $t('profile.positions.title') }}</h2></div>
+        <p class="label">{{ $t('profile.positions.label') }}</p>
+        <div class="pos-picks" role="group" :aria-label="$t('profile.positions.label')">
           <button v-for="position in positionOptions" :key="position" class="pos-pick" :class="{ 'is-on': positions.includes(position) }"
             type="button" :aria-pressed="positions.includes(position).toString()" :disabled="!positionsReady" @click="togglePosition(position)">
-            <span v-if="positions.includes(position)" class="tick" aria-hidden="true">✓</span>{{ position }}
+            <span v-if="positions.includes(position)" class="tick" aria-hidden="true">✓</span>{{ $t(`positions.${position}`) }}
           </button>
         </div>
-        <p class="scope pos-help">Pick one or more. Your groups see them, and admins use them to balance teams.</p>
-        <p v-if="positionsLoadFailed" class="scope">Couldn't load your positions. Reload the page to try again.</p>
+        <p class="scope pos-help">{{ $t('profile.positions.help') }}</p>
+        <p v-if="positionsLoadFailed" class="scope">{{ $t('profile.positions.loadError') }}</p>
       </section>
       <section class="sec">
-        <div class="sec-head"><h2>Email</h2></div>
+        <div class="sec-head"><h2>{{ $t('profile.email.title') }}</h2></div>
         <div class="field account-email">
-          <p id="account-email-label" class="label">Email</p>
+          <p id="account-email-label" class="label">{{ $t('profile.email.title') }}</p>
           <p class="account-email-value" aria-labelledby="account-email-label">{{ email }}</p>
-          <p class="note">Changing your email isn't available yet.</p>
+          <p class="note">{{ $t('profile.email.unavailable') }}</p>
         </div>
       </section>
       <section class="sec">
-        <div class="sec-head"><h2>Password</h2></div>
-        <p class="scope">To choose a new one, we email you a reset link, the same path as forgot password.</p>
-        <p v-if="hasPasskeys" class="scope">A password reset also removes your saved passkeys.</p>
-        <p><button class="btn btn-ghost" type="button" :disabled="sendingReset || !email" @click="sendReset">{{ sendingReset ? 'Sending…' : 'Email the link' }}</button></p>
+        <div class="sec-head"><h2>{{ $t('profile.password.title') }}</h2></div>
+        <p class="scope">{{ $t('profile.password.note') }}</p>
+        <p v-if="hasPasskeys" class="scope">{{ $t('profile.password.passkeysNote') }}</p>
+        <p><button class="btn btn-ghost" type="button" :disabled="sendingReset || !email" @click="sendReset">{{ sendingReset ? $t('common.sending') : $t('profile.password.send') }}</button></p>
         <p v-if="resetNote" class="scope">{{ resetNote }}</p>
       </section>
       <PasskeysV2 v-if="hasPasskeys" @confirming="onChildConfirming" />
       <section class="danger">
-        <p class="label">Danger zone</p>
-        <h2 class="h2">Delete my account</h2>
-        <p>This can't be undone. Your name, email and password are erased, and you're removed from every group. Match history (goals, {{ mvpOfTheMatch }} titles) stays for the other players, and is no longer tied to an account.</p>
+        <p class="label">{{ $t('profile.delete.zone') }}</p>
+        <h2 class="h2">{{ $t('profile.delete.title') }}</h2>
+        <p>{{ $t('profile.delete.text') }}</p>
         <span class="withdraw-wrap">
-          <button class="btn btn-danger" type="button" :aria-expanded="deleting.toString()" @click="openDelete">Delete my account</button>
+          <button class="btn btn-danger" type="button" :aria-expanded="deleting.toString()" @click="openDelete">{{ $t('profile.delete.title') }}</button>
           <div v-if="deleting" class="confirm-pop" role="dialog" aria-labelledby="delete-title">
-            <h3 id="delete-title">Confirm deletion</h3>
-            <p class="ref">Enter your current password to confirm.</p>
+            <h3 id="delete-title">{{ $t('profile.delete.confirmTitle') }}</h3>
+            <p class="ref">{{ $t('profile.delete.confirmText') }}</p>
             <div class="field">
-              <label class="label" for="delete-password-pop">Password</label>
+              <label class="label" for="delete-password-pop">{{ $t('profile.delete.password') }}</label>
               <input id="delete-password-pop" v-model="deletePassword" type="password" autocomplete="current-password">
             </div>
             <p v-if="deleteError" class="scope">{{ deleteError }}</p>
             <div class="confirm-actions actions">
-              <button class="btn btn-ghost" type="button" @click="closeDelete">Cancel</button>
-              <button class="btn btn-danger" type="button" @click="confirmDelete">Delete my account</button>
+              <button class="btn btn-ghost" type="button" @click="closeDelete">{{ $t('common.cancel') }}</button>
+              <button class="btn btn-danger" type="button" @click="confirmDelete">{{ $t('profile.delete.title') }}</button>
             </div>
           </div>
         </span>
       </section>
       <div v-if="deleting" class="confirm-scrim" @click="closeDelete"></div>
       <div v-if="deleting" class="confirm-sheet" role="dialog" aria-labelledby="delete-sheet-title">
-        <h3 id="delete-sheet-title">Confirm deletion</h3>
-        <p class="ref">Enter your current password to confirm.</p>
+        <h3 id="delete-sheet-title">{{ $t('profile.delete.confirmTitle') }}</h3>
+        <p class="ref">{{ $t('profile.delete.confirmText') }}</p>
         <div class="field">
-          <label class="label" for="delete-password">Password</label>
+          <label class="label" for="delete-password">{{ $t('profile.delete.password') }}</label>
           <input id="delete-password" v-model="deletePassword" type="password" autocomplete="current-password">
         </div>
         <p v-if="deleteError" class="scope">{{ deleteError }}</p>
         <div class="confirm-actions">
-          <button class="btn btn-danger" type="button" @click="confirmDelete">Delete my account</button>
-          <button class="btn btn-ghost" type="button" @click="closeDelete">Cancel</button>
+          <button class="btn btn-danger" type="button" @click="confirmDelete">{{ $t('profile.delete.title') }}</button>
+          <button class="btn btn-ghost" type="button" @click="closeDelete">{{ $t('common.cancel') }}</button>
         </div>
       </div>
     </template>
@@ -215,45 +215,45 @@
     <template v-else-if="page === 'settings'">
       <GroupDetailsForm v-if="isAdmin" :key="groupId" :group="currentGroup" @saved="applyGroupDetails" />
       <section class="sec">
-        <div class="sec-head"><h2>Teams</h2></div>
-        <p class="scope">Save each team on its own.</p>
+        <div class="sec-head"><h2>{{ $t('profile.teams.title') }}</h2></div>
+        <p class="scope">{{ $t('profile.teams.note') }}</p>
         <div v-for="team in teams" :key="team.id" class="team-edit">
-          <input v-model="team.name" type="text" :aria-label="`Name of ${team.name}`">
-          <button class="btn" type="button" @click="saveTeam(team)">Save</button>
+          <input v-model="team.name" type="text" :aria-label="$t('profile.teams.nameAria', { name: team.name })">
+          <button class="btn" type="button" @click="saveTeam(team)">{{ $t('common.save') }}</button>
         </div>
         <p v-if="teamNote" class="scope">{{ teamNote }}</p>
       </section>
       <InvitationV2 :group-id="groupId" :code="inviteCode" :share-text="inviteShareText"
         @updated="applyInvitation" @confirming="onChildConfirming" />
       <section class="sec">
-        <div class="sec-head"><h2>Members</h2></div>
-        <p class="scope">You can't change your own role. The last admin can't be demoted.</p>
+        <div class="sec-head"><h2>{{ $t('profile.members.title') }}</h2></div>
+        <p class="scope">{{ $t('profile.members.note') }}</p>
         <div v-for="member in members" :key="member.id" class="member-row">
           <div>
             <div class="nm" :class="{ 'is-self': member.id === playerId }">
               {{ displayName(member.name) }}
-              <span v-if="member.role === 'admin'" class="tag">Admin</span>
-              <span v-if="member.id === playerId" class="tag">You</span>
+              <span v-if="member.role === 'admin'" class="tag">{{ $t('common.admin') }}</span>
+              <span v-if="member.id === playerId" class="tag">{{ $t('match.you') }}</span>
             </div>
           </div>
           <div v-if="member.id !== playerId" class="member-actions withdraw-wrap">
-            <button v-if="member.role === 'admin'" class="btn btn-ghost" type="button" :aria-expanded="(demoting === member.id).toString()" @click="askDemote(member)">Remove admin</button>
-            <button v-else-if="member.has_account" class="btn btn-ghost" type="button" @click="promote(member)">Make admin</button>
-            <button class="btn btn-ghost btn-remove" type="button" :aria-expanded="(removing === member.id).toString()" @click="askRemove(member)">Remove</button>
+            <button v-if="member.role === 'admin'" class="btn btn-ghost" type="button" :aria-expanded="(demoting === member.id).toString()" @click="askDemote(member)">{{ $t('profile.members.removeAdmin') }}</button>
+            <button v-else-if="member.has_account" class="btn btn-ghost" type="button" @click="promote(member)">{{ $t('profile.members.makeAdmin') }}</button>
+            <button class="btn btn-ghost btn-remove" type="button" :aria-expanded="(removing === member.id).toString()" @click="askRemove(member)">{{ $t('common.remove') }}</button>
             <div v-if="removing === member.id" class="confirm-pop" role="dialog">
-              <h3>Remove from the group?</h3>
-              <p class="ref">{{ displayName(member.name) }} leaves the group. Their match history stays. They need a new invite to come back.</p>
+              <h3>{{ $t('profile.members.removeTitle') }}</h3>
+              <p class="ref">{{ $t('profile.members.removeText', { name: displayName(member.name) }) }}</p>
               <div class="confirm-actions actions">
-                <button class="btn btn-ghost" type="button" @click="removing = ''">Cancel</button>
-                <button class="btn btn-danger" type="button" @click="confirmRemove(member)">Remove</button>
+                <button class="btn btn-ghost" type="button" @click="removing = ''">{{ $t('common.cancel') }}</button>
+                <button class="btn btn-danger" type="button" @click="confirmRemove(member)">{{ $t('common.remove') }}</button>
               </div>
             </div>
             <div v-if="demoting === member.id" class="confirm-pop" role="dialog">
-              <h3>Remove the admin role?</h3>
-              <p class="ref">{{ displayName(member.name) }} stays a member of the group. You can make them an admin again later.</p>
+              <h3>{{ $t('profile.members.demoteTitle') }}</h3>
+              <p class="ref">{{ $t('profile.members.demoteText', { name: displayName(member.name) }) }}</p>
               <div class="confirm-actions actions">
-                <button class="btn btn-ghost" type="button" @click="demoting = ''">Cancel</button>
-                <button class="btn btn-danger" type="button" @click="confirmDemote(member)">Remove admin</button>
+                <button class="btn btn-ghost" type="button" @click="demoting = ''">{{ $t('common.cancel') }}</button>
+                <button class="btn btn-danger" type="button" @click="confirmDemote(member)">{{ $t('profile.members.removeAdmin') }}</button>
               </div>
             </div>
           </div>
@@ -262,20 +262,20 @@
       </section>
       <div v-if="removing" class="confirm-scrim" @click="removing = ''"></div>
       <div v-if="removing" class="confirm-sheet" role="dialog">
-        <h3>Remove from the group?</h3>
-        <p class="ref">{{ displayName(removeMemberRow.name) }} leaves the group. Their match history stays. They need a new invite to come back.</p>
+        <h3>{{ $t('profile.members.removeTitle') }}</h3>
+        <p class="ref">{{ $t('profile.members.removeText', { name: displayName(removeMemberRow.name) }) }}</p>
         <div class="confirm-actions">
-          <button class="btn btn-danger" type="button" @click="confirmRemove(removeMemberRow)">Remove</button>
-          <button class="btn btn-ghost" type="button" @click="removing = ''">Cancel</button>
+          <button class="btn btn-danger" type="button" @click="confirmRemove(removeMemberRow)">{{ $t('common.remove') }}</button>
+          <button class="btn btn-ghost" type="button" @click="removing = ''">{{ $t('common.cancel') }}</button>
         </div>
       </div>
       <div v-if="demoting" class="confirm-scrim" @click="demoting = ''"></div>
       <div v-if="demoting" class="confirm-sheet" role="dialog">
-        <h3>Remove the admin role?</h3>
-        <p class="ref">{{ displayName(demoteName) }} stays a member of the group. You can make them an admin again later.</p>
+        <h3>{{ $t('profile.members.demoteTitle') }}</h3>
+        <p class="ref">{{ $t('profile.members.demoteText', { name: displayName(demoteName) }) }}</p>
         <div class="confirm-actions">
-          <button class="btn btn-danger" type="button" @click="confirmDemote(demoteMember)">Remove admin</button>
-          <button class="btn btn-ghost" type="button" @click="demoting = ''">Cancel</button>
+          <button class="btn btn-danger" type="button" @click="confirmDemote(demoteMember)">{{ $t('profile.members.removeAdmin') }}</button>
+          <button class="btn btn-ghost" type="button" @click="demoting = ''">{{ $t('common.cancel') }}</button>
         </div>
       </div>
     </template>
@@ -294,7 +294,6 @@ import {
 } from '@/services/api';
 import { POSITIONS, normalizePositions } from '@/services/v2Positions';
 import { actionErrorMessage } from '@/services/v2Match';
-import { MVP_OF_THE_MATCH, MVP } from '@/services/v2Home';
 import AppToast from '@/components/AppToast.vue';
 import { getPushState, enablePush, disablePush, PUSH_STATE, PUSH_FEATURE } from '@/services/pushNotifications';
 import { getInstallTracker, INSTALL_STATE, PWA_INSTALL_FEATURE } from '@/services/pwaInstall';
@@ -302,24 +301,25 @@ import { buildGroupInviteShareText } from '@/services/shareMessages';
 import InvitationV2 from './InvitationV2.vue';
 import GroupDetailsForm from './GroupDetailsForm.vue';
 import GearLink from './GearLink.vue';
-import { MOTM_ANNOUNCED_LABEL } from '@/services/notificationLabels';
+import { MOTM_ANNOUNCED_KEY } from '@/services/notificationLabels';
+import { formatDecimal } from '@/services/intl';
 
 const PREFERENCE_GROUPS = [
-  { label: 'Match', items: [
-    { key: 'registration_open', label: 'Sign-ups open' },
-    { key: 'team_assigned', label: 'Your team is set' },
-    { key: 'result_recorded', label: 'Final score' },
-    { key: 'motm_announced', label: MOTM_ANNOUNCED_LABEL },
+  { id: 'match', items: [
+    { key: 'registration_open', labelKey: 'profile.notifications.registrationOpen' },
+    { key: 'team_assigned', labelKey: 'profile.notifications.teamAssigned' },
+    { key: 'result_recorded', labelKey: 'profile.notifications.resultRecorded' },
+    { key: 'motm_announced', labelKey: MOTM_ANNOUNCED_KEY },
   ] },
-  { label: 'Predictions', items: [
-    { key: 'predictions_open', label: 'Predictions open' },
-    { key: 'predictions_settled', label: 'Predictions settled' },
+  { id: 'predictions', items: [
+    { key: 'predictions_open', labelKey: 'profile.notifications.predictionsOpen' },
+    { key: 'predictions_settled', labelKey: 'profile.notifications.predictionsSettled' },
   ] },
-  { label: 'Reminder', items: [
-    { key: 'kickoff_reminder', label: 'Kick-off in 30 minutes' },
+  { id: 'reminder', items: [
+    { key: 'kickoff_reminder', labelKey: 'profile.notifications.kickoffReminder' },
   ] },
-  { label: 'Admin', admin: true, items: [
-    { key: 'member_joined', label: 'New member joins' },
+  { id: 'admin', admin: true, items: [
+    { key: 'member_joined', labelKey: 'profile.notifications.memberJoined' },
   ] },
 ];
 
@@ -344,7 +344,6 @@ export default {
   },
   data() {
     return {
-      mvpOfTheMatch: MVP_OF_THE_MATCH,
       loading: true,
       failed: false,
       overall: {},
@@ -391,7 +390,11 @@ export default {
     // at least one group.
     preferenceGroups() {
       const admin = this.groups.some((group) => group.role === 'admin');
-      return PREFERENCE_GROUPS.filter((group) => admin || !group.admin);
+      return PREFERENCE_GROUPS.filter((group) => admin || !group.admin).map((group) => ({
+        ...group,
+        label: this.$t(`profile.notifications.groups.${group.id}`),
+        items: group.items.map((item) => ({ key: item.key, label: this.$t(item.labelKey) })),
+      }));
     },
     page() {
       const name = this.$route.name;
@@ -425,9 +428,9 @@ export default {
       return [...this.seasons].reverse();
     },
     scopeText() {
-      if (this.page === 'group') return this.record.GroupName || 'This group';
+      if (this.page === 'group') return this.record.GroupName || this.$t('profile.thisGroup');
       if (this.rows.length === 1) return this.rows[0].GroupName;
-      return `${this.rows.length} groups combined`;
+      return this.$t('profile.groupsCombined', { n: this.rows.length });
     },
     isAdmin() {
       return this.currentGroup?.role === 'admin';
@@ -439,14 +442,14 @@ export default {
     stats() {
       const row = this.record;
       return [
-        { label: 'Wins', value: row.Won || 0 },
-        { label: 'Draws', value: row.Drawn || 0 },
-        { label: 'Losses', value: row.Lost || 0 },
-        { label: 'Points', value: row.Points || 0 },
-        { label: 'Goals', value: row.GoalsFor || 0 },
-        { label: 'OG', value: row.OwnGoals || 0 },
-        { label: MVP, value: row.MotmAwards || 0 },
-        { label: 'Pred. pts', value: this.predictionLabel(row.PredictionPoints) },
+        { label: this.$t('profile.stats.wins'), value: row.Won || 0 },
+        { label: this.$t('profile.stats.draws'), value: row.Drawn || 0 },
+        { label: this.$t('profile.stats.losses'), value: row.Lost || 0 },
+        { label: this.$t('profile.stats.points'), value: row.Points || 0 },
+        { label: this.$t('profile.stats.goals'), value: row.GoalsFor || 0 },
+        { label: this.$t('profile.stats.ownGoals'), value: row.OwnGoals || 0 },
+        { label: this.$t('glossary.mvp'), value: row.MotmAwards || 0 },
+        { label: this.$t('profile.stats.predictionPoints'), value: this.predictionLabel(row.PredictionPoints) },
       ];
     },
     dark() {
@@ -462,10 +465,10 @@ export default {
       return this.pushState === PUSH_STATE.ON || this.pushState === PUSH_STATE.OFF;
     },
     pushNote() {
-      if (this.pushState === PUSH_STATE.NEEDS_INSTALL) return 'Install the app first, then turn notifications on.';
-      if (this.pushState === PUSH_STATE.DENIED) return 'Notifications are blocked in the browser settings.';
-      if (this.pushState === PUSH_STATE.UNSUPPORTED) return 'This browser cannot receive notifications.';
-      return 'Choose which ones you want.';
+      if (this.pushState === PUSH_STATE.NEEDS_INSTALL) return this.$t('profile.notifications.needsInstall');
+      if (this.pushState === PUSH_STATE.DENIED) return this.$t('profile.notifications.denied');
+      if (this.pushState === PUSH_STATE.UNSUPPORTED) return this.$t('profile.notifications.unsupported');
+      return this.$t('profile.notifications.choose');
     },
     demoteMember() {
       return this.members.find((member) => member.id === this.demoting) || {};
@@ -542,10 +545,10 @@ export default {
     },
     predictionLabel(points) {
       const rounded = Math.round(Number(points || 0) * 10) / 10;
-      const text = Math.abs(rounded).toFixed(1);
+      const text = formatDecimal(Math.abs(rounded), 1);
       if (rounded > 0) return `+${text}`;
       if (rounded < 0) return `−${text}`;
-      return '0.0';
+      return text;
     },
     roleOf(row) {
       const group = this.groups.find((item) => item.id === (row.GroupID || row.id));
@@ -559,10 +562,10 @@ export default {
       if (!this.v2Context) return;
       this.v2Context.hide = true;
       const titles = {
-        group: this.record.GroupName || 'Group',
-        settings: 'Group settings',
-        notifications: 'Notifications',
-        account: 'Account',
+        group: this.record.GroupName || this.$t('profile.group'),
+        settings: this.$t('profile.groupSettings'),
+        notifications: this.$t('profile.settings.notifications'),
+        account: this.$t('profile.account'),
       };
       this.v2Context.pageTitle = titles[this.page] || '';
       this.v2Context.backTo = this.page === 'settings'
@@ -570,7 +573,7 @@ export default {
         : '/profile';
       // The gear to the group's settings, on the title row; admins only.
       this.v2Context.pageAction = this.page === 'group' && this.isAdmin
-        ? { to: `/profile/groups/${this.groupId}/settings`, label: 'Group settings' }
+        ? { to: `/profile/groups/${this.groupId}/settings`, label: this.$t('profile.groupSettings') }
         : null;
     },
     async load() {
@@ -663,7 +666,7 @@ export default {
         this.pushState = this.pushOn ? await disablePush() : await enablePush();
       } catch (error) {
         console.error(error);
-        this.pushError = (error.response && error.response.data && error.response.data.error) || error.message || 'Could not change the notifications.';
+        this.pushError = (error.response && error.response.data && error.response.data.error) || error.message || this.$t('profile.notifications.error');
       }
     },
     async loadPositions() {
@@ -699,12 +702,12 @@ export default {
           this.savedPositions = saved;
           if (seq !== this.positionsSeq) return;
           this.positions = saved;
-          this.$refs.toast?.show('Positions saved.', 'success');
+          this.$refs.toast?.show(this.$t('profile.positions.saved'), 'success');
         } catch (error) {
           console.error(error);
           if (seq !== this.positionsSeq) return;
           this.positions = this.savedPositions;
-          this.$refs.toast?.show(actionErrorMessage(error, 'Could not save your positions.'), 'error');
+          this.$refs.toast?.show(actionErrorMessage(error, this.$t('profile.positions.error')), 'error');
         }
       };
       this.positionsQueue = (this.positionsQueue || Promise.resolve()).then(send);
@@ -717,7 +720,7 @@ export default {
         await updateMyName(this.nameInput.trim());
         await this.load();
       } catch (error) {
-        this.nameError = (error.response && error.response.data && error.response.data.error) || 'Could not save the name.';
+        this.nameError = (error.response && error.response.data && error.response.data.error) || this.$t('profile.identity.error');
       } finally {
         this.savingName = false;
       }
@@ -732,7 +735,7 @@ export default {
         const { message } = await forgotPassword(this.email);
         this.resetNote = message;
       } catch (error) {
-        this.resetNote = (error.response && error.response.data && error.response.data.error) || 'Could not send the reset link. Please try again.';
+        this.resetNote = (error.response && error.response.data && error.response.data.error) || this.$t('profile.password.error');
       } finally {
         this.sendingReset = false;
       }
@@ -752,7 +755,7 @@ export default {
         clearToken();
         window.location.href = '/login?accountDeleted=success';
       } catch (error) {
-        this.deleteError = (error.response && error.response.data && error.response.data.error) || 'Could not delete the account.';
+        this.deleteError = (error.response && error.response.data && error.response.data.error) || this.$t('profile.delete.error');
       }
     },
     async loadSettings() {
@@ -786,9 +789,9 @@ export default {
       this.teamNote = '';
       try {
         await updateTeam(this.groupId, team.id, team.name.trim());
-        this.teamNote = 'Saved.';
+        this.teamNote = this.$t('common.saved');
       } catch {
-        this.teamNote = 'Could not save the team.';
+        this.teamNote = this.$t('profile.teams.error');
       }
     },
     askDemote(member) {
@@ -811,7 +814,7 @@ export default {
         await this.loadSettings();
       } catch (error) {
         this.removing = '';
-        this.roleError = (error.response && error.response.data && error.response.data.error) || 'Could not remove the member.';
+        this.roleError = (error.response && error.response.data && error.response.data.error) || this.$t('profile.members.removeError');
       }
     },
     async confirmDemote(member) {
@@ -821,7 +824,7 @@ export default {
         this.demoting = '';
         await this.loadSettings();
       } catch (error) {
-        this.roleError = (error.response && error.response.data && error.response.data.error) || 'Could not change the role.';
+        this.roleError = (error.response && error.response.data && error.response.data.error) || this.$t('profile.members.roleError');
       }
     },
     async promote(member) {
@@ -830,7 +833,7 @@ export default {
         await updateMemberRole(this.groupId, member.id, 'admin');
         await this.loadSettings();
       } catch (error) {
-        this.roleError = (error.response && error.response.data && error.response.data.error) || 'Could not change the role.';
+        this.roleError = (error.response && error.response.data && error.response.data.error) || this.$t('profile.members.roleError');
       }
     },
   },

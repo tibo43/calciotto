@@ -25,6 +25,28 @@ export const formatDate = (value, options) => {
 
 export const formatNumber = (value, options) => new Intl.NumberFormat(activeTag(), options).format(value);
 
+// A number with exactly `digits` decimals and no grouping: odds, ratings
+// (« 2.35 » in English, « 2,35 » in French). toFixed's own rounding, with
+// the language's decimal separator, so English is toFixed's output exactly.
+export const formatDecimal = (value, digits = 2) => {
+  const decimal = new Intl.NumberFormat(activeTag()).formatToParts(1.5).find((part) => part.type === 'decimal');
+  return Number(value).toFixed(digits).replace('.', decimal ? decimal.value : '.');
+};
+
+// The name of the weekday or month of a Date on its own, in the active
+// language: 'short' (Sun, Sep in English), 'long' (Sunday, September)...
+// For labels whose order comes from a message (date.* in the bundles) rather
+// than from Intl's own patterns. undefined for an invalid Date.
+const namePart = (date, field, width) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return undefined;
+  const part = new Intl.DateTimeFormat(activeTag(), { [field]: width })
+    .formatToParts(date).find((item) => item.type === field);
+  return part && part.value;
+};
+
+export const weekdayName = (date, width = 'short') => namePart(date, 'weekday', width);
+export const monthName = (date, width = 'short') => namePart(date, 'month', width);
+
 // 'one', 'other'... for the active language (0 is 'one' in French, 'other' in
 // English).
 export const pluralCategory = (n) => categoryOf(n, getLocale());

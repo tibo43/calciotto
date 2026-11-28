@@ -2,21 +2,21 @@
   <main class="page edit-page has-sticky">
     <router-link class="back" :to="`/matches/${id}`">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg>
-      Back to the match
+      {{ $t('edit.backToMatch') }}
     </router-link>
 
     <section v-if="loading" class="state"><div class="skel lg"></div><div class="skel md"></div></section>
     <section v-else-if="failed" class="state">
-      <h1>Couldn't load the match</h1>
-      <button class="btn" type="button" @click="load">Try again</button>
+      <h1>{{ $t('match.loadError') }}</h1>
+      <button class="btn" type="button" @click="load">{{ $t('common.tryAgain') }}</button>
     </section>
 
     <template v-else>
-      <p class="label">Editing · admin</p>
+      <p class="label">{{ $t('edit.editing') }}</p>
       <h1 class="display h-kick">{{ heading }}</h1>
       <p class="reg-status">
-        <template v-if="!isScheduled">No sign-up list</template>
-        <template v-else>Sign-ups <strong>{{ registrationWord }}</strong> · <template v-if="step === 'score' && bothSides">teams made</template><template v-else><strong>{{ confirmed.length }} confirmed / {{ cap }} places</strong> · {{ waitingLabel }}</template></template>
+        <template v-if="!isScheduled">{{ $t('edit.noSignupList') }}</template>
+        <template v-else><i18n-t keypath="edit.regStatus" scope="global"><template #state><strong>{{ registrationWord }}</strong></template><template #detail><template v-if="step === 'score' && bothSides">{{ $t('edit.teamsMade') }}</template><i18n-t v-else keypath="edit.regCounts" scope="global"><template #counts><strong>{{ $t('edit.confirmedPlaces', { confirmed: confirmed.length, cap }) }}</strong></template><template #waiting>{{ waitingLabel }}</template></i18n-t></template></i18n-t></template>
       </p>
 
       <div class="match-sharing">
@@ -27,7 +27,7 @@
       <!-- The only way between the steps. The one to do next is orange,
            the others can be reopened to correct them, and one that isn't
            possible yet stays in place, greyed and inert. -->
-      <nav class="steps" aria-label="Steps">
+      <nav class="steps" :aria-label="$t('edit.steps.label')">
         <button v-for="item in stepItems" :key="item.key" class="step-i"
           :class="{ 'is-on': step === item.key, 'is-todo': item.todo, 'is-inactive': item.inactive }" type="button"
           :aria-current="step === item.key ? 'step' : null" :aria-disabled="item.inactive ? 'true' : null"
@@ -36,51 +36,51 @@
 
       <template v-if="step === 'signups'">
         <section class="block">
-          <div class="sec-head"><h2>1. Sign-ups</h2></div>
+          <div class="sec-head"><h2>{{ $t('edit.signups.title') }}</h2></div>
           <p class="note">{{ signupNote }}</p>
           <!-- One row from 768px: the sign-up buttons, then the places. -->
           <div class="signup-controls">
             <div class="actions" v-if="canClose || canReopen">
-              <button v-if="canClose" class="btn btn-ghost" type="button" @click="closeList">Close sign-ups</button>
-              <button v-if="canReopen" class="btn btn-ghost" type="button" aria-label="Reopen sign-ups" @click="reopenList"><span class="when-roomy">Reopen sign-ups</span><span class="when-narrow" aria-hidden="true">Reopen</span></button>
+              <button v-if="canClose" class="btn btn-ghost" type="button" @click="closeList">{{ $t('edit.signups.close') }}</button>
+              <button v-if="canReopen" class="btn btn-ghost" type="button" :aria-label="$t('edit.signups.reopen')" @click="reopenList"><span class="when-roomy">{{ $t('edit.signups.reopen') }}</span><span class="when-narrow" aria-hidden="true">{{ $t('edit.signups.reopenShort') }}</span></button>
             </div>
             <div v-if="isScheduled" class="places-row">
-              <label class="label" for="confirmed-places">Places</label>
-              <input id="confirmed-places" type="number" aria-label="Number of places" min="1" v-model="maxPlayersInput">
-              <button class="btn btn-ghost" type="button" :disabled="!canUpdateCap" @click="updateCap">Update</button>
+              <label class="label" for="confirmed-places">{{ $t('edit.signups.places') }}</label>
+              <input id="confirmed-places" type="number" :aria-label="$t('edit.signups.placesAria')" min="1" v-model="maxPlayersInput">
+              <button class="btn btn-ghost" type="button" :disabled="!canUpdateCap" @click="updateCap">{{ $t('edit.signups.update') }}</button>
             </div>
           </div>
-          <p class="label">Confirmed</p>
+          <p class="label">{{ $t('edit.signups.confirmed') }}</p>
           <div v-for="entry in confirmed" :key="entry.PlayerID" class="sign-row">
             <div class="who">{{ entry.Name }}</div>
           </div>
-          <p v-if="!confirmed.length" class="note">No confirmed players.</p>
-          <p class="label">Waiting list</p>
+          <p v-if="!confirmed.length" class="note">{{ $t('edit.signups.noConfirmed') }}</p>
+          <p class="label">{{ $t('edit.signups.waitingList') }}</p>
           <div v-for="entry in waiting" :key="entry.PlayerID" class="sign-row">
             <div class="who">{{ entry.Name }}</div>
           </div>
-          <p v-if="!waiting.length" class="note">No one is waiting.</p>
+          <p v-if="!waiting.length" class="note">{{ $t('edit.signups.noWaiting') }}</p>
         </section>
         <p v-if="message" class="note">{{ message }}</p>
         <div class="sticky-cta">
-          <button class="btn btn-ghost btn-danger" type="button" @click="confirmDelete">Delete</button>
-          <button class="btn" type="button" :disabled="saving" @click="saveDraft">Save</button>
+          <button class="btn btn-ghost btn-danger" type="button" @click="confirmDelete">{{ $t('edit.delete') }}</button>
+          <button class="btn" type="button" :disabled="saving" @click="saveDraft">{{ $t('edit.save') }}</button>
         </div>
       </template>
 
       <template v-else-if="step === 'teams'">
         <div class="compose-toolbar">
-          <button class="btn" type="button" :disabled="!canSplit" @click="split">Split automatically</button>
-          <button class="btn btn-ghost" type="button" @click="clearTeams">Clear</button>
+          <button class="btn" type="button" :disabled="!canSplit" @click="split">{{ $t('edit.teams.split') }}</button>
+          <button class="btn btn-ghost" type="button" @click="clearTeams">{{ $t('edit.teams.clear') }}</button>
           <p class="hint">{{ splitHint }}</p>
         </div>
-        <p class="tap-hint">Tap a player to move them onto a team, or back to the reserve.</p>
+        <p class="tap-hint">{{ $t('edit.teams.tapHint') }}</p>
         <p class="size-count">{{ sizeCount }}</p>
         <div class="compose-board">
-          <section class="compose-col" :class="{ 'is-drop': pickedId && teamOf(pickedId) !== null }" aria-label="Reserve">
-            <div class="col-head"><h2>Reserve</h2></div>
+          <section class="compose-col" :class="{ 'is-drop': pickedId && teamOf(pickedId) !== null }" :aria-label="$t('edit.teams.reserve')">
+            <div class="col-head"><h2>{{ $t('edit.teams.reserve') }}</h2></div>
             <p class="col-count">{{ reserve.length }}</p>
-            <p v-if="!reserve.length" class="col-empty">Every confirmed player is placed.</p>
+            <p v-if="!reserve.length" class="col-empty">{{ $t('edit.teams.allPlaced') }}</p>
             <template v-for="player in reserve" :key="player.ID">
               <button class="p-row" :class="{ 'is-picked': pickedId === player.ID, 'has-tag': tagOf(player) }" type="button" :data-player="player.ID"
                 aria-haspopup="menu" :aria-expanded="pickedId === player.ID ? 'true' : 'false'" @click="pick(player)">
@@ -88,7 +88,7 @@
                 <span class="nm">{{ player.Name }}</span>
                 <span v-if="tagOf(player)" class="pos-tag">{{ tagOf(player) }}</span>
               </button>
-              <div v-if="pickedId === player.ID" class="move-menu" role="menu" :aria-label="`Move ${player.Name} to`" @keydown="onMenuKey">
+              <div v-if="pickedId === player.ID" class="move-menu" role="menu" :aria-label="$t('edit.teams.moveTo', { name: player.Name })" @keydown="onMenuKey">
                 <button v-for="dest in destinations" :key="dest.key" class="move-opt" role="menuitem" type="button" @click="assign(dest.index)">{{ dest.label }}</button>
               </div>
             </template>
@@ -100,7 +100,7 @@
             </div>
             <p class="col-count">{{ teamPlayers[index].length }}</p>
             <p v-if="teamPlayers[index].length" class="pos-summary">{{ positionSummary(teamPlayers[index], positionsById) }}</p>
-            <p v-if="!teamPlayers[index].length" class="col-empty">No players yet.</p>
+            <p v-if="!teamPlayers[index].length" class="col-empty">{{ $t('edit.teams.noPlayers') }}</p>
             <template v-for="player in teamPlayers[index]" :key="player.ID">
               <button class="p-row" :class="{ 'is-picked': pickedId === player.ID, 'has-tag': tagOf(player) }" type="button" :data-player="player.ID"
                 aria-haspopup="menu" :aria-expanded="pickedId === player.ID ? 'true' : 'false'" @click="pick(player)">
@@ -108,44 +108,44 @@
                 <span class="nm">{{ player.Name }}</span>
                 <span v-if="tagOf(player)" class="pos-tag">{{ tagOf(player) }}</span>
               </button>
-              <div v-if="pickedId === player.ID" class="move-menu" role="menu" :aria-label="`Move ${player.Name} to`" @keydown="onMenuKey">
+              <div v-if="pickedId === player.ID" class="move-menu" role="menu" :aria-label="$t('edit.teams.moveTo', { name: player.Name })" @keydown="onMenuKey">
                 <button v-for="dest in destinations" :key="dest.key" class="move-opt" role="menuitem" type="button" @click="assign(dest.index)">{{ dest.label }}</button>
               </div>
             </template>
           </section>
         </div>
         <section class="sec">
-          <div class="sec-head"><h2>Waiting list</h2></div>
-          <p class="note">These players are not included in the automatic split. The first player on the waiting list moves up when a confirmed place opens.</p>
+          <div class="sec-head"><h2>{{ $t('edit.signups.waitingList') }}</h2></div>
+          <p class="note">{{ $t('edit.teams.waitingNote') }}</p>
           <div v-for="entry in waiting" :key="entry.PlayerID" class="wait-row">
             <div>
               <div class="who">{{ entry.Name }}</div>
-              <div class="meta">Waiting · #{{ entry.Position }}</div>
+              <div class="meta">{{ $t('edit.teams.waitingMeta', { n: entry.Position }) }}</div>
             </div>
           </div>
           <div class="actions">
-            <button class="btn btn-ghost" type="button" @click="toggleGuests">Add a player who didn't sign up</button>
+            <button class="btn btn-ghost" type="button" @click="toggleGuests">{{ $t('edit.teams.addGuest') }}</button>
           </div>
           <div v-if="addingGuest" class="guest-list">
             <button v-for="member in addable" :key="member.id" class="csc-pick" type="button" @click="addGuest(member)">
               <span class="nm">{{ member.name }}</span>
             </button>
-            <p v-if="!addable.length" class="note">Everyone in the group is already here.</p>
+            <p v-if="!addable.length" class="note">{{ $t('edit.teams.everyoneHere') }}</p>
           </div>
         </section>
         <p v-if="message" class="note">{{ message }}</p>
         <div class="sticky-cta">
-          <p v-if="!bothSides" class="cta-msg">Put at least one player on each team to confirm.</p>
-          <button class="btn" :class="{ 'is-off': !bothSides }" type="button" :disabled="!bothSides || saving" @click="saveDraft">Confirm the teams</button>
+          <p v-if="!bothSides" class="cta-msg">{{ $t('edit.teams.needBoth') }}</p>
+          <button class="btn" :class="{ 'is-off': !bothSides }" type="button" :disabled="!bothSides || saving" @click="saveDraft">{{ $t('edit.teams.confirm') }}</button>
         </div>
       </template>
 
       <template v-else>
         <template v-if="!bothSides">
-          <p class="note">The score opens once each team has at least one player.</p>
+          <p class="note">{{ $t('edit.score.opensLater') }}</p>
         </template>
         <template v-else>
-          <section class="score-board" aria-label="Computed score">
+          <section class="score-board" :aria-label="$t('edit.score.computed')">
             <div v-fit-two-lines class="board-teams">
               <div class="board-team"><span class="name">{{ teamName(0) }}</span></div>
               <div class="board-score">{{ sides[0].score }}<span class="sep">–</span>{{ sides[1].score }}</div>
@@ -156,59 +156,59 @@
             <ul class="scorers">
               <li v-for="(line, index) in recap" :key="index" :class="{ away: line.away }">{{ line.text }}</li>
             </ul>
-            <p class="score-hint">The score is the sum of each team's goals, plus the other team's own goals. An own goal does not count in the scorers table.</p>
+            <p class="score-hint">{{ $t('edit.score.hint') }}</p>
           </section>
           <div class="score-teams">
-            <section v-for="index in [0, 1]" :key="teamId(index)" class="score-team" :aria-label="`Goals for ${teamName(index)}`">
+            <section v-for="index in [0, 1]" :key="teamId(index)" class="score-team" :aria-label="$t('edit.score.goalsFor', { team: teamName(index) })">
               <h2>{{ teamName(index) }}</h2>
               <p class="team-sub">{{ teamScoreLine(sides[index]) }}</p>
               <div v-for="player in teamPlayers[index]" :key="player.ID" class="score-row">
                 <div class="who">
                   <span class="nm">{{ player.Name }}</span>
-                  <span v-if="player.OwnGoals" class="og-plain">{{ player.OwnGoals }} OG</span>
+                  <span v-if="player.OwnGoals" class="og-plain">{{ $t('match.ownGoals', player.OwnGoals) }}</span>
                 </div>
                 <div class="stepper">
-                  <button type="button" :disabled="!player.GoalNumber" :aria-label="`Remove a goal for ${player.Name}`" @click="changeGoals(player, -1)">−</button>
+                  <button type="button" :disabled="!player.GoalNumber" :aria-label="$t('edit.score.removeGoal', { name: player.Name })" @click="changeGoals(player, -1)">−</button>
                   <span class="n">{{ player.GoalNumber || 0 }}</span>
-                  <button type="button" :aria-label="`Add a goal for ${player.Name}`" @click="changeGoals(player, 1)">+</button>
+                  <button type="button" :aria-label="$t('edit.score.addGoal', { name: player.Name })" @click="changeGoals(player, 1)">+</button>
                 </div>
               </div>
               <div v-for="player in ownGoalsFor(index)" :key="`og-${player.ID}`" class="score-row">
                 <div class="who">
                   <span class="nm">{{ player.Name }}</span>
-                  <span class="og-plain">OG</span>
+                  <span class="og-plain">{{ $t('edit.score.og') }}</span>
                 </div>
                 <div class="stepper">
-                  <button type="button" :aria-label="`Remove an own goal for ${player.Name}`" @click="changeOwnGoals(player, -1)">−</button>
+                  <button type="button" :aria-label="$t('edit.score.removeOwnGoal', { name: player.Name })" @click="changeOwnGoals(player, -1)">−</button>
                   <span class="n">{{ player.OwnGoals }}</span>
-                  <button type="button" :aria-label="`Add an own goal for ${player.Name}`" @click="changeOwnGoals(player, 1)">+</button>
+                  <button type="button" :aria-label="$t('edit.score.addOwnGoal', { name: player.Name })" @click="changeOwnGoals(player, 1)">+</button>
                 </div>
               </div>
               <div class="csc-add-wrap" :class="{ 'is-open': pickingFor === index }">
-                <button class="btn btn-ghost btn-csc-add" type="button" @click="openOwnGoal(index)">+ Own goal</button>
+                <button class="btn btn-ghost btn-csc-add" type="button" @click="openOwnGoal(index)">{{ $t('edit.score.ownGoalAdd') }}</button>
                 <div v-if="pickingFor === index" class="csc-pop" role="dialog" aria-labelledby="og-pop-title">
-                  <h3 id="og-pop-title">Own goal</h3>
+                  <h3 id="og-pop-title">{{ $t('edit.score.ownGoal') }}</h3>
                   <p class="ref">{{ ownGoalHelp(index) }}</p>
                   <button v-for="player in teamPlayers[1 - index]" :key="player.ID" class="csc-pick" type="button" @click="pickOwnGoal(player)">
                     <span class="nm">{{ player.Name }}</span>
                   </button>
-                  <button class="btn btn-ghost" type="button" @click="pickingFor = null">Cancel</button>
+                  <button class="btn btn-ghost" type="button" @click="pickingFor = null">{{ $t('common.cancel') }}</button>
                 </div>
               </div>
             </section>
           </div>
           <div v-if="pickingFor !== null" class="csc-scrim" @click="pickingFor = null"></div>
           <div v-if="pickingFor !== null" class="csc-sheet" role="dialog" aria-labelledby="og-sheet-title">
-            <h3 id="og-sheet-title">Own goal</h3>
+            <h3 id="og-sheet-title">{{ $t('edit.score.ownGoal') }}</h3>
             <p class="ref">{{ ownGoalHelp(pickingFor) }}</p>
             <button v-for="player in teamPlayers[1 - pickingFor]" :key="player.ID" class="csc-pick" type="button" @click="pickOwnGoal(player)">
               <span class="nm">{{ player.Name }}</span>
             </button>
-            <button class="btn btn-ghost" type="button" @click="pickingFor = null">Cancel</button>
+            <button class="btn btn-ghost" type="button" @click="pickingFor = null">{{ $t('common.cancel') }}</button>
           </div>
           <p v-if="message" class="note">{{ message }}</p>
           <div class="sticky-cta">
-            <button class="btn" type="button" :disabled="saving" @click="saveDraft">Save changes</button>
+            <button class="btn" type="button" :disabled="saving" @click="saveDraft">{{ $t('edit.score.saveChanges') }}</button>
           </div>
         </template>
       </template>
@@ -336,23 +336,23 @@ export default {
       if (!this.match) return '';
       const date = heroDateLabel(this.match.Date);
       const time = kickoffLabel(this.match.ScheduledAt);
-      return time ? `${date} · ${time}` : date;
+      return time ? this.$t('edit.heading', { date, time }) : date;
     },
     // The status line is built in the template, not as an HTML string: no
     // v-html anywhere in the app keeps player-supplied text from ever being
     // rendered as markup.
     registrationWord() {
-      if (this.registrationState === REGISTRATION_OPEN) return 'open';
-      return this.registrationState === 'not-open-yet' ? 'not open yet' : 'closed';
+      if (this.registrationState === REGISTRATION_OPEN) return this.$t('edit.state.open');
+      return this.registrationState === 'not-open-yet' ? this.$t('edit.state.notOpenYet') : this.$t('edit.state.closed');
     },
     waitingLabel() {
-      return this.waiting.length === 1 ? '1 waiting' : `${this.waiting.length} waiting`;
+      return this.$t('edit.waiting', this.waiting.length);
     },
     signupNote() {
-      if (this.bothSides) return 'The teams are made. Sign-ups above stay as they are.';
+      if (this.bothSides) return this.$t('edit.signups.teamsMadeNote');
       const names = this.waiting.map((entry) => entry.Name).join(', ');
-      const bench = names ? `, ${this.waiting.length} waiting (${names})` : '';
-      return `Not composed yet. ${this.confirmed.length} confirmed players are in the reserve${bench}. The waiting list is not split automatically.`;
+      const bench = names ? this.$t('edit.signups.bench', { n: this.waiting.length, names }) : '';
+      return this.$t('edit.signups.notComposed', { confirmed: this.confirmed.length, bench });
     },
     // Where the match stands, from what the server has saved (not this
     // page's draft): sign-ups closed, then teams saved, then the score.
@@ -378,16 +378,16 @@ export default {
     // stays in place, greyed and inert.
     stepItems() {
       return [
-        { key: 'signups', n: 1, label: 'Sign-ups' },
-        { key: 'teams', n: 2, label: 'Teams', inactive: !this.signupsClosed },
-        { key: 'score', n: 3, label: 'Score and goals', inactive: !this.signupsClosed || !this.teamsSaved },
+        { key: 'signups', n: 1, label: this.$t('edit.steps.signups') },
+        { key: 'teams', n: 2, label: this.$t('edit.steps.teams'), inactive: !this.signupsClosed },
+        { key: 'score', n: 3, label: this.$t('edit.steps.score'), inactive: !this.signupsClosed || !this.teamsSaved },
       ].map((item) => ({ ...item, todo: this.progress === item.key && !item.inactive }));
     },
     sizeCount() {
       return sizeCounter(this.teamPlayers[0].length, this.teamPlayers[1].length);
     },
     splitHint() {
-      return 'Confirmed players are split at random: one goalkeeper per team when there are two, then defenders, midfielders and forwards evenly, then players with no position. Team sizes differ by one at most. Players already placed stay where they are. The waiting list is not included.';
+      return this.$t('edit.teams.splitHint');
     },
     picked() {
       if (!this.pickedId) return null;
@@ -403,7 +403,7 @@ export default {
       return [
         { key: 'team-0', index: 0, label: this.teamName(0) },
         { key: 'team-1', index: 1, label: this.teamName(1) },
-        { key: 'reserve', index: null, label: 'Reserve' },
+        { key: 'reserve', index: null, label: this.$t('edit.teams.reserve') },
       ].filter((dest) => dest.index !== here);
     },
     draftTeams() {
@@ -418,7 +418,7 @@ export default {
       return shareSubtitle(this.draftTeams);
     },
     shareLabel() {
-      return lineupsReady(this.draftTeams) ? 'Share teams' : 'Share match';
+      return lineupsReady(this.draftTeams) ? this.$t('edit.share.teams') : this.$t('edit.share.match');
     },
     shareText() {
       if (!this.match) return '';
@@ -440,7 +440,7 @@ export default {
       });
     },
     scoreStatus() {
-      return this.hadScore ? 'Score saved · you can still change it.' : 'Score not saved yet.';
+      return this.hadScore ? this.$t('edit.score.saved') : this.$t('edit.score.notSaved');
     },
     addable() {
       const taken = new Set([
@@ -497,14 +497,14 @@ export default {
     },
     teamName(index) {
       const team = this.match && this.match.Teams && this.match.Teams[index];
-      return (team && team.Name) || 'Team';
+      return (team && team.Name) || this.$t('edit.team');
     },
     teamId(index) {
       const team = this.match && this.match.Teams && this.match.Teams[index];
       return (team && team.ID) || index;
     },
     posLabel(player) {
-      return player.Position ? `#${player.Position}` : 'Guest';
+      return player.Position ? this.$t('home.position', { n: player.Position }) : this.$t('edit.teams.guest');
     },
     teamOf(playerId) {
       const index = this.teamPlayers.findIndex((players) => players.some((player) => player.ID === playerId));
@@ -522,7 +522,7 @@ export default {
       return this.teamPlayers[1 - beneficiary].filter((player) => player.OwnGoals > 0);
     },
     ownGoalHelp(beneficiary) {
-      return `This goal counts for ${this.teamName(beneficiary)}. Choose the ${this.teamName(1 - beneficiary)} player who scored it. It does not count in the scorers table.`;
+      return this.$t('edit.score.ownGoalHelp', { team: this.teamName(beneficiary), other: this.teamName(1 - beneficiary) });
     },
     initDraft() {
       const positionOf = {};
@@ -598,20 +598,20 @@ export default {
       try {
         await closeMatchRegistrations(this.match.ID);
         this.match = { ...this.match, RegistrationsClosedAt: new Date().toISOString() };
-        this.$refs.toast.show('Sign-ups closed.', 'success');
+        this.$refs.toast.show(this.$t('edit.toast.closed'), 'success');
       } catch (error) {
         console.error('Error closing sign-ups:', error);
-        this.$refs.toast.show(actionErrorMessage(error, 'Could not close sign-ups.'), 'error');
+        this.$refs.toast.show(actionErrorMessage(error, this.$t('edit.toast.closeError')), 'error');
       }
     },
     async reopenList() {
       try {
         await reopenMatchRegistrations(this.match.ID);
         this.match = { ...this.match, RegistrationsClosedAt: null };
-        this.$refs.toast.show('Sign-ups reopened.', 'success');
+        this.$refs.toast.show(this.$t('edit.toast.reopened'), 'success');
       } catch (error) {
         console.error('Error reopening sign-ups:', error);
-        this.$refs.toast.show(actionErrorMessage(error, 'Could not reopen sign-ups.'), 'error');
+        this.$refs.toast.show(actionErrorMessage(error, this.$t('edit.toast.reopenError')), 'error');
       }
     },
     async updateCap() {
@@ -621,10 +621,10 @@ export default {
         const entries = await setMatchMaxPlayers(this.match.ID, requested);
         this.registrations = Array.isArray(entries) ? entries : this.registrations;
         this.match = { ...this.match, MaxPlayers: requested };
-        this.$refs.toast.show(`Places set to ${requested}.`, 'success');
+        this.$refs.toast.show(this.$t('edit.toast.placesSet', { n: requested }), 'success');
       } catch (error) {
         console.error('Error updating the places:', error);
-        this.$refs.toast.show(actionErrorMessage(error, 'Could not change the places.'), 'error');
+        this.$refs.toast.show(actionErrorMessage(error, this.$t('edit.toast.placesError')), 'error');
       }
     },
     split() {
@@ -634,7 +634,7 @@ export default {
         this.positionsById,
       );
       if (!addedCount) {
-        this.message = 'Everyone confirmed is already on a team.';
+        this.message = this.$t('edit.toast.allOnTeam');
         return;
       }
       this.teamPlayers = rosters.map((roster) => roster.map((player) => {
@@ -758,16 +758,16 @@ export default {
             : team)),
         };
         this.hadScore = this.hadScore || this.teamPlayers.flat().some((player) => player.GoalNumber || player.OwnGoals);
-        this.$refs.toast.show(this.step === 'score' ? 'Changes saved.' : 'Saved.', 'success');
+        this.$refs.toast.show(this.step === 'score' ? this.$t('edit.toast.changesSaved') : this.$t('edit.toast.saved'), 'success');
       } catch (error) {
         console.error(error);
-        this.$refs.toast.show(actionErrorMessage(error, 'Could not save the match.'), 'error');
+        this.$refs.toast.show(actionErrorMessage(error, this.$t('edit.toast.saveError')), 'error');
       } finally {
         this.saving = false;
       }
     },
     confirmDelete() {
-      if (!window.confirm('Delete this match? This cannot be undone.')) return;
+      if (!window.confirm(this.$t('edit.toast.deleteConfirm'))) return;
       this.remove();
     },
     async remove() {
@@ -776,7 +776,7 @@ export default {
         this.$router.push('/');
       } catch (error) {
         console.error(error);
-        this.$refs.toast.show(actionErrorMessage(error, 'Could not delete the match.'), 'error');
+        this.$refs.toast.show(actionErrorMessage(error, this.$t('edit.toast.deleteError')), 'error');
       }
     },
   },

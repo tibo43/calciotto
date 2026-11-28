@@ -42,6 +42,8 @@ export default defineConfig(({ mode }) => {
       environmentOptions: { jsdom: { url: 'http://localhost/' } },
       globals: true,
       include: ['tests/unit/**/*.spec.js'],
+      // Installs vue-i18n on every mounted component ($t), as main.js does.
+      setupFiles: ['tests/unit/setup.js'],
       maxWorkers: 2,
     },
   };

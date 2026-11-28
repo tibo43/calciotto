@@ -1,22 +1,23 @@
+import { t } from '@/i18n';
+import en from '@/locales/en.json';
 import { parseCalendarDay } from './datetime';
+import { activeTag, monthName, weekdayName } from './intl';
 import { deriveRegistrationState, REGISTRATION_NOT_OPEN_YET, REGISTRATION_OPEN } from './matchRegistration';
 import { isMotmVotingOpen, motmVotingDeadlineMs } from './motmVoting';
 
-// The award's displayed names. The code keeps the motm identifiers
+// The award's short name, the same in every language (glossary.mvp, never
+// translated, never a plural « s »). The code keeps the motm identifiers
 // (MotmAwards, tab=motm, motm_announced…). public/sw.js is served as is
-// from public/, outside the bundle, so it cannot import these: its
-// MOTM_TEXT.name is a copy of the short label, and tests/unit/public/sw.spec.js
-// fails if the two differ. The settings label (notificationLabels.js) is
-// its own string, not one of these.
-export const MVP_OF_THE_MATCH = 'MVP of the Match';
-// Short label, also used in vote lines, toasts and error copy. Never takes
-// an "s": a tie is still "MVP".
-export const MVP = 'MVP';
-export const VOTE_OPEN_LINE = `${MVP} vote open`;
+// from public/, outside the bundle, so it cannot import this: its
+// MOTM_TEXT.name is a copy, and tests/unit/public/sw.spec.js fails if the
+// two differ. Every sentence around it is a message (match.vote.*…).
+export const MVP = en.glossary.mvp;
+
+// « MVP vote open »: a Latest matches row's sub-line while its vote is open.
+export const voteOpenLine = () => t('match.vote.open');
 
 const OLD_AWARD_NAME = /\bm[ae]n[\s_-]+of[\s_-]+the[\s_-]+match\b|\bstars?\s+of\s+the\s+match\b/gi;
 const OLD_AWARD_LEFT = /\bmotm\b|\bm[ae]n[\s_-]+of[\s_-]+the[\s_-]+match\b/i;
-const VOTE_ERROR_FALLBACK = `Error updating your ${MVP} vote.`;
 
 // The toast text after a failed vote. The backend's own reason is kept; an
 // older "man of the match" / "star of the match" wording is rewritten to
@@ -25,16 +26,16 @@ const VOTE_ERROR_FALLBACK = `Error updating your ${MVP} vote.`;
 // sentence: a capital first letter, full stop at the end.
 export function voteErrorMessage(error) {
   const reason = error?.response?.data?.error;
-  if (typeof reason !== 'string' || !reason.trim()) return VOTE_ERROR_FALLBACK;
+  if (typeof reason !== 'string' || !reason.trim()) return t('match.vote.errorFallback');
   const renamed = reason.trim().replace(OLD_AWARD_NAME, MVP);
-  if (OLD_AWARD_LEFT.test(renamed)) return VOTE_ERROR_FALLBACK;
+  if (OLD_AWARD_LEFT.test(renamed)) return t('match.vote.errorFallback');
   // As a sentence: a capital first letter and a closing full stop.
   const sentence = renamed.charAt(0).toUpperCase() + renamed.slice(1);
   return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
 }
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// Weekday and month names come from Intl in the active language ('short':
+// « Sun », « Sep » in English); the order of a label is its date.* message.
 
 const completedAt = (match) => {
   const day = parseCalendarDay(match && match.Date);
@@ -78,7 +79,7 @@ function localParts(value) {
   if (Number.isNaN(at.getTime())) return null;
   // No timeZone option, on purpose: a kick-off is one instant shown in the
   // viewer's own zone, the same rule as formatDateTimeShort in datetime.js.
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(activeTag(), {
     weekday: 'long',
     hour: '2-digit',
     minute: '2-digit',
@@ -89,20 +90,20 @@ function localParts(value) {
 export function heroDateLabel(date) {
   const day = parseCalendarDay(date);
   if (!day) return '';
-  return `${WEEKDAYS[day.getDay()]} ${day.getDate()} ${MONTHS[day.getMonth()]}`;
+  return t('date.hero', { weekday: weekdayName(day), day: day.getDate(), month: monthName(day) });
 }
 
 export function rowDateLabel(date) {
   const day = parseCalendarDay(date);
   if (!day) return '';
-  return `${String(day.getDate()).padStart(2, '0')} ${MONTHS[day.getMonth()]}`;
+  return t('date.row', { day: String(day.getDate()).padStart(2, '0'), month: monthName(day) });
 }
 
 // « 4 Sep »: the day as read out in a Latest matches row's name.
 export function dayMonthLabel(date) {
   const day = parseCalendarDay(date);
   if (!day) return '';
-  return `${day.getDate()} ${MONTHS[day.getMonth()]}`;
+  return t('date.dayMonth', { day: day.getDate(), month: monthName(day) });
 }
 
 // A calendar day with no kick-off returns nothing, so a played match never
@@ -122,14 +123,14 @@ export function weekdayTimeLabel(scheduledAt) {
   if (!time) return '';
   const parts = localParts(scheduledAt);
   const weekday = parts && parts.find((part) => part.type === 'weekday');
-  return weekday ? `${weekday.value} ${time}` : time;
+  return weekday ? t('date.weekdayTime', { weekday: weekday.value, time }) : time;
 }
 
 export function registrationMeta(match, nowMs) {
   const state = deriveRegistrationState(match, nowMs);
-  if (state === REGISTRATION_OPEN) return 'Sign-ups open';
-  if (state === REGISTRATION_NOT_OPEN_YET) return 'Sign-ups not open yet';
-  if (state === 'closed-by-admin' || state === 'closed-at-kickoff') return 'Sign-ups closed';
+  if (state === REGISTRATION_OPEN) return t('home.signups.open');
+  if (state === REGISTRATION_NOT_OPEN_YET) return t('home.signups.notOpenYet');
+  if (state === 'closed-by-admin' || state === 'closed-at-kickoff') return t('home.signups.closed');
   return '';
 }
 
@@ -149,10 +150,10 @@ export function voteDeadlineLabel(match) {
   if (hasKickoff(match.ScheduledAt)) {
     const at = new Date(deadline);
     const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
-    return `${at.getDate()} ${MONTHS[at.getMonth()]} ${time}`;
+    return t('date.deadline', { day: at.getDate(), month: monthName(at), time });
   }
   const last = new Date(deadline - 1);
-  return `${last.getDate()} ${MONTHS[last.getMonth()]} midnight`;
+  return t('date.deadlineMidnight', { day: last.getDate(), month: monthName(last) });
 }
 
 export function motmWinners(votes) {
@@ -166,15 +167,15 @@ export function motmWinners(votes) {
 // still open. A closed vote, or another match's, says nothing there.
 export function homeVoteLine(match, nowMs) {
   if (!match || !isMatchOver(match, nowMs)) return null;
-  return isMotmVotingOpen(match, nowMs) ? `${MVP} vote open · Vote in match details` : null;
+  return isMotmVotingOpen(match, nowMs) ? t('match.vote.openHome') : null;
 }
 
-// A Latest matches row's grey sub-line: VOTE_OPEN_LINE (« MVP vote open »)
+// A Latest matches row's grey sub-line: voteOpenLine() (« MVP vote open »)
 // while that match's vote is still open, in place of its
 // weekday and kick-off time (never both); else that time, or nothing.
 export function rowSubLine(match, nowMs) {
   if (!match) return '';
-  if (isMatchOver(match, nowMs) && isMotmVotingOpen(match, nowMs)) return VOTE_OPEN_LINE;
+  if (isMatchOver(match, nowMs) && isMotmVotingOpen(match, nowMs)) return voteOpenLine();
   return weekdayTimeLabel(match.ScheduledAt);
 }
 
@@ -183,26 +184,23 @@ export function matchVoteCopy(match, votes, nowMs) {
   if (isMotmVotingOpen(match, nowMs)) {
     const until = voteDeadlineLabel(match);
     return until
-      ? `${MVP} vote open until ${until} · tap a player to change`
-      : `${MVP} vote open · tap a player to change`;
+      ? t('match.vote.openUntil', { until })
+      : t('match.vote.openChange');
   }
   const winners = motmWinners(votes);
-  if (!winners.length) return `${MVP} vote closed · no votes, no winner`;
+  if (!winners.length) return t('match.vote.closedNoVotes');
   if (winners.length > 1) {
-    const who = winners.length === 2 ? 'both' : 'all of them';
-    return `${MVP} vote closed · tie, ${who} receive the award`;
+    return winners.length === 2 ? t('match.vote.closedTieBoth') : t('match.vote.closedTieAll');
   }
-  return `${MVP} vote closed`;
+  return t('match.vote.closed');
 }
 
 export function goalLine(player) {
   const goals = Number(player.GoalNumber || player.GoalsScored || 0);
   const own = Number(player.OwnGoals || 0);
   const parts = [];
-  if (goals === 1) parts.push('1 goal');
-  else if (goals > 1) parts.push(`${goals} goals`);
-  if (own === 1) parts.push('1 OG');
-  else if (own > 1) parts.push(`${own} OG`);
+  if (goals > 0) parts.push(t('match.goals', goals));
+  if (own > 0) parts.push(t('match.ownGoals', own));
   return parts.join(' · ');
 }
 

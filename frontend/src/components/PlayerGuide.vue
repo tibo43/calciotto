@@ -6,17 +6,17 @@
       </div>
       <section class="guide-panel">
         <div class="guide-panel-heading">
-          <p class="label">Step {{ index + 1 }} of {{ steps.length }}</p>
-          <button v-if="!required" class="guide-close" type="button" @click="dismiss">Close guide</button>
+          <p class="label">{{ $t('guide.step', { n: index + 1, total: steps.length }) }}</p>
+          <button v-if="!required" class="guide-close" type="button" @click="dismiss">{{ $t('guide.close') }}</button>
         </div>
         <h1 id="player-guide-title" ref="title" class="guide-title" tabindex="-1">{{ step.title }}</h1>
         <p class="guide-description">{{ step.description }}</p>
         <p v-if="error" class="field-error" role="alert">{{ error }}</p>
         <div class="guide-actions">
-          <button v-if="required && error" class="btn btn-ghost" type="button" :disabled="saving" @click="$emit('skip')">Continue anyway</button>
-          <button v-else-if="index > 0" class="btn btn-ghost" type="button" :disabled="saving" @click="changeStep(-1)">Back</button>
+          <button v-if="required && error" class="btn btn-ghost" type="button" :disabled="saving" @click="$emit('skip')">{{ $t('guide.continueAnyway') }}</button>
+          <button v-else-if="index > 0" class="btn btn-ghost" type="button" :disabled="saving" @click="changeStep(-1)">{{ $t('common.back') }}</button>
           <button class="btn" type="button" :disabled="saving" @click="advance">
-            {{ saving ? 'Saving…' : actionLabel }}
+            {{ saving ? $t('common.saving') : actionLabel }}
           </button>
         </div>
       </section>
@@ -25,35 +25,13 @@
 </template>
 
 <script>
-import { MVP_OF_THE_MATCH } from '@/services/v2Home';
-
-// Shown on design v2 only (App.vue), hence the v2 name of the award.
+// The five steps; their title and description are guide.<id>.* messages.
 const steps = [
-  {
-    title: 'Welcome to Agoran',
-    description: 'Find your next match and keep up with your group’s teams, scores, and standings.',
-    image: 'welcome.jpg',
-  },
-  {
-    title: 'Matches',
-    description: 'Tap Sign up when places are open. Come back to see your team and the final score.',
-    image: 'matches.jpg',
-  },
-  {
-    title: 'Rankings',
-    description: `Points tracks match results. Scorers lists goals. ${MVP_OF_THE_MATCH} counts the awards from post-match votes.`,
-    image: 'rankings.jpg',
-  },
-  {
-    title: 'Predictions',
-    description: 'Pick a result while predictions are open. Check the leaderboard for your points after the match.',
-    image: 'predictions.jpg',
-  },
-  {
-    title: 'Profile',
-    description: 'View your record and groups, learn how to install the app, and manage your settings and notifications. Replay this guide anytime.',
-    image: 'profile.jpg',
-  },
+  { id: 'welcome', image: 'welcome.jpg' },
+  { id: 'matches', image: 'matches.jpg' },
+  { id: 'rankings', image: 'rankings.jpg' },
+  { id: 'predictions', image: 'predictions.jpg' },
+  { id: 'profile', image: 'profile.jpg' },
 ];
 
 export default {
@@ -70,7 +48,8 @@ export default {
   },
   computed: {
     step() {
-      return this.steps[this.index];
+      const { id, image } = this.steps[this.index];
+      return { image, title: this.$t(`guide.${id}.title`), description: this.$t(`guide.${id}.description`) };
     },
     imageSrc() {
       const theme = this.dark ? 'dark' : 'light';
@@ -80,8 +59,8 @@ export default {
       return this.index === this.steps.length - 1;
     },
     actionLabel() {
-      if (!this.isLast) return 'Next';
-      return this.required ? 'Get started' : 'Done';
+      if (!this.isLast) return this.$t('guide.next');
+      return this.required ? this.$t('guide.getStarted') : this.$t('guide.done');
     },
   },
   mounted() {

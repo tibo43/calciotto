@@ -27,4 +27,8 @@ export const i18n = createI18n({
   pluralRules,
 });
 
+// For the services (outside components): the global translate function, in
+// the active language at the time of the call.
+export const t = (...args) => i18n.global.t(...args);
+
 export default i18n;

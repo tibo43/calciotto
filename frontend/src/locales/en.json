@@ -1,12 +1,632 @@
 {
+  "glossary": {
+    "mvp": "MVP",
+    "agoranking": "Agoranking"
+  },
   "language": {
     "label": "Language"
   },
-  "award": {
-    "mvp": "MVP",
-    "mvpOfTheMatch": "MVP of the Match"
-  },
   "unit": {
     "points": "{n} pt | {n} pts"
+  },
+  "common": {
+    "back": "Back",
+    "saving": "Saving…",
+    "dismiss": "Dismiss",
+    "done": "Done",
+    "error": "Error",
+    "tryAgain": "Try again",
+    "cancel": "Cancel",
+    "remove": "Remove",
+    "loading": "Loading…",
+    "couldntLoad": "Couldn't load",
+    "save": "Save",
+    "saved": "Saved.",
+    "sending": "Sending…",
+    "admin": "Admin",
+    "member": "Member",
+    "checkConnection": "Check your connection, then try again."
+  },
+  "nav": {
+    "home": "Home",
+    "main": "Main",
+    "matches": "Matches",
+    "rankings": "Rankings",
+    "predictions": "Predictions",
+    "profile": "Profile"
+  },
+  "context": {
+    "label": "Choose the group and the season",
+    "group": "Group",
+    "season": "Season",
+    "noSeason": "No season yet"
+  },
+  "guide": {
+    "saveError": "Could not save your progress. Try again.",
+    "step": "Step {n} of {total}",
+    "close": "Close guide",
+    "continueAnyway": "Continue anyway",
+    "next": "Next",
+    "getStarted": "Get started",
+    "done": "Done",
+    "welcome": {
+      "title": "Welcome to Agoran",
+      "description": "Find your next match and keep up with your group’s teams, scores, and standings."
+    },
+    "matches": {
+      "title": "Matches",
+      "description": "Tap Sign up when places are open. Come back to see your team and the final score."
+    },
+    "rankings": {
+      "title": "Rankings",
+      "description": "Points tracks match results. Scorers lists goals. @:award.mvpOfTheMatch counts the awards from post-match votes."
+    },
+    "predictions": {
+      "title": "Predictions",
+      "description": "Pick a result while predictions are open. Check the leaderboard for your points after the match."
+    },
+    "profile": {
+      "title": "Profile",
+      "description": "View your record and groups, learn how to install the app, and manage your settings and notifications. Replay this guide anytime."
+    }
+  },
+  "award": {
+    "mvpOfTheMatch": "@:glossary.mvp of the Match"
+  },
+  "share": {
+    "dialogLabel": "Copy share message",
+    "copyThis": "Copy this message",
+    "copied": "Message copied",
+    "match": "Match: {when}",
+    "signupsOpen": "Sign-ups are open — Join Agoran:",
+    "viewMatch": "View the match in Agoran:",
+    "groupCode": "Group code: {code}",
+    "joinGroup": "Join our Agoran group:",
+    "noPlayers": "No players yet",
+    "player": "- {name}"
+  },
+  "home": {
+    "nextMatch": "Next match",
+    "signups": {
+      "open": "Sign-ups open",
+      "notOpenYet": "Sign-ups not open yet",
+      "closed": "Sign-ups closed"
+    },
+    "loadError": "Couldn't load the matches",
+    "empty": {
+      "label": "No matches yet",
+      "title": "Start the season",
+      "admin": "Create the first match to open sign-ups.",
+      "member": "An admin will create the first match."
+    },
+    "createMatch": "Create match",
+    "viewMatch": "View match",
+    "youPlayFor": "You play for {team}",
+    "teamsSet": "Teams are set",
+    "teamsVs": "{home} vs {away}",
+    "placesLeft": "places left",
+    "signedUpCount": "{confirmed} / {cap} signed up",
+    "waitingCount": "{n} in waiting list",
+    "youAreSignedUp": "You're signed up · {status}",
+    "statusWaiting": "waiting list",
+    "statusConfirmed": "confirmed",
+    "fullYoudBe": "Full · you'd be {position} on the waiting list",
+    "position": "#{n}",
+    "joinWaitingList": "Join the waiting list",
+    "signUp": "Sign up",
+    "withdraw": "Withdraw",
+    "withdrawTitle": "Withdraw from this match?",
+    "withdrawText": "Your spot goes to the first player on the waiting list.",
+    "lastMatch": "Last match",
+    "later": "Later",
+    "upcoming": "Upcoming",
+    "latest": "Latest matches",
+    "vs": "vs",
+    "newMatch": "New match",
+    "rowLabel": "{home} {score} {away}, {day}",
+    "toast": {
+      "waiting": "Signed up — you are #{position}, on the waiting list.",
+      "inPosition": "You're in for this match. You are #{position}.",
+      "in": "You're in for this match.",
+      "signUpError": "Error signing up for this match.",
+      "withdrawn": "You have withdrawn from this match.",
+      "withdrawError": "Error withdrawing from this match."
+    }
+  },
+  "match": {
+    "manage": "Manage match",
+    "vote": {
+      "open": "@:glossary.mvp vote open",
+      "openHome": "@:glossary.mvp vote open · Vote in match details",
+      "openUntil": "@:glossary.mvp vote open until {until} · tap a player to change",
+      "openChange": "@:glossary.mvp vote open · tap a player to change",
+      "closedNoVotes": "@:glossary.mvp vote closed · no votes, no winner",
+      "closedTieBoth": "@:glossary.mvp vote closed · tie, both receive the award",
+      "closedTieAll": "@:glossary.mvp vote closed · tie, all of them receive the award",
+      "closed": "@:glossary.mvp vote closed",
+      "errorFallback": "Error updating your @:glossary.mvp vote.",
+      "removed": "Your @:glossary.mvp vote has been removed.",
+      "saved": "Your @:glossary.mvp vote has been saved."
+    },
+    "goals": "{n} goal | {n} goals",
+    "ownGoals": "{n} OG | {n} OG",
+    "loadError": "Couldn't load the match",
+    "you": "You",
+    "confirmed": "Confirmed",
+    "confirmedCount": "{confirmed} / {cap}",
+    "yourPrediction": "Your prediction",
+    "yourPredictionPick": "Your prediction · {pick}",
+    "waitingList": "Waiting list",
+    "draw": "Draw",
+    "pick": "{label} · {odds}",
+    "votesAria": "{n} vote | {n} votes",
+    "votesAriaMine": "{n} vote, your vote (tap to remove it) | {n} votes, your vote (tap to remove it)",
+    "predictionError": "Failed to save your prediction. Please try again.",
+    "notInGroups": "This match is not in any of your groups."
+  },
+  "group": {
+    "details": {
+      "title": "Group details",
+      "description": "Description",
+      "linkAddress": "Link address",
+      "linkLabel": "Link label",
+      "linkLabelPlaceholder": "Open group link",
+      "save": "Save details",
+      "saved": "Group details saved.",
+      "saveError": "Could not save group details."
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Log in",
+      "lead": "Find your groups and your matches.",
+      "resetConfirmed": "Your password has been updated. Log in with it below.",
+      "accountDeleted": "Your account has been deleted.",
+      "waitingDevice": "Waiting for your device…",
+      "withPasskey": "Log in with a passkey",
+      "or": "or",
+      "submitting": "Logging in…",
+      "submit": "Log in",
+      "forgot": "Forgot password?",
+      "signup": "No account yet? Sign up with an invite code",
+      "failed": "Login failed. Please check your credentials.",
+      "passkeyFailed": "Could not log in with a passkey. Try again or use your password."
+    },
+    "email": "Email",
+    "password": "Password",
+    "signup": {
+      "title": "Sign up",
+      "lead": "You need an invite code from your group admin.",
+      "inviteCode": "Invite code",
+      "name": "Name",
+      "submitting": "Signing up…",
+      "submit": "Sign up",
+      "login": "Already have an account? Log in",
+      "hintFromLink": "Filled in from your invite link.",
+      "hintAskAdmin": "Ask your group admin for it.",
+      "inviteRequired": "Invite code is required.",
+      "failed": "Signup failed. Please try again."
+    },
+    "forgot": {
+      "title": "Forgot password",
+      "lead": "Enter your email. We'll send you a link to set a new password.",
+      "backToLogin": "Back to log in",
+      "requested": "If an account exists for this email, a reset link has been sent.",
+      "sending": "Sending…",
+      "sendAgain": "Send again",
+      "send": "Send the link",
+      "failed": "Could not send the reset link. Please try again."
+    },
+    "reset": {
+      "title": "New password",
+      "lead": "Choose a new password for your account.",
+      "newPassword": "New password",
+      "save": "Save password",
+      "requestNew": "Request a new link",
+      "expired": "This link has expired. Request a new one.",
+      "failed": "Could not reset the password. Please try again."
+    }
+  },
+  "newMatch": {
+    "title": "New match",
+    "kickoff": "Kick-off",
+    "day": "Day",
+    "time": "Time",
+    "signups": "Sign-ups",
+    "opensOn": "Open on",
+    "opensHint": "Right away by default. Must be before kick-off.",
+    "places": "Places",
+    "placesHint": "8 a side by default. Players past this number go on the waiting list.",
+    "signMeUp": "Sign me up",
+    "signMeUpNote": "You're on the list as soon as the match exists",
+    "creating": "Creating…",
+    "create": "Create match",
+    "createError": "Could not create the match. Please try again.",
+    "errors": {
+      "day": "Pick the match day.",
+      "time": "Set a kick-off time.",
+      "opensAt": "Set when sign-ups open.",
+      "places": "Places must be a whole number, at least 1.",
+      "checkKickoff": "Check the day and kick-off time.",
+      "kickoffPast": "Kick-off must be in the future.",
+      "checkOpensAt": "Check when sign-ups open.",
+      "opensAfterKickoff": "Sign-ups must open before kick-off."
+    }
+  },
+  "date": {
+    "hero": "{weekday} {day} {month}",
+    "row": "{day} {month}",
+    "dayMonth": "{day} {month}",
+    "deadline": "{day} {month} {time}",
+    "deadlineMidnight": "{day} {month} midnight",
+    "weekdayTime": "{weekday} {time}",
+    "dayMonthYear": "{day} {month} {year}"
+  },
+  "rankings": {
+    "label": "Rankings",
+    "tabs": {
+      "points": "Points",
+      "scorers": "Scorers"
+    },
+    "loadError": "Couldn't load the rankings",
+    "agorankingLoadError": "Couldn't load the @:glossary.agoranking",
+    "emptyGroup": {
+      "label": "No matches played yet",
+      "title": "Rankings",
+      "text": "Standings appear once the first score is recorded."
+    },
+    "agr": {
+      "lead": "Who wins the most points {perMatch}, not in total. A few lucky games aren't enough: the more you play, the more your own results count.",
+      "perMatch": "per match",
+      "how": "How it's calculated",
+      "howText": "A win is worth 3 points, a draw 1, a loss 0. Every player starts with a few {average} worth the group's average points per match. Your real matches are added on top, so a newcomer sits near the average and moves away from it as they play.",
+      "average": "“average” matches",
+      "formula": "rating = ({points} + N × group avg) ÷ ({matches} + N)",
+      "formulaPoints": "points",
+      "formulaMatches": "matches",
+      "note": "N is a third of the matches the group has played this season, rounded up. It's also the minimum number of matches you need to be ranked, so both grow as the season goes on.",
+      "notRanked": "Not ranked yet · {n}",
+      "playedShort": "{n} M",
+      "record": "{won}W {drawn}D {lost}L · {points}",
+      "rankedLine": "{played} M · {record}"
+    },
+    "you": "YOU",
+    "leftGroup": "(left the group)",
+    "cols": {
+      "player": "Player",
+      "matchesShort": "M",
+      "wdl": "W-D-L",
+      "pts": "Pts",
+      "rating": "Rating",
+      "played": "P",
+      "won": "W",
+      "drawn": "D",
+      "lost": "L",
+      "goalsFor": "GF",
+      "ownGoals": "OG",
+      "goals": "Goals",
+      "awards": "Awards"
+    },
+    "pointsLine": "P {played} · W {won} · D {drawn} · L {lost} · GF {goalsFor}",
+    "scorersLine": "{goals} · {played}",
+    "matches": "{n} match | {n} matches",
+    "goals": "{n} goal | {n} goals",
+    "awards": "{n} award | {n} awards",
+    "empty": {
+      "scorers": "No goals yet",
+      "motm": "No @:glossary.mvp yet",
+      "agoranking": "No ranking yet",
+      "points": "No standings yet",
+      "text": "Players appear here once a match has been played this season."
+    }
+  },
+  "predictions": {
+    "label": "Predictions",
+    "tabs": {
+      "matches": "Matches",
+      "leaderboard": "Leaderboard"
+    },
+    "loadError": "Couldn't load the predictions",
+    "loadErrorText": "Your saved picks are kept. Check your connection, then try again.",
+    "emptyGroup": {
+      "label": "No matches yet",
+      "title": "Predictions",
+      "text": "Predictions open when the first match is created."
+    },
+    "empty": {
+      "title": "No predictions yet",
+      "matches": "Odds open once both teams are set. Come back after the next match is announced.",
+      "leaderboard": "Predict a result once the teams are set to see the leaderboard."
+    },
+    "seeTeams": "See the teams",
+    "cols": {
+      "last5": "Last 5"
+    },
+    "formWin": "W",
+    "formLoss": "L",
+    "team": "Team",
+    "whenTime": "{date} · {time}",
+    "whenAwaiting": "{date} · awaiting result",
+    "whenPlayed": "{date} · played",
+    "noteOpen": "Predictions open · tap to choose.",
+    "noteWaiting": "Teams are set · waiting for your pick.",
+    "yourPick": "Your pick: {label} · {odds}",
+    "awaitingResult": "Awaiting result",
+    "won": "Won · {points}",
+    "lost": "Lost · {points}",
+    "saveError": "Failed to save your prediction. Please try again."
+  },
+  "edit": {
+    "backToMatch": "Back to the match",
+    "editing": "Editing · admin",
+    "noSignupList": "No sign-up list",
+    "regStatus": "Sign-ups {state} · {detail}",
+    "teamsMade": "teams made",
+    "regCounts": "{counts} · {waiting}",
+    "confirmedPlaces": "{confirmed} confirmed / {cap} places",
+    "state": {
+      "open": "open",
+      "notOpenYet": "not open yet",
+      "closed": "closed"
+    },
+    "waiting": "{n} waiting | {n} waiting",
+    "steps": {
+      "label": "Steps",
+      "signups": "Sign-ups",
+      "teams": "Teams",
+      "score": "Score and goals"
+    },
+    "signups": {
+      "title": "1. Sign-ups",
+      "close": "Close sign-ups",
+      "reopen": "Reopen sign-ups",
+      "reopenShort": "Reopen",
+      "places": "Places",
+      "placesAria": "Number of places",
+      "update": "Update",
+      "confirmed": "Confirmed",
+      "noConfirmed": "No confirmed players.",
+      "waitingList": "Waiting list",
+      "noWaiting": "No one is waiting.",
+      "teamsMadeNote": "The teams are made. Sign-ups above stay as they are.",
+      "notComposed": "Not composed yet. {confirmed} confirmed players are in the reserve{bench}. The waiting list is not split automatically.",
+      "bench": ", {n} waiting ({names})"
+    },
+    "delete": "Delete",
+    "save": "Save",
+    "teams": {
+      "split": "Split automatically",
+      "clear": "Clear",
+      "splitHint": "Confirmed players are split at random: one goalkeeper per team when there are two, then defenders, midfielders and forwards evenly, then players with no position. Team sizes differ by one at most. Players already placed stay where they are. The waiting list is not included.",
+      "tapHint": "Tap a player to move them onto a team, or back to the reserve.",
+      "reserve": "Reserve",
+      "allPlaced": "Every confirmed player is placed.",
+      "moveTo": "Move {name} to",
+      "noPlayers": "No players yet.",
+      "waitingNote": "These players are not included in the automatic split. The first player on the waiting list moves up when a confirmed place opens.",
+      "waitingMeta": "Waiting · #{n}",
+      "addGuest": "Add a player who didn't sign up",
+      "everyoneHere": "Everyone in the group is already here.",
+      "needBoth": "Put at least one player on each team to confirm.",
+      "confirm": "Confirm the teams",
+      "guest": "Guest",
+      "sizeCounter": "{a} v {b}"
+    },
+    "score": {
+      "opensLater": "The score opens once each team has at least one player.",
+      "computed": "Computed score",
+      "hint": "The score is the sum of each team's goals, plus the other team's own goals. An own goal does not count in the scorers table.",
+      "goalsFor": "Goals for {team}",
+      "og": "OG",
+      "removeGoal": "Remove a goal for {name}",
+      "addGoal": "Add a goal for {name}",
+      "removeOwnGoal": "Remove an own goal for {name}",
+      "addOwnGoal": "Add an own goal for {name}",
+      "ownGoalAdd": "+ Own goal",
+      "ownGoal": "Own goal",
+      "ownGoalHelp": "This goal counts for {team}. Choose the {other} player who scored it. It does not count in the scorers table.",
+      "saveChanges": "Save changes",
+      "saved": "Score saved · you can still change it.",
+      "notSaved": "Score not saved yet."
+    },
+    "share": {
+      "teams": "Share teams",
+      "match": "Share match",
+      "subtitleMatch": "The match announcement will be sent — the date and the sign-up link.",
+      "subtitleTeams": "The line-ups will be sent — {counts}.",
+      "teamCount": "{team} {n}"
+    },
+    "heading": "{date} · {time}",
+    "team": "Team",
+    "toast": {
+      "closed": "Sign-ups closed.",
+      "closeError": "Could not close sign-ups.",
+      "reopened": "Sign-ups reopened.",
+      "reopenError": "Could not reopen sign-ups.",
+      "placesSet": "Places set to {n}.",
+      "placesError": "Could not change the places.",
+      "allOnTeam": "Everyone confirmed is already on a team.",
+      "changesSaved": "Changes saved.",
+      "saved": "Saved.",
+      "saveError": "Could not save the match.",
+      "deleteConfirm": "Delete this match? This cannot be undone.",
+      "deleteError": "Could not delete the match."
+    },
+    "recap": {
+      "goals": "{name} ×{n}",
+      "ownGoals": "{name} (OG ×{n})"
+    }
+  },
+  "invite": {
+    "title": "Invitation",
+    "cardTitle": "Invite players",
+    "active": "Code active",
+    "none": "No active code",
+    "validUntil": "Works until you renew it",
+    "share": "Share",
+    "copy": "Copy",
+    "copied": "Copied",
+    "renew": "Renew",
+    "renewTitle": "Renew the code?",
+    "renewNote": "The old code and invite link stop working.",
+    "empty": "Make a code to let new players join.",
+    "make": "Make a code",
+    "copyError": "Could not copy the code.",
+    "renewed": "Code renewed.",
+    "renewError": "Could not renew the code.",
+    "makeError": "Could not make a code."
+  },
+  "passkeys": {
+    "title": "Passkeys",
+    "loadingAria": "Loading passkeys",
+    "empty": "Sign in with Face ID, your fingerprint or your screen lock.",
+    "removeAria": "Remove {name}",
+    "removeTitle": "Remove this passkey?",
+    "removeNote": "You won't be able to sign in with it anymore.",
+    "nameLabel": "Name (optional)",
+    "namePlaceholder": "My phone",
+    "password": "Current password",
+    "waiting": "Waiting for your device…",
+    "create": "Create passkey",
+    "add": "Add a passkey",
+    "unsupported": "Open Agoran in a browser that supports passkeys to add one.",
+    "noneYet": "None yet",
+    "devices": "{n} device | {n} devices",
+    "lastUsed": "Last used {date}",
+    "added": "Added {date}",
+    "loadError": "Could not load your passkeys.",
+    "addedToast": "Passkey added.",
+    "addError": "Could not add the passkey.",
+    "removedToast": "Passkey removed.",
+    "removeError": "Could not remove the passkey."
+  },
+  "positions": {
+    "GK": "GK",
+    "DEF": "DEF",
+    "MID": "MID",
+    "FWD": "FWD"
+  },
+  "notifications": {
+    "motmAnnounced": "@:glossary.mvp announced"
+  },
+  "profile": {
+    "loadError": "Couldn't load your profile",
+    "account": "Account",
+    "manageAccount": "Manage account",
+    "aboutGroup": "About this group",
+    "openGroupLink": "Open group link",
+    "record": "Record",
+    "allSeasons": "All seasons",
+    "groups": "Groups",
+    "noGroup": "No group yet. Ask an admin to invite you.",
+    "favouriteGroup": "Favourite group",
+    "setFavourite": "Set as favourite",
+    "favourite": "Favourite",
+    "groupMeta": "{matches} matches · {points} pts",
+    "groupSettings": "Group settings",
+    "thisGroup": "This group",
+    "group": "Group",
+    "groupsCombined": "{n} groups combined",
+    "stats": {
+      "wins": "Wins",
+      "draws": "Draws",
+      "losses": "Losses",
+      "points": "Points",
+      "goals": "Goals",
+      "ownGoals": "OG",
+      "predictionPoints": "Pred. pts"
+    },
+    "settings": {
+      "title": "Settings",
+      "notifications": "Notifications",
+      "pushOn": "On on this device",
+      "pushOff": "Off on this device",
+      "install": "Install Agoran",
+      "installPrompt": "Open it from your home screen, like any other app",
+      "installIos": "Tap Share, then Add to Home Screen",
+      "installButton": "Install",
+      "replayGuide": "Replay app guide"
+    },
+    "logout": "Log out",
+    "notifications": {
+      "device": "Notifications on this device",
+      "types": "Types",
+      "needsInstall": "Install the app first, then turn notifications on.",
+      "denied": "Notifications are blocked in the browser settings.",
+      "unsupported": "This browser cannot receive notifications.",
+      "choose": "Choose which ones you want.",
+      "error": "Could not change the notifications.",
+      "unavailable": "Notifications are not available yet. Please try again later.",
+      "groups": {
+        "match": "Match",
+        "predictions": "Predictions",
+        "reminder": "Reminder",
+        "admin": "Admin"
+      },
+      "registrationOpen": "Sign-ups open",
+      "teamAssigned": "Your team is set",
+      "resultRecorded": "Final score",
+      "predictionsOpen": "Predictions open",
+      "predictionsSettled": "Predictions settled",
+      "kickoffReminder": "Kick-off in 30 minutes",
+      "memberJoined": "New member joins"
+    },
+    "appearance": {
+      "title": "Appearance",
+      "dark": "Dark mode",
+      "darkNote": "Applies across the site, on this device"
+    },
+    "identity": {
+      "title": "Identity",
+      "name": "Name",
+      "save": "Save name",
+      "error": "Could not save the name."
+    },
+    "positions": {
+      "title": "Positions",
+      "label": "Where you like to play",
+      "help": "Pick one or more. Your groups see them, and admins use them to balance teams.",
+      "loadError": "Couldn't load your positions. Reload the page to try again.",
+      "saved": "Positions saved.",
+      "error": "Could not save your positions."
+    },
+    "email": {
+      "title": "Email",
+      "unavailable": "Changing your email isn't available yet."
+    },
+    "password": {
+      "title": "Password",
+      "note": "To choose a new one, we email you a reset link, the same path as forgot password.",
+      "passkeysNote": "A password reset also removes your saved passkeys.",
+      "send": "Email the link",
+      "error": "Could not send the reset link. Please try again."
+    },
+    "delete": {
+      "zone": "Danger zone",
+      "title": "Delete my account",
+      "text": "This can't be undone. Your name, email and password are erased, and you're removed from every group. Match history (goals, @:{'award.mvpOfTheMatch'} titles) stays for the other players, and is no longer tied to an account.",
+      "confirmTitle": "Confirm deletion",
+      "confirmText": "Enter your current password to confirm.",
+      "password": "Password",
+      "error": "Could not delete the account."
+    },
+    "teams": {
+      "title": "Teams",
+      "note": "Save each team on its own.",
+      "nameAria": "Name of {name}",
+      "error": "Could not save the team."
+    },
+    "members": {
+      "title": "Members",
+      "note": "You can't change your own role. The last admin can't be demoted.",
+      "removeAdmin": "Remove admin",
+      "makeAdmin": "Make admin",
+      "removeTitle": "Remove from the group?",
+      "removeText": "{name} leaves the group. Their match history stays. They need a new invite to come back.",
+      "demoteTitle": "Remove the admin role?",
+      "demoteText": "{name} stays a member of the group. You can make them an admin again later.",
+      "removeError": "Could not remove the member.",
+      "roleError": "Could not change the role."
+    }
   }
 }

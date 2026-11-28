@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import { resolveActiveGroup } from '@/services/activeGroup';
 import { findGroupForMatch } from '@/router/index';
 
@@ -15,7 +16,7 @@ export async function findMatchInMyGroups(matchId) {
   ];
   const found = await findGroupForMatch(matchId, ordered);
   if (!found) {
-    throw new Error('This match is not in any of your groups.');
+    throw new Error(t('match.notInGroups'));
   }
   return { ...found, groups };
 }

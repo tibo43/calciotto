@@ -1,4 +1,4 @@
-import { asSentence, authErrorMessage, EXPIRED_RESET_LINK, resetErrorMessage } from '@/services/v2Auth';
+import { asSentence, authErrorMessage, expiredResetLink, resetErrorMessage } from '@/services/v2Auth';
 
 vi.mock('@/router/index', () => ({ findGroupForMatch: vi.fn() }));
 
@@ -22,8 +22,8 @@ describe('v2Auth', () => {
   });
 
   it('turns the invalid reset token answer into the expired link message', () => {
-    expect(resetErrorMessage(rejected('invalid or expired reset token'))).toBe(EXPIRED_RESET_LINK);
-    expect(EXPIRED_RESET_LINK).toBe('This link has expired. Request a new one.');
+    expect(resetErrorMessage(rejected('invalid or expired reset token'))).toBe(expiredResetLink());
+    expect(expiredResetLink()).toBe('This link has expired. Request a new one.');
     expect(resetErrorMessage(rejected('password is required'))).toBe('Password is required.');
     expect(resetErrorMessage(undefined)).toBe('Could not reset the password. Please try again.');
   });

@@ -6,13 +6,13 @@
       <div class="skel md"></div>
     </section>
     <section v-else-if="failed" class="state">
-      <h1>Couldn't load the match</h1>
-      <button class="btn" type="button" @click="load">Try again</button>
+      <h1>{{ $t('match.loadError') }}</h1>
+      <button class="btn" type="button" @click="load">{{ $t('common.tryAgain') }}</button>
     </section>
 
     <template v-else-if="upcoming">
       <section class="hero">
-        <p class="label">Next match</p>
+        <p class="label">{{ $t('home.nextMatch') }}</p>
         <div class="hero-date-row">
           <h1 class="display hero-date">{{ heroDateLabel(match.Date) }}</h1>
           <ManageMatchLink v-if="isAdmin" :id="match.ID" />
@@ -23,35 +23,35 @@
         <div v-if="teamsSet" class="hero-team">
           <template v-if="myTeam">
             <!-- Same line as on the home: mono label, the team in the accent. -->
-            <p class="label hero-team-line">You play for <span class="hero-team-mine">{{ myTeam }}</span></p>
+            <p class="label hero-team-line"><i18n-t keypath="home.youPlayFor" scope="global"><template #team><span class="hero-team-mine">{{ myTeam }}</span></template></i18n-t></p>
           </template>
-          <p v-else class="label">Teams are set</p>
+          <p v-else class="label">{{ $t('home.teamsSet') }}</p>
         </div>
         <template v-else>
           <div class="hero-spots">
             <div class="num big">{{ places }}</div>
             <!-- Same three lines as on the home page. -->
             <div class="cap">
-              <span class="cap-line">places left</span>
-              <span class="cap-line">{{ confirmed.length }} / {{ cap }} signed up</span>
-              <span v-if="full" class="cap-line">{{ waiting.length }} in waiting list</span>
+              <span class="cap-line">{{ $t('home.placesLeft') }}</span>
+              <span class="cap-line">{{ $t('home.signedUpCount', { confirmed: confirmed.length, cap }) }}</span>
+              <span v-if="full" class="cap-line">{{ $t('home.waitingCount', { n: waiting.length }) }}</span>
             </div>
           </div>
           <div class="bar" aria-hidden="true"><i :style="{ '--pct': barPct }"></i></div>
         </template>
-        <p v-if="mine && !teamsSet" class="reg-you">You're signed up · {{ mine.IsWaiting ? 'waiting list' : 'confirmed' }}</p>
-        <p v-else-if="full && open" class="reg-you">Full · you'd be <strong>#{{ waitingPosition }}</strong> on the waiting list</p>
+        <p v-if="mine && !teamsSet" class="reg-you">{{ $t('home.youAreSignedUp', { status: mine.IsWaiting ? $t('home.statusWaiting') : $t('home.statusConfirmed') }) }}</p>
+        <p v-else-if="full && open" class="reg-you"><i18n-t keypath="home.fullYoudBe" scope="global"><template #position><strong>{{ $t('home.position', { n: waitingPosition }) }}</strong></template></i18n-t></p>
         <div class="actions">
-          <button v-if="!mine && open" class="btn" type="button" :disabled="busy" @click="signUp">{{ full ? 'Join the waiting list' : 'Sign up' }}</button>
+          <button v-if="!mine && open" class="btn" type="button" :disabled="busy" @click="signUp">{{ full ? $t('home.joinWaitingList') : $t('home.signUp') }}</button>
           <span v-else-if="mine && open" class="withdraw-wrap withdraw-slot">
-            <button class="btn btn-ghost" type="button" :disabled="busy" @click="confirming = true">Withdraw</button>
+            <button class="btn btn-ghost" type="button" :disabled="busy" @click="confirming = true">{{ $t('home.withdraw') }}</button>
             <!-- Wide screens: anchored under the button, as on the home page. -->
             <div class="confirm-pop" role="dialog" aria-labelledby="match-withdraw-pop-title">
-              <h3 id="match-withdraw-pop-title">Withdraw from this match?</h3>
-              <p class="ref">Your spot goes to the first player on the waiting list.</p>
+              <h3 id="match-withdraw-pop-title">{{ $t('home.withdrawTitle') }}</h3>
+              <p class="ref">{{ $t('home.withdrawText') }}</p>
               <div class="confirm-actions">
-                <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">Withdraw</button>
-                <button class="btn btn-ghost" type="button" @click="confirming = false">Cancel</button>
+                <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">{{ $t('home.withdraw') }}</button>
+                <button class="btn btn-ghost" type="button" @click="confirming = false">{{ $t('common.cancel') }}</button>
               </div>
             </div>
           </span>
@@ -67,24 +67,24 @@
                    after the name, which gives way first (…). -->
               <span v-if="tagOf(player)" class="nm-line"><span class="nm">{{ player.Name }}</span><span class="pos-tag">{{ tagOf(player) }}</span></span>
               <span v-else class="nm">{{ player.Name }}</span>
-              <span v-if="player.ID === playerId" class="pos">You</span>
+              <span v-if="player.ID === playerId" class="pos">{{ $t('match.you') }}</span>
             </li>
           </ul>
         </section>
       </div>
       <section v-else class="sec">
-        <div class="sec-head"><h2>Confirmed</h2><span class="label">{{ confirmed.length }} / {{ cap }}</span></div>
+        <div class="sec-head"><h2>{{ $t('match.confirmed') }}</h2><span class="label">{{ $t('match.confirmedCount', { confirmed: confirmed.length, cap }) }}</span></div>
         <ul class="signup-ro">
           <li v-for="entry in confirmed" :key="entry.PlayerID">
             <span class="nm">{{ entry.Name }}</span>
-            <span class="pos">#{{ entry.Position }}</span>
+            <span class="pos">{{ $t('home.position', { n: entry.Position }) }}</span>
           </li>
         </ul>
       </section>
       <!-- The prediction, next to the teams it's about: pinned above the tab
            bar on a phone, in the flow on a desktop. -->
       <div v-if="betOpen" class="sticky-cta bet-bar">
-        <p class="cta-msg">{{ myPick ? `Your prediction · ${myPick}` : 'Your prediction' }}</p>
+        <p class="cta-msg">{{ myPick ? $t('match.yourPredictionPick', { pick: myPick }) : $t('match.yourPrediction') }}</p>
         <div class="picks">
           <button v-for="option in betOptions" :key="option.key" class="pick" type="button"
             :class="{ 'is-on': option.on }" :disabled="betBusy" @click="predict(option.teamId)">
@@ -94,7 +94,7 @@
         </div>
       </div>
       <section v-if="waiting.length" class="sec">
-        <div class="sec-head"><h2>Waiting list</h2><span class="label">{{ waiting.length }}</span></div>
+        <div class="sec-head"><h2>{{ $t('match.waitingList') }}</h2><span class="label">{{ waiting.length }}</span></div>
         <ul class="signup-ro">
           <li v-for="entry in waiting" :key="entry.PlayerID">
             <span class="nm">{{ entry.Name }}</span>
@@ -146,11 +146,11 @@
          Only while the match is ahead: once over, nothing is about sign-ups. -->
     <div v-if="upcoming" class="confirm-scrim" @click="confirming = false"></div>
     <div v-if="upcoming" class="confirm-sheet" role="dialog" aria-labelledby="match-withdraw-title">
-      <h3 id="match-withdraw-title">Withdraw from this match?</h3>
-      <p class="ref">Your spot goes to the first player on the waiting list.</p>
+      <h3 id="match-withdraw-title">{{ $t('home.withdrawTitle') }}</h3>
+      <p class="ref">{{ $t('home.withdrawText') }}</p>
       <div class="confirm-actions">
-        <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">Withdraw</button>
-        <button class="btn btn-ghost" type="button" @click="confirming = false">Cancel</button>
+        <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">{{ $t('home.withdraw') }}</button>
+        <button class="btn btn-ghost" type="button" @click="confirming = false">{{ $t('common.cancel') }}</button>
       </div>
     </div>
 
@@ -167,7 +167,8 @@ import { findMatchInMyGroups, actionErrorMessage } from '@/services/v2Match';
 import AppToast from '@/components/AppToast.vue';
 import ManageMatchLink from '@/components/v2/ManageMatchLink.vue';
 import { deriveRegistrationState, registrationsAreOpen, isPlayerOnRoster, teamsAreComposed } from '@/services/matchRegistration';
-import { heroDateLabel, kickoffLabel, placesLeft, isMatchOver, matchVoteCopy, motmWinners, goalLine, myTeam, nextWaitingPosition, MVP, voteErrorMessage } from '@/services/v2Home';
+import { heroDateLabel, kickoffLabel, placesLeft, isMatchOver, matchVoteCopy, motmWinners, goalLine, myTeam, nextWaitingPosition, voteErrorMessage } from '@/services/v2Home';
+import { formatDecimal } from '@/services/intl';
 import { isMotmVotingOpen } from '@/services/motmVoting';
 import fitTwoLines from '@/directives/fitTwoLines';
 
@@ -249,17 +250,17 @@ export default {
       const odds = (this.prediction && this.prediction.Odds) || {};
       const mine = this.prediction && this.prediction.MyPrediction;
       const picked = mine ? (mine.PredictedTeamID || null) : undefined;
-      const fmt = (value) => (Number.isFinite(Number(value)) && value != null ? Number(value).toFixed(2) : '');
+      const fmt = (value) => (Number.isFinite(Number(value)) && value != null ? formatDecimal(Number(value)) : '');
       const [a, b] = this.teams;
       return [
         { key: 'a', teamId: a.ID, label: a.Name, odds: fmt(odds.TeamAOdds) },
-        { key: 'draw', teamId: null, label: 'Draw', odds: fmt(odds.DrawOdds) },
+        { key: 'draw', teamId: null, label: this.$t('match.draw'), odds: fmt(odds.DrawOdds) },
         { key: 'b', teamId: b.ID, label: b.Name, odds: fmt(odds.TeamBOdds) },
       ].map((option) => ({ ...option, on: picked !== undefined && picked === option.teamId }));
     },
     myPick() {
       const chosen = this.betOptions.find((option) => option.on);
-      return chosen ? `${chosen.label} · ${chosen.odds}` : '';
+      return chosen ? this.$t('match.pick', { label: chosen.label, odds: chosen.odds }) : '';
     },
     full() {
       return Boolean(this.cap) && this.places === 0;
@@ -336,7 +337,7 @@ export default {
     },
     voteAria(player) {
       const count = this.votesFor(player);
-      return this.isMyVote(player) ? `${count} votes, your vote (tap to remove it)` : `${count} votes`;
+      return this.isMyVote(player) ? this.$t('match.votesAriaMine', count) : this.$t('match.votesAria', count);
     },
     // Tapping the player you voted for takes the vote back, as on today's
     // Matches tab; any other player casts or moves it.
@@ -351,8 +352,8 @@ export default {
           await voteForMotm(this.match.ID, player.ID);
         }
         this.$refs.toast.show(removing
-          ? `Your ${MVP} vote has been removed.`
-          : `Your ${MVP} vote has been saved.`, 'success');
+          ? this.$t('match.vote.removed')
+          : this.$t('match.vote.saved'), 'success');
       } catch (error) {
         console.error('Error updating MVP vote:', error);
         this.$refs.toast.show(voteErrorMessage(error), 'error');
@@ -417,7 +418,7 @@ export default {
         this.prediction = await predictForMatch(this.id, teamId);
       } catch (error) {
         console.error(error);
-        this.$refs.toast.show(actionErrorMessage(error, 'Failed to save your prediction. Please try again.'), 'error');
+        this.$refs.toast.show(actionErrorMessage(error, this.$t('match.predictionError')), 'error');
         this.prediction = await getMatchPredictions(this.id).catch(() => this.prediction);
       } finally {
         this.betBusy = false;
@@ -431,14 +432,16 @@ export default {
       try {
         const entry = await registerForMatch(this.id);
         if (entry && entry.IsWaiting) {
-          this.$refs.toast.show(`Signed up — you are #${entry.Position}, on the waiting list.`, 'success');
+          this.$refs.toast.show(this.$t('home.toast.waiting', { position: entry.Position }), 'success');
         } else {
-          const position = entry && entry.Position ? ` You are #${entry.Position}.` : '';
-          this.$refs.toast.show(`You're in for this match.${position}`, 'success');
+          const message = entry && entry.Position
+            ? this.$t('home.toast.inPosition', { position: entry.Position })
+            : this.$t('home.toast.in');
+          this.$refs.toast.show(message, 'success');
         }
       } catch (error) {
         console.error('Error signing up for match:', error);
-        this.$refs.toast.show(actionErrorMessage(error, 'Error signing up for this match.'), 'error');
+        this.$refs.toast.show(actionErrorMessage(error, this.$t('home.toast.signUpError')), 'error');
       } finally {
         await this.reloadRegistrations();
         this.busy = false;
@@ -449,10 +452,10 @@ export default {
       this.busy = true;
       try {
         await unregisterFromMatch(this.id);
-        this.$refs.toast.show('You have withdrawn from this match.', 'success');
+        this.$refs.toast.show(this.$t('home.toast.withdrawn'), 'success');
       } catch (error) {
         console.error('Error withdrawing from match:', error);
-        this.$refs.toast.show(actionErrorMessage(error, 'Error withdrawing from this match.'), 'error');
+        this.$refs.toast.show(actionErrorMessage(error, this.$t('home.toast.withdrawError')), 'error');
       } finally {
         // Closed either way, so the toast saying what happened isn't hidden
         // behind it.

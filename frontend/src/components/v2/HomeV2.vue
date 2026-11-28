@@ -1,37 +1,37 @@
 <template>
   <main class="page" :class="{ 'has-fab': isAdmin }">
     <template v-if="loading">
-      <p class="label">Next match</p>
+      <p class="label">{{ $t('home.nextMatch') }}</p>
       <div class="skel lg"></div>
       <div class="skel md"></div>
       <div class="skel sm"></div>
     </template>
 
     <section v-else-if="failed" class="state">
-      <p class="label">Error</p>
-      <h1>Couldn't load the matches</h1>
-      <button class="btn" type="button" @click="load">Try again</button>
+      <p class="label">{{ $t('common.error') }}</p>
+      <h1>{{ $t('home.loadError') }}</h1>
+      <button class="btn" type="button" @click="load">{{ $t('common.tryAgain') }}</button>
     </section>
 
     <section v-else-if="!next && recent.length === 0" class="state">
-      <p class="label">No matches yet</p>
-      <h1>Start the season</h1>
-      <p v-if="isAdmin">Create the first match to open sign-ups.</p>
-      <p v-else>An admin will create the first match.</p>
-      <router-link v-if="isAdmin" class="btn" :to="{ name: 'NewMatch' }">Create match</router-link>
+      <p class="label">{{ $t('home.empty.label') }}</p>
+      <h1>{{ $t('home.empty.title') }}</h1>
+      <p v-if="isAdmin">{{ $t('home.empty.admin') }}</p>
+      <p v-else>{{ $t('home.empty.member') }}</p>
+      <router-link v-if="isAdmin" class="btn" :to="{ name: 'NewMatch' }">{{ $t('home.createMatch') }}</router-link>
     </section>
 
     <template v-else>
       <section v-if="next" class="hero hero-home">
         <router-link class="hero-go" :to="matchTo(next)">
-          <p class="label">Next match</p>
+          <p class="label">{{ $t('home.nextMatch') }}</p>
           <h1 class="display hero-date">{{ heroDateLabel(next.Date) }}</h1>
           <p v-if="kickoffLabel(next.ScheduledAt)" class="display hero-time">{{ kickoffLabel(next.ScheduledAt) }}</p>
         </router-link>
         <!-- The way into the match, on the right: View match for everyone,
              plus Manage (gear) for an admin. -->
         <div class="hero-status">
-          <router-link class="btn btn-ghost hero-status-btn" :to="matchTo(next)">View match</router-link>
+          <router-link class="btn btn-ghost hero-status-btn" :to="matchTo(next)">{{ $t('home.viewMatch') }}</router-link>
           <ManageMatchLink v-if="isAdmin" :id="next.ID" />
         </div>
         <!-- Once the teams are set the places are history: what matters is
@@ -39,11 +39,11 @@
         <div v-if="teamsSet" class="hero-team">
           <template v-if="myTeam">
             <!-- One line, one face: only the team takes the accent. -->
-            <p class="label hero-team-line">You play for <span class="hero-team-mine">{{ myTeam }}</span></p>
+            <p class="label hero-team-line"><i18n-t keypath="home.youPlayFor" scope="global"><template #team><span class="hero-team-mine">{{ myTeam }}</span></template></i18n-t></p>
           </template>
           <template v-else>
-            <p class="label">Teams are set</p>
-            <p class="hero-meta">{{ teamName(next, 0) }} vs {{ teamName(next, 1) }}</p>
+            <p class="label">{{ $t('home.teamsSet') }}</p>
+            <p class="hero-meta">{{ $t('home.teamsVs', { home: teamName(next, 0), away: teamName(next, 1) }) }}</p>
           </template>
         </div>
         <template v-else>
@@ -53,26 +53,26 @@
                  the places, then, once full, the waiting list's size — so
                  17 sign-ups for 16 places read 16 / 16 and 1 waiting. -->
             <div class="cap">
-              <span class="cap-line">places left</span>
-              <span class="cap-line">{{ confirmedCount }} / {{ cap }} signed up</span>
-              <span v-if="full" class="cap-line">{{ waitingCount }} in waiting list</span>
+              <span class="cap-line">{{ $t('home.placesLeft') }}</span>
+              <span class="cap-line">{{ $t('home.signedUpCount', { confirmed: confirmedCount, cap }) }}</span>
+              <span v-if="full" class="cap-line">{{ $t('home.waitingCount', { n: waitingCount }) }}</span>
             </div>
           </div>
           <div class="bar" aria-hidden="true"><i :style="{ '--pct': barPct }"></i></div>
         </template>
-        <p v-if="mine && registrationsAreOpen(regState)" class="reg-you">You're signed up · {{ mine.IsWaiting ? 'waiting list' : 'confirmed' }}</p>
-        <p v-else-if="full && registrationsAreOpen(regState)" class="reg-you">Full · you'd be <strong>#{{ waitingPosition }}</strong> on the waiting list</p>
+        <p v-if="mine && registrationsAreOpen(regState)" class="reg-you">{{ $t('home.youAreSignedUp', { status: mine.IsWaiting ? $t('home.statusWaiting') : $t('home.statusConfirmed') }) }}</p>
+        <p v-else-if="full && registrationsAreOpen(regState)" class="reg-you"><i18n-t keypath="home.fullYoudBe" scope="global"><template #position><strong>{{ $t('home.position', { n: waitingPosition }) }}</strong></template></i18n-t></p>
         <div class="actions" v-if="registrationsAreOpen(regState)">
-          <button v-if="!mine" class="btn" type="button" :disabled="busy" @click="signUp">{{ full ? 'Join the waiting list' : 'Sign up' }}</button>
+          <button v-if="!mine" class="btn" type="button" :disabled="busy" @click="signUp">{{ full ? $t('home.joinWaitingList') : $t('home.signUp') }}</button>
           <span v-else class="withdraw-wrap withdraw-slot">
-            <button class="btn btn-ghost" type="button" @click="confirming = true">Withdraw</button>
+            <button class="btn btn-ghost" type="button" @click="confirming = true">{{ $t('home.withdraw') }}</button>
             <!-- Wide screens: anchored under the button, as on the match page. -->
             <div class="confirm-pop" role="dialog" aria-labelledby="home-withdraw-pop-title">
-              <h3 id="home-withdraw-pop-title">Withdraw from this match?</h3>
-              <p class="ref">Your spot goes to the first player on the waiting list.</p>
+              <h3 id="home-withdraw-pop-title">{{ $t('home.withdrawTitle') }}</h3>
+              <p class="ref">{{ $t('home.withdrawText') }}</p>
               <div class="confirm-actions">
-                <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">Withdraw</button>
-                <button class="btn btn-ghost" type="button" @click="confirming = false">Cancel</button>
+                <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">{{ $t('home.withdraw') }}</button>
+                <button class="btn btn-ghost" type="button" @click="confirming = false">{{ $t('common.cancel') }}</button>
               </div>
             </div>
           </span>
@@ -83,7 +83,7 @@
            until the next one is created (then it heads Latest matches). -->
       <section v-else class="hero hero-home hero-last" :class="{ 'has-motm': voteLine }">
         <router-link class="hero-go" :to="matchTo(last)">
-          <p class="label">Last match</p>
+          <p class="label">{{ $t('home.lastMatch') }}</p>
           <h1 class="display hero-date">{{ heroDateLabel(last.Date) }}</h1>
         </router-link>
         <div v-fit-two-lines class="board-teams hero-board">
@@ -92,7 +92,7 @@
           <div class="board-team"><span class="name">{{ teamName(last, 1) }}</span></div>
         </div>
         <div class="hero-status">
-          <router-link class="btn btn-ghost hero-status-btn" :to="matchTo(last)">View match</router-link>
+          <router-link class="btn btn-ghost hero-status-btn" :to="matchTo(last)">{{ $t('home.viewMatch') }}</router-link>
           <ManageMatchLink v-if="isAdmin" :id="last.ID" />
         </div>
         <!-- Part of the header: its vote, while open, under the score. -->
@@ -102,7 +102,7 @@
       </section>
 
       <section v-if="later.length" class="sec">
-        <div class="sec-head"><h2>Later</h2></div>
+        <div class="sec-head"><h2>{{ $t('home.later') }}</h2></div>
         <div class="list">
           <router-link v-for="match in later" :key="match.ID" class="row" :to="matchTo(match)">
             <div class="row-date">{{ rowDateLabel(match.Date) }}</div>
@@ -110,13 +110,13 @@
               <div v-if="weekdayTimeLabel(match.ScheduledAt)" class="row-title">{{ weekdayTimeLabel(match.ScheduledAt) }}</div>
               <div class="row-sub">{{ metaOf(match) }}</div>
             </div>
-            <span class="chip">Upcoming</span>
+            <span class="chip">{{ $t('home.upcoming') }}</span>
           </router-link>
         </div>
       </section>
 
       <section v-if="latest.length" class="sec">
-        <div class="sec-head"><h2>Latest matches</h2></div>
+        <div class="sec-head"><h2>{{ $t('home.latest') }}</h2></div>
         <div class="list">
           <!-- The score only on the right; the accessible name still reads it,
                with the day, and the sub-line describes the row. -->
@@ -128,10 +128,10 @@
             <div class="row-main">
               <!-- « A vs » then « B »: on one line when they fit, else B on
                    the next line; a name too long for the column wraps. -->
-              <div class="row-title row-teams"><span class="row-side"><span class="row-team">{{ teamName(match, 0) }}</span>&nbsp;<span class="row-vs">vs</span>{{ ' ' }}</span><span class="row-side"><span class="row-team">{{ teamName(match, 1) }}</span></span></div>
+              <div class="row-title row-teams"><span class="row-side"><span class="row-team">{{ teamName(match, 0) }}</span>&nbsp;<span class="row-vs">{{ $t('home.vs') }}</span>{{ ' ' }}</span><span class="row-side"><span class="row-team">{{ teamName(match, 1) }}</span></span></div>
               <!-- One grey line: « MVP vote open » while its vote is open,
                    else its weekday and kick-off time; the row leads to it. -->
-              <div v-if="rowSubLine(match, nowMs)" :id="`row-sub-${match.ID}`" class="row-sub" :class="{ 'row-sub-vote': rowSubLine(match, nowMs) === voteOpenLine }">{{ rowSubLine(match, nowMs) }}</div>
+              <div v-if="rowSubLine(match, nowMs)" :id="`row-sub-${match.ID}`" class="row-sub" :class="{ 'row-sub-vote': rowSubLine(match, nowMs) === voteOpenLine() }">{{ rowSubLine(match, nowMs) }}</div>
             </div>
             <div class="score">{{ scoreOf(match) }}</div>
           </router-link>
@@ -141,11 +141,11 @@
 
     <div class="confirm-scrim" @click="confirming = false"></div>
     <div class="confirm-sheet" role="dialog" aria-labelledby="withdraw-title">
-      <h3 id="withdraw-title">Withdraw from this match?</h3>
-      <p class="ref">Your spot goes to the first player on the waiting list.</p>
+      <h3 id="withdraw-title">{{ $t('home.withdrawTitle') }}</h3>
+      <p class="ref">{{ $t('home.withdrawText') }}</p>
       <div class="confirm-actions">
-        <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">Withdraw</button>
-        <button class="btn btn-ghost" type="button" @click="confirming = false">Cancel</button>
+        <button class="btn btn-danger" type="button" :disabled="busy" @click="withdraw">{{ $t('home.withdraw') }}</button>
+        <button class="btn btn-ghost" type="button" @click="confirming = false">{{ $t('common.cancel') }}</button>
       </div>
     </div>
 
@@ -153,7 +153,7 @@
 
     <!-- Floating, so it's there whatever the page shows, including when a
          match is already scheduled. -->
-    <router-link v-if="isAdmin && !loading" class="fab" :to="{ name: 'NewMatch' }" aria-label="New match" title="New match">
+    <router-link v-if="isAdmin && !loading" class="fab" :to="{ name: 'NewMatch' }" :aria-label="$t('home.newMatch')" :title="$t('home.newMatch')">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16" /></svg>
     </router-link>
   </main>
@@ -167,7 +167,7 @@ import { getMatchesDetails, getMatchRegistrations, registerForMatch, unregisterF
 import { deriveRegistrationState, registrationsAreOpen, teamsAreComposed } from '@/services/matchRegistration';
 import {
   splitHomeMatches, heroDateLabel, rowDateLabel, dayMonthLabel, kickoffLabel, weekdayTimeLabel,
-  registrationMeta, placesLeft, homeVoteLine, rowSubLine, myTeam, nextWaitingPosition, VOTE_OPEN_LINE,
+  registrationMeta, placesLeft, homeVoteLine, rowSubLine, myTeam, nextWaitingPosition, voteOpenLine,
 } from '@/services/v2Home';
 import fitTwoLines from '@/directives/fitTwoLines';
 
@@ -198,7 +198,6 @@ export default {
   },
   data() {
     return {
-      voteOpenLine: VOTE_OPEN_LINE,
       loading: true,
       failed: false,
       matches: [],
@@ -294,7 +293,7 @@ export default {
     this.load();
   },
   methods: {
-    heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel, rowSubLine, registrationsAreOpen,
+    heroDateLabel, rowDateLabel, kickoffLabel, weekdayTimeLabel, rowSubLine, registrationsAreOpen, voteOpenLine,
     publishContext() {
       this.v2Context.hide = false;
     },
@@ -317,7 +316,7 @@ export default {
     // « Les Bleus 4–6 Les Rouges, 4 Sep »: the score the row shows on the
     // right, read with the teams and the day.
     rowAriaLabel(match) {
-      return `${this.teamName(match, 0)} ${this.scorePair(match)} ${this.teamName(match, 1)}, ${dayMonthLabel(match.Date)}`;
+      return this.$t('home.rowLabel', { home: this.teamName(match, 0), score: this.scorePair(match), away: this.teamName(match, 1), day: dayMonthLabel(match.Date) });
     },
     scoreOf(match) {
       const text = this.scorePair(match);
@@ -361,15 +360,17 @@ export default {
       try {
         const entry = await registerForMatch(this.next.ID);
         if (entry && entry.IsWaiting) {
-          this.$refs.toast.show(`Signed up — you are #${entry.Position}, on the waiting list.`, 'success');
+          this.$refs.toast.show(this.$t('home.toast.waiting', { position: entry.Position }), 'success');
         } else {
-          const position = entry && entry.Position ? ` You are #${entry.Position}.` : '';
-          this.$refs.toast.show(`You're in for this match.${position}`, 'success');
+          const message = entry && entry.Position
+            ? this.$t('home.toast.inPosition', { position: entry.Position })
+            : this.$t('home.toast.in');
+          this.$refs.toast.show(message, 'success');
         }
         await this.load();
       } catch (error) {
         console.error(error);
-        this.$refs.toast.show(actionErrorMessage(error, 'Error signing up for this match.'), 'error');
+        this.$refs.toast.show(actionErrorMessage(error, this.$t('home.toast.signUpError')), 'error');
         await this.load();
       } finally {
         this.busy = false;
@@ -380,11 +381,11 @@ export default {
       this.busy = true;
       try {
         await unregisterFromMatch(this.next.ID);
-        this.$refs.toast.show('You have withdrawn from this match.', 'success');
+        this.$refs.toast.show(this.$t('home.toast.withdrawn'), 'success');
         await this.load();
       } catch (error) {
         console.error(error);
-        this.$refs.toast.show(actionErrorMessage(error, 'Error withdrawing from this match.'), 'error');
+        this.$refs.toast.show(actionErrorMessage(error, this.$t('home.toast.withdrawError')), 'error');
         await this.load();
       } finally {
         // Closed either way, so the toast isn't hidden behind it.

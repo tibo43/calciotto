@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import en from '@/locales/en.json';
 import { LOCALES, DEFAULT_LOCALE, messages } from '@/locales';
 import { i18n } from '@/i18n';
-import { MVP, MVP_OF_THE_MATCH } from '@/services/v2Home';
+import { MVP } from '@/services/v2Home';
 
 describe('vue-i18n instance', () => {
   it('is the composition API, in English, falling back to English', () => {
@@ -25,9 +25,11 @@ describe('vue-i18n instance', () => {
     }
   });
 
-  it('keeps the award names of the screens (until they come from here)', () => {
-    expect(en.award.mvp).toBe(MVP);
-    expect(en.award.mvpOfTheMatch).toBe(MVP_OF_THE_MATCH);
+  it('keeps MVP and Agoranking as single, untranslated glossary keys', () => {
+    expect(en.glossary.mvp).toBe('MVP');
+    expect(MVP).toBe('MVP');
+    expect(en.glossary.agoranking).toBe('Agoranking');
+    expect(i18n.global.t('award.mvpOfTheMatch')).toBe('MVP of the Match');
   });
 
   it('lists the five languages in the selector order, with their own names', () => {
