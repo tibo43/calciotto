@@ -73,7 +73,7 @@ func resolveScopedGroupID(c *gin.Context, membershipService *services.GroupMembe
 func resolveGroupID(c *gin.Context, membershipService *services.GroupMembershipService) (id uuid.UUID, ok bool) {
 	groupID, failure := resolveScopedGroupID(c, membershipService, nil)
 	if failure != nil {
-		c.JSON(failure.status, gin.H{"error": failure.message})
+		c.JSON(failure.status, messageBody(failure.message))
 		return uuid.Nil, false
 	}
 	return groupID, true

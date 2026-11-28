@@ -51,13 +51,13 @@ func (h *MatchVoteHandler) Vote(c *gin.Context) {
 	}
 	voterID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
 	var req voteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "voted_for_id is required"})
+		c.JSON(http.StatusBadRequest, messageBody("voted_for_id is required"))
 		return
 	}
 
@@ -85,7 +85,7 @@ func (h *MatchVoteHandler) Unvote(c *gin.Context) {
 	}
 	voterID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
@@ -106,7 +106,7 @@ func (h *MatchVoteHandler) ListVotes(c *gin.Context) {
 	}
 	callerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
@@ -129,14 +129,14 @@ func (h *MatchVoteHandler) ListVotes(c *gin.Context) {
 func respondMatchVoteError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrMatchNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, errorBody(err))
 	case errors.Is(err, services.ErrCannotVoteForSelf),
 		errors.Is(err, services.ErrVotedForPlayerNotOnRoster),
 		errors.Is(err, services.ErrVoterNotOnRoster):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 	case errors.Is(err, services.ErrVotingClosed):
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, errorBody(err))
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 	}
 }

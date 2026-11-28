@@ -22,13 +22,13 @@ func NewTeamHandler(service *services.TeamService) *TeamHandler {
 func (h *TeamHandler) GetTeamsByGroup(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid group id"))
 		return
 	}
 
 	teams, err := h.Service.GetTeamsByGroupID(groupID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	c.JSON(http.StatusOK, teams)
@@ -47,13 +47,13 @@ func (h *TeamHandler) GetTeamsByGroup(c *gin.Context) {
 func (h *TeamHandler) UpdateTeam(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid group id"))
 		return
 	}
 
 	teamID, err := uuid.Parse(c.Param("teamId"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid team id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid team id"))
 		return
 	}
 
@@ -61,7 +61,7 @@ func (h *TeamHandler) UpdateTeam(c *gin.Context) {
 		Name string `json:"name"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 
@@ -69,11 +69,11 @@ func (h *TeamHandler) UpdateTeam(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrTeamNameRequired):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, errorBody(err))
 		case errors.Is(err, gorm.ErrRecordNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "team not found in this group"})
+			c.JSON(http.StatusNotFound, messageBody("team not found in this group"))
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, errorBody(err))
 		}
 		return
 	}

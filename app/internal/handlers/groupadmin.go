@@ -22,7 +22,7 @@ func RequireGroupAdmin(membershipService *services.GroupMembershipService) gin.H
 	return func(c *gin.Context) {
 		playerID, ok := playerIDFromContext(c)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, messageBody("missing authentication"))
 			return
 		}
 
@@ -42,13 +42,13 @@ func RequireGroupAdminByPathParam(membershipService *services.GroupMembershipSer
 	return func(c *gin.Context) {
 		playerID, ok := playerIDFromContext(c)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, messageBody("missing authentication"))
 			return
 		}
 
 		groupID, err := uuid.Parse(c.Param(paramName))
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+			c.AbortWithStatusJSON(http.StatusBadRequest, messageBody("invalid group id"))
 			return
 		}
 
@@ -65,14 +65,14 @@ func authorizeGroupAdmin(c *gin.Context, membershipService *services.GroupMember
 	role, err := membershipService.GetRole(groupID, playerID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not an admin of this group"})
+			c.AbortWithStatusJSON(http.StatusForbidden, messageBody("not an admin of this group"))
 			return
 		}
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	if role != models.RoleAdmin {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not an admin of this group"})
+		c.AbortWithStatusJSON(http.StatusForbidden, messageBody("not an admin of this group"))
 		return
 	}
 	c.Set(authorizedGroupIDKey, groupID)

@@ -25,7 +25,7 @@ func RequireGroupMembership(membershipService *services.GroupMembershipService) 
 	return func(c *gin.Context) {
 		playerID, ok := playerIDFromContext(c)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, messageBody("missing authentication"))
 			return
 		}
 
@@ -45,13 +45,13 @@ func RequireGroupMembershipByPathParam(membershipService *services.GroupMembersh
 	return func(c *gin.Context) {
 		playerID, ok := playerIDFromContext(c)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, messageBody("missing authentication"))
 			return
 		}
 
 		groupID, err := uuid.Parse(c.Param(paramName))
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+			c.AbortWithStatusJSON(http.StatusBadRequest, messageBody("invalid group id"))
 			return
 		}
 
@@ -62,11 +62,11 @@ func RequireGroupMembershipByPathParam(membershipService *services.GroupMembersh
 func authorizeGroupMembership(c *gin.Context, membershipService *services.GroupMembershipService, groupID, playerID uuid.UUID) {
 	isMember, err := membershipService.IsMember(groupID, playerID)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	if !isMember {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not a member of this group"})
+		c.AbortWithStatusJSON(http.StatusForbidden, messageBody("not a member of this group"))
 		return
 	}
 	c.Next()
@@ -109,7 +109,7 @@ func authorizedGroupIDFromContext(c *gin.Context) (uuid.UUID, bool) {
 func resolveGroupIDForMembership(c *gin.Context, membershipService *services.GroupMembershipService) (uuid.UUID, bool) {
 	groupID, failure := resolveScopedGroupID(c, membershipService, peekGroupIDFromBody)
 	if failure != nil {
-		c.AbortWithStatusJSON(failure.status, gin.H{"error": failure.message})
+		c.AbortWithStatusJSON(failure.status, messageBody(failure.message))
 		return uuid.Nil, false
 	}
 	return groupID, true

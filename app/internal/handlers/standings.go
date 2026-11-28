@@ -25,7 +25,7 @@ func (h *StandingsHandler) GetPointsStandings(c *gin.Context) {
 	}
 	rows, err := h.Service.GetPointsStandings(groupID, c.Query("season"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	c.JSON(http.StatusOK, rows)
@@ -38,7 +38,7 @@ func (h *StandingsHandler) GetScorers(c *gin.Context) {
 	}
 	rows, err := h.Service.GetScorers(groupID, c.Query("season"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	c.JSON(http.StatusOK, rows)
@@ -54,7 +54,7 @@ func (h *StandingsHandler) GetSeasons(c *gin.Context) {
 	}
 	seasons, err := h.Service.GetSeasons(groupID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	c.JSON(http.StatusOK, seasons)
@@ -69,7 +69,7 @@ func (h *StandingsHandler) GetMotmStandings(c *gin.Context) {
 	}
 	rows, err := h.Service.GetMotmStandings(groupID, c.Query("season"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	c.JSON(http.StatusOK, rows)
@@ -85,7 +85,7 @@ func (h *StandingsHandler) GetPredictionStandings(c *gin.Context) {
 	}
 	rows, err := h.Service.GetPredictionStandings(groupID, c.Query("season"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	c.JSON(http.StatusOK, rows)
@@ -98,16 +98,16 @@ func (h *StandingsHandler) GetPredictionStandings(c *gin.Context) {
 func (h *StandingsHandler) GetAgoranking(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, messageBody("unauthorized"))
 		return
 	}
 	enabled, err := h.Service.PlayerService.HasFeature(playerID, models.FeatureAgoranking)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	if !enabled {
-		c.JSON(http.StatusForbidden, gin.H{"error": "the Agoranking is not enabled for this account"})
+		c.JSON(http.StatusForbidden, messageBody("the Agoranking is not enabled for this account"))
 		return
 	}
 	groupID, ok := resolveGroupID(c, h.MembershipService)
@@ -116,7 +116,7 @@ func (h *StandingsHandler) GetAgoranking(c *gin.Context) {
 	}
 	result, err := h.Service.GetAgoranking(groupID, c.Query("season"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	c.JSON(http.StatusOK, result)
@@ -135,20 +135,20 @@ func (h *StandingsHandler) GetAgoranking(c *gin.Context) {
 func (h *StandingsHandler) GetPlayerProfile(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
 	profile, err := h.Service.GetPlayerProfile(playerID, c.Query("season"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	// The route is scoped to the token's own player, so the address returned
 	// here is always the caller's own.
 	email, err := h.Service.PlayerService.GetEmailByID(playerID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	profile.Email = email

@@ -1,4 +1,5 @@
 import { t } from '@/i18n';
+import { apiErrorMessage } from './apiError';
 import en from '@/locales/en.json';
 import { parseCalendarDay } from './datetime';
 import { activeTag, dateLabel, monthName, weekdayName } from './intl';
@@ -26,7 +27,7 @@ const OLD_AWARD_LEFT = /\bmotm\b|\bm[ae]n[\s_-]+of[\s_-]+the[\s_-]+match\b/i;
 // the generic message. The reason is shown as a
 // sentence: a capital first letter, full stop at the end.
 export function voteErrorMessage(error) {
-  const reason = error?.response?.data?.error;
+  const reason = apiErrorMessage(error, '');
   if (typeof reason !== 'string' || !reason.trim()) return t('match.vote.errorFallback');
   const renamed = reason.trim().replace(OLD_AWARD_NAME, MVP);
   if (OLD_AWARD_LEFT.test(renamed)) return t('match.vote.errorFallback');

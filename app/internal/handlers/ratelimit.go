@@ -30,7 +30,7 @@ func RateLimit(r rate.Limit, burst int) gin.HandlerFunc {
 	limiter := newIPRateLimiter(r, burst)
 	return func(c *gin.Context) {
 		if !limiter.allow(c.ClientIP()) {
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, messageBody("too many requests, please try again later"))
 			return
 		}
 		c.Next()
@@ -62,7 +62,7 @@ func ProxiedRateLimit(r rate.Limit, burst int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		peer := c.ClientIP()
 		if !perPeer.allow(peer) || !perClient.allow(ProxiedClientKey(c)) {
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, messageBody("too many requests, please try again later"))
 			return
 		}
 		c.Next()
@@ -160,7 +160,7 @@ func (rl *ipRateLimiter) hasTokens(key string) bool {
 func LimitRequestBody(maxBytes int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.ContentLength > maxBytes {
-			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body is too large"})
+			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, messageBody("request body is too large"))
 			return
 		}
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)

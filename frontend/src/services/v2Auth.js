@@ -1,4 +1,5 @@
 import { t } from '@/i18n';
+import { hasApiErrorCode } from './apiError';
 import { actionErrorMessage } from './v2Match';
 
 // The backend's auth messages are lower-case fragments ("no group matches
@@ -25,7 +26,8 @@ const INVALID_RESET_TOKEN = 'invalid or expired reset token';
 
 export function resetErrorMessage(error) {
   const reason = error?.response?.data?.error;
-  if (typeof reason === 'string' && reason.trim().toLowerCase() === INVALID_RESET_TOKEN) {
+  if (hasApiErrorCode(error, 'invalid_reset_token')
+    || (typeof reason === 'string' && reason.trim().toLowerCase() === INVALID_RESET_TOKEN)) {
     return expiredResetLink();
   }
   return authErrorMessage(error, t('auth.reset.failed'));

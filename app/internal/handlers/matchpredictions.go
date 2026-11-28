@@ -49,13 +49,13 @@ func (h *MatchPredictionHandler) Predict(c *gin.Context) {
 	}
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
 	var req predictRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid request body"))
 		return
 	}
 
@@ -83,7 +83,7 @@ func (h *MatchPredictionHandler) ListPredictions(c *gin.Context) {
 	}
 	callerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
@@ -107,13 +107,13 @@ func (h *MatchPredictionHandler) ListPredictions(c *gin.Context) {
 func respondMatchPredictionError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrMatchNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, errorBody(err))
 	case errors.Is(err, services.ErrPredictionsNotAvailable),
 		errors.Is(err, services.ErrPredictedTeamNotInMatch):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 	case errors.Is(err, services.ErrPredictionsClosed):
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, errorBody(err))
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 	}
 }

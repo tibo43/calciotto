@@ -294,6 +294,7 @@ import {
   forgotPassword, getMyFeatures, getMyPositions, updateMyPositions,
 } from '@/services/api';
 import { POSITIONS, normalizePositions } from '@/services/v2Positions';
+import { apiErrorMessage } from '@/services/apiError';
 import { actionErrorMessage } from '@/services/v2Match';
 import AppToast from '@/components/AppToast.vue';
 import { getPushState, enablePush, disablePush, PUSH_STATE, PUSH_FEATURE } from '@/services/pushNotifications';
@@ -674,7 +675,7 @@ export default {
         this.pushState = this.pushOn ? await disablePush() : await enablePush();
       } catch (error) {
         console.error(error);
-        this.pushError = (error.response && error.response.data && error.response.data.error) || error.message || messageKey('profile.notifications.error');
+        this.pushError = apiErrorMessage(error, error.message || messageKey('profile.notifications.error'));
       }
     },
     async loadPositions() {
@@ -728,7 +729,7 @@ export default {
         await updateMyName(this.nameInput.trim());
         await this.load();
       } catch (error) {
-        this.nameError = (error.response && error.response.data && error.response.data.error) || messageKey('profile.identity.error');
+        this.nameError = apiErrorMessage(error, messageKey('profile.identity.error'));
       } finally {
         this.savingName = false;
       }
@@ -743,7 +744,7 @@ export default {
         const { message } = await forgotPassword(this.email);
         this.resetNote = message;
       } catch (error) {
-        this.resetNote = (error.response && error.response.data && error.response.data.error) || messageKey('profile.password.error');
+        this.resetNote = apiErrorMessage(error, messageKey('profile.password.error'));
       } finally {
         this.sendingReset = false;
       }
@@ -763,7 +764,7 @@ export default {
         clearToken();
         window.location.href = '/login?accountDeleted=success';
       } catch (error) {
-        this.deleteError = (error.response && error.response.data && error.response.data.error) || messageKey('profile.delete.error');
+        this.deleteError = apiErrorMessage(error, messageKey('profile.delete.error'));
       }
     },
     async loadSettings() {
@@ -822,7 +823,7 @@ export default {
         await this.loadSettings();
       } catch (error) {
         this.removing = '';
-        this.roleError = (error.response && error.response.data && error.response.data.error) || messageKey('profile.members.removeError');
+        this.roleError = apiErrorMessage(error, messageKey('profile.members.removeError'));
       }
     },
     async confirmDemote(member) {
@@ -832,7 +833,7 @@ export default {
         this.demoting = '';
         await this.loadSettings();
       } catch (error) {
-        this.roleError = (error.response && error.response.data && error.response.data.error) || messageKey('profile.members.roleError');
+        this.roleError = apiErrorMessage(error, messageKey('profile.members.roleError'));
       }
     },
     async promote(member) {
@@ -841,7 +842,7 @@ export default {
         await updateMemberRole(this.groupId, member.id, 'admin');
         await this.loadSettings();
       } catch (error) {
-        this.roleError = (error.response && error.response.data && error.response.data.error) || messageKey('profile.members.roleError');
+        this.roleError = apiErrorMessage(error, messageKey('profile.members.roleError'));
       }
     },
   },

@@ -1,3 +1,4 @@
+import { i18n } from '@/i18n';
 import { splitHomeMatches, heroDateLabel, placesLeft, registrationMeta, kickoffLabel, homeVoteLine, rowSubLine, weekdayTimeLabel, dayMonthLabel, matchVoteCopy, goalLine, myTeam, nextWaitingPosition, voteErrorMessage } from '@/services/v2Home';
 
 const NOW = new Date('2026-09-04T10:00:00+02:00').getTime();
@@ -172,5 +173,21 @@ describe('voteErrorMessage', () => {
     expect(voteErrorMessage(refusal({ code: 1 }))).toBe(GENERIC);
     expect(voteErrorMessage(new Error('Failed to cast Man of the Match vote'))).toBe(GENERIC);
     expect(voteErrorMessage(undefined)).toBe(GENERIC);
+  });
+});
+
+describe('voteErrorMessage in the active language', () => {
+  const refused = (code, error = 'x') => ({ response: { data: { error, code } } });
+  afterEach(() => { i18n.global.locale.value = 'en'; });
+
+  it('writes a coded refusal in the language, with MVP untranslated', () => {
+    i18n.global.locale.value = 'de';
+    expect(voteErrorMessage(refused('voting_closed'))).toBe('Die Abstimmung für den MVP ist für dieses Spiel beendet.');
+    i18n.global.locale.value = 'es';
+    expect(voteErrorMessage(refused('cannot_vote_for_self'))).toBe('No puedes votarte a ti mismo como MVP.');
+  });
+
+  it('keeps the English sentence in English', () => {
+    expect(voteErrorMessage(refused('voting_closed'))).toBe('Voting for MVP is closed for this match.');
   });
 });
