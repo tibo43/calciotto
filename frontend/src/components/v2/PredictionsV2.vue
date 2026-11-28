@@ -83,7 +83,7 @@
         <div class="table-wrap desk-only">
           <table class="stand">
             <thead>
-              <tr><th>#</th><th>{{ $t('rankings.cols.player') }}</th><th>{{ $t('predictions.cols.last5') }}</th><th>{{ $t('rankings.cols.pts') }}</th></tr>
+              <tr><th>{{ $t('rankings.cols.rank') }}</th><th>{{ $t('rankings.cols.player') }}</th><th>{{ $t('predictions.cols.last5') }}</th><th>{{ $t('rankings.cols.pts') }}</th></tr>
             </thead>
             <tbody>
               <tr v-for="(row, index) in standings" :key="row.PlayerID" :class="{ 'is-me': isMe(row), 'is-left': left(row) }">

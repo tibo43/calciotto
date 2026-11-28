@@ -60,7 +60,7 @@
         <div class="table-wrap desk-only">
           <table class="stand agr-table">
             <thead>
-              <tr><th>#</th><th>{{ $t('rankings.cols.player') }}</th><th>{{ $t('rankings.cols.matchesShort') }}</th><th>{{ $t('rankings.cols.wdl') }}</th><th>{{ $t('rankings.cols.pts') }}</th><th>{{ $t('rankings.cols.rating') }}</th></tr>
+              <tr><th>{{ $t('rankings.cols.rank') }}</th><th>{{ $t('rankings.cols.player') }}</th><th>{{ $t('rankings.cols.matchesShort') }}</th><th>{{ $t('rankings.cols.wdl') }}</th><th>{{ $t('rankings.cols.pts') }}</th><th>{{ $t('rankings.cols.rating') }}</th></tr>
             </thead>
             <tbody>
               <tr v-for="(row, index) in agoranking.Ranked" :key="row.PlayerID" :class="{ 'is-me': isMe(row), 'is-left': left(row) }">
@@ -124,7 +124,7 @@
         <table class="stand">
           <thead>
             <tr>
-              <th>#</th><th>{{ $t('rankings.cols.player') }}</th>              <th>{{ $t('rankings.cols.played') }}</th><th>{{ $t('rankings.cols.won') }}</th><th>{{ $t('rankings.cols.drawn') }}</th><th>{{ $t('rankings.cols.lost') }}</th><th>{{ $t('rankings.cols.goalsFor') }}</th><th>{{ $t('rankings.cols.ownGoals') }}</th><th>{{ $t('rankings.cols.pts') }}</th>
+              <th>{{ $t('rankings.cols.rank') }}</th><th>{{ $t('rankings.cols.player') }}</th>              <th>{{ $t('rankings.cols.played') }}</th><th>{{ $t('rankings.cols.won') }}</th><th>{{ $t('rankings.cols.drawn') }}</th><th>{{ $t('rankings.cols.lost') }}</th><th>{{ $t('rankings.cols.goalsFor') }}</th><th>{{ $t('rankings.cols.ownGoals') }}</th><th>{{ $t('rankings.cols.pts') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -158,7 +158,7 @@
       <div class="table-wrap desk-only">
         <table class="stand">
           <thead>
-            <tr><th>#</th><th>{{ $t('rankings.cols.player') }}</th><th></th><th>{{ $t('rankings.cols.goals') }}</th></tr>
+            <tr><th>{{ $t('rankings.cols.rank') }}</th><th>{{ $t('rankings.cols.player') }}</th><th></th><th>{{ $t('rankings.cols.goals') }}</th></tr>
           </thead>
           <tbody>
             <tr v-for="(row, index) in rows" :key="row.PlayerID" :class="{ 'is-me': isMe(row), 'is-left': left(row) }">
@@ -186,7 +186,7 @@
       <div class="table-wrap desk-only">
         <table class="stand">
           <thead>
-            <tr><th>#</th><th>{{ $t('rankings.cols.player') }}</th><th>{{ $t('rankings.cols.awards') }}</th></tr>
+            <tr><th>{{ $t('rankings.cols.rank') }}</th><th>{{ $t('rankings.cols.player') }}</th><th>{{ $t('rankings.cols.awards') }}</th></tr>
           </thead>
           <tbody>
             <tr v-for="(row, index) in rows" :key="row.PlayerID" :class="{ 'is-me': isMe(row), 'is-left': left(row) }">

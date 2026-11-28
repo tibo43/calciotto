@@ -1,0 +1,627 @@
+{
+  "glossary": {
+    "mvp": "MVP",
+    "agoranking": "Agoranking"
+  },
+  "language": {
+    "label": "Sprache"
+  },
+  "unit": {
+    "points": "{n} Pkt. | {n} Pkt."
+  },
+  "common": {
+    "back": "Zurück",
+    "saving": "Speichern…",
+    "dismiss": "Schließen",
+    "done": "OK",
+    "error": "Fehler",
+    "tryAgain": "Erneut versuchen",
+    "cancel": "Abbrechen",
+    "remove": "Entfernen",
+    "loading": "Lädt…",
+    "couldntLoad": "Laden fehlgeschlagen",
+    "save": "Speichern",
+    "saved": "Gespeichert.",
+    "sending": "Wird gesendet…",
+    "admin": "Admin",
+    "member": "Mitglied",
+    "checkConnection": "Prüf deine Verbindung und versuch es dann erneut."
+  },
+  "nav": {
+    "home": "Startseite",
+    "main": "Hauptmenü",
+    "matches": "Spiele",
+    "rankings": "Tabelle",
+    "predictions": "Tipps",
+    "profile": "Profil"
+  },
+  "context": {
+    "label": "Gruppe und Saison wählen",
+    "group": "Gruppe",
+    "season": "Saison",
+    "noSeason": "Noch keine Saison"
+  },
+  "guide": {
+    "saveError": "Dein Fortschritt konnte nicht gespeichert werden. Versuch es erneut.",
+    "step": "Schritt {n} von {total}",
+    "close": "Anleitung schließen",
+    "continueAnyway": "Trotzdem weiter",
+    "next": "Weiter",
+    "getStarted": "Los geht’s",
+    "done": "Fertig",
+    "welcome": {
+      "title": "Willkommen bei Agoran",
+      "description": "Finde dein nächstes Spiel und behalte Teams, Ergebnisse und Tabelle deiner Gruppe im Blick."
+    },
+    "matches": {
+      "title": "Spiele",
+      "description": "Tippe auf Anmelden, sobald Plätze frei sind. Schau später wieder rein, um dein Team und das Endergebnis zu sehen."
+    },
+    "rankings": {
+      "title": "Tabelle",
+      "description": "Punkte zeigt die Spielergebnisse. Torjäger listet die Tore. @:award.mvpOfTheMatch zählt die Titel aus den Abstimmungen nach dem Spiel."
+    },
+    "predictions": {
+      "title": "Tipps",
+      "description": "Gib einen Tipp ab, solange die Tipprunde offen ist. Nach dem Spiel siehst du deine Punkte in der Tabelle."
+    },
+    "profile": {
+      "title": "Profil",
+      "description": "Sieh dir deine Bilanz und Gruppen an, erfahre, wie du die App installierst, und verwalte Einstellungen und Benachrichtigungen. Diese Anleitung kannst du jederzeit erneut ansehen."
+    }
+  },
+  "award": {
+    "mvpOfTheMatch": "@:glossary.mvp des Spiels"
+  },
+  "share": {
+    "dialogLabel": "Nachricht zum Teilen kopieren",
+    "copyThis": "Diese Nachricht kopieren",
+    "copied": "Nachricht kopiert",
+    "match": "Spiel: {when}",
+    "signupsOpen": "Anmeldung ist offen — mach mit bei Agoran:",
+    "viewMatch": "Spiel in Agoran ansehen:",
+    "groupCode": "Gruppencode: {code}",
+    "joinGroup": "Tritt unserer Agoran-Gruppe bei:",
+    "noPlayers": "Noch keine Spieler",
+    "player": "- {name}"
+  },
+  "home": {
+    "nextMatch": "Nächstes Spiel",
+    "signups": {
+      "open": "Anmeldung offen",
+      "notOpenYet": "Anmeldung noch nicht offen",
+      "closed": "Anmeldung geschlossen"
+    },
+    "loadError": "Spiele konnten nicht geladen werden",
+    "empty": {
+      "label": "Noch keine Spiele",
+      "title": "Starte die Saison",
+      "admin": "Leg das erste Spiel an, um die Anmeldung zu öffnen.",
+      "member": "Ein Admin legt das erste Spiel an."
+    },
+    "createMatch": "Spiel anlegen",
+    "viewMatch": "Zum Spiel",
+    "youPlayFor": "Du spielst für {team}",
+    "teamsSet": "Teams stehen fest",
+    "teamsVs": "{home} gegen {away}",
+    "placesLeft": "Plätze frei",
+    "signedUpCount": "{confirmed} / {cap} angemeldet",
+    "waitingCount": "{n} auf der Warteliste",
+    "youAreSignedUp": "Du bist angemeldet · {status}",
+    "statusWaiting": "Warteliste",
+    "statusConfirmed": "bestätigt",
+    "fullYoudBe": "Voll · du wärst {position} auf der Warteliste",
+    "position": "Nr. {n}",
+    "joinWaitingList": "Auf die Warteliste",
+    "signUp": "Anmelden",
+    "withdraw": "Abmelden",
+    "withdrawTitle": "Von diesem Spiel abmelden?",
+    "withdrawText": "Dein Platz geht an den Ersten auf der Warteliste.",
+    "lastMatch": "Letztes Spiel",
+    "later": "Später",
+    "upcoming": "Demnächst",
+    "latest": "Letzte Spiele",
+    "vs": "gegen",
+    "newMatch": "Neues Spiel",
+    "rowLabel": "{home} {score} {away}, {day}",
+    "toast": {
+      "waiting": "Angemeldet — du bist Nr. {position} auf der Warteliste.",
+      "inPosition": "Du bist bei diesem Spiel dabei. Du bist Nr. {position}.",
+      "in": "Du bist bei diesem Spiel dabei.",
+      "signUpError": "Fehler bei der Anmeldung zu diesem Spiel.",
+      "withdrawn": "Du hast dich von diesem Spiel abgemeldet.",
+      "withdrawError": "Fehler bei der Abmeldung von diesem Spiel."
+    }
+  },
+  "match": {
+    "manage": "Spiel verwalten",
+    "vote": {
+      "open": "@:{'glossary.mvp'}-Wahl offen",
+      "openHome": "@:{'glossary.mvp'}-Wahl offen · Abstimmen im Spiel",
+      "openUntil": "@:{'glossary.mvp'}-Wahl offen bis {until} · tippe auf einen Spieler, um zu ändern",
+      "openChange": "@:{'glossary.mvp'}-Wahl offen · tippe auf einen Spieler, um zu ändern",
+      "closedNoVotes": "@:{'glossary.mvp'}-Wahl beendet · keine Stimmen, kein Sieger",
+      "closedTieBoth": "@:{'glossary.mvp'}-Wahl beendet · Gleichstand, beide erhalten den Titel",
+      "closedTieAll": "@:{'glossary.mvp'}-Wahl beendet · Gleichstand, alle erhalten den Titel",
+      "closed": "@:{'glossary.mvp'}-Wahl beendet",
+      "errorFallback": "Fehler beim Aktualisieren deiner @:{'glossary.mvp'}-Stimme.",
+      "removed": "Deine @:{'glossary.mvp'}-Stimme wurde entfernt.",
+      "saved": "Deine @:{'glossary.mvp'}-Stimme wurde gespeichert."
+    },
+    "goals": "{n} Tor | {n} Tore",
+    "ownGoals": "{n} ET | {n} ET",
+    "loadError": "Spiel konnte nicht geladen werden",
+    "you": "Du",
+    "confirmed": "Bestätigt",
+    "confirmedCount": "{confirmed} / {cap}",
+    "yourPrediction": "Dein Tipp",
+    "yourPredictionPick": "Dein Tipp · {pick}",
+    "waitingList": "Warteliste",
+    "draw": "Remis",
+    "pick": "{label} · {odds}",
+    "votesAria": "{n} Stimme | {n} Stimmen",
+    "votesAriaMine": "{n} Stimme, deine Stimme (tippen zum Entfernen) | {n} Stimmen, inklusive deiner (tippen zum Entfernen)",
+    "predictionError": "Dein Tipp konnte nicht gespeichert werden. Bitte versuch es erneut.",
+    "notInGroups": "Dieses Spiel gehört zu keiner deiner Gruppen."
+  },
+  "group": {
+    "details": {
+      "title": "Gruppendetails",
+      "description": "Beschreibung",
+      "linkAddress": "Link-Adresse",
+      "linkLabel": "Link-Text",
+      "linkLabelPlaceholder": "Gruppenlink öffnen",
+      "save": "Details speichern",
+      "saved": "Gruppendetails gespeichert.",
+      "saveError": "Gruppendetails konnten nicht gespeichert werden."
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Anmelden",
+      "lead": "Zu deinen Gruppen und Spielen.",
+      "resetConfirmed": "Dein Passwort wurde geändert. Melde dich unten damit an.",
+      "accountDeleted": "Dein Konto wurde gelöscht.",
+      "waitingDevice": "Warte auf dein Gerät…",
+      "withPasskey": "Mit Passkey anmelden",
+      "or": "oder",
+      "submitting": "Anmeldung läuft…",
+      "submit": "Anmelden",
+      "forgot": "Passwort vergessen?",
+      "signup": "Noch kein Konto? Mit Einladungscode registrieren",
+      "failed": "Anmeldung fehlgeschlagen. Bitte prüf deine Zugangsdaten.",
+      "passkeyFailed": "Anmeldung mit Passkey fehlgeschlagen. Versuch es erneut oder nutze dein Passwort."
+    },
+    "email": "E-Mail",
+    "password": "Passwort",
+    "signup": {
+      "title": "Registrieren",
+      "lead": "Du brauchst einen Einladungscode vom Admin deiner Gruppe.",
+      "inviteCode": "Einladungscode",
+      "name": "Name",
+      "submitting": "Registrierung läuft…",
+      "submit": "Registrieren",
+      "login": "Schon ein Konto? Anmelden",
+      "hintFromLink": "Aus deinem Einladungslink übernommen.",
+      "hintAskAdmin": "Frag den Admin deiner Gruppe danach.",
+      "inviteRequired": "Einladungscode ist erforderlich.",
+      "failed": "Registrierung fehlgeschlagen. Bitte versuch es erneut."
+    },
+    "forgot": {
+      "title": "Passwort vergessen",
+      "lead": "Gib deine E-Mail-Adresse ein. Wir schicken dir einen Link, um ein neues Passwort festzulegen.",
+      "backToLogin": "Zurück zur Anmeldung",
+      "requested": "Falls ein Konto mit dieser E-Mail-Adresse existiert, wurde ein Link zum Zurücksetzen gesendet.",
+      "sending": "Wird gesendet…",
+      "sendAgain": "Erneut senden",
+      "send": "Link senden",
+      "failed": "Der Link konnte nicht gesendet werden. Bitte versuch es erneut."
+    },
+    "reset": {
+      "title": "Neues Passwort",
+      "lead": "Wähle ein neues Passwort für dein Konto.",
+      "newPassword": "Neues Passwort",
+      "save": "Passwort speichern",
+      "requestNew": "Neuen Link anfordern",
+      "expired": "Dieser Link ist abgelaufen. Fordere einen neuen an.",
+      "failed": "Passwort konnte nicht zurückgesetzt werden. Bitte versuch es erneut."
+    }
+  },
+  "newMatch": {
+    "title": "Neues Spiel",
+    "kickoff": "Anstoß",
+    "day": "Tag",
+    "time": "Uhrzeit",
+    "signups": "Anmeldung",
+    "opensOn": "Öffnet am",
+    "opensHint": "Standardmäßig sofort. Muss vor dem Anstoß liegen.",
+    "places": "Plätze",
+    "placesHint": "Standardmäßig 8 gegen 8. Wer darüber hinaus kommt, landet auf der Warteliste.",
+    "signMeUp": "Mich anmelden",
+    "signMeUpNote": "Du stehst auf der Liste, sobald das Spiel angelegt ist",
+    "creating": "Wird angelegt…",
+    "create": "Spiel anlegen",
+    "createError": "Das Spiel konnte nicht angelegt werden. Bitte versuch es erneut.",
+    "errors": {
+      "day": "Wähle den Spieltag.",
+      "time": "Leg eine Anstoßzeit fest.",
+      "opensAt": "Leg fest, wann die Anmeldung öffnet.",
+      "places": "Plätze müssen eine ganze Zahl sein, mindestens 1.",
+      "checkKickoff": "Prüf Tag und Anstoßzeit.",
+      "kickoffPast": "Der Anstoß muss in der Zukunft liegen.",
+      "checkOpensAt": "Prüf, wann die Anmeldung öffnet.",
+      "opensAfterKickoff": "Die Anmeldung muss vor dem Anstoß öffnen."
+    }
+  },
+  "date": {
+    "deadlineMidnight": "{date}, Mitternacht"
+  },
+  "rankings": {
+    "label": "Tabelle",
+    "tabs": {
+      "points": "Punkte",
+      "scorers": "Torjäger"
+    },
+    "loadError": "Tabelle konnte nicht geladen werden",
+    "agorankingLoadError": "@:glossary.agoranking konnte nicht geladen werden",
+    "emptyGroup": {
+      "label": "Noch keine Spiele gespielt",
+      "title": "Tabelle",
+      "text": "Die Tabelle erscheint, sobald das erste Ergebnis eingetragen ist."
+    },
+    "agr": {
+      "lead": "Wer {perMatch} die meisten Punkte holt, nicht insgesamt. Ein paar Glückstreffer reichen nicht: Je mehr du spielst, desto mehr zählen deine eigenen Ergebnisse.",
+      "perMatch": "pro Spiel",
+      "how": "So wird gerechnet",
+      "howText": "Ein Sieg bringt 3 Punkte, ein Unentschieden 1, eine Niederlage 0. Jeder Spieler startet mit ein paar {average}, die dem Punkteschnitt der Gruppe pro Spiel entsprechen. Deine echten Spiele kommen dazu: Neue liegen nahe am Schnitt und entfernen sich davon, je mehr sie spielen.",
+      "average": "„Durchschnittsspielen“",
+      "formula": "Wertung = ({points} + N × Gruppenschnitt) ÷ ({matches} + N)",
+      "formulaPoints": "Punkte",
+      "formulaMatches": "Spiele",
+      "note": "N ist ein Drittel der Spiele, die die Gruppe in dieser Saison gespielt hat, aufgerundet. Das ist auch die Mindestzahl an Spielen für die Wertung, beide wachsen also im Lauf der Saison.",
+      "notRanked": "Noch nicht gewertet · {n}",
+      "playedShort": "{n} Sp.",
+      "record": "{won}S {drawn}U {lost}N · {points}",
+      "rankedLine": "{played} Sp. · {record}"
+    },
+    "you": "DU",
+    "leftGroup": "(hat die Gruppe verlassen)",
+    "cols": {
+      "rank": "Pl.",
+      "player": "Spieler",
+      "matchesShort": "Sp.",
+      "wdl": "S-U-N",
+      "pts": "Pkt.",
+      "rating": "Wertung",
+      "played": "Sp.",
+      "won": "S",
+      "drawn": "U",
+      "lost": "N",
+      "goalsFor": "Tore",
+      "ownGoals": "ET",
+      "goals": "Tore",
+      "awards": "@:glossary.mvp"
+    },
+    "pointsLine": "Sp. {played} · S {won} · U {drawn} · N {lost} · Tore {goalsFor}",
+    "scorersLine": "{goals} · {played}",
+    "matches": "{n} Spiel | {n} Spiele",
+    "goals": "{n} Tor | {n} Tore",
+    "awards": "{n} @:glossary.mvp | {n} @:glossary.mvp",
+    "empty": {
+      "scorers": "Noch keine Tore",
+      "motm": "Noch kein @:glossary.mvp",
+      "agoranking": "Noch keine Wertung",
+      "points": "Noch keine Tabelle",
+      "text": "Spieler erscheinen hier, sobald in dieser Saison ein Spiel gespielt wurde."
+    }
+  },
+  "predictions": {
+    "label": "Tipps",
+    "tabs": {
+      "matches": "Spiele",
+      "leaderboard": "Tabelle"
+    },
+    "loadError": "Tipps konnten nicht geladen werden",
+    "loadErrorText": "Deine gespeicherten Tipps bleiben erhalten. Prüf deine Verbindung und versuch es dann erneut.",
+    "emptyGroup": {
+      "label": "Noch keine Spiele",
+      "title": "Tipps",
+      "text": "Die Tipprunde öffnet, sobald das erste Spiel angelegt ist."
+    },
+    "empty": {
+      "title": "Noch keine Tipps",
+      "matches": "Quoten gibt es, sobald beide Teams feststehen. Schau wieder rein, wenn das nächste Spiel angekündigt ist.",
+      "leaderboard": "Gib einen Tipp ab, sobald die Teams feststehen, um die Tabelle zu sehen."
+    },
+    "seeTeams": "Teams ansehen",
+    "cols": {
+      "last5": "Letzte 5"
+    },
+    "formWin": "R",
+    "formLoss": "F",
+    "team": "Team",
+    "whenTime": "{date} · {time}",
+    "whenAwaiting": "{date} · Ergebnis ausstehend",
+    "whenPlayed": "{date} · gespielt",
+    "noteOpen": "Tipprunde offen · zum Tippen antippen.",
+    "noteWaiting": "Teams stehen fest · dein Tipp fehlt noch.",
+    "yourPick": "Dein Tipp: {label} · {odds}",
+    "awaitingResult": "Ergebnis ausstehend",
+    "won": "Richtig · {points}",
+    "lost": "Falsch · {points}",
+    "saveError": "Dein Tipp konnte nicht gespeichert werden. Bitte versuch es erneut."
+  },
+  "edit": {
+    "backToMatch": "Zurück zum Spiel",
+    "editing": "Bearbeiten · Admin",
+    "noSignupList": "Keine Anmeldeliste",
+    "regStatus": "Anmeldung {state} · {detail}",
+    "teamsMade": "Teams stehen",
+    "regCounts": "{counts} · {waiting}",
+    "confirmedPlaces": "{confirmed} bestätigt / {cap} Plätze",
+    "state": {
+      "open": "offen",
+      "notOpenYet": "noch nicht offen",
+      "closed": "geschlossen"
+    },
+    "waiting": "{n} wartet | {n} warten",
+    "steps": {
+      "label": "Schritte",
+      "signups": "Anmeldung",
+      "teams": "Teams",
+      "score": "Ergebnis und Tore"
+    },
+    "signups": {
+      "title": "1. Anmeldung",
+      "close": "Anmeldung schließen",
+      "reopen": "Anmeldung wieder öffnen",
+      "reopenShort": "Öffnen",
+      "places": "Plätze",
+      "placesAria": "Anzahl der Plätze",
+      "update": "Ändern",
+      "confirmed": "Bestätigt",
+      "noConfirmed": "Keine bestätigten Spieler.",
+      "waitingList": "Warteliste",
+      "noWaiting": "Niemand wartet.",
+      "teamsMadeNote": "Die Teams stehen. Die Anmeldung oben bleibt, wie sie ist.",
+      "notComposed": "Noch nicht aufgeteilt. Bestätigte Spieler in der Reserve: {confirmed}{bench}. Die Warteliste wird nicht automatisch aufgeteilt.",
+      "bench": ", auf der Warteliste: {n} ({names})"
+    },
+    "delete": "Löschen",
+    "save": "Speichern",
+    "teams": {
+      "split": "Automatisch aufteilen",
+      "clear": "Leeren",
+      "splitHint": "Bestätigte Spieler werden zufällig aufgeteilt: ein Torwart pro Team, wenn es zwei gibt, dann Abwehr, Mittelfeld und Sturm gleichmäßig, dann Spieler ohne Position. Die Teams unterscheiden sich um höchstens einen Spieler. Bereits eingeteilte Spieler bleiben, wo sie sind. Die Warteliste wird nicht berücksichtigt.",
+      "tapHint": "Tippe auf einen Spieler, um ihn einem Team zuzuteilen oder zurück in die Reserve zu schicken.",
+      "reserve": "Reserve",
+      "allPlaced": "Alle bestätigten Spieler sind eingeteilt.",
+      "moveTo": "{name} verschieben nach",
+      "noPlayers": "Noch keine Spieler.",
+      "waitingNote": "Diese Spieler werden bei der automatischen Aufteilung nicht berücksichtigt. Der Erste auf der Warteliste rückt nach, sobald ein bestätigter Platz frei wird.",
+      "waitingMeta": "Wartet · Nr. {n}",
+      "addGuest": "Spieler ohne Anmeldung hinzufügen",
+      "everyoneHere": "Die ganze Gruppe ist schon dabei.",
+      "needBoth": "Teile jedem Team mindestens einen Spieler zu, um zu bestätigen.",
+      "confirm": "Teams bestätigen",
+      "guest": "Gast",
+      "sizeCounter": "{a} gegen {b}"
+    },
+    "score": {
+      "opensLater": "Das Ergebnis lässt sich eintragen, sobald jedes Team mindestens einen Spieler hat.",
+      "computed": "Berechnetes Ergebnis",
+      "hint": "Das Ergebnis ist die Summe der Tore jedes Teams plus die Eigentore des Gegners. Ein Eigentor zählt nicht in der Torjägerliste.",
+      "goalsFor": "Tore für {team}",
+      "og": "ET",
+      "removeGoal": "Ein Tor von {name} entfernen",
+      "addGoal": "Ein Tor für {name} hinzufügen",
+      "removeOwnGoal": "Ein Eigentor von {name} entfernen",
+      "addOwnGoal": "Ein Eigentor für {name} hinzufügen",
+      "ownGoalAdd": "+ Eigentor",
+      "ownGoal": "Eigentor",
+      "ownGoalHelp": "Dieses Tor zählt für {team}. Wähle den Spieler von {other}, der es erzielt hat. Es zählt nicht in der Torjägerliste.",
+      "saveChanges": "Änderungen speichern",
+      "saved": "Ergebnis gespeichert · du kannst es noch ändern.",
+      "notSaved": "Ergebnis noch nicht gespeichert."
+    },
+    "share": {
+      "teams": "Teams teilen",
+      "match": "Spiel teilen",
+      "subtitleMatch": "Die Spielankündigung wird gesendet — Datum und Anmeldelink.",
+      "subtitleTeams": "Die Aufstellungen werden gesendet — {counts}.",
+      "teamCount": "{team} {n}"
+    },
+    "heading": "{date} · {time}",
+    "team": "Team",
+    "toast": {
+      "closed": "Anmeldung geschlossen.",
+      "closeError": "Die Anmeldung konnte nicht geschlossen werden.",
+      "reopened": "Anmeldung wieder geöffnet.",
+      "reopenError": "Die Anmeldung konnte nicht wieder geöffnet werden.",
+      "placesSet": "Plätze auf {n} gesetzt.",
+      "placesError": "Die Plätze konnten nicht geändert werden.",
+      "allOnTeam": "Alle Bestätigten sind schon in einem Team.",
+      "changesSaved": "Änderungen gespeichert.",
+      "saved": "Gespeichert.",
+      "saveError": "Das Spiel konnte nicht gespeichert werden.",
+      "deleteConfirm": "Dieses Spiel löschen? Das lässt sich nicht rückgängig machen.",
+      "deleteError": "Das Spiel konnte nicht gelöscht werden."
+    },
+    "recap": {
+      "goals": "{name} ×{n}",
+      "ownGoals": "{name} (ET ×{n})"
+    }
+  },
+  "invite": {
+    "title": "Einladung",
+    "cardTitle": "Spieler einladen",
+    "active": "Code aktiv",
+    "none": "Kein aktiver Code",
+    "validUntil": "Gültig, bis du ihn erneuerst",
+    "share": "Teilen",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "renew": "Erneuern",
+    "renewTitle": "Code erneuern?",
+    "renewNote": "Der alte Code und der Einladungslink funktionieren dann nicht mehr.",
+    "empty": "Erstelle einen Code, damit neue Spieler beitreten können.",
+    "make": "Code erstellen",
+    "copyError": "Der Code konnte nicht kopiert werden.",
+    "renewed": "Code erneuert.",
+    "renewError": "Der Code konnte nicht erneuert werden.",
+    "makeError": "Es konnte kein Code erstellt werden."
+  },
+  "passkeys": {
+    "title": "Passkeys",
+    "loadingAria": "Passkeys werden geladen",
+    "empty": "Melde dich mit Face ID, deinem Fingerabdruck oder deiner Bildschirmsperre an.",
+    "removeAria": "{name} entfernen",
+    "removeTitle": "Diesen Passkey entfernen?",
+    "removeNote": "Du kannst dich dann nicht mehr damit anmelden.",
+    "nameLabel": "Name (optional)",
+    "namePlaceholder": "Mein Handy",
+    "password": "Aktuelles Passwort",
+    "waiting": "Warte auf dein Gerät…",
+    "create": "Passkey erstellen",
+    "add": "Passkey hinzufügen",
+    "unsupported": "Öffne Agoran in einem Browser, der Passkeys unterstützt, um einen hinzuzufügen.",
+    "noneYet": "Noch keine",
+    "devices": "{n} Gerät | {n} Geräte",
+    "lastUsed": "Zuletzt genutzt am {date}",
+    "added": "Hinzugefügt am {date}",
+    "loadError": "Deine Passkeys konnten nicht geladen werden.",
+    "addedToast": "Passkey hinzugefügt.",
+    "addError": "Der Passkey konnte nicht hinzugefügt werden.",
+    "removedToast": "Passkey entfernt.",
+    "removeError": "Der Passkey konnte nicht entfernt werden."
+  },
+  "positions": {
+    "GK": "TW",
+    "DEF": "ABW",
+    "MID": "MF",
+    "FWD": "ST"
+  },
+  "notifications": {
+    "motmAnnounced": "@:glossary.mvp steht fest"
+  },
+  "profile": {
+    "loadError": "Dein Profil konnte nicht geladen werden",
+    "account": "Konto",
+    "manageAccount": "Konto verwalten",
+    "aboutGroup": "Über diese Gruppe",
+    "openGroupLink": "Gruppenlink öffnen",
+    "record": "Bilanz",
+    "allSeasons": "Alle Saisons",
+    "groups": "Gruppen",
+    "noGroup": "Noch keine Gruppe. Bitte einen Admin, dich einzuladen.",
+    "favouriteGroup": "Lieblingsgruppe",
+    "setFavourite": "Als Favorit festlegen",
+    "favourite": "Favorit",
+    "groupMeta": "{matches} Sp. · {points} Pkt.",
+    "groupSettings": "Gruppeneinstellungen",
+    "thisGroup": "Diese Gruppe",
+    "group": "Gruppe",
+    "groupsCombined": "{n} Gruppen zusammen",
+    "stats": {
+      "wins": "Siege",
+      "draws": "Remis",
+      "losses": "Nieder­lagen",
+      "points": "Punkte",
+      "goals": "Tore",
+      "ownGoals": "ET",
+      "predictionPoints": "Tipp-Pkt."
+    },
+    "settings": {
+      "title": "Einstellungen",
+      "notifications": "Benachrichtigungen",
+      "pushOn": "Auf diesem Gerät an",
+      "pushOff": "Auf diesem Gerät aus",
+      "install": "Agoran installieren",
+      "installPrompt": "Öffne sie wie jede andere App von deinem Startbildschirm",
+      "installIos": "Tippe auf Teilen, dann auf Zum Home-Bildschirm",
+      "installButton": "Installieren",
+      "replayGuide": "Anleitung erneut ansehen"
+    },
+    "logout": "Abmelden",
+    "notifications": {
+      "device": "Benachrichtigungen auf diesem Gerät",
+      "types": "Arten",
+      "needsInstall": "Installiere zuerst die App und schalte dann die Benachrichtigungen ein.",
+      "denied": "Benachrichtigungen sind in den Browsereinstellungen blockiert.",
+      "unsupported": "Dieser Browser kann keine Benachrichtigungen empfangen.",
+      "choose": "Wähle aus, welche du möchtest.",
+      "error": "Die Benachrichtigungen konnten nicht geändert werden.",
+      "unavailable": "Benachrichtigungen sind noch nicht verfügbar. Bitte versuch es später erneut.",
+      "groups": {
+        "match": "Spiel",
+        "predictions": "Tipps",
+        "reminder": "Erinnerung",
+        "admin": "Admin"
+      },
+      "registrationOpen": "Anmeldung offen",
+      "teamAssigned": "Dein Team steht fest",
+      "resultRecorded": "Endergebnis",
+      "predictionsOpen": "Tipprunde offen",
+      "predictionsSettled": "Tipps ausgewertet",
+      "kickoffReminder": "Anstoß in 30 Minuten",
+      "memberJoined": "Neues Mitglied"
+    },
+    "appearance": {
+      "title": "Darstellung",
+      "dark": "Dunkelmodus",
+      "darkNote": "Gilt für die ganze Website, auf diesem Gerät"
+    },
+    "identity": {
+      "title": "Identität",
+      "name": "Name",
+      "save": "Namen speichern",
+      "error": "Der Name konnte nicht gespeichert werden."
+    },
+    "positions": {
+      "title": "Positionen",
+      "label": "Wo du gern spielst",
+      "help": "Wähle eine oder mehrere. Deine Gruppen sehen sie, und Admins nutzen sie, um die Teams auszugleichen.",
+      "loadError": "Deine Positionen konnten nicht geladen werden. Lade die Seite neu, um es erneut zu versuchen.",
+      "saved": "Positionen gespeichert.",
+      "error": "Deine Positionen konnten nicht gespeichert werden."
+    },
+    "email": {
+      "title": "E-Mail",
+      "unavailable": "Die E-Mail-Adresse lässt sich noch nicht ändern."
+    },
+    "password": {
+      "title": "Passwort",
+      "note": "Für ein neues Passwort schicken wir dir einen Link per E-Mail, wie bei „Passwort vergessen“.",
+      "passkeysNote": "Beim Zurücksetzen des Passworts werden auch deine gespeicherten Passkeys entfernt.",
+      "send": "Link per E-Mail senden",
+      "error": "Der Link konnte nicht gesendet werden. Bitte versuch es erneut."
+    },
+    "delete": {
+      "zone": "Gefahrenbereich",
+      "title": "Mein Konto löschen",
+      "text": "Das lässt sich nicht rückgängig machen. Dein Name, deine E-Mail-Adresse und dein Passwort werden gelöscht, und du wirst aus allen Gruppen entfernt. Die Spielhistorie (Tore, Titel als @:{'award.mvpOfTheMatch'}) bleibt für die anderen Spieler erhalten und ist mit keinem Konto mehr verknüpft.",
+      "confirmTitle": "Löschen bestätigen",
+      "confirmText": "Gib zur Bestätigung dein aktuelles Passwort ein.",
+      "password": "Passwort",
+      "error": "Das Konto konnte nicht gelöscht werden."
+    },
+    "teams": {
+      "title": "Teams",
+      "note": "Speichere jedes Team einzeln.",
+      "nameAria": "Name von {name}",
+      "error": "Das Team konnte nicht gespeichert werden."
+    },
+    "members": {
+      "title": "Mitglieder",
+      "note": "Deine eigene Rolle kannst du nicht ändern. Der letzte Admin kann nicht herabgestuft werden.",
+      "removeAdmin": "Admin entziehen",
+      "makeAdmin": "Admin machen",
+      "removeTitle": "Aus der Gruppe entfernen?",
+      "removeText": "{name} verlässt die Gruppe. Die Spielhistorie bleibt erhalten. Für eine Rückkehr ist eine neue Einladung nötig.",
+      "demoteTitle": "Admin-Rolle entziehen?",
+      "demoteText": "{name} bleibt Mitglied der Gruppe. Du kannst die Person später wieder zum Admin machen.",
+      "removeError": "Das Mitglied konnte nicht entfernt werden.",
+      "roleError": "Die Rolle konnte nicht geändert werden."
+    }
+  }
+}

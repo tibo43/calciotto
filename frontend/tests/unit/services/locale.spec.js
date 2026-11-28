@@ -4,17 +4,18 @@ const setLanguages = (languages) => {
   Object.defineProperty(window.navigator, 'languages', { value: languages, configurable: true });
 };
 
-// A fresh i18n instance and locale service per test (module state), with the
-// given languages made "available" by giving them a message.
+const ALL = ['fr', 'it', 'de', 'es'];
+
+// A fresh i18n instance and locale service per test (module state). Only the
+// given languages stay "available": the others get an empty bundle, which is
+// how the app tells a language it cannot show yet.
 const load = async (available = []) => {
   vi.resetModules();
   const { i18n } = await import('@/i18n');
-  available.forEach((code) => i18n.global.setLocaleMessage(code, { language: { label: code } }));
+  ALL.filter((code) => !available.includes(code)).forEach((code) => i18n.global.setLocaleMessage(code, {}));
   const service = await import('@/services/locale');
   return { i18n, ...service };
 };
-
-const ALL = ['fr', 'it', 'de', 'es'];
 
 // Each fresh module registers its own 'languagechange' listener on the shared
 // window; they are removed after each test so an old instance cannot answer
@@ -69,7 +70,7 @@ describe('locale service', () => {
       expect(detectLocale(['en-GB', 'fr'])).toBe('en');
     });
 
-    it('only counts languages that have messages: today English alone', async () => {
+    it('only counts languages that have messages', async () => {
       const { detectLocale, availableLocales } = await load();
       expect(availableLocales()).toEqual(['en']);
       expect(detectLocale(['fr-FR', 'de'])).toBe('en');

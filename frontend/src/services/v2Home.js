@@ -1,7 +1,8 @@
 import { t } from '@/i18n';
 import en from '@/locales/en.json';
 import { parseCalendarDay } from './datetime';
-import { activeTag, monthName, weekdayName } from './intl';
+import { activeTag, dateLabel, monthName, weekdayName } from './intl';
+import { getLocale } from './locale';
 import { deriveRegistrationState, REGISTRATION_NOT_OPEN_YET, REGISTRATION_OPEN } from './matchRegistration';
 import { isMotmVotingOpen, motmVotingDeadlineMs } from './motmVoting';
 
@@ -74,36 +75,36 @@ export function splitHomeMatches(matches, nowMs) {
 
 const hasKickoff = (value) => Boolean(value) && !/^\d{4}-\d{2}-\d{2}$/.test(String(value));
 
+const WEEKDAY_TIME = { weekday: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
+
 function localParts(value) {
   const at = new Date(value);
   if (Number.isNaN(at.getTime())) return null;
   // No timeZone option, on purpose: a kick-off is one instant shown in the
   // viewer's own zone, the same rule as formatDateTimeShort in datetime.js.
-  return new Intl.DateTimeFormat(activeTag(), {
-    weekday: 'long',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(at);
+  return new Intl.DateTimeFormat(activeTag(), WEEKDAY_TIME).formatToParts(at);
 }
 
 export function heroDateLabel(date) {
   const day = parseCalendarDay(date);
   if (!day) return '';
-  return t('date.hero', { weekday: weekdayName(day), day: day.getDate(), month: monthName(day) });
+  return dateLabel(day, { weekday: 'short', day: 'numeric', month: 'short' },
+    () => t('date.hero', { weekday: weekdayName(day), day: day.getDate(), month: monthName(day) }));
 }
 
 export function rowDateLabel(date) {
   const day = parseCalendarDay(date);
   if (!day) return '';
-  return t('date.row', { day: String(day.getDate()).padStart(2, '0'), month: monthName(day) });
+  return dateLabel(day, { day: '2-digit', month: 'short' },
+    () => t('date.row', { day: String(day.getDate()).padStart(2, '0'), month: monthName(day) }));
 }
 
 // « 4 Sep »: the day as read out in a Latest matches row's name.
 export function dayMonthLabel(date) {
   const day = parseCalendarDay(date);
   if (!day) return '';
-  return t('date.dayMonth', { day: day.getDate(), month: monthName(day) });
+  return dateLabel(day, { day: 'numeric', month: 'short' },
+    () => t('date.dayMonth', { day: day.getDate(), month: monthName(day) }));
 }
 
 // A calendar day with no kick-off returns nothing, so a played match never
@@ -121,6 +122,7 @@ export function kickoffLabel(scheduledAt) {
 export function weekdayTimeLabel(scheduledAt) {
   const time = kickoffLabel(scheduledAt);
   if (!time) return '';
+  if (getLocale() !== 'en') return dateLabel(scheduledAt, WEEKDAY_TIME);
   const parts = localParts(scheduledAt);
   const weekday = parts && parts.find((part) => part.type === 'weekday');
   return weekday ? t('date.weekdayTime', { weekday: weekday.value, time }) : time;
@@ -150,10 +152,13 @@ export function voteDeadlineLabel(match) {
   if (hasKickoff(match.ScheduledAt)) {
     const at = new Date(deadline);
     const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
-    return t('date.deadline', { day: at.getDate(), month: monthName(at), time });
+    return dateLabel(at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' },
+      () => t('date.deadline', { day: at.getDate(), month: monthName(at), time }));
   }
   const last = new Date(deadline - 1);
-  return t('date.deadlineMidnight', { day: last.getDate(), month: monthName(last) });
+  const date = dateLabel(last, { day: 'numeric', month: 'short' },
+    () => t('date.dayMonth', { day: last.getDate(), month: monthName(last) }));
+  return t('date.deadlineMidnight', { date });
 }
 
 export function motmWinners(votes) {

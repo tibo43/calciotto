@@ -84,14 +84,15 @@ import { getMyPasskeys, removeMyPasskey } from '@/services/api';
 import { addPasskey, supportsPasskeys } from '@/services/passkeys';
 import { actionErrorMessage } from '@/services/v2Match';
 import { t } from '@/i18n';
-import { monthName } from '@/services/intl';
+import { dateLabel, monthName } from '@/services/intl';
 import CollapsibleCardV2 from './CollapsibleCardV2.vue';
 
 // "18 Nov 2026" in the browser's own time zone (the label style uppercases it).
 export function formatPasskeyDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return t('date.dayMonthYear', { day: date.getDate(), month: monthName(date), year: date.getFullYear() });
+  return dateLabel(date, { day: 'numeric', month: 'short', year: 'numeric' },
+    () => t('date.dayMonthYear', { day: date.getDate(), month: monthName(date), year: date.getFullYear() }));
 }
 
 // Design v2 passkey list for the Account page, shown only with the

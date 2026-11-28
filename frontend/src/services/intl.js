@@ -47,6 +47,15 @@ const namePart = (date, field, width) => {
 export const weekdayName = (date, width = 'short') => namePart(date, 'weekday', width);
 export const monthName = (date, width = 'short') => namePart(date, 'month', width);
 
+// A date label with one rule for every language but English: Intl's own text
+// for the language (de « So., 6. Sept. », fr « dim. 6 sept. »), with no
+// pieces glued together by hand, so that every screen writes a date the same
+// way. English keeps its designed « Sun 6 Sep » (`english()`, built from the
+// date.* messages), which Intl's en-US pattern (« Sun, Sep 6 ») does not give.
+export const dateLabel = (date, options, english) => (
+  getLocale() === 'en' ? english() : formatDate(date, options)
+);
+
 // 'one', 'other'... for the active language (0 is 'one' in French, 'other' in
 // English).
 export const pluralCategory = (n) => categoryOf(n, getLocale());

@@ -16,10 +16,12 @@ describe('vue-i18n instance', () => {
     expect(i18n.global.t('language.label')).toBe('Language');
   });
 
-  it('falls back to English for a language with no message', () => {
+  it('falls back to English for a key a language does not have', () => {
+    i18n.global.mergeLocaleMessage('en', { test: { onlyEnglish: 'Only in English' } });
     i18n.global.locale.value = 'fr';
     try {
-      expect(i18n.global.t('language.label')).toBe('Language');
+      expect(i18n.global.t('language.label')).toBe('Langue');
+      expect(i18n.global.t('test.onlyEnglish')).toBe('Only in English');
     } finally {
       i18n.global.locale.value = 'en';
     }
@@ -39,7 +41,7 @@ describe('vue-i18n instance', () => {
     expect(DEFAULT_LOCALE).toBe('en');
   });
 
-  it('has a bundle for English only so far', () => {
-    expect(Object.keys(messages)).toEqual(['en']);
+  it('has a bundle for each of the five languages', () => {
+    expect(Object.keys(messages).sort()).toEqual(['de', 'en', 'es', 'fr', 'it']);
   });
 });

@@ -258,7 +258,7 @@
     "row": "{day} {month}",
     "dayMonth": "{day} {month}",
     "deadline": "{day} {month} {time}",
-    "deadlineMidnight": "{day} {month} midnight",
+    "deadlineMidnight": "{date} midnight",
     "weekdayTime": "{weekday} {time}",
     "dayMonthYear": "{day} {month} {year}"
   },
@@ -293,6 +293,7 @@
     "you": "YOU",
     "leftGroup": "(left the group)",
     "cols": {
+      "rank": "#",
       "player": "Player",
       "matchesShort": "M",
       "wdl": "W-D-L",
