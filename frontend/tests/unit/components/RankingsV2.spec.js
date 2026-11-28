@@ -74,16 +74,16 @@ describe('RankingsV2.vue empty group', () => {
   });
 });
 
-describe('RankingsV2.vue Star of the Match tab', () => {
+describe('RankingsV2.vue MVP tab', () => {
   beforeEach(() => {
     getToken.mockReturnValue('');
   });
 
-  it('names the motm tab Stars, and its empty title No stars yet', async () => {
+  it('names the motm tab MVP, and its empty title No MVP yet', async () => {
     const wrapper = mountRankings({ seasons: ['2026-2027'], route: { query: { tab: 'motm' } } });
     await flushPromises();
-    expect(wrapper.findAll('.subnav a').map((tab) => tab.text())).toEqual(['Points', 'Scorers', 'Stars']);
-    expect(wrapper.find('h1').text()).toBe('No stars yet');
+    expect(wrapper.findAll('.subnav a').map((tab) => tab.text())).toEqual(['Points', 'Scorers', 'MVP']);
+    expect(wrapper.find('h1').text()).toBe('No MVP yet');
     wrapper.unmount();
   });
 });

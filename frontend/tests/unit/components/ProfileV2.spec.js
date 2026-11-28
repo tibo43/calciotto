@@ -170,12 +170,12 @@ describe('ProfileV2.vue notifications switch', () => {
     expect(wrapper.text()).toContain('Install the app first');
   });
 
-  it('lists Star of the Match right under Final score', async () => {
+  it('lists MVP announced right under Final score', async () => {
     const { wrapper } = await mountProfile({ routeName: 'ProfileNotifications', features: ['push-notifications'] });
     const text = wrapper.text();
-    expect(text).toContain('Star of the Match');
-    expect(text.indexOf('Final score')).toBeLessThan(text.indexOf('Star of the Match'));
-    expect(text.indexOf('Star of the Match')).toBeLessThan(text.indexOf('Predictions open'));
+    expect(text).toContain('MVP announced');
+    expect(text.indexOf('Final score')).toBeLessThan(text.indexOf('MVP announced'));
+    expect(text.indexOf('MVP announced')).toBeLessThan(text.indexOf('Predictions open'));
   });
 });
 
@@ -342,17 +342,17 @@ describe('ProfileV2.vue preferred positions (Account)', () => {
   });
 });
 
-describe('ProfileV2.vue Star of the Match', () => {
-  it('labels the awards stat Stars', async () => {
+describe('ProfileV2.vue MVP', () => {
+  it('labels the awards stat MVP', async () => {
     const { wrapper } = await mountProfile();
     const labels = wrapper.findAll('.stat').map((stat) => stat.text());
-    expect(labels.some((text) => /Stars$/.test(text))).toBe(true);
+    expect(labels.some((text) => /MVP$/.test(text))).toBe(true);
     expect(wrapper.text()).not.toContain('MOTM');
-    expect(wrapper.find('.stats').text()).not.toContain('Star of the Match');
+    expect(wrapper.find('.stats').text()).not.toContain('MVP of the Match');
   });
 
-  it('names the titles Star of the Match in the account deletion text', async () => {
+  it('names the titles MVP of the Match in the account deletion text', async () => {
     const { wrapper } = await mountProfile({ routeName: 'ProfileAccount' });
-    expect(wrapper.find('.danger').text()).toContain('Match history (goals, Star of the Match titles) stays');
+    expect(wrapper.find('.danger').text()).toContain('Match history (goals, MVP of the Match titles) stays');
   });
 });

@@ -76,18 +76,16 @@ function formatOutcome(score) {
   return leaders[0].team ? `${leaders[0].team} won! ` : '';
 }
 
-// The design v2 name of the Man of the Match award, and every word of the
-// motm_announced notification built on it. This worker is served as is from
-// public/, outside the bundle, so it cannot import STAR_OF_THE_MATCH from
+// The short on-screen name of the award (MVP). This worker is served as is
+// from public/, outside the bundle, so it cannot import MVP from
 // src/services/v2Home.js: `name` is a copy, and tests/unit/public/sw.spec.js
-// fails if the two differ. The result_recorded push uses it too.
-const MOTM_NAME = 'Star of the Match';
+// fails if the two differ. The result_recorded push uses it too. There is
+// no plural: a tie still says "MVP: Luca & Marco".
+const MVP_NAME = 'MVP';
 const MOTM_TEXT = {
-  name: MOTM_NAME,
-  winnerTitle: `You're the ${MOTM_NAME}!`,
-  voterTitle: MOTM_NAME,
-  // The plural, on a tie.
-  voterTitleTie: MOTM_NAME.replace(/^Star\b/, 'Stars'),
+  name: MVP_NAME,
+  winnerTitle: `You're the ${MVP_NAME}!`,
+  voterTitle: MVP_NAME,
   body: 'See the game.',
 };
 
@@ -156,9 +154,8 @@ function buildNotification(data) {
         return { title: MOTM_TEXT.winnerTitle, body: MOTM_TEXT.body };
       }
       const names = formatNames(data.winners);
-      const noun = (data.winners || []).filter(Boolean).length > 1 ? MOTM_TEXT.voterTitleTie : MOTM_TEXT.voterTitle;
       return {
-        title: names ? `${noun}: ${names}` : MOTM_TEXT.voterTitle,
+        title: names ? `${MOTM_TEXT.voterTitle}: ${names}` : MOTM_TEXT.voterTitle,
         body: MOTM_TEXT.body,
       };
     }

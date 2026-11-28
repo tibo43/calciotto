@@ -167,7 +167,7 @@ import { findMatchInMyGroups, actionErrorMessage } from '@/services/v2Match';
 import AppToast from '@/components/AppToast.vue';
 import ManageMatchLink from '@/components/v2/ManageMatchLink.vue';
 import { deriveRegistrationState, registrationsAreOpen, isPlayerOnRoster, teamsAreComposed } from '@/services/matchRegistration';
-import { heroDateLabel, kickoffLabel, placesLeft, isMatchOver, matchVoteCopy, motmWinners, goalLine, myTeam, nextWaitingPosition, STAR_OF_THE_MATCH, voteErrorMessage } from '@/services/v2Home';
+import { heroDateLabel, kickoffLabel, placesLeft, isMatchOver, matchVoteCopy, motmWinners, goalLine, myTeam, nextWaitingPosition, MVP, voteErrorMessage } from '@/services/v2Home';
 import { isMotmVotingOpen } from '@/services/motmVoting';
 import fitTwoLines from '@/directives/fitTwoLines';
 
@@ -351,10 +351,10 @@ export default {
           await voteForMotm(this.match.ID, player.ID);
         }
         this.$refs.toast.show(removing
-          ? `Your ${STAR_OF_THE_MATCH} vote has been removed.`
-          : `Your ${STAR_OF_THE_MATCH} vote has been saved.`, 'success');
+          ? `Your ${MVP} vote has been removed.`
+          : `Your ${MVP} vote has been saved.`, 'success');
       } catch (error) {
-        console.error('Error updating Man of the Match vote:', error);
+        console.error('Error updating MVP vote:', error);
         this.$refs.toast.show(voteErrorMessage(error), 'error');
       } finally {
         this.votes = await getMatchVotes(this.match.ID).catch(() => this.votes);

@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { STAR_OF_THE_MATCH } from '@/services/v2Home';
+import { MVP } from '@/services/v2Home';
 
 // The notification wording lives in public/sw.js (see its comment); the file
 // exports it for exactly this test.
@@ -14,8 +14,8 @@ const kickoffText = new Date(KICKOFF).toLocaleString('en-US', {
 const kickoffTime = new Date(KICKOFF).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
 describe('buildNotification', () => {
-  it("names the award like the v2 screens (its copy of STAR_OF_THE_MATCH)", () => {
-    expect(MOTM_TEXT.name).toBe(STAR_OF_THE_MATCH);
+  it("names the award like the v2 screens (its copy of MVP)", () => {
+    expect(MOTM_TEXT.name).toBe(MVP);
   });
 
   it('announces open sign-ups with the group and kick-off', () => {
@@ -39,11 +39,11 @@ describe('buildNotification', () => {
       .toBe(`Kick-off at ${kickoffTime}.`);
   });
 
-  it('gives the final score and asks for a Star of the Match vote', () => {
+  it('gives the final score and asks for an MVP vote', () => {
     expect(buildNotification({
       type: 'result_recorded',
       score: [{ team: 'Black', goals: 3 }, { team: 'White', goals: 1 }]
-    })).toEqual({ title: 'Final score: Black 3 – White 1', body: 'Vote for your Star of the Match.' });
+    })).toEqual({ title: 'Final score: Black 3 – White 1', body: 'Vote for your MVP.' });
   });
 
   it('announces that predictions are open for the match', () => {
@@ -110,27 +110,27 @@ describe('buildNotification', () => {
       .toBe('You earned 0 points.');
   });
 
-  it('tells a Star of the Match winner they won', () => {
+  it('tells an MVP winner they won', () => {
     expect(buildNotification({ type: 'motm_announced', winner: true, winners: ['Luca'] })).toEqual({
-      title: "You're the Star of the Match!",
+      title: "You're the MVP!",
       body: 'See the game.'
     });
     expect(buildNotification({ type: 'motm_announced', winner: true, winners: ['Luca', 'Marco'] }).title)
-      .toBe("You're the Star of the Match!");
+      .toBe("You're the MVP!");
   });
 
-  it('tells a voter who the Star of the Match is, every name on a tie', () => {
+  it('tells a voter who the MVP is, every name on a tie', () => {
     expect(buildNotification({ type: 'motm_announced', winners: ['Luca'] })).toEqual({
-      title: 'Star of the Match: Luca',
+      title: 'MVP: Luca',
       body: 'See the game.'
     });
     expect(buildNotification({ type: 'motm_announced', winners: ['Luca', 'Marco'] }).title)
-      .toBe('Stars of the Match: Luca & Marco');
+      .toBe('MVP: Luca & Marco');
     expect(buildNotification({ type: 'motm_announced', winners: ['Luca', 'Marco', 'Sara'] }).title)
-      .toBe('Stars of the Match: Luca, Marco & Sara');
+      .toBe('MVP: Luca, Marco & Sara');
     expect(buildNotification({ type: 'motm_announced', winners: ['Luca', 'Marco', 'Sara', 'Tom'] }).title)
-      .toBe('Stars of the Match: Luca, Marco, Sara & Tom');
-    expect(buildNotification({ type: 'motm_announced' })).toEqual({ title: 'Star of the Match', body: 'See the game.' });
+      .toBe('MVP: Luca, Marco, Sara & Tom');
+    expect(buildNotification({ type: 'motm_announced' })).toEqual({ title: 'MVP', body: 'See the game.' });
   });
 
   it('still shows something for a type it does not know', () => {
