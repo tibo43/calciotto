@@ -539,6 +539,11 @@ func TestDeleteAccount_Integration_AnonymizesAndCleansUp(t *testing.T) {
 		t.Fatalf("failed to promote Quinn to admin directly: %v", err)
 	}
 
+	// A saved language is personal data too: the deletion must clear it.
+	if err := tx.Model(&models.Player{}).Where("id = ?", deletingPlayerID).Update("locale", "de").Error; err != nil {
+		t.Fatalf("failed to save a language for Quinn: %v", err)
+	}
+
 	survivorID, err := authService.SignupNewPlayer("Zzz Integration Auth Rita", "rita@example.com", "s3cret-pass", group.InviteCode)
 	if err != nil {
 		t.Fatalf("SignupNewPlayer for the survivor returned error: %v", err)
@@ -663,6 +668,9 @@ func TestDeleteAccount_Integration_AnonymizesAndCleansUp(t *testing.T) {
 	}
 	if player.PasswordHash != "" {
 		t.Error("player password hash after deletion is not empty")
+	}
+	if player.Locale != nil {
+		t.Errorf("player locale after deletion = %q, want nil", *player.Locale)
 	}
 
 	if _, err := authService.Login("quinn@example.com", "s3cret-pass"); !errors.Is(err, services.ErrInvalidCredentials) {

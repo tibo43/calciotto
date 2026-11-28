@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import LanguageSelectorV2 from '@/components/v2/LanguageSelectorV2.vue';
+import LocaleSaveErrorToast from '@/components/LocaleSaveErrorToast.vue';
 import { startLocaleSync } from '@/services/playerLocale';
 import { followPhone, getLocale, getLocaleSource, initLocale, onLocaleChange, SOURCE_EXPLICIT, SOURCE_PHONE } from '@/services/locale';
 
@@ -152,6 +153,18 @@ describe('LanguageSelectorV2', () => {
   });
 });
 
+// The selector next to the app shell's toast, as the Account page has them.
+const Shell = {
+  components: { LanguageSelectorV2, LocaleSaveErrorToast },
+  template: '<div><LanguageSelectorV2 /><LocaleSaveErrorToast /></div>',
+};
+
+const mountOpenInShell = async () => {
+  const wrapper = mount(Shell, { attachTo: document.body });
+  await wrapper.find('button.lang-toggle').trigger('click');
+  return wrapper;
+};
+
 describe('LanguageSelectorV2 when the save fails', () => {
   let stop;
   const toastText = (wrapper) => wrapper.find('.toast-message').text();
@@ -174,11 +187,11 @@ describe('LanguageSelectorV2 when the save fails', () => {
 
   it('puts the checkmark and the texts back, and shows the error toast in the previous language', async () => {
     api.updateMyLocale.mockRejectedValueOnce(new Error('503'));
-    const wrapper = await mountOpen();
+    const wrapper = await mountOpenInShell();
 
-    await wrapper.findAll('[role="radio"]')[2].trigger('click');
+    // Not awaited: the save's answer may already be in by the next tick.
+    wrapper.findAll('[role="radio"]')[2].trigger('click');
     expect(getLocale()).toBe('fr');
-    expect(wrapper.find('button.lang-toggle').text()).toBe('LangueFrançais');
     await flush();
     await wrapper.vm.$nextTick();
 
@@ -189,10 +202,22 @@ describe('LanguageSelectorV2 when the save fails', () => {
     expect(toastText(wrapper)).toContain('Sprache konnte nicht gespeichert werden. Versuch es noch mal.');
     expect(wrapper.find('.toast-message').classes()).toContain('error');
     expect(wrapper.find('.toast-message').attributes('data-label')).toBe('Fehler');
+    // Once: the selector has no toast of its own.
+    expect(wrapper.findAll('.toast-message')).toHaveLength(1);
+  });
+
+  it('leaves the toast to the app shell: the selector alone shows none', async () => {
+    api.updateMyLocale.mockRejectedValueOnce(new Error('503'));
+    const wrapper = await mountOpen();
+    await wrapper.findAll('[role="radio"]')[2].trigger('click');
+    await flush();
+    await wrapper.vm.$nextTick();
+    expect(getLocale()).toBe('de');
+    expect(wrapper.find('.toast-message').exists()).toBe(false);
   });
 
   it('shows no toast when the save succeeds', async () => {
-    const wrapper = await mountOpen();
+    const wrapper = await mountOpenInShell();
     await wrapper.findAll('[role="radio"]')[2].trigger('click');
     await flush();
     await wrapper.vm.$nextTick();
@@ -213,7 +238,7 @@ describe('LanguageSelectorV2 when the save fails', () => {
       initLocale();
       expect(getLocaleSource()).toBe(SOURCE_PHONE);
       api.updateMyLocale.mockRejectedValueOnce(new Error('503'));
-      const wrapper = await mountOpen();
+      const wrapper = await mountOpenInShell();
       // Any language but the phone's.
       const other = wrapper.findAll('[role="radio"]')[1];
       await other.trigger('click');

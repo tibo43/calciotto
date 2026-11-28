@@ -67,6 +67,19 @@ func TestLocaleFromAcceptLanguage(t *testing.T) {
 		"fr;q=0,en;q=0.1":                  "en",
 		"de;q=oops,es":                     "es",
 		" es-419 ; q=0.8 , it ; q=0.9 ":    "it",
+		// Parameter names are case-insensitive, and q need not come first.
+		"fr;Q=0.1,de;q=0.5":   "de",
+		"fr;x=1;q=0.1,de":     "de",
+		"fr ; X=1 ; Q=0 , es": "es",
+		"fr;level=1,de;q=0.9": "fr",
+		// A q outside [0, 1], or not a finite number, makes the entry invalid.
+		"fr;q=2,de;q=0.5":    "de",
+		"fr;q=1e3,de;q=0.5":  "de",
+		"fr;q=Inf,de;q=0.5":  "de",
+		"fr;q=+Inf,de;q=0.5": "de",
+		"fr;q=NaN,de;q=0.5":  "de",
+		"fr;q=-0.5,de;q=0.1": "de",
+		"fr;q=1,de;q=1.0001": "fr",
 	} {
 		if got := services.LocaleFromAcceptLanguage(header); got != want {
 			t.Errorf("Accept-Language %q: got %q, want %q", header, got, want)

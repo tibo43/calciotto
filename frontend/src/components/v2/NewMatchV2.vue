@@ -47,7 +47,7 @@
         </div>
       </section>
 
-      <p v-if="formError" class="field-error">{{ formError }}</p>
+      <p v-if="formError" class="field-error">{{ showText(formError) }}</p>
       <div class="actions">
         <button class="btn" type="submit" :disabled="creating">{{ creating ? $t('newMatch.creating') : $t('newMatch.create') }}</button>
       </div>
@@ -58,6 +58,7 @@
 <script>
 import { createMatch } from '@/services/api';
 import { apiErrorMessage } from '@/services/apiError';
+import { messageKey, showText } from '@/i18n';
 import { resolveActiveGroup } from '@/services/activeGroup';
 import { buildNewMatch, localDateTimeValue, DEFAULT_MAX_PLAYERS } from '@/services/v2NewMatch';
 
@@ -88,7 +89,6 @@ export default {
   },
   async created() {
     this.v2Context.hide = true;
-    this.v2Context.pageTitle = this.$t('newMatch.title');
     this.v2Context.backTo = '/';
     try {
       const { groups, activeGroupId } = await resolveActiveGroup();
@@ -110,7 +110,17 @@ export default {
     this.v2Context.pageTitle = '';
     this.v2Context.backTo = '';
   },
+  watch: {
+    // The title follows a language switch while the page is open.
+    '$i18n.locale': {
+      handler() {
+        this.v2Context.pageTitle = this.$t('newMatch.title');
+      },
+      immediate: true,
+    },
+  },
   methods: {
+    showText,
     errorFor(field) {
       return this.invalid && this.invalid.field === field ? this.invalid.error : '';
     },
@@ -135,7 +145,7 @@ export default {
         this.$router.push({ name: 'MatchView', params: { id } });
       } catch (error) {
         console.error('Error creating match:', error);
-        this.formError = apiErrorMessage(error, this.$t('newMatch.createError'));
+        this.formError = apiErrorMessage(error, messageKey('newMatch.createError'));
       } finally {
         this.creating = false;
       }
