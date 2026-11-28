@@ -60,6 +60,10 @@ const tokenTTL = 7 * 24 * time.Hour
 // Login also limits attempts by IP and by account.
 const minPasswordLength = 8
 
+// MinPasswordLength is the shortest password a player can choose, for the API
+// error that names it.
+const MinPasswordLength = minPasswordLength
+
 // validateNewPassword is the whole policy, in the one place both paths that
 // let a caller choose a password go through (SignupNewPlayer and
 // ResetPassword). Length is counted in *runes*, not bytes: a passphrase in a

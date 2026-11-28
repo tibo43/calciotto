@@ -44,7 +44,7 @@ func (h *MatchRegistrationHandler) Register(c *gin.Context) {
 	}
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
@@ -72,7 +72,7 @@ func (h *MatchRegistrationHandler) Register(c *gin.Context) {
 	// Unreachable unless the sign-up vanished between the two calls, which
 	// would mean a concurrent withdrawal by the same player — reported rather
 	// than papered over with a fabricated entry.
-	c.JSON(http.StatusInternalServerError, gin.H{"error": "registration was created but could not be read back"})
+	c.JSON(http.StatusInternalServerError, messageBody("registration was created but could not be read back"))
 }
 
 // Unregister withdraws the caller's own sign-up — the only sign-up they can
@@ -85,7 +85,7 @@ func (h *MatchRegistrationHandler) Unregister(c *gin.Context) {
 	}
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
@@ -175,11 +175,11 @@ func (h *MatchRegistrationHandler) SetMaxPlayers(c *gin.Context) {
 		MaxPlayers *int `json:"max_players"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 	if req.MaxPlayers == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "max_players is required"})
+		c.JSON(http.StatusBadRequest, messageBody("max_players is required"))
 		return
 	}
 
@@ -206,7 +206,7 @@ func (h *MatchRegistrationHandler) SetMaxPlayers(c *gin.Context) {
 func matchIDFromPath(c *gin.Context) (uuid.UUID, bool) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid match id"))
 		return uuid.Nil, false
 	}
 	return id, true
@@ -225,7 +225,7 @@ func matchAndAuthorizedGroup(c *gin.Context) (matchID, groupID uuid.UUID, ok boo
 
 	groupID, ok = authorizedGroupIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "route is missing its group authorization middleware"})
+		c.JSON(http.StatusInternalServerError, messageBody("route is missing its group authorization middleware"))
 		return uuid.Nil, uuid.Nil, false
 	}
 
@@ -244,16 +244,16 @@ func matchAndAuthorizedGroup(c *gin.Context) (matchID, groupID uuid.UUID, ok boo
 func respondMatchRegistrationError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrMatchNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, errorBody(err))
 	case errors.Is(err, services.ErrMatchNotScheduled),
 		errors.Is(err, services.ErrInvalidMaxPlayers):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 	case errors.Is(err, services.ErrRegistrationsNotOpenYet),
 		errors.Is(err, services.ErrRegistrationsClosed),
 		errors.Is(err, services.ErrAlreadyRegistered),
 		errors.Is(err, services.ErrNotRegistered):
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusConflict, errorBody(err))
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 	}
 }

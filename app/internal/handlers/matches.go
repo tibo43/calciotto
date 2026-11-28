@@ -59,17 +59,17 @@ type createMatchRequest struct {
 func (h *MatchHandler) CreateMatch(c *gin.Context) {
 	var req createMatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 
 	groupID, ok := authorizedGroupIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved for this match"})
+		c.JSON(http.StatusInternalServerError, messageBody("group not resolved for this match"))
 		return
 	}
 	if req.GroupID != uuid.Nil && req.GroupID != groupID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "group_id does not match the authorized group"})
+		c.JSON(http.StatusBadRequest, messageBody("group_id does not match the authorized group"))
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 	if req.RegisterCreator {
 		playerID, ok := playerIDFromContext(c)
 		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+			c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 			return
 		}
 		spec.RegisterCreatorID = playerID
@@ -100,9 +100,9 @@ func (h *MatchHandler) CreateMatch(c *gin.Context) {
 			errors.Is(err, services.ErrRegistrationOpensAfterKickoff),
 			errors.Is(err, services.ErrInvalidMaxPlayers),
 			errors.Is(err, services.ErrRegisterCreatorOnUnscheduledMatch):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, errorBody(err))
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, errorBody(err))
 		}
 		return
 	}
@@ -119,18 +119,18 @@ func (h *MatchHandler) GetMatchesDetails(c *gin.Context) {
 	if raw := c.Query("limit"); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": services.ErrInvalidMatchLimit.Error()})
+			c.JSON(http.StatusBadRequest, errorBody(services.ErrInvalidMatchLimit))
 			return
 		}
 		limit = value
 	}
 	matches, next, err := h.Service.GetMatchesDetailsPage(groupID, c.Query("season"), c.Query("cursor"), limit)
 	if errors.Is(err, services.ErrInvalidMatchCursor) || errors.Is(err, services.ErrInvalidMatchLimit) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to load matches"})
+		c.JSON(http.StatusInternalServerError, messageBody("unable to load matches"))
 		return
 	}
 	if next != "" {
@@ -149,7 +149,7 @@ func (h *MatchHandler) GetMatchesDetails(c *gin.Context) {
 func (h *MatchHandler) GetMatchDetailsByID(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid match id"))
 		return
 	}
 	groupID, ok := resolveGroupID(c, h.MembershipService)
@@ -160,9 +160,9 @@ func (h *MatchHandler) GetMatchDetailsByID(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrMatchNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			c.JSON(http.StatusNotFound, errorBody(err))
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, errorBody(err))
 		}
 		return
 	}
@@ -174,18 +174,18 @@ func (h *MatchHandler) GetMatchDetailsByID(c *gin.Context) {
 func (h *MatchHandler) DeleteMatch(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid match id"))
 		return
 	}
 	groupID, ok := authorizedGroupIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved for this match"})
+		c.JSON(http.StatusInternalServerError, messageBody("group not resolved for this match"))
 		return
 	}
 	if raw := c.Query("group_id"); raw != "" {
 		requestedGroupID, err := uuid.Parse(raw)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group_id"})
+			c.JSON(http.StatusBadRequest, messageBody("invalid group_id"))
 			return
 		}
 		if requestedGroupID != groupID {
@@ -197,9 +197,9 @@ func (h *MatchHandler) DeleteMatch(c *gin.Context) {
 	if err := h.Service.DeleteMatch(id, groupID); err != nil {
 		switch {
 		case errors.Is(err, services.ErrMatchNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			c.JSON(http.StatusNotFound, errorBody(err))
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, errorBody(err))
 		}
 		return
 	}
@@ -220,7 +220,7 @@ func (h *MatchHandler) DeleteMatch(c *gin.Context) {
 func (h *MatchHandler) UpdateMatch(c *gin.Context) {
 	matchID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid match id"))
 		return
 	}
 	// A missing authorized group means the route was wired without the
@@ -228,24 +228,24 @@ func (h *MatchHandler) UpdateMatch(c *gin.Context) {
 	// 500 (same contract as the registration/vote handlers).
 	groupID, ok := authorizedGroupIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved for this match"})
+		c.JSON(http.StatusInternalServerError, messageBody("group not resolved for this match"))
 		return
 	}
 
 	var match models.MatchWithDetails
 	if err := c.ShouldBindJSON(&match); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 
 	if err := h.Service.UpdateMatch(matchID, groupID, match.Teams); err != nil {
 		switch {
 		case errors.Is(err, services.ErrMatchNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			c.JSON(http.StatusNotFound, errorBody(err))
 		case errors.Is(err, services.ErrTeamNotInGroup), errors.Is(err, services.ErrPlayerNotInGroup):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, errorBody(err))
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, errorBody(err))
 		}
 		return
 	}

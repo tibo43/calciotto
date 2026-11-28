@@ -342,12 +342,18 @@ func TestAuthHandler_Integration_SignupPasswordTooShort(t *testing.T) {
 	if shortRec.Code != http.StatusBadRequest {
 		t.Fatalf("signup with a 7-character password returned status %d, want 400, body: %s", shortRec.Code, shortRec.Body.String())
 	}
-	var errBody map[string]string
+	var errBody map[string]any
 	if err := json.Unmarshal(shortRec.Body.Bytes(), &errBody); err != nil {
 		t.Fatalf("failed to unmarshal the error body: %v", err)
 	}
 	if errBody["error"] != services.ErrPasswordTooShort.Error() {
 		t.Errorf("error body = %q, want %q", errBody["error"], services.ErrPasswordTooShort.Error())
+	}
+	if errBody["code"] != "password_too_short" {
+		t.Errorf("error code = %v, want password_too_short", errBody["code"])
+	}
+	if params, _ := errBody["params"].(map[string]any); params["min"] != float64(services.MinPasswordLength) {
+		t.Errorf("error params = %v, want the minimum length", errBody["params"])
 	}
 
 	if okRec := signup("handler-eight-pass@example.com", "8chars!!"); okRec.Code != http.StatusOK {

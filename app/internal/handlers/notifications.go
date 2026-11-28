@@ -39,20 +39,20 @@ func (h *NotificationHandler) GetPublicKey(c *gin.Context) {
 func (h *NotificationHandler) Subscribe(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 	var input services.PushSubscriptionInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 	if err := h.Service.Subscribe(playerID, input); err != nil {
 		switch {
 		case errors.Is(err, services.ErrInvalidPushSubscription):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, errorBody(err))
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, errorBody(err))
 		}
 		return
 	}
@@ -63,18 +63,18 @@ func (h *NotificationHandler) Subscribe(c *gin.Context) {
 func (h *NotificationHandler) Unsubscribe(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 	var req struct {
 		Endpoint string `json:"endpoint" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 	if err := h.Service.Unsubscribe(playerID, req.Endpoint); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"unsubscribed": true})
@@ -85,7 +85,7 @@ func (h *NotificationHandler) Unsubscribe(c *gin.Context) {
 func (h *NotificationHandler) GetPreferences(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 	prefs, err := h.Service.GetPreferences(playerID)
@@ -102,18 +102,18 @@ func (h *NotificationHandler) GetPreferences(c *gin.Context) {
 func (h *NotificationHandler) UpdatePreferences(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 	var req struct {
 		Preferences map[string]bool `json:"preferences"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 	if req.Preferences == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "preferences is required"})
+		c.JSON(http.StatusBadRequest, messageBody("preferences is required"))
 		return
 	}
 	prefs, err := h.Service.UpdatePreferences(playerID, req.Preferences)
@@ -127,9 +127,9 @@ func (h *NotificationHandler) UpdatePreferences(c *gin.Context) {
 func writePreferenceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrUnknownNotificationType):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 	}
 }
 
@@ -140,7 +140,7 @@ func writePreferenceError(c *gin.Context, err error) {
 func (h *NotificationHandler) Tick(c *gin.Context) {
 	token, found := strings.CutPrefix(c.GetHeader("Authorization"), "Bearer ")
 	if !found || h.TickSecret == "" || subtle.ConstantTimeCompare([]byte(token), []byte(h.TickSecret)) != 1 {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, messageBody("unauthorized"))
 		return
 	}
 	result, err := h.Service.Tick(time.Now())

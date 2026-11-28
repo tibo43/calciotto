@@ -203,12 +203,18 @@ func TestPasswordResetEndpoints_Integration_TooShortPasswordReturns400(t *testin
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("reset-password with a 7-character password returned status %d, want 400, body: %s", rec.Code, rec.Body.String())
 	}
-	var errBody map[string]string
+	var errBody map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &errBody); err != nil {
 		t.Fatalf("failed to unmarshal the error body: %v", err)
 	}
 	if errBody["error"] != services.ErrPasswordTooShort.Error() {
 		t.Errorf("error body = %q, want %q", errBody["error"], services.ErrPasswordTooShort.Error())
+	}
+	if errBody["code"] != "password_too_short" {
+		t.Errorf("error code = %v, want password_too_short", errBody["code"])
+	}
+	if params, _ := errBody["params"].(map[string]any); params["min"] != float64(services.MinPasswordLength) {
+		t.Errorf("error params = %v, want the minimum length", errBody["params"])
 	}
 }
 

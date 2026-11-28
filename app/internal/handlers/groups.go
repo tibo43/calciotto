@@ -29,27 +29,27 @@ func NewGroupHandler(service *services.GroupService, membershipService *services
 // and GroupMembershipService.AddPlayerToGroupWithRole; re-enabling this route
 // is a matter of restoring this handler's old body, not rebuilding anything.
 func (h *GroupHandler) CreateGroup(c *gin.Context) {
-	c.JSON(http.StatusForbidden, gin.H{"error": "group creation is not available yet"})
+	c.JSON(http.StatusForbidden, messageBody("group creation is not available yet"))
 }
 
 // JoinGroup is temporarily disabled for the same reason as CreateGroup above
 // — players must not self-service joining a group by invite code right now.
 // GroupService.JoinByInviteCode is untouched.
 func (h *GroupHandler) JoinGroup(c *gin.Context) {
-	c.JSON(http.StatusForbidden, gin.H{"error": "joining a group is not available yet"})
+	c.JSON(http.StatusForbidden, messageBody("joining a group is not available yet"))
 }
 
 // GetInviteCode returns the current invitation to a group administrator.
 func (h *GroupHandler) GetInviteCode(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid group id"))
 		return
 	}
 
 	group, err := h.Service.GetGroupByID(groupID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+		c.JSON(http.StatusNotFound, messageBody("group not found"))
 		return
 	}
 
@@ -59,12 +59,12 @@ func (h *GroupHandler) GetInviteCode(c *gin.Context) {
 func (h *GroupHandler) GetGroups(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 	groups, err := h.MembershipService.GetGroupsByPlayerID(playerID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to load groups"})
+		c.JSON(http.StatusInternalServerError, messageBody("unable to load groups"))
 		return
 	}
 	if groups == nil {
@@ -76,22 +76,22 @@ func (h *GroupHandler) GetGroups(c *gin.Context) {
 func (h *GroupHandler) ChangeInvitation(c *gin.Context) {
 	groupID, ok := authorizedGroupIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved"})
+		c.JSON(http.StatusInternalServerError, messageBody("group not resolved"))
 		return
 	}
 	adminID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 	group, err := h.Service.ChangeInvitation(groupID, adminID, c.Request.Method == http.MethodPost)
 	switch {
 	case errors.Is(err, services.ErrGroupAdminRequired):
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		c.JSON(http.StatusForbidden, errorBody(err))
 	case errors.Is(err, gorm.ErrRecordNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+		c.JSON(http.StatusNotFound, messageBody("group not found"))
 	case err != nil:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to update the invitation"})
+		c.JSON(http.StatusInternalServerError, messageBody("unable to update the invitation"))
 	default:
 		writeInvitation(c, group)
 	}
@@ -109,12 +109,12 @@ func writeInvitation(c *gin.Context, group *models.Group) {
 func (h *GroupHandler) GetGroupByID(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid group id"))
 		return
 	}
 	group, err := h.Service.GetGroupByID(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+		c.JSON(http.StatusNotFound, messageBody("group not found"))
 		return
 	}
 	c.JSON(http.StatusOK, group)
@@ -123,17 +123,17 @@ func (h *GroupHandler) GetGroupByID(c *gin.Context) {
 func (h *GroupHandler) UpdateGroupDetails(c *gin.Context) {
 	groupID, ok := authorizedGroupIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "group not resolved"})
+		c.JSON(http.StatusInternalServerError, messageBody("group not resolved"))
 		return
 	}
 	adminID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 	var details models.GroupDetails
 	if err := c.ShouldBindJSON(&details); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group details"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid group details"))
 		return
 	}
 	group, err := h.Service.UpdateGroupDetails(groupID, adminID, details)
@@ -141,13 +141,13 @@ func (h *GroupHandler) UpdateGroupDetails(c *gin.Context) {
 	case errors.Is(err, services.ErrGroupDescriptionTooLong),
 		errors.Is(err, services.ErrGroupWebsiteLabelTooLong),
 		errors.Is(err, services.ErrInvalidGroupWebsite):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 	case errors.Is(err, services.ErrGroupAdminRequired):
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		c.JSON(http.StatusForbidden, errorBody(err))
 	case errors.Is(err, gorm.ErrRecordNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+		c.JSON(http.StatusNotFound, messageBody("group not found"))
 	case err != nil:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not save group details"})
+		c.JSON(http.StatusInternalServerError, messageBody("could not save group details"))
 	default:
 		c.JSON(http.StatusOK, group)
 	}
@@ -156,7 +156,7 @@ func (h *GroupHandler) UpdateGroupDetails(c *gin.Context) {
 func (h *GroupHandler) AddPlayerToGroup(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid group id"))
 		return
 	}
 
@@ -164,23 +164,23 @@ func (h *GroupHandler) AddPlayerToGroup(c *gin.Context) {
 		PlayerID uuid.UUID `json:"player_id"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 
 	actor, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 	if err := h.MembershipService.AddPlayerAsAdmin(groupID, body.PlayerID, actor); err != nil {
 		switch {
 		case errors.Is(err, services.ErrGroupAdminRequired):
-			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			c.JSON(http.StatusForbidden, errorBody(err))
 		case errors.Is(err, gorm.ErrRecordNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "player or group not found"})
+			c.JSON(http.StatusNotFound, messageBody("player or group not found"))
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to add the player"})
+			c.JSON(http.StatusInternalServerError, messageBody("unable to add the player"))
 		}
 		return
 	}
@@ -198,13 +198,13 @@ func (h *GroupHandler) AddPlayerToGroup(c *gin.Context) {
 func (h *GroupHandler) GetGroupMembers(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid group id"))
 		return
 	}
 
 	players, err := h.MembershipService.GetPlayersWithRoleByGroupID(groupID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	c.JSON(http.StatusOK, players)
@@ -220,22 +220,22 @@ func (h *GroupHandler) GetGroupMembers(c *gin.Context) {
 func (h *GroupHandler) LeaveGroup(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid group id"))
 		return
 	}
 
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
 	if err := h.MembershipService.LeaveGroup(groupID, playerID); err != nil {
 		if errors.Is(err, services.ErrLastMember) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, errorBody(err))
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 
@@ -249,22 +249,22 @@ func (h *GroupHandler) LeaveGroup(c *gin.Context) {
 func (h *GroupHandler) SetFavoriteGroup(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid group id"))
 		return
 	}
 
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
 	if err := h.MembershipService.SetFavoriteGroup(playerID, groupID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this group"})
+			c.JSON(http.StatusForbidden, messageBody("not a member of this group"))
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 
@@ -284,32 +284,32 @@ func (h *GroupHandler) SetFavoriteGroup(c *gin.Context) {
 func (h *GroupHandler) RemoveMember(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid group id"))
 		return
 	}
 
 	targetPlayerID, err := uuid.Parse(c.Param("playerId"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid player id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid player id"))
 		return
 	}
 
 	actingPlayerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
 	if err := h.MembershipService.RemoveMember(groupID, actingPlayerID, targetPlayerID); err != nil {
 		switch {
 		case errors.Is(err, services.ErrCannotRemoveSelf):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, errorBody(err))
 		case errors.Is(err, services.ErrGroupAdminRequired):
-			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			c.JSON(http.StatusForbidden, errorBody(err))
 		case errors.Is(err, gorm.ErrRecordNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "player is not a member of this group"})
+			c.JSON(http.StatusNotFound, messageBody("player is not a member of this group"))
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, errorBody(err))
 		}
 		return
 	}
@@ -327,19 +327,19 @@ func (h *GroupHandler) RemoveMember(c *gin.Context) {
 func (h *GroupHandler) UpdateMemberRole(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid group id"))
 		return
 	}
 
 	targetPlayerID, err := uuid.Parse(c.Param("playerId"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid player id"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid player id"))
 		return
 	}
 
 	actingPlayerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
@@ -347,7 +347,7 @@ func (h *GroupHandler) UpdateMemberRole(c *gin.Context) {
 		Role string `json:"role"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 
@@ -356,13 +356,13 @@ func (h *GroupHandler) UpdateMemberRole(c *gin.Context) {
 		case errors.Is(err, services.ErrInvalidRole),
 			errors.Is(err, services.ErrCannotChangeOwnRole),
 			errors.Is(err, services.ErrLastAdmin):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, errorBody(err))
 		case errors.Is(err, services.ErrGroupAdminRequired):
-			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			c.JSON(http.StatusForbidden, errorBody(err))
 		case errors.Is(err, gorm.ErrRecordNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "player is not a member of this group"})
+			c.JSON(http.StatusNotFound, messageBody("player is not a member of this group"))
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, errorBody(err))
 		}
 		return
 	}
@@ -387,13 +387,13 @@ func (h *GroupHandler) UpdateMemberRole(c *gin.Context) {
 func (h *GroupHandler) GetMyGroups(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
 	groups, err := h.MembershipService.GetGroupsWithRoleByPlayerID(playerID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, errorBody(err))
 		return
 	}
 	// Belonging to no group is a normal state (a freshly signed-up player),

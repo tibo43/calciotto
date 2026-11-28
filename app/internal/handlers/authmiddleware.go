@@ -20,13 +20,13 @@ func AuthMiddleware(authService *services.AuthService) gin.HandlerFunc {
 		header := c.GetHeader("Authorization")
 		const prefix = "Bearer "
 		if !strings.HasPrefix(header, prefix) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid Authorization header"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, messageBody("missing or invalid Authorization header"))
 			return
 		}
 
 		playerID, err := authService.ParseToken(strings.TrimPrefix(header, prefix))
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, messageBody("invalid or expired token"))
 			return
 		}
 

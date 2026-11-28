@@ -37,7 +37,7 @@ func (h *PasskeyHandler) RegistrationOptions(c *gin.Context) {
 		return
 	}
 	if !h.enrollmentLimits.allow(playerID.String()) {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many attempts, try again later"})
+		c.JSON(http.StatusTooManyRequests, messageBody("too many attempts, try again later"))
 		return
 	}
 	id, options, err := h.service.BeginRegistration(playerID, c.GetHeader("Origin"), request.Password, request.Name)
@@ -121,7 +121,7 @@ func (h *PasskeyHandler) Remove(c *gin.Context) {
 	}
 	keyID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid passkey ID"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid passkey ID"))
 		return
 	}
 	if err := h.service.Remove(playerID, keyID); err != nil {
@@ -134,11 +134,11 @@ func (h *PasskeyHandler) Remove(c *gin.Context) {
 func bindPasskeyJSON(c *gin.Context, request any) bool {
 	c.Header("Cache-Control", "no-store")
 	if c.ContentType() != "application/json" {
-		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "expected application/json"})
+		c.JSON(http.StatusUnsupportedMediaType, messageBody("expected application/json"))
 		return false
 	}
 	if request != nil && c.ShouldBindJSON(request) != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid passkey request"})
+		c.JSON(http.StatusBadRequest, messageBody("invalid passkey request"))
 		return false
 	}
 	return true
@@ -147,14 +147,14 @@ func bindPasskeyJSON(c *gin.Context, request any) bool {
 func passkeyError(c *gin.Context, err error, proofStatus int) {
 	switch {
 	case errors.Is(err, services.ErrPasskeyOrigin), errors.Is(err, services.ErrPasskeysDisabled):
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		c.JSON(http.StatusForbidden, errorBody(err))
 	case errors.Is(err, services.ErrPasskeyName):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 	case errors.Is(err, services.ErrInvalidCredentials):
-		c.JSON(http.StatusBadRequest, gin.H{"error": "incorrect password"})
+		c.JSON(http.StatusBadRequest, messageBody("incorrect password"))
 	case errors.Is(err, services.ErrPasskeyProof):
-		c.JSON(proofStatus, gin.H{"error": err.Error()})
+		c.JSON(proofStatus, errorBody(err))
 	default:
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "passkeys are temporarily unavailable"})
+		c.JSON(http.StatusServiceUnavailable, messageBody("passkeys are temporarily unavailable"))
 	}
 }

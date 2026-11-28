@@ -49,7 +49,7 @@ func accountRateKey(email string) string {
 // password through a second POST /auth/login just to get a token.
 func (h *AuthHandler) Signup(c *gin.Context) {
 	if c.ContentType() != "application/json" {
-		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "expected application/json"})
+		c.JSON(http.StatusUnsupportedMediaType, messageBody("expected application/json"))
 		return
 	}
 	var req struct {
@@ -59,7 +59,7 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		InviteCode string `json:"invite_code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 
@@ -77,9 +77,9 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 			errors.Is(err, services.ErrEmailAlreadyUsed),
 			errors.Is(err, services.ErrInviteCodeRequired),
 			errors.Is(err, services.ErrInviteCodeNotFound):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, errorBody(err))
 		default:
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unable to complete signup"})
+			c.JSON(http.StatusServiceUnavailable, messageBody("unable to complete signup"))
 		}
 		return
 	}
@@ -90,7 +90,7 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 
 func (h *AuthHandler) Login(c *gin.Context) {
 	if c.ContentType() != "application/json" {
-		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "expected application/json"})
+		c.JSON(http.StatusUnsupportedMediaType, messageBody("expected application/json"))
 		return
 	}
 	var req struct {
@@ -98,7 +98,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		Password string `json:"password"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 
@@ -109,17 +109,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// player who knows their password is never charged for logging in.
 	account := accountRateKey(req.Email)
 	if !h.loginFailures.hasTokens(account) || !h.loginByAccount.allow(account+ProxiedClientKey(c)) {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests, please try again later"})
+		c.JSON(http.StatusTooManyRequests, messageBody("too many requests, please try again later"))
 		return
 	}
 	credentials, err := h.Service.LoginSession(req.Email, req.Password)
 	if errors.Is(err, services.ErrInvalidCredentials) {
 		h.loginFailures.allow(account)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": services.ErrInvalidCredentials.Error()})
+		c.JSON(http.StatusUnauthorized, errorBody(services.ErrInvalidCredentials))
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unable to start the session"})
+		c.JSON(http.StatusServiceUnavailable, messageBody("unable to start the session"))
 		return
 	}
 
@@ -135,7 +135,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		Email string `json:"email"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 	if h.Service.PasswordResetMailer != nil && !h.resetByAccount.allow(accountRateKey(req.Email)) {
@@ -155,7 +155,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		if errors.Is(err, services.ErrPasswordResetUnavailable) {
 			status = http.StatusServiceUnavailable
 		}
-		c.JSON(status, gin.H{"error": services.ErrPasswordResetUnavailable.Error()})
+		c.JSON(status, errorBody(services.ErrPasswordResetUnavailable))
 		return
 	}
 
@@ -168,7 +168,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		NewPassword string `json:"new_password"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 
@@ -179,9 +179,9 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		case errors.Is(err, services.ErrInvalidResetToken),
 			errors.Is(err, services.ErrPasswordRequired),
 			errors.Is(err, services.ErrPasswordTooShort):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, errorBody(err))
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, errorBody(err))
 		}
 		return
 	}
@@ -205,7 +205,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 	playerID, ok := playerIDFromContext(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.JSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return
 	}
 
@@ -213,16 +213,16 @@ func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 		Password string `json:"password"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, errorBody(err))
 		return
 	}
 
 	if err := h.Service.DeleteAccount(playerID, req.Password); err != nil {
 		switch {
 		case errors.Is(err, services.ErrPasswordRequired), errors.Is(err, services.ErrInvalidCredentials):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, errorBody(err))
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, errorBody(err))
 		}
 		return
 	}

@@ -53,7 +53,7 @@ func RequireGroupMembershipByMatchPathParam(matchService *services.MatchService,
 
 		isMember, err := membershipService.IsMember(groupID, playerID)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.AbortWithStatusJSON(http.StatusInternalServerError, errorBody(err))
 			return
 		}
 		if !isMember {
@@ -87,11 +87,11 @@ func RequireGroupAdminByMatchPathParam(matchService *services.MatchService, memb
 				abortMatchNotFound(c)
 				return
 			}
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.AbortWithStatusJSON(http.StatusInternalServerError, errorBody(err))
 			return
 		}
 		if role != models.RoleAdmin {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "not an admin of this group"})
+			c.AbortWithStatusJSON(http.StatusForbidden, messageBody("not an admin of this group"))
 			return
 		}
 
@@ -111,13 +111,13 @@ func RequireGroupAdminByMatchPathParam(matchService *services.MatchService, memb
 func resolveMatchGroupForCaller(c *gin.Context, matchService *services.MatchService, paramName string) (playerID, groupID uuid.UUID, ok bool) {
 	playerID, ok = playerIDFromContext(c)
 	if !ok {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authentication"})
+		c.AbortWithStatusJSON(http.StatusUnauthorized, messageBody("missing authentication"))
 		return uuid.Nil, uuid.Nil, false
 	}
 
 	matchID, err := uuid.Parse(c.Param(paramName))
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		c.AbortWithStatusJSON(http.StatusBadRequest, messageBody("invalid match id"))
 		return uuid.Nil, uuid.Nil, false
 	}
 
@@ -127,7 +127,7 @@ func resolveMatchGroupForCaller(c *gin.Context, matchService *services.MatchServ
 			abortMatchNotFound(c)
 			return uuid.Nil, uuid.Nil, false
 		}
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, errorBody(err))
 		return uuid.Nil, uuid.Nil, false
 	}
 
@@ -139,5 +139,5 @@ func resolveMatchGroupForCaller(c *gin.Context, matchService *services.MatchServ
 // the two indistinguishable to a caller probing for match ids — two subtly
 // different wordings would leak exactly what the shared status code hides.
 func abortMatchNotFound(c *gin.Context) {
-	c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": services.ErrMatchNotFound.Error()})
+	c.AbortWithStatusJSON(http.StatusNotFound, errorBody(services.ErrMatchNotFound))
 }
