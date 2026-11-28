@@ -61,12 +61,16 @@
           </router-link>
         </nav>
     </div>
+    <!-- Outside the guide/app switch, so a failed language save is reported
+         on any page, the guide included. -->
+    <LocaleSaveErrorToast />
   </div>
 </template>
 
 <script>
 import PlayerGuide from '@/components/PlayerGuide.vue';
 import GearLink from '@/components/v2/GearLink.vue';
+import LocaleSaveErrorToast from '@/components/LocaleSaveErrorToast.vue';
 import { clearToken, completeGuide, getSessionKey, logoutSession } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta, prefersDarkTheme } from '@/services/theme';
@@ -81,7 +85,7 @@ const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'
 
 export default {
   name: 'App',
-  components: { GearLink, PlayerGuide },
+  components: { GearLink, LocaleSaveErrorToast, PlayerGuide },
   provide() {
     return {
       v2Context: this.v2Context,
