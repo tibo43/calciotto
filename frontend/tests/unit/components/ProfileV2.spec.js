@@ -48,11 +48,11 @@ vi.mock('@/services/pwaInstall', async (importOriginal) => ({
 const GROUP_ID = 'group-uuid';
 
 async function mountProfile({
-  routeName = 'Profile', features = [], installState = 'unavailable', members = [], groupRole = 'admin', groupDetails = {},
+  routeName = 'Profile', features = [], installState = 'unavailable', members = [], groupRole = 'admin', groupDetails = {}, perGroup = { Played: 3, Points: 6 },
 } = {}) {
   getPlayerProfile.mockResolvedValue({
     Overall: { Name: 'Me' },
-    PerGroup: [{ GroupID: GROUP_ID, GroupName: 'Giovedi', Played: 3, Points: 6 }],
+    PerGroup: [{ GroupID: GROUP_ID, GroupName: 'Giovedi', ...perGroup }],
     Seasons: []
   });
   getMyGroups.mockResolvedValue([{ id: GROUP_ID, name: 'Giovedi', role: groupRole, is_favorite: true, ...groupDetails }]);
@@ -354,5 +354,17 @@ describe('ProfileV2.vue MVP', () => {
   it('names the titles MVP of the Match in the account deletion text', async () => {
     const { wrapper } = await mountProfile({ routeName: 'ProfileAccount' });
     expect(wrapper.find('.danger').text()).toContain('Match history (goals, MVP of the Match titles) stays');
+  });
+});
+
+describe('ProfileV2.vue group counts', () => {
+  it.each([
+    [{ Played: 3, Points: 6 }, '3 matches · 6 pts'],
+    [{ Played: 1, Points: 1 }, '1 match · 1 pt'],
+    [{ Played: 0, Points: 0 }, '0 matches · 0 pts'],
+    [{ Played: 2, Points: 1 }, '2 matches · 1 pt'],
+  ])('writes %j as « %s »', async (perGroup, text) => {
+    const { wrapper } = await mountProfile({ perGroup });
+    expect(wrapper.find('.meta').text()).toBe(text);
   });
 });

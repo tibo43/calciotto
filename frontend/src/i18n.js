@@ -3,7 +3,7 @@
 // src/services/locale.js, not set from here.
 import { createI18n } from 'vue-i18n';
 import { LOCALES, DEFAULT_LOCALE, messages } from '@/locales';
-import { pluralCategory } from '@/services/pluralRules';
+import { pluralCategory, intlTag } from '@/services/pluralRules';
 
 // vue-i18n picks a plural form from the number of forms written in a message
 // ("a | b" or "zero | one | other"); its built-in choice is English-shaped, so
@@ -26,6 +26,34 @@ export const i18n = createI18n({
   messages,
   pluralRules,
 });
+
+// Counts are shown the way the language writes numbers: « 1,5 » in French
+// and German, « 1.5 » in English. vue-i18n puts the plural count into the
+// message as the plain JavaScript number, so every message that reads {n} (or
+// {count}) would print a dot whatever the language. The translate function
+// hands it the number already formatted by Intl.NumberFormat, in the language
+// the message is translated into: t(key, 1.5), t(key, named, { plural: 1.5 })
+// and t(key, { n: 1.5 }) all do. The plural form is still chosen from the
+// number itself, not from its text.
+const composer = i18n.global;
+const translate = composer.t;
+const isNamed = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+const formatCount = (value, locale) => new Intl.NumberFormat(intlTag(locale)).format(value);
+
+composer.t = (key, arg2, arg3) => {
+  const options = isNamed(arg3) ? arg3 : {};
+  const plural = [arg2, arg3, options.plural].find((value) => typeof value === 'number');
+  const named = isNamed(arg2) ? arg2 : {};
+  const isCount = (name) => typeof named[name] === 'number';
+  if (plural === undefined && !isCount('n') && !isCount('count')) return translate(key, arg2, arg3);
+  const locale = options.locale || composer.locale.value;
+  const counted = { ...named };
+  ['n', 'count'].forEach((name) => {
+    if (isCount(name)) counted[name] = formatCount(named[name], locale);
+    else if (plural !== undefined && named[name] === undefined) counted[name] = formatCount(plural, locale);
+  });
+  return translate(key, counted, plural === undefined ? options : { ...options, plural });
+};
 
 // For the services (outside components): the global translate function, in
 // the active language at the time of the call.
