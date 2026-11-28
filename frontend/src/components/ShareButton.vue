@@ -8,13 +8,13 @@
     <span class="share-label">{{ label }}</span>
   </button>
   <AppToast ref="toast" />
-  <dialog ref="copyDialog" class="share-dialog" aria-label="Copy share message" @close="manualText = ''">
+  <dialog ref="copyDialog" class="share-dialog" :aria-label="$t('share.dialogLabel')" @close="manualText = ''">
     <form method="dialog">
       <label>
-        Copy this message
+        {{ $t('share.copyThis') }}
         <textarea readonly :value="manualText" rows="6" @focus="$event.target.select()"></textarea>
       </label>
-      <button class="btn-base btn-cancel" type="submit">Done</button>
+      <button class="btn-base btn-cancel" type="submit">{{ $t('common.done') }}</button>
     </form>
   </dialog>
 </template>
@@ -51,7 +51,7 @@ export default {
         }
         try {
           await navigator.clipboard.writeText(text);
-          this.$refs.toast?.show('Message copied');
+          this.$refs.toast?.show(this.$t('share.copied'));
         } catch {
           this.manualText = text;
           await this.$nextTick();

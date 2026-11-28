@@ -1,3 +1,4 @@
+import { t } from '@/i18n';
 import { teamsAreComposed } from './matchRegistration';
 
 // A side's score is its own goals plus the other side's own goals. Nothing
@@ -17,15 +18,15 @@ export function scoreSides(rosters) {
 }
 
 export function teamScoreLine(side) {
-  const total = side.score === 1 ? '1 goal' : `${side.score} goals`;
+  const total = t('match.goals', side.score);
   if (!side.concededOwnGoals) return total;
-  const og = side.concededOwnGoals === 1 ? '1 OG' : `${side.concededOwnGoals} OG`;
+  const og = t('match.ownGoals', side.concededOwnGoals);
   return `${total} · ${og}`;
 }
 
 // Headcount only. Uneven sides are allowed, so this never becomes a warning.
 export function sizeCounter(countA, countB) {
-  return `${countA} v ${countB}`;
+  return t('edit.teams.sizeCounter', { a: countA, b: countB });
 }
 
 export function lastName(name) {
@@ -44,8 +45,8 @@ export function recapEntries(rosters) {
       const name = lastName(player.Name);
       if (!name) return;
       if (goals === 1) entries.push({ text: name, away: index === 1 });
-      else if (goals > 1) entries.push({ text: `${name} ×${goals}`, away: index === 1 });
-      if (own > 0) entries.push({ text: `${name} (OG ×${own})`, away: index === 0 });
+      else if (goals > 1) entries.push({ text: t('edit.recap.goals', { name, n: goals }), away: index === 1 });
+      if (own > 0) entries.push({ text: t('edit.recap.ownGoals', { name, n: own }), away: index === 0 });
     });
   });
   return entries;
@@ -57,10 +58,10 @@ export function lineupsReady(teams) {
 
 export function shareSubtitle(teams) {
   if (!lineupsReady(teams)) {
-    return 'The match announcement will be sent — the date and the sign-up link.';
+    return t('edit.share.subtitleMatch');
   }
   const counts = (teams || []).slice(0, 2).map((team) => (
-    `${team.Name} ${((team && team.Players) || []).length}`
+    t('edit.share.teamCount', { team: team.Name, n: ((team && team.Players) || []).length })
   ));
-  return `The line-ups will be sent — ${counts.join(' · ')}.`;
+  return t('edit.share.subtitleTeams', { counts: counts.join(' · ') });
 }

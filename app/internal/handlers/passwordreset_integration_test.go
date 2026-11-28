@@ -44,7 +44,7 @@ func forgotPasswordAndCaptureToken(t *testing.T, authService *services.AuthServi
 	t.Helper()
 
 	var token string
-	authService.PasswordResetMailer = func(_, link string) error {
+	authService.PasswordResetMailer = func(_, link, _ string) error {
 		resetURL, err := url.Parse(link)
 		if err != nil {
 			t.Fatal("the test mailer received an invalid reset link")
@@ -249,7 +249,7 @@ func TestPasswordResetEndpoints_Integration_LinkFollowsAllowedOrigin(t *testing.
 		{"", "https://calcio-otto.vercel.app"},
 	} {
 		var link string
-		authService.PasswordResetMailer = func(_, delivered string) error {
+		authService.PasswordResetMailer = func(_, delivered, _ string) error {
 			link = delivered
 			return nil
 		}
@@ -267,6 +267,47 @@ func TestPasswordResetEndpoints_Integration_LinkFollowsAllowedOrigin(t *testing.
 		parsed, err := url.Parse(link)
 		if err != nil || parsed.Scheme+"://"+parsed.Host != tt.wantBase || parsed.Path != "/reset-password" {
 			t.Fatalf("origin %q: reset link %q, want it on %s/reset-password", tt.origin, link, tt.wantBase)
+		}
+	}
+}
+
+// The reset email is written in the language of the browser that asked for it
+// (the signed-out screens follow the browser), English when it names none the
+// app speaks.
+func TestPasswordResetEndpoints_Integration_EmailFollowsTheBrowserLanguage(t *testing.T) {
+	tx := testutil.BeginTx(t, testutil.OpenDB(t))
+	authService := services.NewAuthService(tx, testAuthJWTSecret)
+	router := newPasswordResetTestRouter(authService)
+	signupRec := postJSON(t, router, "/auth/signup", map[string]string{
+		"name":        "Zzz Integration Handler Lang",
+		"email":       "lang-reset@example.com",
+		"password":    "old-pass",
+		"invite_code": newSignupInviteCode(t, tx),
+	})
+	if signupRec.Code != http.StatusOK {
+		t.Fatalf("signup returned status %d, body: %s", signupRec.Code, signupRec.Body.String())
+	}
+
+	for _, tt := range []struct{ header, want string }{
+		{"de-DE,de;q=0.9,en;q=0.5", "de"},
+		{"pt-BR,pt;q=0.9", "en"},
+		{"", "en"},
+	} {
+		var locale string
+		authService.PasswordResetMailer = func(_, _, got string) error {
+			locale = got
+			return nil
+		}
+		encoded, _ := json.Marshal(map[string]string{"email": "lang-reset@example.com"})
+		req := httptest.NewRequest(http.MethodPost, "/auth/forgot-password", bytes.NewReader(encoded))
+		req.Header.Set("Content-Type", "application/json")
+		if tt.header != "" {
+			req.Header.Set("Accept-Language", tt.header)
+		}
+		rec := httptest.NewRecorder()
+		newPasswordResetTestRouter(authService).ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || locale != tt.want {
+			t.Errorf("Accept-Language %q: status %d, email language %q, want %q", tt.header, rec.Code, locale, tt.want)
 		}
 	}
 }

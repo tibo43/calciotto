@@ -133,6 +133,10 @@ func main() {
 	// Account page. Same scoping as above: only ever the JWT's own player.
 	r.GET("/players/me/positions", authRequired, playerHandler.GetMyPositions)
 	r.PUT("/players/me/positions", authRequired, playerHandler.UpdateMyPositions)
+	// The caller's own language (null = follow the phone), set from the Account
+	// page's language selector. Same scoping as above.
+	r.GET("/players/me/locale", authRequired, playerHandler.GetMyLocale)
+	r.PUT("/players/me/locale", authRequired, playerHandler.UpdateMyLocale)
 	// Push notifications for the caller's own devices.
 	r.GET("/push/public-key", authRequired, notificationHandler.GetPublicKey)
 	r.POST("/players/me/push-subscription", authRequired, notificationHandler.Subscribe)

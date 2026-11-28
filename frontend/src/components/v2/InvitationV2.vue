@@ -1,50 +1,50 @@
 <template>
   <section class="sec invitation-v2">
-    <div class="sec-head"><h2>Invitation</h2></div>
-    <CollapsibleCardV2 title="Invite players" :summary="code ? 'Code active' : 'No active code'">
+    <div class="sec-head"><h2>{{ $t('invite.title') }}</h2></div>
+    <CollapsibleCardV2 :title="$t('invite.cardTitle')" :summary="code ? $t('invite.active') : $t('invite.none')">
       <template #icon>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
           stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1" /></svg>
       </template>
       <template v-if="code">
         <p class="invite-code">{{ code }}</p>
-        <p class="label invite-note">Works until you renew it</p>
+        <p class="label invite-note">{{ $t('invite.validUntil') }}</p>
         <div class="invite-tiles withdraw-wrap">
-          <ShareButton ref="share" class="invite-tile" @click="$refs.toast?.dismiss()" icon :text="shareText" label="Share" />
+          <ShareButton ref="share" class="invite-tile" @click="$refs.toast?.dismiss()" icon :text="shareText" :label="$t('invite.share')" />
           <button class="invite-tile" type="button" @click="copy">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
               stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4H4v12h4" /></svg>
-            <span>{{ copied ? 'Copied' : 'Copy' }}</span>
+            <span>{{ copied ? $t('invite.copied') : $t('invite.copy') }}</span>
           </button>
           <button class="invite-tile" type="button" :disabled="saving"
             :aria-expanded="asking.toString()" @click="ask">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
               stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5" /></svg>
-            <span>Renew</span>
+            <span>{{ $t('invite.renew') }}</span>
           </button>
           <div v-if="asking" class="confirm-pop" role="dialog" aria-labelledby="invite-confirm-title">
-            <h3 id="invite-confirm-title">Renew the code?</h3>
-            <p class="ref">The old code and invite link stop working.</p>
+            <h3 id="invite-confirm-title">{{ $t('invite.renewTitle') }}</h3>
+            <p class="ref">{{ $t('invite.renewNote') }}</p>
             <div class="confirm-actions actions">
-              <button class="btn btn-ghost" type="button" @click="cancel">Cancel</button>
-              <button class="btn btn-ghost" type="button" :disabled="saving" @click="renew">Renew</button>
+              <button class="btn btn-ghost" type="button" @click="cancel">{{ $t('common.cancel') }}</button>
+              <button class="btn btn-ghost" type="button" :disabled="saving" @click="renew">{{ $t('invite.renew') }}</button>
             </div>
           </div>
         </div>
       </template>
       <div v-else class="invite-empty">
-        <p class="scope">Make a code to let new players join.</p>
-        <button class="btn btn-ghost" type="button" :disabled="saving" @click="renew">Make a code</button>
+        <p class="scope">{{ $t('invite.empty') }}</p>
+        <button class="btn btn-ghost" type="button" :disabled="saving" @click="renew">{{ $t('invite.make') }}</button>
       </div>
     </CollapsibleCardV2>
   </section>
   <div v-if="asking" class="confirm-scrim" @click="cancel"></div>
   <div v-if="asking" class="confirm-sheet" role="dialog" aria-labelledby="invite-sheet-title">
-    <h3 id="invite-sheet-title">Renew the code?</h3>
-    <p class="ref">The old code and invite link stop working.</p>
+    <h3 id="invite-sheet-title">{{ $t('invite.renewTitle') }}</h3>
+    <p class="ref">{{ $t('invite.renewNote') }}</p>
     <div class="confirm-actions">
-      <button class="btn btn-ghost" type="button" :disabled="saving" @click="renew">Renew</button>
-      <button class="btn btn-ghost" type="button" @click="cancel">Cancel</button>
+      <button class="btn btn-ghost" type="button" :disabled="saving" @click="renew">{{ $t('invite.renew') }}</button>
+      <button class="btn btn-ghost" type="button" @click="cancel">{{ $t('common.cancel') }}</button>
     </div>
   </div>
   <AppToast ref="toast" />
@@ -113,7 +113,7 @@ export default {
           this.copiedTimer = null;
         }, COPIED_MS);
       } catch {
-        this.notify('Could not copy the code.', 'error');
+        this.notify(this.$t('invite.copyError'), 'error');
       }
     },
     async renew() {
@@ -127,9 +127,9 @@ export default {
         const invitation = await rotateGroupInvitation(groupId);
         if (this.groupId !== groupId) return;
         this.$emit('updated', invitation);
-        if (renewing) this.notify('Code renewed.', 'success');
+        if (renewing) this.notify(this.$t('invite.renewed'), 'success');
       } catch (error) {
-        const fallback = renewing ? 'Could not renew the code.' : 'Could not make a code.';
+        const fallback = renewing ? this.$t('invite.renewError') : this.$t('invite.makeError');
         if (this.groupId === groupId) this.notify(actionErrorMessage(error, fallback), 'error');
       } finally {
         this.saving = false;

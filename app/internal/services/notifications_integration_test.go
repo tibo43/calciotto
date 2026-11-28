@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"app/pkg/database"
 
 	"github.com/google/uuid"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -1443,5 +1445,74 @@ func TestAddPredictionsSettledNotifiedAt_Integration(t *testing.T) {
 	}
 	if got := settledAt(p.matchID); got != nil {
 		t.Fatalf("a later start backfilled predictions_settled_notified_at to %v", got)
+	}
+}
+
+// The push carries the language the player chose in the app, and nothing for a
+// player who follows their phone: the service worker then reads the phone's.
+func TestNotifications_Integration_PushCarriesTheChosenLanguage(t *testing.T) {
+	env := newNotificationEnv(t)
+	now := time.Now()
+	german, germanEndpoint := env.member(t, "German", true)
+	_, phoneEndpoint := env.member(t, "Phone", true)
+	unsupported, unsupportedEndpoint := env.member(t, "Unsupported", true)
+	if _, err := services.NewPlayerService(env.tx).UpdateLocale(german, ptr("de")); err != nil {
+		t.Fatalf("UpdateLocale: %v", err)
+	}
+	// A value outside the supported languages (a column edited by hand) is not forwarded.
+	if err := env.tx.Model(&models.Player{}).Where("id = ?", unsupported).
+		UpdateColumn("locale", "xx").Error; err != nil {
+		t.Fatalf("set unsupported locale: %v", err)
+	}
+
+	env.scheduledMatch(t, now.Add(72*time.Hour), now.Add(-10*time.Minute), 10)
+	if _, err := env.notifications.Tick(now); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if got := env.sender.sent[germanEndpoint]; len(got) != 1 || got[0].Locale != "de" {
+		t.Errorf("German player got %+v, want one push with locale de", got)
+	}
+	if got := env.sender.sent[phoneEndpoint]; len(got) != 1 || got[0].Locale != "" {
+		t.Errorf("player following the phone got %+v, want a push without a locale", got)
+	}
+	if got := env.sender.sent[unsupportedEndpoint]; len(got) != 1 || got[0].Locale != "" {
+		t.Errorf("player with an unknown language got %+v, want a push without a locale", got)
+	}
+}
+
+func ptr(s string) *string { return &s }
+
+// A failed language lookup still sends the push, without a locale: the service
+// worker then falls back to the phone's language.
+func TestNotifications_Integration_FailedLanguageLookupStillSends(t *testing.T) {
+	env := newNotificationEnv(t)
+	now := time.Now()
+	german, endpoint := env.member(t, "German lookup fails", true)
+	if _, err := services.NewPlayerService(env.tx).UpdateLocale(german, ptr("de")); err != nil {
+		t.Fatalf("UpdateLocale: %v", err)
+	}
+
+	// The same transaction behind its own gorm config, so the failing callback
+	// stays local to this test. It fails the lookup before any SQL is sent,
+	// which keeps the transaction usable for the rest of the tick.
+	failing, err := gorm.Open(postgres.New(postgres.Config{Conn: env.tx.Statement.ConnPool}), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if err := failing.Callback().Query().Before("gorm:query").Register("test:fail_locale_lookup", func(db *gorm.DB) {
+		if db.Statement.Table == "players" && slices.Contains(db.Statement.Selects, "locale") {
+			_ = db.AddError(errors.New("language lookup failed"))
+		}
+	}); err != nil {
+		t.Fatalf("register callback: %v", err)
+	}
+	env.notifications.DB = failing
+
+	env.scheduledMatch(t, now.Add(72*time.Hour), now.Add(-10*time.Minute), 10)
+	if _, err := env.notifications.Tick(now); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if got := env.sender.sent[endpoint]; len(got) != 1 || got[0].Locale != "" {
+		t.Errorf("got %+v, want one push without a locale", got)
 	}
 }

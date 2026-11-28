@@ -4,9 +4,9 @@
        it by ref and calls show(message, type) / dismiss(). -->
   <transition name="app-toast">
     <div v-if="message" class="toast-container toast-bottom" role="status" aria-live="polite">
-      <div class="toast-message" :class="type">
+      <div class="toast-message" :class="type" :data-label="type === 'error' ? $t('common.error') : $t('common.done')">
         <span>{{ message }}</span>
-        <button type="button" class="toast-close" aria-label="Dismiss" @click="dismiss">×</button>
+        <button type="button" class="toast-close" :aria-label="$t('common.dismiss')" @click="dismiss">×</button>
       </div>
     </div>
   </transition>

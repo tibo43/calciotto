@@ -3,7 +3,7 @@
        GET /matches/details without a group_id (that request would fall back
        to the player's first group). -->
   <div v-if="isInitializing" class="page" aria-busy="true">
-    <p class="label">Next match</p>
+    <p class="label">{{ $t('home.nextMatch') }}</p>
     <div class="skel lg"></div>
     <div class="skel md"></div>
     <div class="skel sm"></div>

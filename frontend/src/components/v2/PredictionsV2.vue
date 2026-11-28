@@ -1,11 +1,11 @@
 <template>
   <main class="page">
-    <nav v-if="!isEmptyGroup" class="subnav" aria-label="Predictions">
+    <nav v-if="!isEmptyGroup" class="subnav" :aria-label="$t('predictions.label')">
       <router-link to="/predictions" :class="{ 'is-on': tab === 'matches' }">
-        Matches
+        {{ $t('predictions.tabs.matches') }}
       </router-link>
       <router-link to="/predictions?tab=leaderboard" :class="{ 'is-on': tab === 'leaderboard' }">
-        Leaderboard
+        {{ $t('predictions.tabs.leaderboard') }}
       </router-link>
     </nav>
 
@@ -17,19 +17,19 @@
         </div>
       </section>
       <section v-else-if="failed" class="state">
-        <p class="label">Error</p>
-        <h1>Couldn't load the predictions</h1>
-        <p>Your saved picks are kept. Check your connection, then try again.</p>
-        <button class="btn" type="button" @click="load">Try again</button>
+        <p class="label">{{ $t('common.error') }}</p>
+        <h1>{{ $t('predictions.loadError') }}</h1>
+        <p>{{ $t('predictions.loadErrorText') }}</p>
+        <button class="btn" type="button" @click="load">{{ $t('common.tryAgain') }}</button>
       </section>
       <section v-else-if="isEmptyGroup" class="state">
-        <p class="label">No matches yet</p>
-        <h1>Predictions</h1>
-        <p>Predictions open when the first match is created.</p>
+        <p class="label">{{ $t('predictions.emptyGroup.label') }}</p>
+        <h1>{{ $t('predictions.emptyGroup.title') }}</h1>
+        <p>{{ $t('predictions.emptyGroup.text') }}</p>
       </section>
       <section v-else-if="eligible.length === 0" class="state">
-        <h1>No predictions yet</h1>
-        <p>Odds open once both teams are set. Come back after the next match is announced.</p>
+        <h1>{{ $t('predictions.empty.title') }}</h1>
+        <p>{{ $t('predictions.empty.matches') }}</p>
       </section>
       <template v-else>
         <article v-for="match in eligible" :key="match.ID" class="pred">
@@ -54,7 +54,7 @@
           </div>
           <p v-if="resultLine(match)" class="pred-state" :class="resultKind(match)">{{ resultLine(match) }}</p>
           <!-- The line-ups live on the match page rather than folded in here. -->
-          <router-link class="pred-teams" :to="{ name: 'MatchView', params: { id: match.ID } }">See the teams</router-link>
+          <router-link class="pred-teams" :to="{ name: 'MatchView', params: { id: match.ID } }">{{ $t('predictions.seeTeams') }}</router-link>
         </article>
       </template>
     </template>
@@ -65,31 +65,31 @@
         <div class="skel"></div>
       </section>
       <section v-else-if="boardFailed" class="state">
-        <p class="label">Error</p>
-        <h1>Couldn't load the predictions</h1>
-        <p>Your saved picks are kept. Check your connection, then try again.</p>
-        <button class="btn" type="button" @click="loadBoard">Try again</button>
+        <p class="label">{{ $t('common.error') }}</p>
+        <h1>{{ $t('predictions.loadError') }}</h1>
+        <p>{{ $t('predictions.loadErrorText') }}</p>
+        <button class="btn" type="button" @click="loadBoard">{{ $t('common.tryAgain') }}</button>
       </section>
       <section v-else-if="isEmptyGroup" class="state">
-        <p class="label">No matches yet</p>
-        <h1>Predictions</h1>
-        <p>Predictions open when the first match is created.</p>
+        <p class="label">{{ $t('predictions.emptyGroup.label') }}</p>
+        <h1>{{ $t('predictions.emptyGroup.title') }}</h1>
+        <p>{{ $t('predictions.emptyGroup.text') }}</p>
       </section>
       <section v-else-if="standings.length === 0" class="state">
-        <h1>No predictions yet</h1>
-        <p>Predict a result once the teams are set to see the leaderboard.</p>
+        <h1>{{ $t('predictions.empty.title') }}</h1>
+        <p>{{ $t('predictions.empty.leaderboard') }}</p>
       </section>
       <template v-else>
         <div class="table-wrap desk-only">
           <table class="stand">
             <thead>
-              <tr><th>#</th><th>Player</th><th>Last 5</th><th>Pts</th></tr>
+              <tr><th>{{ $t('rankings.cols.rank') }}</th><th>{{ $t('rankings.cols.player') }}</th><th>{{ $t('predictions.cols.last5') }}</th><th>{{ $t('rankings.cols.pts') }}</th></tr>
             </thead>
             <tbody>
               <tr v-for="(row, index) in standings" :key="row.PlayerID" :class="{ 'is-me': isMe(row), 'is-left': left(row) }">
                 <td class="rk">{{ index + 1 }}</td>
-                <td>{{ displayName(row) }}<span v-if="left(row)" class="left-note"> (left the group)</span></td>
-                <td><span class="form"><span class="form-k">Last 5</span><span v-for="(slot, i) in lastFive(row)" :key="i" class="form-cell" :class="{ 'is-pad': !slot }">{{ slot || '\u2013' }}</span></span></td>
+                <td>{{ displayName(row) }}<span v-if="left(row)" class="left-note">{{ ' ' + $t('rankings.leftGroup') }}</span></td>
+                <td><span class="form"><span class="form-k">{{ $t('predictions.cols.last5') }}</span><span v-for="(slot, i) in lastFive(row)" :key="i" class="form-cell" :class="{ 'is-pad': !slot }">{{ slot || '\u2013' }}</span></span></td>
                 <td class="pts">{{ pointsLabel(row.Points) }}</td>
               </tr>
             </tbody>
@@ -99,8 +99,8 @@
           <article v-for="(row, index) in standings" :key="row.PlayerID" class="pcard" :class="{ 'is-me': isMe(row), 'is-left': left(row) }">
             <div class="rk">{{ index + 1 }}</div>
             <div>
-              <div class="nm">{{ displayName(row) }}<span v-if="left(row)" class="left-note"> (left the group)</span></div>
-              <div class="st"><span class="form"><span class="form-k">Last 5</span><span v-for="(slot, i) in lastFive(row)" :key="i" class="form-cell" :class="{ 'is-pad': !slot }">{{ slot || '\u2013' }}</span></span></div>
+              <div class="nm">{{ displayName(row) }}<span v-if="left(row)" class="left-note">{{ ' ' + $t('rankings.leftGroup') }}</span></div>
+              <div class="st"><span class="form"><span class="form-k">{{ $t('predictions.cols.last5') }}</span><span v-for="(slot, i) in lastFive(row)" :key="i" class="form-cell" :class="{ 'is-pad': !slot }">{{ slot || '\u2013' }}</span></span></div>
             </div>
             <div class="pts">{{ pointsLabel(row.Points) }}</div>
           </article>
@@ -115,6 +115,7 @@
 <script>
 import AppToast from '@/components/AppToast.vue';
 import { actionErrorMessage } from '@/services/v2Match';
+import { formatDecimal } from '@/services/intl';
 import {
   getMatchesDetails, getMatchPredictions, predictForMatch, getPredictionStandings, getSeasons, getToken,
 } from '@/services/api';
@@ -192,7 +193,7 @@ export default {
     },
     teamName(match, index) {
       const team = match.Teams && match.Teams[index];
-      return (team && team.Name) || 'Team';
+      return (team && team.Name) || this.$t('predictions.team');
     },
     showScore(match) {
       return this.state(match) === PREDICTIONS_SETTLED;
@@ -201,10 +202,10 @@ export default {
       const date = heroDateLabel(match.Date);
       if (this.state(match) === PREDICTIONS_OPEN) {
         const time = kickoffLabel(match.ScheduledAt);
-        return time ? `${date} · ${time}` : date;
+        return time ? this.$t('predictions.whenTime', { date, time }) : date;
       }
-      if (this.state(match) === PREDICTIONS_AWAITING_RESULT) return `${date} · awaiting result`;
-      return `${date} · played`;
+      if (this.state(match) === PREDICTIONS_AWAITING_RESULT) return this.$t('predictions.whenAwaiting', { date });
+      return this.$t('predictions.whenPlayed', { date });
     },
     mine(match) {
       return this.summary(match).MyPrediction || null;
@@ -212,21 +213,21 @@ export default {
     note(match) {
       if (!this.open(match)) return '';
       return this.mine(match)
-        ? 'Predictions open · tap to choose.'
-        : 'Teams are set · waiting for your pick.';
+        ? this.$t('predictions.noteOpen')
+        : this.$t('predictions.noteWaiting');
     },
     options(match) {
       const odds = this.summary(match).Odds || {};
       const [teamA, teamB] = match.Teams;
       return [
         { key: 'a', teamId: teamA.ID, label: teamA.Name, odds: odds.TeamAOdds },
-        { key: 'draw', teamId: null, label: 'Draw', odds: odds.DrawOdds },
+        { key: 'draw', teamId: null, label: this.$t('match.draw'), odds: odds.DrawOdds },
         { key: 'b', teamId: teamB.ID, label: teamB.Name, odds: odds.TeamBOdds },
       ];
     },
     oddsLabel(value) {
       const number = Number(value);
-      return Number.isFinite(number) ? number.toFixed(2) : '';
+      return Number.isFinite(number) ? formatDecimal(number) : '';
     },
     pickClass(match, teamId) {
       const classes = [];
@@ -247,14 +248,14 @@ export default {
       if (state === PREDICTIONS_OPEN && this.mine(match)) {
         const picked = this.mine(match).PredictedTeamID;
         const option = this.options(match).find((item) => item.teamId === (picked || null));
-        return option ? `Your pick: ${option.label} · ${this.oddsLabel(option.odds)}` : '';
+        return option ? this.$t('predictions.yourPick', { label: option.label, odds: this.oddsLabel(option.odds) }) : '';
       }
       const outcome = this.outcome(match);
       if (!outcome) {
-        return state === PREDICTIONS_AWAITING_RESULT ? 'Awaiting result' : '';
+        return state === PREDICTIONS_AWAITING_RESULT ? this.$t('predictions.awaitingResult') : '';
       }
-      const points = `${outcome.points > 0 ? '+' : '−'}${Math.abs(outcome.points).toFixed(2)}`;
-      return outcome.correct ? `Won · ${points}` : `Lost · ${points}`;
+      const points = `${outcome.points > 0 ? '+' : '−'}${formatDecimal(Math.abs(outcome.points))}`;
+      return outcome.correct ? this.$t('predictions.won', { points }) : this.$t('predictions.lost', { points });
     },
     resultKind(match) {
       const outcome = this.outcome(match);
@@ -277,15 +278,15 @@ export default {
       return ` ${match.Teams[0].Score}\u2013${match.Teams[1].Score} `;
     },
     lastFive(row) {
-      const recent = (row.History || []).slice(-5).map((entry) => (entry.Correct ? 'W' : 'L'));
+      const recent = (row.History || []).slice(-5).map((entry) => (entry.Correct ? this.$t('predictions.formWin') : this.$t('predictions.formLoss')));
       return [...Array(5 - recent.length).fill(null), ...recent];
     },
     pointsLabel(points) {
       const rounded = Math.round(Number(points) * 10) / 10;
-      const text = Math.abs(rounded).toFixed(1);
+      const text = formatDecimal(Math.abs(rounded), 1);
       if (rounded > 0) return `+${text}`;
       if (rounded < 0) return `−${text}`;
-      return '0.0';
+      return formatDecimal(0, 1);
     },
     async choose(match, teamId) {
       if (!this.open(match)) return;
@@ -296,7 +297,7 @@ export default {
         // Same contract as today's Pronostic page: say why (kick-off has
         // passed, say) and re-read the match's summary.
         console.error(error);
-        this.$refs.toast.show(actionErrorMessage(error, 'Failed to save your prediction. Please try again.'), 'error');
+        this.$refs.toast.show(actionErrorMessage(error, this.$t('predictions.saveError')), 'error');
         const summary = await getMatchPredictions(match.ID).catch(() => null);
         if (summary) this.summaries = { ...this.summaries, [match.ID]: summary };
       }

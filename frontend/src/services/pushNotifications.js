@@ -4,6 +4,7 @@
 //
 // Every function takes the window so the tests can hand in a fake one.
 
+import { t } from '@/i18n';
 import { getPushPublicKey, savePushSubscription, deletePushSubscription } from '@/services/api';
 import { isIos, isStandalone } from '@/services/pwaInstall';
 
@@ -89,7 +90,7 @@ export async function enablePush(win = window) {
   }
   const publicKey = await getPushPublicKey();
   if (!publicKey) {
-    throw new Error('Notifications are not available yet. Please try again later.');
+    throw new Error(t('profile.notifications.unavailable'));
   }
   const registration = await registrationOf(win);
   const subscription = await registration.pushManager.subscribe({

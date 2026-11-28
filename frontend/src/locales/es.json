@@ -1,0 +1,632 @@
+{
+  "glossary": {
+    "mvp": "MVP",
+    "agoranking": "Agoranking"
+  },
+  "language": {
+    "label": "Idioma",
+    "saveError": "No se pudo guardar el idioma. Inténtalo de nuevo."
+  },
+  "unit": {
+    "points": "{n} pt | {n} pts"
+  },
+  "common": {
+    "back": "Atrás",
+    "saving": "Guardando…",
+    "dismiss": "Cerrar",
+    "done": "OK",
+    "error": "Error",
+    "tryAgain": "Reintentar",
+    "cancel": "Cancelar",
+    "remove": "Quitar",
+    "loading": "Cargando…",
+    "couldntLoad": "No se pudo cargar",
+    "save": "Guardar",
+    "saved": "Guardado.",
+    "sending": "Enviando…",
+    "admin": "Admin",
+    "member": "Miembro",
+    "checkConnection": "Revisa tu conexión y vuelve a intentarlo."
+  },
+  "nav": {
+    "home": "Inicio",
+    "main": "Principal",
+    "matches": "Partidos",
+    "rankings": "Clasificación",
+    "predictions": "Pronósticos",
+    "profile": "Perfil"
+  },
+  "context": {
+    "label": "Elige el grupo y la temporada",
+    "group": "Grupo",
+    "season": "Temporada",
+    "noSeason": "Aún no hay temporada"
+  },
+  "guide": {
+    "saveError": "No se pudo guardar tu progreso. Inténtalo de nuevo.",
+    "step": "Paso {n} de {total}",
+    "close": "Cerrar la guía",
+    "continueAnyway": "Continuar de todos modos",
+    "next": "Siguiente",
+    "getStarted": "Empezar",
+    "done": "Listo",
+    "welcome": {
+      "title": "Bienvenido a Agoran",
+      "description": "Encuentra tu próximo partido y sigue los equipos, resultados y la clasificación de tu grupo."
+    },
+    "matches": {
+      "title": "Partidos",
+      "description": "Toca Apuntarme cuando haya plazas. Vuelve para ver tu equipo y el resultado final."
+    },
+    "rankings": {
+      "title": "Clasificación",
+      "description": "Puntos sigue los resultados de los partidos. Goleadores muestra los goles. @:award.mvpOfTheMatch cuenta los premios de las votaciones tras el partido."
+    },
+    "predictions": {
+      "title": "Pronósticos",
+      "description": "Elige un resultado mientras los pronósticos estén abiertos. Mira la clasificación después del partido para ver tus puntos."
+    },
+    "profile": {
+      "title": "Perfil",
+      "description": "Consulta tu historial y tus grupos, aprende a instalar la app y gestiona tus ajustes y notificaciones. Repite esta guía cuando quieras."
+    }
+  },
+  "award": {
+    "mvpOfTheMatch": "@:glossary.mvp del partido"
+  },
+  "share": {
+    "dialogLabel": "Copiar el mensaje para compartir",
+    "copyThis": "Copia este mensaje",
+    "copied": "Mensaje copiado",
+    "match": "Partido: {when}",
+    "signupsOpen": "Inscripciones abiertas — Únete en Agoran:",
+    "viewMatch": "Ver el partido en Agoran:",
+    "groupCode": "Código del grupo: {code}",
+    "joinGroup": "Únete a nuestro grupo de Agoran:",
+    "noPlayers": "Aún no hay jugadores",
+    "player": "- {name}"
+  },
+  "home": {
+    "nextMatch": "Próximo partido",
+    "signups": {
+      "open": "Inscripciones abiertas",
+      "notOpenYet": "Inscripciones aún no abiertas",
+      "closed": "Inscripciones cerradas"
+    },
+    "loadError": "No se pudieron cargar los partidos",
+    "empty": {
+      "label": "Aún no hay partidos",
+      "title": "Empieza la temporada",
+      "admin": "Crea el primer partido para abrir las inscripciones.",
+      "member": "Un admin creará el primer partido."
+    },
+    "createMatch": "Crear partido",
+    "viewMatch": "Ver partido",
+    "youPlayFor": "Juegas con {team}",
+    "teamsSet": "Equipos hechos",
+    "teamsVs": "{home} contra {away}",
+    "placesLeft": "plaza libre | plazas libres",
+    "signedUpCount": "{confirmed} / {cap} apuntados",
+    "waitingCount": "{n} en lista de espera",
+    "youAreSignedUp": "Estás apuntado · {status}",
+    "statusWaiting": "lista de espera",
+    "statusConfirmed": "confirmado",
+    "fullYoudBe": "Completo · serías el {position} en la lista de espera",
+    "position": "n.º {n}",
+    "joinWaitingList": "Apuntarme a la lista de espera",
+    "signUp": "Apuntarme",
+    "withdraw": "Borrarme",
+    "withdrawTitle": "¿Borrarte de este partido?",
+    "withdrawText": "Tu plaza pasa al primer jugador de la lista de espera.",
+    "lastMatch": "Último partido",
+    "later": "Más adelante",
+    "upcoming": "Próximos",
+    "latest": "Últimos partidos",
+    "vs": "contra",
+    "newMatch": "Nuevo partido",
+    "rowLabel": "{home} {score} {away}, {day}",
+    "toast": {
+      "waiting": "Apuntado — eres el n.º {position}, en la lista de espera.",
+      "inPosition": "Estás dentro para este partido. Eres el n.º {position}.",
+      "in": "Estás dentro para este partido.",
+      "signUpError": "Error al apuntarte a este partido.",
+      "withdrawn": "Te has borrado de este partido.",
+      "withdrawError": "Error al borrarte de este partido."
+    }
+  },
+  "match": {
+    "manage": "Gestionar partido",
+    "vote": {
+      "open": "Votación @:glossary.mvp abierta",
+      "openHome": "Votación @:glossary.mvp abierta · Vota en el detalle del partido",
+      "openUntil": "Votación @:glossary.mvp abierta hasta el {until} · toca un jugador para cambiar",
+      "openChange": "Votación @:glossary.mvp abierta · toca un jugador para cambiar",
+      "closedNoVotes": "Votación @:glossary.mvp cerrada · sin votos, sin ganador",
+      "closedTieBoth": "Votación @:glossary.mvp cerrada · empate, ambos reciben el premio",
+      "closedTieAll": "Votación @:glossary.mvp cerrada · empate, todos reciben el premio",
+      "closed": "Votación @:glossary.mvp cerrada",
+      "errorFallback": "Error al actualizar tu voto al @:{'glossary.mvp'}.",
+      "removed": "Tu voto al @:glossary.mvp se ha quitado.",
+      "saved": "Tu voto al @:glossary.mvp se ha guardado."
+    },
+    "goals": "{n} gol | {n} goles",
+    "ownGoals": "{n} p.p. | {n} p.p.",
+    "loadError": "No se pudo cargar el partido",
+    "you": "Tú",
+    "confirmed": "Confirmados",
+    "confirmedCount": "{confirmed} / {cap}",
+    "yourPrediction": "Tu pronóstico",
+    "yourPredictionPick": "Tu pronóstico · {pick}",
+    "waitingList": "Lista de espera",
+    "draw": "Empate",
+    "pick": "{label} · {odds}",
+    "votesAria": "{n} voto | {n} votos",
+    "votesAriaMine": "{n} voto, el tuyo (toca para quitarlo) | {n} votos, incluido el tuyo (toca para quitarlo)",
+    "predictionError": "No se pudo guardar tu pronóstico. Inténtalo de nuevo.",
+    "notInGroups": "Este partido no está en ninguno de tus grupos."
+  },
+  "group": {
+    "details": {
+      "title": "Datos del grupo",
+      "description": "Descripción",
+      "linkAddress": "Dirección del enlace",
+      "linkLabel": "Texto del enlace",
+      "linkLabelPlaceholder": "Abrir el enlace del grupo",
+      "save": "Guardar datos",
+      "saved": "Datos del grupo guardados.",
+      "saveError": "No se pudieron guardar los datos del grupo."
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Iniciar sesión",
+      "lead": "Encuentra tus grupos y tus partidos.",
+      "resetConfirmed": "Tu contraseña se ha actualizado. Inicia sesión con ella aquí abajo.",
+      "accountDeleted": "Tu cuenta se ha eliminado.",
+      "waitingDevice": "Esperando a tu dispositivo…",
+      "withPasskey": "Iniciar sesión con una llave de acceso",
+      "or": "o",
+      "submitting": "Iniciando sesión…",
+      "submit": "Iniciar sesión",
+      "forgot": "¿Has olvidado la contraseña?",
+      "signup": "¿Aún no tienes cuenta? Regístrate con un código de invitación",
+      "failed": "No se pudo iniciar sesión. Revisa tus datos.",
+      "passkeyFailed": "No se pudo iniciar sesión con la llave de acceso. Inténtalo de nuevo o usa tu contraseña."
+    },
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "signup": {
+      "title": "Registrarse",
+      "lead": "Necesitas un código de invitación del admin de tu grupo.",
+      "inviteCode": "Código de invitación",
+      "name": "Nombre",
+      "submitting": "Registrando…",
+      "submit": "Registrarse",
+      "login": "¿Ya tienes cuenta? Inicia sesión",
+      "hintFromLink": "Rellenado desde tu enlace de invitación.",
+      "hintAskAdmin": "Pídeselo al admin de tu grupo.",
+      "inviteRequired": "El código de invitación es obligatorio.",
+      "failed": "No se pudo completar el registro. Inténtalo de nuevo."
+    },
+    "forgot": {
+      "title": "Contraseña olvidada",
+      "lead": "Escribe tu correo. Te enviaremos un enlace para elegir una contraseña nueva.",
+      "backToLogin": "Volver a iniciar sesión",
+      "requested": "Si existe una cuenta con este correo, se ha enviado un enlace para restablecer la contraseña.",
+      "sending": "Enviando…",
+      "sendAgain": "Volver a enviar",
+      "send": "Enviar el enlace",
+      "failed": "No se pudo enviar el enlace. Inténtalo de nuevo."
+    },
+    "reset": {
+      "title": "Contraseña nueva",
+      "lead": "Elige una contraseña nueva para tu cuenta.",
+      "newPassword": "Contraseña nueva",
+      "save": "Guardar contraseña",
+      "requestNew": "Pedir un enlace nuevo",
+      "expired": "Este enlace ha caducado. Pide uno nuevo.",
+      "failed": "No se pudo restablecer la contraseña. Inténtalo de nuevo."
+    }
+  },
+  "newMatch": {
+    "title": "Nuevo partido",
+    "kickoff": "Inicio",
+    "day": "Día",
+    "time": "Hora",
+    "signups": "Inscripciones",
+    "opensOn": "Se abren el",
+    "opensHint": "Al momento por defecto. Debe ser antes del inicio.",
+    "places": "Plazas",
+    "placesHint": "8 contra 8 por defecto. Los jugadores que superen esta cifra van a la lista de espera.",
+    "signMeUp": "Apuntarme",
+    "signMeUpNote": "Estás en la lista en cuanto se crea el partido",
+    "creating": "Creando…",
+    "create": "Crear partido",
+    "createError": "No se pudo crear el partido. Inténtalo de nuevo.",
+    "errors": {
+      "day": "Elige el día del partido.",
+      "time": "Indica la hora de inicio.",
+      "opensAt": "Indica cuándo se abren las inscripciones.",
+      "places": "Las plazas deben ser un número entero, como mínimo 1.",
+      "checkKickoff": "Revisa el día y la hora de inicio.",
+      "kickoffPast": "El inicio debe ser en el futuro.",
+      "checkOpensAt": "Revisa cuándo se abren las inscripciones.",
+      "opensAfterKickoff": "Las inscripciones deben abrirse antes del inicio."
+    }
+  },
+  "date": {
+    "deadlineMidnight": "{date} a medianoche"
+  },
+  "rankings": {
+    "label": "Clasificación",
+    "tabs": {
+      "points": "Puntos",
+      "scorers": "Goleadores"
+    },
+    "loadError": "No se pudo cargar la clasificación",
+    "agorankingLoadError": "No se pudo cargar el @:glossary.agoranking",
+    "emptyGroup": {
+      "label": "Aún no se ha jugado ningún partido",
+      "title": "Clasificación",
+      "text": "La clasificación aparece en cuanto se registra el primer resultado."
+    },
+    "agr": {
+      "lead": "Quién gana más puntos {perMatch}, no en total. Unos cuantos partidos con suerte no bastan: cuanto más juegas, más cuentan tus propios resultados.",
+      "perMatch": "por partido",
+      "how": "Cómo se calcula",
+      "howText": "Una victoria vale 3 puntos, un empate 1, una derrota 0. Cada jugador empieza con unos cuantos {average} que valen la media de puntos por partido del grupo. Tus partidos reales se suman encima: quien llega nuevo se queda cerca de la media y se aleja de ella al jugar.",
+      "average": "partidos “medios”",
+      "formula": "valoración = ({points} + N × media grupo) ÷ ({matches} + N)",
+      "formulaPoints": "puntos",
+      "formulaMatches": "partidos",
+      "note": "N es un tercio de los partidos que ha jugado el grupo esta temporada, redondeado hacia arriba. También es el mínimo de partidos para entrar en la clasificación, así que ambos crecen a lo largo de la temporada.",
+      "notRanked": "Aún sin clasificar · {n}",
+      "playedShort": "{n} PJ",
+      "record": "{won}G {drawn}E {lost}P · {points}",
+      "rankedLine": "{played} PJ · {record}"
+    },
+    "you": "TÚ",
+    "leftGroup": "(dejó el grupo)",
+    "cols": {
+      "rank": "#",
+      "player": "Jugador",
+      "matchesShort": "PJ",
+      "wdl": "G-E-P",
+      "pts": "Pts",
+      "rating": "Valoración",
+      "played": "PJ",
+      "won": "G",
+      "drawn": "E",
+      "lost": "P",
+      "goalsFor": "GF",
+      "ownGoals": "PP",
+      "goals": "Goles",
+      "awards": "@:glossary.mvp"
+    },
+    "pointsLine": "PJ {played} · G {won} · E {drawn} · P {lost} · GF {goalsFor}",
+    "scorersLine": "{goals} · {played}",
+    "matches": "{n} partido | {n} partidos",
+    "goals": "{n} gol | {n} goles",
+    "awards": "{n} @:glossary.mvp | {n} @:glossary.mvp",
+    "empty": {
+      "scorers": "Aún no hay goles",
+      "motm": "Aún no hay @:glossary.mvp",
+      "agoranking": "Aún no hay clasificación",
+      "points": "Aún no hay clasificación",
+      "text": "Los jugadores aparecen aquí en cuanto se juegue un partido esta temporada."
+    }
+  },
+  "predictions": {
+    "label": "Pronósticos",
+    "tabs": {
+      "matches": "Partidos",
+      "leaderboard": "Clasificación"
+    },
+    "loadError": "No se pudieron cargar los pronósticos",
+    "loadErrorText": "Tus pronósticos guardados se conservan. Revisa tu conexión y vuelve a intentarlo.",
+    "emptyGroup": {
+      "label": "Aún no hay partidos",
+      "title": "Pronósticos",
+      "text": "Los pronósticos se abren cuando se crea el primer partido."
+    },
+    "empty": {
+      "title": "Aún no hay pronósticos",
+      "matches": "Las cuotas se abren cuando ambos equipos están hechos. Vuelve cuando se anuncie el próximo partido.",
+      "leaderboard": "Pronostica un resultado cuando los equipos estén hechos para ver la clasificación."
+    },
+    "seeTeams": "Ver los equipos",
+    "cols": {
+      "last5": "Últimos 5"
+    },
+    "formWin": "A",
+    "formLoss": "F",
+    "team": "Equipo",
+    "whenTime": "{date} · {time}",
+    "whenAwaiting": "{date} · resultado pendiente",
+    "whenPlayed": "{date} · jugado",
+    "noteOpen": "Pronósticos abiertos · toca para elegir.",
+    "noteWaiting": "Equipos hechos · falta tu pronóstico.",
+    "yourPick": "Tu pronóstico: {label} · {odds}",
+    "awaitingResult": "Resultado pendiente",
+    "won": "Acertado · {points}",
+    "lost": "Fallado · {points}",
+    "saveError": "No se pudo guardar tu pronóstico. Inténtalo de nuevo."
+  },
+  "edit": {
+    "backToMatch": "Volver al partido",
+    "editing": "Edición · admin",
+    "noSignupList": "Sin lista de inscripción",
+    "regStatus": "Inscripciones {state} · {detail}",
+    "teamsMade": "equipos hechos",
+    "regCounts": "{counts} · {waiting}",
+    "confirmedPlaces": "{confirmed} / {cap}",
+    "confirmedCount": "{n} confirmado | {n} confirmados",
+    "placesCount": "{n} plaza | {n} plazas",
+    "state": {
+      "open": "abiertas",
+      "notOpenYet": "aún no abiertas",
+      "closed": "cerradas"
+    },
+    "waiting": "{n} en espera | {n} en espera",
+    "steps": {
+      "label": "Pasos",
+      "signups": "Inscritos",
+      "teams": "Equipos",
+      "score": "Resultado y goles"
+    },
+    "signups": {
+      "title": "1. Inscripciones",
+      "close": "Cerrar inscripciones",
+      "reopen": "Reabrir inscripciones",
+      "reopenShort": "Reabrir",
+      "places": "Plazas",
+      "placesAria": "Número de plazas",
+      "update": "Actualizar",
+      "confirmed": "Confirmados",
+      "noConfirmed": "No hay jugadores confirmados.",
+      "waitingList": "Lista de espera",
+      "noWaiting": "No hay nadie esperando.",
+      "teamsMadeNote": "Los equipos están hechos. Las inscripciones de arriba se quedan como están.",
+      "notComposed": "Equipos aún sin hacer. Confirmados en reserva: {confirmed}{bench}. La lista de espera no se reparte automáticamente. | Equipos aún sin hacer. Confirmados en reserva: {confirmed}{bench}. La lista de espera no se reparte automáticamente.",
+      "bench": ", en espera: {n} ({names})"
+    },
+    "delete": "Eliminar",
+    "save": "Guardar",
+    "teams": {
+      "split": "Repartir automáticamente",
+      "clear": "Vaciar",
+      "splitHint": "Los confirmados se reparten al azar: un portero por equipo si hay dos, luego defensas, centrocampistas y delanteros a partes iguales, y después los jugadores sin posición. Los equipos se diferencian como mucho en un jugador. Los que ya están colocados se quedan donde están. La lista de espera no se incluye.",
+      "tapHint": "Toca un jugador para pasarlo a un equipo o devolverlo a la reserva.",
+      "reserve": "Reserva",
+      "allPlaced": "Todos los confirmados están colocados.",
+      "moveTo": "Mover a {name} a",
+      "noPlayers": "Aún no hay jugadores.",
+      "waitingNote": "Estos jugadores no entran en el reparto automático. El primero de la lista de espera sube en cuanto queda libre una plaza confirmada.",
+      "waitingMeta": "En espera · n.º {n}",
+      "addGuest": "Añadir un jugador que no se apuntó",
+      "everyoneHere": "Todo el grupo ya está aquí.",
+      "needBoth": "Pon al menos un jugador en cada equipo para confirmar.",
+      "confirm": "Confirmar los equipos",
+      "guest": "Invitado",
+      "sizeCounter": "{a} contra {b}"
+    },
+    "score": {
+      "opensLater": "El resultado se abre cuando cada equipo tiene al menos un jugador.",
+      "computed": "Resultado calculado",
+      "hint": "El resultado es la suma de los goles de cada equipo más los goles en propia puerta del rival. Un gol en propia puerta no cuenta en la tabla de goleadores.",
+      "goalsFor": "Goles de {team}",
+      "og": "p.p.",
+      "removeGoal": "Quitar un gol a {name}",
+      "addGoal": "Añadir un gol a {name}",
+      "removeOwnGoal": "Quitar un gol en propia puerta a {name}",
+      "addOwnGoal": "Añadir un gol en propia puerta a {name}",
+      "ownGoalAdd": "+ Gol en propia",
+      "ownGoal": "Gol en propia puerta",
+      "ownGoalHelp": "Este gol cuenta para {team}. Elige el jugador de {other} que lo marcó. No cuenta en la tabla de goleadores.",
+      "saveChanges": "Guardar cambios",
+      "saved": "Resultado guardado · aún puedes cambiarlo.",
+      "notSaved": "Resultado aún sin guardar."
+    },
+    "share": {
+      "teams": "Compartir equipos",
+      "match": "Compartir partido",
+      "subtitleMatch": "Se enviará el anuncio del partido — la fecha y el enlace de inscripción.",
+      "subtitleTeams": "Se enviarán las alineaciones — {counts}.",
+      "teamCount": "{team} {n}"
+    },
+    "heading": "{date} · {time}",
+    "team": "Equipo",
+    "toast": {
+      "closed": "Inscripciones cerradas.",
+      "closeError": "No se pudieron cerrar las inscripciones.",
+      "reopened": "Inscripciones reabiertas.",
+      "reopenError": "No se pudieron reabrir las inscripciones.",
+      "placesSet": "Plazas actualizadas.",
+      "placesError": "No se pudieron cambiar las plazas.",
+      "allOnTeam": "Todos los confirmados ya están en un equipo.",
+      "changesSaved": "Cambios guardados.",
+      "saved": "Guardado.",
+      "saveError": "No se pudo guardar el partido.",
+      "deleteConfirm": "¿Eliminar este partido? No se puede deshacer.",
+      "deleteError": "No se pudo eliminar el partido."
+    },
+    "recap": {
+      "goals": "{name} ×{n}",
+      "ownGoals": "{name} (p.p. ×{n})"
+    }
+  },
+  "invite": {
+    "title": "Invitación",
+    "cardTitle": "Invitar jugadores",
+    "active": "Código activo",
+    "none": "Ningún código activo",
+    "validUntil": "Válido hasta que lo renueves",
+    "share": "Compartir",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "renew": "Renovar",
+    "renewTitle": "¿Renovar el código?",
+    "renewNote": "El código anterior y el enlace de invitación dejarán de funcionar.",
+    "empty": "Crea un código para que se unan jugadores nuevos.",
+    "make": "Crear un código",
+    "copyError": "No se pudo copiar el código.",
+    "renewed": "Código renovado.",
+    "renewError": "No se pudo renovar el código.",
+    "makeError": "No se pudo crear un código."
+  },
+  "passkeys": {
+    "title": "Llaves de acceso",
+    "loadingAria": "Cargando llaves de acceso",
+    "empty": "Inicia sesión con Face ID, tu huella o el bloqueo de pantalla.",
+    "removeAria": "Quitar {name}",
+    "removeTitle": "¿Quitar esta llave de acceso?",
+    "removeNote": "Ya no podrás iniciar sesión con ella.",
+    "nameLabel": "Nombre (opcional)",
+    "namePlaceholder": "Mi móvil",
+    "password": "Contraseña actual",
+    "waiting": "Esperando a tu dispositivo…",
+    "create": "Crear llave de acceso",
+    "add": "Añadir una llave de acceso",
+    "unsupported": "Abre Agoran en un navegador compatible con llaves de acceso para añadir una.",
+    "noneYet": "Ninguna todavía",
+    "devices": "{n} dispositivo | {n} dispositivos",
+    "lastUsed": "Usada el {date}",
+    "added": "Añadida el {date}",
+    "loadError": "No se pudieron cargar tus llaves de acceso.",
+    "addedToast": "Llave de acceso añadida.",
+    "addError": "No se pudo añadir la llave de acceso.",
+    "removedToast": "Llave de acceso quitada.",
+    "removeError": "No se pudo quitar la llave de acceso."
+  },
+  "positions": {
+    "GK": "POR",
+    "DEF": "DEF",
+    "MID": "MED",
+    "FWD": "DEL"
+  },
+  "notifications": {
+    "motmAnnounced": "@:glossary.mvp anunciado"
+  },
+  "profile": {
+    "loadError": "No se pudo cargar tu perfil",
+    "account": "Cuenta",
+    "manageAccount": "Gestionar cuenta",
+    "aboutGroup": "Sobre este grupo",
+    "openGroupLink": "Abrir el enlace del grupo",
+    "record": "Historial",
+    "allSeasons": "Todas las temporadas",
+    "groups": "Grupos",
+    "noGroup": "Aún no tienes grupo. Pide a un admin que te invite.",
+    "favouriteGroup": "Grupo favorito",
+    "setFavourite": "Marcar como favorito",
+    "favourite": "Favorito",
+    "groupMeta": "{matches} · {points}",
+    "groupMatches": "{n} PJ | {n} PJ",
+    "groupPoints": "{n} Pt | {n} Pts",
+    "groupSettings": "Ajustes del grupo",
+    "thisGroup": "Este grupo",
+    "group": "Grupo",
+    "groupsCombined": "{n} grupo en total | {n} grupos en total",
+    "stats": {
+      "wins": "Victorias",
+      "draws": "Empates",
+      "losses": "Derrotas",
+      "points": "Puntos",
+      "goals": "Goles",
+      "ownGoals": "PP",
+      "predictionPoints": "Pts pron."
+    },
+    "settings": {
+      "title": "Ajustes",
+      "notifications": "Notificaciones",
+      "pushOn": "Activadas en este dispositivo",
+      "pushOff": "Desactivadas en este dispositivo",
+      "install": "Instalar Agoran",
+      "installPrompt": "Ábrela desde tu pantalla de inicio, como cualquier otra app",
+      "installIos": "Toca Compartir y luego Añadir a pantalla de inicio",
+      "installButton": "Instalar",
+      "replayGuide": "Repetir la guía de la app"
+    },
+    "logout": "Cerrar sesión",
+    "notifications": {
+      "device": "Notificaciones en este dispositivo",
+      "types": "Tipos",
+      "needsInstall": "Instala primero la app y luego activa las notificaciones.",
+      "denied": "Las notificaciones están bloqueadas en los ajustes del navegador.",
+      "unsupported": "Este navegador no puede recibir notificaciones.",
+      "choose": "Elige cuáles quieres.",
+      "error": "No se pudieron cambiar las notificaciones.",
+      "unavailable": "Las notificaciones aún no están disponibles. Inténtalo más tarde.",
+      "groups": {
+        "match": "Partido",
+        "predictions": "Pronósticos",
+        "reminder": "Recordatorio",
+        "admin": "Admin"
+      },
+      "registrationOpen": "Inscripciones abiertas",
+      "teamAssigned": "Tu equipo está hecho",
+      "resultRecorded": "Resultado final",
+      "predictionsOpen": "Pronósticos abiertos",
+      "predictionsSettled": "Pronósticos resueltos",
+      "kickoffReminder": "Empieza en 30 minutos",
+      "memberJoined": "Nuevo miembro"
+    },
+    "appearance": {
+      "title": "Apariencia",
+      "dark": "Modo oscuro",
+      "darkNote": "Se aplica a todo el sitio, en este dispositivo"
+    },
+    "identity": {
+      "title": "Identidad",
+      "name": "Nombre",
+      "save": "Guardar nombre",
+      "error": "No se pudo guardar el nombre."
+    },
+    "positions": {
+      "title": "Posiciones",
+      "label": "Dónde te gusta jugar",
+      "help": "Elige una o varias. Tus grupos las ven y los admins las usan para equilibrar los equipos.",
+      "loadError": "No se pudieron cargar tus posiciones. Recarga la página para volver a intentarlo.",
+      "saved": "Posiciones guardadas.",
+      "error": "No se pudieron guardar tus posiciones."
+    },
+    "email": {
+      "title": "Correo electrónico",
+      "unavailable": "Aún no se puede cambiar el correo."
+    },
+    "password": {
+      "title": "Contraseña",
+      "note": "Para elegir una nueva, te enviamos por correo un enlace para restablecerla, igual que si la hubieras olvidado.",
+      "passkeysNote": "Restablecer la contraseña también quita tus llaves de acceso guardadas.",
+      "send": "Enviarme el enlace",
+      "error": "No se pudo enviar el enlace. Inténtalo de nuevo."
+    },
+    "delete": {
+      "zone": "Zona de peligro",
+      "title": "Eliminar mi cuenta",
+      "text": "No se puede deshacer. Tu nombre, correo y contraseña se borran, y sales de todos los grupos. El historial de partidos (goles, premios de @:{'award.mvpOfTheMatch'}) se queda para los demás jugadores y ya no está ligado a ninguna cuenta.",
+      "confirmTitle": "Confirmar eliminación",
+      "confirmText": "Escribe tu contraseña actual para confirmar.",
+      "password": "Contraseña",
+      "error": "No se pudo eliminar la cuenta."
+    },
+    "teams": {
+      "title": "Equipos",
+      "note": "Guarda cada equipo por separado.",
+      "nameAria": "Nombre de {name}",
+      "error": "No se pudo guardar el equipo."
+    },
+    "members": {
+      "title": "Miembros",
+      "note": "No puedes cambiar tu propio rol. El último admin no puede perder su rol.",
+      "removeAdmin": "Quitar admin",
+      "makeAdmin": "Hacer admin",
+      "removeTitle": "¿Quitar del grupo?",
+      "removeText": "{name} sale del grupo. Su historial de partidos se conserva. Necesitará una invitación nueva para volver.",
+      "demoteTitle": "¿Quitar el rol de admin?",
+      "demoteText": "{name} sigue siendo miembro del grupo. Puedes volver a hacerle admin más tarde.",
+      "removeError": "No se pudo quitar al miembro.",
+      "roleError": "No se pudo cambiar el rol."
+    }
+  }
+}

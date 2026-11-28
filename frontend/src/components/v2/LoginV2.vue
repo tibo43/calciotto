@@ -1,34 +1,34 @@
 <template>
   <main class="page is-auth auth-v2 login-v2" :class="{ 'is-waiting': isUsingPasskey }">
-    <h1 class="auth-title">Log in</h1>
-    <p class="auth-lead">Find your groups and your matches.</p>
-    <p v-if="resetConfirmed" class="auth-notice" role="status">Your password has been updated. Log in with it below.</p>
-    <p v-if="accountDeleted" class="auth-notice" role="status">Your account has been deleted.</p>
+    <h1 class="auth-title">{{ $t('auth.login.title') }}</h1>
+    <p class="auth-lead">{{ $t('auth.login.lead') }}</p>
+    <p v-if="resetConfirmed" class="auth-notice" role="status">{{ $t('auth.login.resetConfirmed') }}</p>
+    <p v-if="accountDeleted" class="auth-notice" role="status">{{ $t('auth.login.accountDeleted') }}</p>
 
     <template v-if="passkeysAvailable">
       <button class="btn btn-ghost btn-block pk-btn" type="button" :disabled="busy" @click="submitPasskey">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"
           aria-hidden="true"><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M17 6l3 3M14 9l2 2" /></svg>
-        {{ isUsingPasskey ? 'Waiting for your device…' : 'Log in with a passkey' }}
+        {{ isUsingPasskey ? $t('auth.login.waitingDevice') : $t('auth.login.withPasskey') }}
       </button>
-      <div class="or" aria-hidden="true"><span>or</span></div>
+      <div class="or" aria-hidden="true"><span>{{ $t('auth.login.or') }}</span></div>
     </template>
 
     <form @submit.prevent="submit">
       <div class="field">
-        <label class="label" for="email">Email</label>
+        <label class="label" for="email">{{ $t('auth.email') }}</label>
         <input id="email" v-model="email" type="email" required autocomplete="username webauthn">
       </div>
       <div class="field">
-        <label class="label" for="password">Password</label>
+        <label class="label" for="password">{{ $t('auth.password') }}</label>
         <input id="password" v-model="password" type="password" required autocomplete="current-password">
       </div>
-      <button class="btn btn-block" type="submit" :disabled="busy">{{ isSubmitting ? 'Logging in…' : 'Log in' }}</button>
+      <button class="btn btn-block" type="submit" :disabled="busy">{{ isSubmitting ? $t('auth.login.submitting') : $t('auth.login.submit') }}</button>
     </form>
 
     <div class="auth-links">
-      <router-link to="/forgot-password">Forgot password?</router-link>
-      <router-link to="/signup">No account yet? Sign up with an invite code</router-link>
+      <router-link to="/forgot-password">{{ $t('auth.login.forgot') }}</router-link>
+      <router-link to="/signup">{{ $t('auth.login.signup') }}</router-link>
     </div>
     <AppToast ref="toast" />
   </main>
@@ -76,7 +76,7 @@ export default {
         const { token } = await login(this.email, this.password);
         this.openSession(token);
       } catch (error) {
-        this.$refs.toast?.show(authErrorMessage(error, 'Login failed. Please check your credentials.'), 'error');
+        this.$refs.toast?.show(authErrorMessage(error, this.$t('auth.login.failed')), 'error');
       } finally {
         this.isSubmitting = false;
       }
@@ -89,7 +89,7 @@ export default {
         const { token } = await signInWithPasskey();
         this.openSession(token);
       } catch {
-        this.$refs.toast?.show('Could not log in with a passkey. Try again or use your password.', 'error');
+        this.$refs.toast?.show(this.$t('auth.login.passkeyFailed'), 'error');
       } finally {
         this.isUsingPasskey = false;
       }

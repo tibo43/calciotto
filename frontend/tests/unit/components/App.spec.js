@@ -3,10 +3,12 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import App from '@/App.vue';
 import PlayerGuide from '@/components/PlayerGuide.vue';
 import GearLink from '@/components/v2/GearLink.vue';
+import LocaleSaveErrorToast from '@/components/LocaleSaveErrorToast.vue';
 import { getMyFeatureStatus, getSessionKey, clearToken, completeGuide } from '@/services/api';
 import { resetFeatureStatus } from '@/services/featureStatus';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { disablePushOnLogout } from '@/services/pushNotifications';
+import { resetSavedLocale, syncSavedLocale } from '@/services/playerLocale';
 
 vi.mock('@/services/api', () => ({
   getMyFeatureStatus: vi.fn(),
@@ -14,6 +16,12 @@ vi.mock('@/services/api', () => ({
   completeGuide: vi.fn(),
   logoutSession: vi.fn(),
   clearToken: vi.fn()
+}));
+
+vi.mock('@/services/playerLocale', () => ({
+  syncSavedLocale: vi.fn(() => Promise.resolve()),
+  resetSavedLocale: vi.fn(),
+  onLocaleSaveError: vi.fn(() => () => {})
 }));
 
 vi.mock('@/services/activeGroup', () => ({
@@ -71,11 +79,42 @@ describe('App.vue shell', () => {
     getMyFeatureStatus.mockResolvedValue({ features: [] });
     getSessionKey.mockReset();
     getSessionKey.mockReturnValue('token-a');
+    syncSavedLocale.mockClear();
+    resetSavedLocale.mockClear();
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('restores the saved language on a signed-in page, not on a public one', async () => {
+    await mountAt('/profile');
+    expect(syncSavedLocale).toHaveBeenCalled();
+    expect(resetSavedLocale).not.toHaveBeenCalled();
+  });
+
+  it('shows the browser\'s language on a public page, whatever was chosen', async () => {
+    const { router } = await mountAt('/login');
+    expect(resetSavedLocale).toHaveBeenCalled();
+    expect(syncSavedLocale).not.toHaveBeenCalled();
+
+    syncSavedLocale.mockClear();
+    resetSavedLocale.mockClear();
+    await router.push('/profile');
+    await flushPromises();
+    expect(syncSavedLocale).toHaveBeenCalled();
+    await router.push('/signup');
+    await flushPromises();
+    expect(resetSavedLocale).toHaveBeenCalled();
+  });
+
+  it('mounts the failed-language-save toast once, on every signed-in page', async () => {
+    for (const path of ['/', '/predictions', '/profile']) {
+      const { wrapper } = await mountAt(path);
+      expect(wrapper.findAllComponents(LocaleSaveErrorToast)).toHaveLength(1);
+      wrapper.unmount();
+    }
   });
 
   it('paints the signed-in app straight away, without waiting for the features request', async () => {
@@ -187,6 +226,14 @@ describe('App.vue shell', () => {
 
     expect(getMyFeatureStatus).toHaveBeenCalledTimes(2);
     expect(wrapper.findComponent(PlayerGuide).props('required')).toBe(true);
+  });
+
+  it('goes back to the browser\'s language on logout', async () => {
+    const { wrapper } = await mountAt('/profile');
+    resetSavedLocale.mockClear();
+    await wrapper.vm.logout();
+    expect(clearToken).toHaveBeenCalled();
+    expect(resetSavedLocale).toHaveBeenCalled();
   });
 
   it('stores nothing in localStorage', async () => {

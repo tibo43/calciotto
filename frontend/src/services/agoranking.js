@@ -2,25 +2,28 @@
 // is computed by the backend (GET /standings/agoranking): rows arrive already
 // sorted, with the unrounded rating.
 
+import { t } from '@/i18n';
+import { formatDecimal } from '@/services/intl';
+
 // Hidden feature (GET /players/me/features), matching models.FeatureAgoranking.
 export const AGORANKING_FEATURE = 'agoranking';
 
 export function formatRating(rating) {
   const value = Number(rating);
-  return Number.isFinite(value) ? value.toFixed(2) : '–';
+  return Number.isFinite(value) ? formatDecimal(value) : '–';
 }
 
 export function pointsLabel(points) {
-  return `${points} ${points === 1 ? 'pt' : 'pts'}`;
+  return t('unit.points', points);
 }
 
 export function recordLine(row) {
-  return `${row.Won}W ${row.Drawn}D ${row.Lost}L · ${pointsLabel(row.Points)}`;
+  return t('rankings.agr.record', { won: row.Won, drawn: row.Drawn, lost: row.Lost, points: pointsLabel(row.Points) });
 }
 
 // Mobile card line of a ranked player: "8 M · 4W 2D 2L · 14 pts".
 export function rankedLine(row) {
-  return `${row.Played} M · ${recordLine(row)}`;
+  return t('rankings.agr.rankedLine', { played: row.Played, record: recordLine(row) });
 }
 
 export function emptyAgoranking() {

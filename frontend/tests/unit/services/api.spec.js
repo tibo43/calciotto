@@ -465,3 +465,29 @@ describe('a session that ends with a 401', () => {
     expect(forgetPush).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('my language', () => {
+  beforeEach(() => {
+    mockInstance.get.mockReset();
+    mockInstance.put.mockReset();
+  });
+
+  it('reads the saved language, null when the player follows the phone', async () => {
+    mockInstance.get.mockResolvedValueOnce({ data: { locale: 'de' } });
+    await expect(api.getMyLocale()).resolves.toBe('de');
+    expect(mockInstance.get).toHaveBeenCalledWith('/players/me/locale');
+    mockInstance.get.mockResolvedValueOnce({ data: { locale: null } });
+    await expect(api.getMyLocale()).resolves.toBeNull();
+    mockInstance.get.mockResolvedValueOnce({ data: {} });
+    await expect(api.getMyLocale()).resolves.toBeNull();
+  });
+
+  it('saves a language, or null to follow the phone', async () => {
+    mockInstance.put.mockResolvedValueOnce({ data: { locale: 'fr' } });
+    await expect(api.updateMyLocale('fr')).resolves.toBe('fr');
+    expect(mockInstance.put).toHaveBeenCalledWith('/players/me/locale', { locale: 'fr' });
+    mockInstance.put.mockResolvedValueOnce({ data: { locale: null } });
+    await expect(api.updateMyLocale(null)).resolves.toBeNull();
+    expect(mockInstance.put).toHaveBeenLastCalledWith('/players/me/locale', { locale: null });
+  });
+});

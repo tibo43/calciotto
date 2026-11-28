@@ -208,6 +208,28 @@ async function stubApi(page, overrides = {}) {
     }
     return json(route, { PreferredPositions: myPositions });
   });
+  // The player's saved language, read at start-up and on every signed-in page
+  // (null = follow the phone, which is what every screenshot runs with unless a
+  // test says otherwise). A PUT is kept, and pushed on overrides.localeWrites
+  // for a test that passes an array to read, and fails them all when
+  // overrides.localeSaveError is set.
+  let savedLocale = overrides.locale ?? null;
+  await page.route(`${API}/players/me/locale`, (route) => {
+    const method = route.request().method();
+    if (method === 'PUT') {
+      // overrides.localeSaveError makes every save fail, for the error toast.
+      if (overrides.localeSaveError) {
+        return route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"unavailable"}' });
+      }
+      const body = JSON.parse(route.request().postData() || '{}');
+      savedLocale = body.locale ?? null;
+      if (overrides.localeWrites) overrides.localeWrites.push(savedLocale);
+    } else if (method !== 'GET') {
+      unstubbed.push(`${method} ${route.request().url()}`);
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unexpected write"}' });
+    }
+    return json(route, { locale: savedLocale });
+  });
   await page.route(`${API}/matches/*/positions`, (route) => {
     if (route.request().method() !== 'GET') {
       unstubbed.push(`${route.request().method()} ${route.request().url()}`);

@@ -1,25 +1,25 @@
 <template>
   <section class="sec">
-    <div class="sec-head"><h2>Group details</h2></div>
+    <div class="sec-head"><h2>{{ $t('group.details.title') }}</h2></div>
     <form class="group-details-form" @submit.prevent="save" @input="feedback = null">
       <div class="field">
-        <label class="label" for="group-description">Description</label>
+        <label class="label" for="group-description">{{ $t('group.details.description') }}</label>
         <textarea id="group-description" v-model="draft.description" rows="3" maxlength="1000" :disabled="saving"></textarea>
       </div>
       <div class="field">
-        <label class="label" for="group-website-url">Link address</label>
+        <label class="label" for="group-website-url">{{ $t('group.details.linkAddress') }}</label>
         <input id="group-website-url" v-model.trim="draft.website_url" type="url"
           placeholder="https://example.com" maxlength="2048" :disabled="saving">
       </div>
       <div class="field">
-        <label class="label" for="group-website-label">Link label</label>
+        <label class="label" for="group-website-label">{{ $t('group.details.linkLabel') }}</label>
         <input id="group-website-label" v-model="draft.website_label" type="text"
-          placeholder="Open group link" maxlength="100" :disabled="saving || !draft.website_url">
+          :placeholder="$t('group.details.linkLabelPlaceholder')" maxlength="100" :disabled="saving || !draft.website_url">
       </div>
       <div class="group-details-actions">
-        <button class="btn" type="submit" :disabled="saving">{{ saving ? 'Saving…' : 'Save details' }}</button>
+        <button class="btn" type="submit" :disabled="saving">{{ saving ? $t('common.saving') : $t('group.details.save') }}</button>
         <p v-if="feedback" :role="feedback.error ? 'alert' : 'status'"
-          :class="{ 'field-error': feedback.error }">{{ feedback.message }}</p>
+          :class="{ 'field-error': feedback.error }">{{ showText(feedback.message) }}</p>
       </div>
     </form>
   </section>
@@ -27,6 +27,7 @@
 
 <script>
 import { updateGroupDetails } from '@/services/api';
+import { messageKey, showText } from '@/i18n';
 
 function detailsOf(group) {
   return {
@@ -44,6 +45,7 @@ export default {
     return { draft: detailsOf(this.group), saving: false, feedback: null };
   },
   methods: {
+    showText,
     async save() {
       if (this.saving) return;
       this.saving = true;
@@ -52,9 +54,9 @@ export default {
         const group = await updateGroupDetails(this.group.id, this.draft);
         this.draft = detailsOf(group);
         this.$emit('saved', group);
-        this.feedback = { message: 'Group details saved.' };
+        this.feedback = { message: messageKey('group.details.saved') };
       } catch (error) {
-        this.feedback = { error: true, message: error.response?.data?.error || 'Could not save group details.' };
+        this.feedback = { error: true, message: error.response?.data?.error || messageKey('group.details.saveError') };
       } finally {
         this.saving = false;
       }
