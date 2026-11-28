@@ -43,10 +43,8 @@ var uncodedMessages = map[string]bool{
 	"missing authentication":                  true,
 	"missing or invalid Authorization header": true,
 	"unauthorized":                            true,
-	"invalid or expired session":              true,
 	"invalid session request origin":          true,
 	"missing or invalid session ID":           true,
-	"session just renewed, retry":             true,
 	"the active session changed":              true,
 
 	// Server-side failures: a lost database, a route wired without its
@@ -54,13 +52,10 @@ var uncodedMessages = map[string]bool{
 	"group not resolved":                                  true,
 	"group not resolved for this match":                   true,
 	"route is missing its group authorization middleware": true,
-	"registration was created but could not be read back": true,
 	"could not load guide status":                         true,
 	"could not save guide completion":                     true,
 	"unable to load groups":                               true,
 	"unable to load matches":                              true,
-	"unable to start the session":                         true,
-	"unable to renew the session":                         true,
 	"unable to end the session":                           true,
 }
 
