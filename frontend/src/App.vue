@@ -1,7 +1,7 @@
 <template>
   <div id="app" class="design-v2" :class="{ 'dark-mode': isDarkMode }">
     <PlayerGuide v-if="guideMode" :required="guideMode === 'required'" :saving="savingGuide"
-      :dark="isDarkMode" :error="guideError" @finish="finishGuide" @dismiss="closeGuide" @skip="skipGuide" />
+      :dark="isDarkMode" :error="showText(guideError)" @finish="finishGuide" @dismiss="closeGuide" @skip="skipGuide" />
     <div v-else class="app-container wrap" :class="{ 'is-confirming': v2Context.confirming, 'is-picking-csc': v2Context.pickingCsc }">
         <header class="topbar">
           <div class="topbar-left">
@@ -61,12 +61,17 @@
           </router-link>
         </nav>
     </div>
+    <!-- Outside the guide/app switch, so a failed language save is reported
+         on any page, the guide included. -->
+    <LocaleSaveErrorToast />
   </div>
 </template>
 
 <script>
 import PlayerGuide from '@/components/PlayerGuide.vue';
+import { messageKey, showText } from '@/i18n';
 import GearLink from '@/components/v2/GearLink.vue';
+import LocaleSaveErrorToast from '@/components/LocaleSaveErrorToast.vue';
 import { clearToken, completeGuide, getSessionKey, logoutSession } from '@/services/api';
 import { clearActiveGroupId, clearMyGroupsCache } from '@/services/activeGroup';
 import { syncThemeColorMeta, prefersDarkTheme } from '@/services/theme';
@@ -81,7 +86,7 @@ const PUBLIC_ROUTE_NAMES = ['Login', 'Signup', 'ForgotPassword', 'ResetPassword'
 
 export default {
   name: 'App',
-  components: { GearLink, PlayerGuide },
+  components: { GearLink, LocaleSaveErrorToast, PlayerGuide },
   provide() {
     return {
       v2Context: this.v2Context,
@@ -163,6 +168,7 @@ export default {
     syncThemeColorMeta(this.isDarkMode);
   },
   methods: {
+    showText,
     toggleTheme() {
       this.isDarkMode = !this.isDarkMode;
       localStorage.setItem('calciotto-theme', this.isDarkMode ? 'dark' : 'light');
@@ -235,7 +241,7 @@ export default {
         }
       } catch {
         if (sessionKey === getSessionKey() && this.guideMode === 'required') {
-          this.guideError = this.$t('guide.saveError');
+          this.guideError = messageKey('guide.saveError');
         }
       } finally {
         if (sessionKey === getSessionKey()) this.savingGuide = false;

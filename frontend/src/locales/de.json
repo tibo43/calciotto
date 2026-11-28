@@ -56,7 +56,7 @@
     },
     "matches": {
       "title": "Spiele",
-      "description": "Tippe auf Anmelden, sobald Plätze frei sind. Schau später wieder rein, um dein Team und das Endergebnis zu sehen."
+      "description": "Tippe auf Eintragen, sobald Plätze frei sind. Schau später wieder rein, um dein Team und das Endergebnis zu sehen."
     },
     "rankings": {
       "title": "Tabelle",
@@ -106,17 +106,17 @@
     "teamsSet": "Teams stehen fest",
     "teamsVs": "{home} gegen {away}",
     "placesLeft": "Platz frei | Plätze frei",
-    "signedUpCount": "{confirmed} / {cap} angemeldet",
+    "signedUpCount": "{confirmed} / {cap} eingetragen",
     "waitingCount": "{n} auf der Warteliste",
-    "youAreSignedUp": "Du bist angemeldet · {status}",
+    "youAreSignedUp": "Du bist eingetragen · {status}",
     "statusWaiting": "Warteliste",
     "statusConfirmed": "bestätigt",
     "fullYoudBe": "Voll · du wärst {position} auf der Warteliste",
     "position": "Nr. {n}",
     "joinWaitingList": "Auf die Warteliste",
-    "signUp": "Anmelden",
-    "withdraw": "Abmelden",
-    "withdrawTitle": "Von diesem Spiel abmelden?",
+    "signUp": "Eintragen",
+    "withdraw": "Austragen",
+    "withdrawTitle": "Aus diesem Spiel austragen?",
     "withdrawText": "Dein Platz geht an den Ersten auf der Warteliste.",
     "lastMatch": "Letztes Spiel",
     "later": "Später",
@@ -126,19 +126,19 @@
     "newMatch": "Neues Spiel",
     "rowLabel": "{home} {score} {away}, {day}",
     "toast": {
-      "waiting": "Angemeldet — du bist Nr. {position} auf der Warteliste.",
+      "waiting": "Eingetragen — du bist Nr. {position} auf der Warteliste.",
       "inPosition": "Du bist bei diesem Spiel dabei. Du bist Nr. {position}.",
       "in": "Du bist bei diesem Spiel dabei.",
-      "signUpError": "Fehler bei der Anmeldung zu diesem Spiel.",
-      "withdrawn": "Du hast dich von diesem Spiel abgemeldet.",
-      "withdrawError": "Fehler bei der Abmeldung von diesem Spiel."
+      "signUpError": "Fehler beim Eintragen für dieses Spiel.",
+      "withdrawn": "Du hast dich aus diesem Spiel ausgetragen.",
+      "withdrawError": "Fehler beim Austragen aus diesem Spiel."
     }
   },
   "match": {
     "manage": "Spiel verwalten",
     "vote": {
       "open": "@:{'glossary.mvp'}-Wahl offen",
-      "openHome": "@:{'glossary.mvp'}-Wahl offen · Abstimmen im Spiel",
+      "openHome": "@:{'glossary.mvp'}-Wahl offen · In den Spieldetails abstimmen",
       "openUntil": "@:{'glossary.mvp'}-Wahl offen bis {until} · tippe auf einen Spieler, um zu ändern",
       "openChange": "@:{'glossary.mvp'}-Wahl offen · tippe auf einen Spieler, um zu ändern",
       "closedNoVotes": "@:{'glossary.mvp'}-Wahl beendet · keine Stimmen, kein Sieger",
@@ -238,7 +238,7 @@
     "opensHint": "Standardmäßig sofort. Muss vor dem Anstoß liegen.",
     "places": "Plätze",
     "placesHint": "Standardmäßig 8 gegen 8. Wer darüber hinaus kommt, landet auf der Warteliste.",
-    "signMeUp": "Mich anmelden",
+    "signMeUp": "Mich eintragen",
     "signMeUpNote": "Du stehst auf der Liste, sobald das Spiel angelegt ist",
     "creating": "Wird angelegt…",
     "create": "Spiel anlegen",
@@ -255,7 +255,7 @@
     }
   },
   "date": {
-    "deadlineMidnight": "{date}, Mitternacht"
+    "deadlineMidnight": "{date}, 24 Uhr"
   },
   "rankings": {
     "label": "Tabelle",

@@ -19,7 +19,7 @@
       <div class="group-details-actions">
         <button class="btn" type="submit" :disabled="saving">{{ saving ? $t('common.saving') : $t('group.details.save') }}</button>
         <p v-if="feedback" :role="feedback.error ? 'alert' : 'status'"
-          :class="{ 'field-error': feedback.error }">{{ feedback.message }}</p>
+          :class="{ 'field-error': feedback.error }">{{ showText(feedback.message) }}</p>
       </div>
     </form>
   </section>
@@ -27,6 +27,7 @@
 
 <script>
 import { updateGroupDetails } from '@/services/api';
+import { messageKey, showText } from '@/i18n';
 
 function detailsOf(group) {
   return {
@@ -44,6 +45,7 @@ export default {
     return { draft: detailsOf(this.group), saving: false, feedback: null };
   },
   methods: {
+    showText,
     async save() {
       if (this.saving) return;
       this.saving = true;
@@ -52,9 +54,9 @@ export default {
         const group = await updateGroupDetails(this.group.id, this.draft);
         this.draft = detailsOf(group);
         this.$emit('saved', group);
-        this.feedback = { message: this.$t('group.details.saved') };
+        this.feedback = { message: messageKey('group.details.saved') };
       } catch (error) {
-        this.feedback = { error: true, message: error.response?.data?.error || this.$t('group.details.saveError') };
+        this.feedback = { error: true, message: error.response?.data?.error || messageKey('group.details.saveError') };
       } finally {
         this.saving = false;
       }

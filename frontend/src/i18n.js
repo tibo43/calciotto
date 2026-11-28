@@ -42,21 +42,35 @@ const formatCount = (value, locale) => new Intl.NumberFormat(intlTag(locale)).fo
 
 composer.t = (key, arg2, arg3) => {
   const options = isNamed(arg3) ? arg3 : {};
-  const plural = [arg2, arg3, options.plural].find((value) => typeof value === 'number');
+  const explicitPlural = [arg2, arg3, options.plural].find((value) => typeof value === 'number');
   const named = isNamed(arg2) ? arg2 : {};
   const isCount = (name) => typeof named[name] === 'number';
-  if (plural === undefined && !isCount('n') && !isCount('count')) return translate(key, arg2, arg3);
+  if (explicitPlural === undefined && !isCount('n') && !isCount('count')) return translate(key, arg2, arg3);
   const locale = options.locale || composer.locale.value;
   const counted = { ...named };
   ['n', 'count'].forEach((name) => {
     if (isCount(name)) counted[name] = formatCount(named[name], locale);
-    else if (plural !== undefined && named[name] === undefined) counted[name] = formatCount(plural, locale);
+    else if (explicitPlural !== undefined && named[name] === undefined) counted[name] = formatCount(explicitPlural, locale);
   });
-  return translate(key, counted, plural === undefined ? options : { ...options, plural });
+  // Once {n} and {count} are text, vue-i18n can no longer pick the plural
+  // form from them, so it is passed explicitly, from the original number.
+  const plural = explicitPlural ?? (isCount('n') ? named.n : named.count);
+  return translate(key, counted, { ...options, plural });
 };
 
 // For the services (outside components): the global translate function, in
 // the active language at the time of the call.
 export const t = (...args) => i18n.global.t(...args);
+
+// A note or error a page keeps on screen until the next action. A translated
+// string stored in data would stay in the language it was written in, so the
+// page stores the key instead, as messageKey(key, named), and translates it
+// when it renders, with showText. Text from the server is stored as it is
+// and shown unchanged.
+export const messageKey = (key, named) => ({ key, named });
+export const showText = (value) => {
+  if (value && typeof value === 'object') return value.named === undefined ? t(value.key) : t(value.key, value.named);
+  return value || '';
+};
 
 export default i18n;

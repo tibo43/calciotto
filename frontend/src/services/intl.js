@@ -16,6 +16,11 @@ export const activeTag = () => intlTag(getLocale());
 
 // A Date, a timestamp or an RFC3339 string; '' for empty or unparseable input
 // rather than "Invalid Date".
+//
+// Not a bare calendar day such as Match.Date ('2026-09-06'): new Date() reads a
+// date-only string as UTC midnight, so it would show the day before anywhere
+// west of Greenwich. Parse it with parseCalendarDay (services/datetime.js)
+// first and pass the resulting Date.
 export const formatDate = (value, options) => {
   if (value === null || value === undefined || value === '') return '';
   const date = value instanceof Date ? value : new Date(value);

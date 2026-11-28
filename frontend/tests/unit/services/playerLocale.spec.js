@@ -137,6 +137,47 @@ describe('player locale sync', () => {
     expect(locale.getLocale()).toBe('de');
   });
 
+  it('ignores an answer that lands after a public page reset the language', async () => {
+    const { locale, sync } = await load();
+    locale.initLocale();
+    sync.startLocaleSync();
+    let answer;
+    api.getMyLocale.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    const reading = sync.syncSavedLocale();
+
+    // /login or /reset-password opened with a still-valid token: same session key.
+    sync.resetSavedLocale();
+    answer('fr');
+    await reading;
+
+    expect(locale.getLocale()).toBe('de');
+    expect(locale.getLocaleSource()).toBe(locale.SOURCE_PHONE);
+  });
+
+  it('drops a queued pick when the session changed before its turn', async () => {
+    const { locale, sync } = await load();
+    locale.initLocale();
+    sync.startLocaleSync();
+    const listener = vi.fn();
+    sync.onLocaleSaveError(listener);
+    let release;
+    api.updateMyLocale
+      .mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }))
+      .mockRejectedValue(new Error('should not be sent'));
+
+    locale.setLocale('fr');
+    locale.setLocale('it'); // queued behind 'fr'
+    await flush();
+    // A logs out, B logs in, in the same tab.
+    api.getSessionKey.mockReturnValue('session-2');
+    release(null);
+    await flush();
+
+    expect(api.updateMyLocale.mock.calls.map(([value]) => value)).toEqual(['fr']);
+    expect(listener).not.toHaveBeenCalled();
+    expect(locale.getLocale()).toBe('it');
+  });
+
   it('saves a pick, and null when the player goes back to the phone', async () => {
     const { locale, sync } = await load();
     locale.initLocale();
@@ -287,6 +328,74 @@ describe('player locale sync', () => {
 
       expect(locale.getLocale()).toBe('de');
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('goes back to the server\'s language when the startup read landed after the pick', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { locale, sync } = await load();
+      locale.initLocale();
+      sync.startLocaleSync();
+      const listener = vi.fn();
+      sync.onLocaleSaveError(listener);
+      let answer;
+      api.getMyLocale.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+      let failSave;
+      api.updateMyLocale.mockImplementationOnce(() => new Promise((resolve, reject) => { failSave = reject; }));
+      const reading = sync.syncSavedLocale();
+
+      locale.setLocale('it');
+      answer('fr');
+      await reading;
+      // The pick still wins on screen while its save is pending.
+      expect(locale.getLocale()).toBe('it');
+
+      failSave(new Error('500'));
+      await flush();
+
+      expect(locale.getLocale()).toBe('fr');
+      expect(locale.getLocaleSource()).toBe(locale.SOURCE_EXPLICIT);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('goes back to the phone when the late startup read said nothing is saved', async () => {
+      const { locale, sync } = await load();
+      locale.initLocale();
+      api.getMyLocale.mockResolvedValue('fr');
+      sync.startLocaleSync();
+      // A first session restores French, then the next account (nothing saved) starts.
+      await sync.syncSavedLocale();
+      api.getSessionKey.mockReturnValue('session-2');
+      let answer;
+      api.getMyLocale.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+      api.updateMyLocale.mockRejectedValueOnce(new Error('500'));
+      const reading = sync.syncSavedLocale();
+
+      locale.setLocale('it');
+      answer(null);
+      await reading;
+      await flush();
+
+      expect(locale.getLocale()).toBe('de');
+      expect(locale.getLocaleSource()).toBe(locale.SOURCE_PHONE);
+    });
+
+    it('keeps a save that succeeded over an older startup answer', async () => {
+      const { locale, sync } = await load();
+      locale.initLocale();
+      sync.startLocaleSync();
+      let answer;
+      api.getMyLocale.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+      const reading = sync.syncSavedLocale();
+
+      locale.setLocale('it');
+      await flush(); // 'it' saved
+      answer('fr');
+      await reading;
+      api.updateMyLocale.mockRejectedValueOnce(new Error('500'));
+      locale.setLocale('es');
+      await flush();
+
+      expect(locale.getLocale()).toBe('it');
     });
 
     it('stays silent when a save succeeds', async () => {
