@@ -180,7 +180,7 @@
     "login": {
       "title": "Connexion",
       "lead": "Retrouve tes groupes et tes matchs.",
-      "resetConfirmed": "Ton mot de passe a été mis à jour. Connecte-toi avec ci-dessous.",
+      "resetConfirmed": "Ton mot de passe a été mis à jour. Connecte-toi ci-dessous avec ton nouveau mot de passe.",
       "accountDeleted": "Ton compte a été supprimé.",
       "waitingDevice": "En attente de ton appareil…",
       "withPasskey": "Se connecter avec une clé d’accès",
