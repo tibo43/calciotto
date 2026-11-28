@@ -14,7 +14,7 @@ var (
 	// ErrCannotVoteForSelf rejects a vote where the voter and the candidate are
 	// the same player. There is no legitimate self-nomination for "best player
 	// on the pitch", unlike e.g. self-registering for a match.
-	ErrCannotVoteForSelf = errors.New("you cannot vote for yourself for man of the match")
+	ErrCannotVoteForSelf = errors.New("you cannot vote for yourself for MVP")
 
 	// ErrVotedForPlayerNotOnRoster rejects a vote for a player with no
 	// MatchPlayer row for this match, on either team. This is what scopes
@@ -32,7 +32,7 @@ var (
 	// it — new explicit product feedback narrowed that: only someone who
 	// actually took part in this specific match may vote on who was its best
 	// player.
-	ErrVoterNotOnRoster = errors.New("only players on this match's roster can vote for man of the match")
+	ErrVoterNotOnRoster = errors.New("only players on this match's roster can vote for MVP")
 
 	// ErrVotingClosed is returned once the voting window (see
 	// VotingWindowError) has passed for this match. Casting, changing and
@@ -40,7 +40,7 @@ var (
 	// (ListVotes) never is, following the same status-code convention as
 	// ErrRegistrationsClosed: a 409, since the window having passed is a state
 	// conflict rather than a malformed request.
-	ErrVotingClosed = errors.New("voting for man of the match is closed for this match")
+	ErrVotingClosed = errors.New("voting for MVP is closed for this match")
 )
 
 // MotmVotingWindow is how long a scheduled match's Man of the Match vote

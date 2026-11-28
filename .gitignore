@@ -98,3 +98,6 @@ pnpm-debug.log*
 # reasoning as .claude/worktrees above applies: restated here to hold for
 # every checkout rather than for whoever happens to have that global config.
 /.claude/settings.local.json
+
+# Review captures produced by agents — not part of the product.
+/review/

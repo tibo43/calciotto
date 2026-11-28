@@ -8,7 +8,7 @@
         Scorers
       </router-link>
       <router-link to="/rankings?tab=motm" :class="{ 'is-on': tab === 'motm' }">
-        {{ stars }}
+        {{ mvp }}
       </router-link>
       <router-link v-if="agorankingEnabled" to="/rankings?tab=agoranking" :class="{ 'is-on': tab === 'agoranking' }">
         Agoranking
@@ -215,7 +215,7 @@
 import { getPointsStandings, getScorers, getMotmStandings, getAgoranking, getSeasons, getToken } from '@/services/api';
 import { formatRating, rankedLine, recordLine, normalizeAgoranking, emptyAgoranking, AGORANKING_FEATURE } from '@/services/agoranking';
 import { knownFeatureStatus, loadFeatureStatus } from '@/services/featureStatus';
-import { STARS } from '@/services/v2Home';
+import { MVP } from '@/services/v2Home';
 import { resolveActiveGroup, setActiveGroupId } from '@/services/activeGroup';
 
 function currentPlayerId() {
@@ -241,7 +241,7 @@ export default {
   },
   data() {
     return {
-      stars: STARS,
+      mvp: MVP,
       loading: true,
       failed: false,
       points: [],
@@ -275,12 +275,12 @@ export default {
     },
     emptyTitle() {
       if (this.tab === 'scorers') return 'No goals yet';
-      if (this.tab === 'motm') return `No ${STARS.toLowerCase()} yet`;
+      if (this.tab === 'motm') return `No ${MVP} yet`;
       if (this.tab === 'agoranking') return 'No ranking yet';
       return 'No standings yet';
     },
-    // Points, scorers and the Agoranking fill up from played matches; stars
-    // need votes too, so their tab keeps the bare title.
+    // Points, scorers and the Agoranking fill up from played matches; MVP
+    // awards need votes too, so their tab keeps the bare title.
     emptyText() {
       return this.tab === 'motm' ? '' : 'Players appear here once a match has been played this season.';
     },

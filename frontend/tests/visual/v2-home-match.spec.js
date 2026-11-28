@@ -74,7 +74,7 @@ test.describe('design v2 home and match', () => {
 
   test('played match, vote closed', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, `/matches/${PLAYED}`, V2);
-    await expect(page.getByText('Star of the Match vote closed', { exact: true })).toBeVisible();
+    await expect(page.getByText('MVP vote closed', { exact: true })).toBeVisible();
     await expect(page).toHaveScreenshot('v2-match-played.png', { fullPage: true });
     expectEverythingStubbed(unstubbed);
   });
@@ -104,14 +104,14 @@ test.describe('design v2 home and match', () => {
   test('played match, positions for a member too', async ({ page }) => {
     const groups = data.groups.map((group) => ({ ...group, role: 'member' }));
     const { unstubbed } = await gotoApp(page, `/matches/${PLAYED}`, { ...V2, groups, matchPositions });
-    await expect(page.getByText('Star of the Match vote closed', { exact: true })).toBeVisible();
+    await expect(page.getByText('MVP vote closed', { exact: true })).toBeVisible();
     await expect(page.locator('.pos-tag')).toHaveCount(7);
     expectEverythingStubbed(unstubbed);
   });
 
   test('played match, vote closed, dark', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, `/matches/${PLAYED}`, { ...V2, theme: 'dark' });
-    await expect(page.getByText('Star of the Match vote closed', { exact: true })).toBeVisible();
+    await expect(page.getByText('MVP vote closed', { exact: true })).toBeVisible();
     await expect(page).toHaveScreenshot('v2-match-played-dark.png', { fullPage: true });
     expectEverythingStubbed(unstubbed);
   });
@@ -209,7 +209,7 @@ test.describe('design v2 once the score is recorded', () => {
     // ...but its row says so, in grey in place of its kick-off time, and
     // leads to it.
     const row = page.locator(`.list .row[href="/matches/${recorded.ID}"]`);
-    await expect(row.locator('.row-sub')).toHaveText('Star of the Match vote open');
+    await expect(row.locator('.row-sub')).toHaveText('MVP vote open');
     await expect(row).not.toContainText('08:00');
     const vote = row.locator('.row-sub-vote');
     const [colour, muted] = await vote.evaluate((node) => {
@@ -289,7 +289,7 @@ test.describe('design v2 MOTM counts', () => {
   for (const theme of ['light', 'dark']) {
     test(`vote open, every count muted, ${theme}`, async ({ page }) => {
       const { unstubbed } = await gotoApp(page, `/matches/${recorded.ID}`, { ...V2, theme, matches: [...data.matches, recorded] });
-      await expect(page.locator('.motm-line')).toContainText('Star of the Match vote open');
+      await expect(page.locator('.motm-line')).toContainText('MVP vote open');
       for (const row of await colours(page)) {
         expect(row.votes).toBe(row.muted);
         expect(row.star).toBe(row.muted);
@@ -300,7 +300,7 @@ test.describe('design v2 MOTM counts', () => {
 
   test('vote closed, the winner in the accent', async ({ page }) => {
     const { unstubbed } = await gotoApp(page, `/matches/${PLAYED}`, V2);
-    await expect(page.getByText('Star of the Match vote closed', { exact: true })).toBeVisible();
+    await expect(page.getByText('MVP vote closed', { exact: true })).toBeVisible();
     const rows = await colours(page);
     for (const row of rows) {
       if (row.name === 'Marco Rossi') expect(row.votes).not.toBe(row.muted);
