@@ -64,7 +64,7 @@
               <span v-if="isFavorite(row)" class="tag tag-acc">{{ $t('profile.favourite') }}</span>
               <span class="tag">{{ roleOf(row) === 'admin' ? $t('common.admin') : $t('common.member') }}</span>
             </h3>
-            <p class="meta">{{ $t('profile.groupMeta', { matches: row.Played, points: row.Points }) }}</p>
+            <p class="meta">{{ $t('profile.groupMeta', { matches: $t('profile.groupMatches', row.Played || 0), points: $t('profile.groupPoints', row.Points || 0) }) }}</p>
           </router-link>
           <GearLink v-if="roleOf(row) === 'admin'" class="group-gear" :to="`/profile/groups/${row.GroupID}/settings`" :label="$t('profile.groupSettings')" />
           <router-link class="chev-link" :to="`/profile/groups/${row.GroupID}`" aria-hidden="true" tabindex="-1">
@@ -430,7 +430,7 @@ export default {
     scopeText() {
       if (this.page === 'group') return this.record.GroupName || this.$t('profile.thisGroup');
       if (this.rows.length === 1) return this.rows[0].GroupName;
-      return this.$t('profile.groupsCombined', { n: this.rows.length });
+      return this.$t('profile.groupsCombined', this.rows.length);
     },
     isAdmin() {
       return this.currentGroup?.role === 'admin';
